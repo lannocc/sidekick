@@ -1,0 +1,25 @@
+```json
+[
+  {
+    "agent": "browse",
+    "prompt": "Open facebook.com and navigate to the friends list page for the currently logged in user. If not logged in, log in."
+  },
+  {
+    "agent": "browse",
+    "prompt": "Take a screenshot of the Facebook friends list page."
+  },
+  {
+    "agent": "file",
+    "prompt": "Save the screenshot to the user's home directory.  Assume the filename should be \"facebook_friends.png\"."
+  },
+  {
+    "agent": "browse",
+    "prompt": "Upload the file \"facebook_friends.png\" to imgur.com."
+  },
+  {
+    "agent": "file",
+    "prompt": "Delete the file \"facebook_friends.png\" from the user's home directory."
+  }
+]
+```
+
