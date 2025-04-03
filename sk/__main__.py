@@ -8,7 +8,7 @@ import sys
 
 def run():
     try:
-        main(sys.argv[1:])
+        main(sys.argv[1:], called=sys.argv[0])
 
     except KeyboardInterrupt:
         pass

@@ -6,7 +6,7 @@ from .util import print_flush
 print = print_flush
 
 
-def main(args):
+def main(args, called=''):
     print('SIDEKICK: ', end='')
 
     '''
@@ -23,15 +23,16 @@ def main(args):
         print('Try `ask help` for a list of commands.')
     '''
 
-    if not args:
-        print('need a prompt')
-        return
+    task = called.endswith('task')
+    ask = not task and called.endswith('ask')
+    opts = False
 
     while args and args[0].startswith('-'):
         op = args[0]
         args = args[1:]
 
         if op in OPTIONS:
+            opts = True
             op = OPTIONS[op]
             print(op[1])
             op[0](None)
@@ -39,6 +40,50 @@ def main(args):
         else:
             print(f'unknown option: {op}')
             return
+
+    if task or ask:
+        if not args:
+            print('need a prompt')
+            return
+
+        if len(args) > 1:
+            prompt = ' '.join(args)
+        else:
+            prompt = args[0]
+
+        if task:
+            do_task(prompt)
+        else:
+            ask_question(prompt)
+
+    elif not opts:
+        if not args:
+            print('hello')
+
+        else:
+            print('here I am')
+
+
+def ask_question(prompt):
+    from . import ai
+
+    print('Ask a Question')
+    print()
+    print(f' >> {prompt}')
+    print()
+
+    answer = ai.prompt_for_text(prompt)
+    print(f' << {answer}')
+    print()
+
+
+def do_task(prompt):
+    print('Perform a Task')
+    print()
+    print(f' >> {prompt}')
+    print()
+    print('SORRY, NOT READY YET')
+    print()
 
 
 def help(args):
@@ -49,9 +94,9 @@ def help(args):
     print('   ask [options] <question-prompt>')
     print('   task [options] <command-prompt>')
     print()
-    #print('The following commands are available:')
-    #for name, cmd in SET.items():
-    #    print(f'   {name} - {cmd[1]}')
+    print('The following options are available:')
+    for name, cmd in OPTIONS.items():
+        print(f'   {name} :: {cmd[1]}')
 
 
 def version(args):
