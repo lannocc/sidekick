@@ -13,3 +13,10 @@ def prompt_for_text(prompt):
     resp = model.generate_content(prompt)
     return resp.text
 
+
+def prompt_for_json(prompt):
+    resp = model.generate_content(prompt,
+                                  generation_config=genai.GenerationConfig(
+                                      response_mime_type='application/json'))
+    return resp.text
+

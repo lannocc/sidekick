@@ -78,11 +78,14 @@ def ask_question(prompt):
 
 
 def do_task(prompt):
+    from . import agent
+
     print('Perform a Task')
     print()
     print(f' >> {prompt}')
     print()
-    print('SORRY, NOT READY YET')
+
+    agent.prompt_for_agent(prompt)
     print()
 
 
