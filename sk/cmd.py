@@ -37,31 +37,45 @@ def main(args, called=''):
             print(op[1])
             op[0](None)
 
+            if op[0] is help or op[0] is version:
+                return
+
         else:
             print(f'unknown option: {op}')
             return
 
+    # prompt mode
     if task or ask:
         if not args:
             print('need a prompt')
             return
 
-        if len(args) > 1:
-            prompt = ' '.join(args)
-        else:
-            prompt = args[0]
+        if len(args) > 1: prompt = ' '.join(args)
+        else: prompt = args[0]
 
-        if task:
-            do_task(prompt)
-        else:
-            ask_question(prompt)
+        if task: do_task(prompt)
+        else: ask_question(prompt)
 
-    elif not opts:
-        if not args:
-            print('hello')
+        return
+
+    # command mode
+    cmd = args[0] if args else 'help'
+    args = args[1:]
+
+    if cmd not in COMMANDS:
+        if cmd is None:
+            print('need an option or command')
+            help(args)
 
         else:
-            print('here I am')
+            print(f'unknown command: {cmd}')
+            print('Try `sk help` for a list of commands.')
+
+        return
+
+    cmd = COMMANDS[cmd]
+    print(cmd[1])
+    cmd[0](args)
 
 
 def ask_question(prompt):
@@ -92,14 +106,16 @@ def do_task(prompt):
 def help(args):
     print('AI SideKick')
     print()
-    print('USAGE:')
-    print('   sk [options]')
-    print('   ask [options] <question-prompt>')
+    print('GENERAL USAGE:')
+    print('     sk [options] <command> [args...]')
+    print('    ask [options] <question-prompt>')
     print('   task [options] <command-prompt>')
     print()
-    print('The following options are available:')
-    for name, cmd in OPTIONS.items():
-        print(f'   {name} :: {cmd[1]}')
+    print('Use `sk` for sidekick commands, `ask` questions, `task` for tasks.')
+    print()
+    print('The following general options are available:')
+    for name, opt in OPTIONS.items():
+        print(f'   {name} :: {opt[1]}')
 
 
 def version(args):
@@ -107,11 +123,54 @@ def version(args):
     print(f'Installed version is {__version__}')
 
 
+def help_cmds(args):
+    print('AI SideKick')
+    print()
+    print('COMMAND USAGE:')
+    print('   sk [options] <command> [args...]')
+    print()
+    print('The following commands are available:')
+    for name, cmd in COMMANDS.items():
+        print(f'   {name} :: {cmd[1]}')
+
+
+def agent(args):
+    from .agent.cmd import main as agent_main
+
+    agent_main(args)
+
+
+def action(args):
+    from .action.cmd import main as action_main
+
+    action_main(args)
+
+
+def ask(args):
+    from .ask.cmd import main as ask_main
+
+    ask_main(args)
+
+
 
 OPTIONS = {
     '-h': (help,
-        'help for this program'),
+        'general help for sidekick options'),
     '-v': (version,
         'version information'),
+}
+
+
+COMMANDS = {
+    'help': (help_cmds,
+        'help for sidekick commands'),
+    'ver': (version,
+        'version information'),
+    'agent': (agent,
+        'agents'),
+    'action': (action,
+        'actions'),
+    'ask': (ask,
+        'ask commands'),
 }
 

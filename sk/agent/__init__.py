@@ -27,7 +27,7 @@ for agent, desc in SET:
 
 
 META_PROMPT = '''
-Take the following prompt and select one or more agents from the list of available agents to handle the prompt or a section of it, in the appropriate sequential order.
+Take the following prompt and select one or more agents from the list of available agents to handle the prompt or a section of it, in the appropriate sequential order. Consecutive agents of the same type should be collapsed into a single prompt.
 
 PROMPT:
 '''

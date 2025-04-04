@@ -24,6 +24,9 @@ def run():
         entry_points = {
             'console_scripts': [
                 'sk=sk.__main__:run',
+                'sk-agent=sk.agent.__main__:run',
+                'sk-action=sk.action.__main__:run',
+                'sk-ask=sk.ask.__main__:run',
                 'ask=sk.__main__:run',
                 'task=sk.__main__:run',
             ],
