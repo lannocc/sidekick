@@ -3,6 +3,7 @@
 
 from .. import ai
 from . import file
+from . import browser
 from . import wild
 
 import json
@@ -10,6 +11,8 @@ import json
 
 SET = [
     (file, 'perform filesystem and git commands'),
+    (browser, 'access the Internet and interact with the screen, mouse, and '
+                +'keyboard'),
     (wild, 'catch-all for anything not understood or handled by the others'),
 ]
 
