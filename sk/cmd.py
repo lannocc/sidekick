@@ -99,8 +99,20 @@ def do_task(prompt):
     print(f' >> {prompt}')
     print()
 
-    agent.prompt_for_agent(prompt)
-    print()
+    agents = agent.prompt_for_agent(prompt)
+
+    for name, agent, prompt in agents:
+        print()
+        print(f'~~{name}~~')
+
+        actions = agent.prompt_for_action(prompt)
+        ok = actions.do()
+
+        if not ok:
+            print('!!! the agent failed to do actions !!!')
+            return False
+
+    return True
 
 
 def help(args):

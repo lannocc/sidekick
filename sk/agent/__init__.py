@@ -39,12 +39,12 @@ PROMPT:
 def prompt_for_agent(text):
     agents = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text)
     print(agents)
+    to_do = [ ]
 
     for agent in json.loads(agents):
         name = agent['agent']
         prompt = agent['prompt']
         found = False
-        to_do = [ ]
 
         for agent, desc in SET:
             if agent.__name__.split('.')[-1] == name:
@@ -54,8 +54,12 @@ def prompt_for_agent(text):
 
         assert found
 
+        '''
         for name, agent, prompt in to_do:
             print()
             print(f'  ## {name} ##')
             agent.prompt_for_action(prompt)
+        '''
+
+    return to_do
 

@@ -58,6 +58,7 @@ def prompt_for_action(text):
     print(f'      << {actions}')
 
     actions = Actions(json.loads(actions))
+    return actions
 
 
 class Actions:

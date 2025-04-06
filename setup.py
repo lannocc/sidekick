@@ -19,7 +19,10 @@ def run():
             "Operating System :: OS Independent",
         ],
         install_requires=[
+            'google-genai',
             'google-generativeai',
+            'Pillow',
+            'pyautogui',
         ],
         entry_points = {
             'console_scripts': [

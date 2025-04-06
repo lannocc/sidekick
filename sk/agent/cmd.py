@@ -46,7 +46,8 @@ def prompt(args):
         if not prompt: return
 
     from . import prompt_for_agent
-    prompt_for_agent(prompt)
+    agents = prompt_for_agent(prompt)
+    #print(agents)
 
 
 def list_agents(args):
