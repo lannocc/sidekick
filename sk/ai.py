@@ -5,6 +5,7 @@ from .config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT
 
 import google.generativeai as genai0
 from google import genai
+from google.genai.types import HttpOptions
 
 
 model0 = genai0.GenerativeModel(GEMINI_MODEL)
@@ -24,7 +25,8 @@ def prompt_for_json(prompt):
 
 
 def prompt_with_file_for_text(prompt, file):
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=GEMINI_API_KEY,
+                          http_options=HttpOptions(timeout=GEMINI_TIMEOUT))
     file = client.files.upload(file=file)
 
     resp = client.models.generate_content(
@@ -39,7 +41,8 @@ def prompt_with_file_for_text(prompt, file):
 
 
 def prompt_with_file_for_json(prompt, file):
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=GEMINI_API_KEY,
+                          http_options=HttpOptions(timeout=GEMINI_TIMEOUT))
     file = client.files.upload(file=file)
 
     resp = client.models.generate_content(

@@ -16,18 +16,18 @@ import time
 PRE_PROMPT = '''
 We act as a web browser agent.
 
-Reply with a JSON list of maps where each map has a key named "action" whose value is one of the following: "open", "click", "type", "key", or "help". Each possible type of action map is described with additional keys below...
+Reply with a JSON list of maps where each map has a key named "action" whose value is one of the following: "open", "click", "type", "key", or "help". Each possible type of action map is described with additional keys below (be descriptive or verbatim if possible for the additional prompt key values)...
 
 To resolve and open web paes:
 {
     "action": "open",
-    "what_to_open": "(required)",
+    "prompt_to_open": "(required)",
 }
 
 To interact with visual elements with the mouse:
 {
     "action": "click",
-    "what_to_click": "(required)",
+    "prompt_to_click": "(required)",
 }
 
 To enter text with the keyboard:
@@ -73,9 +73,11 @@ def resolve_url(text):
     prompt = 'Return simply the URL for the given resource or the word FAIL ' \
             + f'if the full URL cannot be known, for this resource: {text}'
     url = ai.prompt_for_text(prompt)
-    if url.upper() == 'FAIL':
+    if url.upper().startswith('FAIL'):
         print(f'            -!! {url}')
-        return None
+        #return None
+        print(f' ***CONTINUIING ANYWAY***')
+        return text
 
     else:
         print(f'            --> {url}')
@@ -102,8 +104,8 @@ class Actions:
 
         return True
 
-    def do_open(self, what_to_open):
-        url = resolve_url(what_to_open)
+    def do_open(self, prompt_to_open):
+        url = resolve_url(prompt_to_open)
         if not url:
             return False
 
@@ -124,7 +126,7 @@ class Actions:
 
         return True
 
-    def do_click(self, what_to_click):
+    def do_click(self, prompt_to_click):
         file = '/tmp/sidekick-shot.png'
 
         shot = ImageGrab.grab()
@@ -135,17 +137,20 @@ class Actions:
         '''
         prompt = 'Return a JSON map with the single key named "midpoint" and ' \
                 + 'value is the [X,Y] coordinates for the midpoint of the ' \
-                + f'region described as "{what_to_click}", or set midpoint ' \
-                + f'JSON false if "{what_to_click}" cannot be found. The ' \
+                + f'region described as "{prompt_to_click}", or set midpoint ' \
+                + f'JSON false if "{prompt_to_click}" cannot be found. The ' \
                 + f'attached image is {w} px wide and {h} px high and 0,0 is ' \
                 + 'the top-left position.'
         '''
 
         prompt = 'Return a JSON map with the single key named "bounding_box" ' \
                 + 'and value is the bounding box of the region described as ' \
-                + f'"{what_to_click}", or set bounding_box to JSON false if ' \
-                + f'"{what_to_click}" cannot be found. The image is a ' \
-                + 'full-screen screenshot so start at 0,0 on the top left.'
+                + f'"{prompt_to_click}", or set bounding_box to JSON false if '\
+                + f'"{prompt_to_click}" cannot be found. The image is a ' \
+                + 'full-screen screenshot so start at 0,0 on the top left ' \
+                + 'and do not ignore upper menu bars or other blank regions. ' \
+                + 'Be sure to return of the form { "bounding_box": ' \
+                + '[y1,x1,y2,x2] } or { "bounding_box": false }'
 
         print(f'   >>> {prompt}')
         box = ai.prompt_with_file_for_json(file=file, prompt=prompt)
