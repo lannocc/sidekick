@@ -2,10 +2,13 @@
 # @%@~LICENSE~@%@
 
 from .config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT
+from .util import play_retry
 
 import google.generativeai as genai0
 from google import genai
 from google.genai.types import HttpOptions
+
+from httpx import ReadTimeout, WriteTimeout
 
 
 model0 = genai0.GenerativeModel(GEMINI_MODEL)
@@ -49,8 +52,13 @@ def prompt_with_file_for_json(prompt, file, retries=0):
             file = client.files.upload(file=file)
             break
 
+        except ReadTimeout:
+            print(f'  -+? RETRY {t+1}')
+
         except WriteTimeout:
             print(f'  -+? RETRY {t+1}')
+
+        play_retry()
 
     resp = client.models.generate_content(
             model=GEMINI_MODEL,

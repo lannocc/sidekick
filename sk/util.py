@@ -4,12 +4,15 @@
 from .config import CHROME_PROFILE
 
 from PIL import ImageGrab
+from playsound3 import playsound
+#import simpleaudio as sa
 
 from sys import stdout
 import os
 import subprocess
 import platform
 import tempfile
+#import time
 
 
 def print_flush(*args, **kwargs):
@@ -52,9 +55,57 @@ def open_browser(url):
 def take_screenshot():
     fd, file = tempfile.mkstemp(prefix='sidekick-shot-', suffix='.png')
     shot = ImageGrab.grab()
+    play_shot()
     w,h = shot.size
     shot.save(file)
     shot.close()
 
     return file, w, h
+
+
+def play(file_path):
+    '''
+    system = platform.system()
+
+    if system == 'Windows':
+        import winsound
+        winsound.PlaySound(file_path, winsound.SND_FILENAME)
+        return
+
+    elif system == 'Darwin':
+        r = os.system(f'aplay "{file_path}"')
+
+    elif system == 'Linux':
+        try: r = os.system(f'aplay "{file_path}"')
+        except: r = os.system(f'xdg-open "{file_path}"')
+
+    if r != 0:
+        raise RuntimeError(f'failed to play sound: {file_path}')
+    '''
+
+    playsound(file_path)
+
+    #wave = sa.WaveObject.from_wave_file(file_path)
+    #play = wave.play()
+    #play.wait_done()
+
+
+def play_error():
+    #play('assets/beep.wav')
+    #play('assets/beep1.wav')
+    play('assets/beep2.wav')
+    play('assets/beep2.wav')
+    play('assets/beep2.wav')
+
+
+def play_retry():
+    play('assets/short_beep.wav')
+
+
+def play_success():
+    play('assets/good_bell.wav')
+
+
+def play_shot():
+    play('assets/shutter.wav')
 

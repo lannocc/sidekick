@@ -22,7 +22,9 @@ def run():
             'google-genai',
             'google-generativeai',
             'Pillow',
+            'playsound3',
             'pyautogui',
+            #'simpleaudio',
         ],
         entry_points = {
             'console_scripts': [

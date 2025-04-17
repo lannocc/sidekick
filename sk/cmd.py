@@ -131,25 +131,43 @@ def ask_question(prompt=None, shot=False, file=None):
 
 def do_task(prompt=None, shot=False, file=None):
     from . import agent
+    from .util import play_error, play_success
 
     print('Perform a Task')
     print()
-    print(f' >> {prompt}')
+
+    if prompt:
+        print(f' >> {prompt}')
+
+    else:
+        print(' >> ', end='')
+        prompt = input()
+
+    if not prompt:
+        return
+
     print()
 
-    agents = agent.prompt_for_agent(prompt)
+    try:
+        agents = agent.prompt_for_agent(prompt)
 
-    for name, agent, prompt in agents:
-        print()
-        print(f'~~{name}~~')
+        for name, agent, prompt in agents:
+            print()
+            print(f'~~{name}~~')
 
-        actions = agent.prompt_for_action(prompt)
-        ok = actions.do()
+            actions = agent.prompt_for_action(prompt)
+            ok = actions.do()
 
-        if not ok:
-            print('!!! the agent failed to do actions !!!')
-            return False
+            if not ok:
+                print('!!! the agent failed to do actions !!!')
+                play_error()
+                return False
 
+    except Exception as e:
+        play_error()
+        raise e
+
+    play_success()
     return True
 
 

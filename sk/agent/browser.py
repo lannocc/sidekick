@@ -110,8 +110,8 @@ class Actions:
         proc = open_browser(url)
         print(f'   # opened pid {proc.pid}')
 
-        print_flush('5(s) delay', end='')
-        for i in range(5):
+        print_flush('10(s) delay', end='')
+        for i in range(10):
             print_flush('.', end='')
             time.sleep(1)
 
@@ -158,10 +158,10 @@ class Actions:
             print(f'            !,!= {box} (coordinates)')
             return None
 
-        print_flush('5(s) delay', end='')
-        for i in range(5):
-            print_flush('.', end='')
-            time.sleep(1)
+        #print_flush('5(s) delay', end='')
+        #for i in range(5):
+        #    print_flush('.', end='')
+        #    time.sleep(1)
 
         pyautogui.click()
 
