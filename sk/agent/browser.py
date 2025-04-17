@@ -10,6 +10,7 @@ import pyautogui
 import json
 import subprocess
 import time
+import tempfile
 
 
 PRE_PROMPT = '''
@@ -119,7 +120,8 @@ class Actions:
         return True
 
     def do_click(self, prompt_to_click):
-        file = '/tmp/sidekick-shot.png'
+        #file = '/tmp/sidekick-shot.png'
+        fd, file = tempfile.mkstemp(prefix='sidekick-shot-', suffix='.png')
 
         shot = ImageGrab.grab()
         w,h = shot.size
