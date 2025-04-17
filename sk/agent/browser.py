@@ -2,8 +2,7 @@
 # @%@~LICENSE~@%@
 
 from .. import ai
-from ..config import CHROME_PROFILE
-from ..util import print_flush
+from ..util import print_flush, open_browser
 
 from PIL import ImageGrab
 import pyautogui
@@ -70,8 +69,8 @@ def prompt_for_action(text):
 def resolve_url(text):
     print(f'            @ {text}')
 
-    prompt = 'Return simply the URL for the given resource or the word FAIL ' \
-            + f'if the full URL cannot be known, for this resource: {text}'
+    prompt = 'Return simply the likely URL for the given site, or the word ' \
+            + f"FAIL if the URL isn't known for this site: {text}"
     url = ai.prompt_for_text(prompt)
     if url.upper().startswith('FAIL'):
         print(f'            -!! {url}')
@@ -109,14 +108,7 @@ class Actions:
         if not url:
             return False
 
-        proc = subprocess.Popen(['google-chrome',
-                                 f'--profile-directory={CHROME_PROFILE}',
-                                 '--start-fullscreen', '--new-window', url],
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
-                                stdin=subprocess.DEVNULL,
-                                start_new_session=True)
-
+        proc = open_browser(url)
         print(f'   # opened pid {proc.pid}')
 
         print_flush('5(s) delay', end='')
@@ -153,7 +145,7 @@ class Actions:
                 + '[y1,x1,y2,x2] } or { "bounding_box": false }'
 
         print(f'   >>> {prompt}')
-        box = ai.prompt_with_file_for_json(file=file, prompt=prompt)
+        box = ai.prompt_with_file_for_json(file=file, prompt=prompt, retries=2)
         print(f'   <<< {box}')
 
         box = json.loads(box)

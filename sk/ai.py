@@ -40,10 +40,17 @@ def prompt_with_file_for_text(prompt, file):
     return resp.text
 
 
-def prompt_with_file_for_json(prompt, file):
+def prompt_with_file_for_json(prompt, file, retries=0):
     client = genai.Client(api_key=GEMINI_API_KEY,
                           http_options=HttpOptions(timeout=GEMINI_TIMEOUT))
-    file = client.files.upload(file=file)
+
+    for t in range(retries+1):
+        try:
+            file = client.files.upload(file=file)
+            break
+
+        except WriteTimeout:
+            print(f'  -+? RETRY {t+1}')
 
     resp = client.models.generate_content(
             model=GEMINI_MODEL,
