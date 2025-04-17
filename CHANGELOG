@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_041725_3 - Add options to take screenshot or upload file with prompt.
+
 saw_041725_2 - Use proper cross-platform temporary file.
 
 saw_041725_1 - Support Chrome on Windows too. Improve URL lookup. Retry uploads.

@@ -3,10 +3,13 @@
 
 from .config import CHROME_PROFILE
 
+from PIL import ImageGrab
+
 from sys import stdout
 import os
 import subprocess
 import platform
+import tempfile
 
 
 def print_flush(*args, **kwargs):
@@ -44,4 +47,14 @@ def open_browser(url):
                             start_new_session=True)
 
     return proc
+
+
+def take_screenshot():
+    fd, file = tempfile.mkstemp(prefix='sidekick-shot-', suffix='.png')
+    shot = ImageGrab.grab()
+    w,h = shot.size
+    shot.save(file)
+    shot.close()
+
+    return file, w, h
 

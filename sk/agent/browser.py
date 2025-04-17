@@ -2,15 +2,13 @@
 # @%@~LICENSE~@%@
 
 from .. import ai
-from ..util import print_flush, open_browser
+from ..util import print_flush, open_browser, take_screenshot
 
-from PIL import ImageGrab
 import pyautogui
 
 import json
 import subprocess
 import time
-import tempfile
 
 
 PRE_PROMPT = '''
@@ -120,13 +118,7 @@ class Actions:
         return True
 
     def do_click(self, prompt_to_click):
-        #file = '/tmp/sidekick-shot.png'
-        fd, file = tempfile.mkstemp(prefix='sidekick-shot-', suffix='.png')
-
-        shot = ImageGrab.grab()
-        w,h = shot.size
-        shot.save(file)
-        shot.close()
+        file, w, h = take_screenshot()
 
         '''
         prompt = 'Return a JSON map with the single key named "midpoint" and ' \
