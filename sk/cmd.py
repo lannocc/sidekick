@@ -180,8 +180,8 @@ def help(args):
     print('   task [options] <command-prompt>')
     print()
     #print('Use `sk` for sidekick commands, `ask` questions, `task` for tasks.')
-    print('Use `ask` to get a reply to a question or other promot.')
-    print('Use `task` to invoke our agents to do something.')
+    print('Use `ask` to get a reply to a question or other prompt.')
+    print('Use `task` to invoke our agents to do something useful.')
     print()
     print('The following general options are available:')
     for name, opt in OPTIONS.items():

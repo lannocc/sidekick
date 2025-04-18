@@ -152,7 +152,14 @@ class Actions:
             x2 = x2 * w / 1000
             y1 = y1 * h / 1000
             y2 = y2 * h / 1000
-            pyautogui.moveTo(x1 + (x2-x1)/2, y1 + (y2-y1)/2, duration=5)
+
+            pyautogui.moveTo(x1, y1, duration=1)
+            pyautogui.moveTo(x1, y2, duration=.5)
+            pyautogui.moveTo(x2, y2, duration=.5)
+            pyautogui.moveTo(x2, y1, duration=.5)
+            pyautogui.moveTo(x1, y1, duration=.5)
+
+            pyautogui.moveTo(x1 + (x2-x1)/2, y1 + (y2-y1)/2, duration=1)
 
         else:
             print(f'            !,!= {box} (coordinates)')
