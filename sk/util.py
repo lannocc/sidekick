@@ -110,12 +110,20 @@ def play_shot():
     play('assets/shutter.wav')
 
 
+def play_ding():
+    play('assets/ding.wav')
+
+
 def play_click():
     play('assets/mouse_click.wav')
 
 
-def play_ding():
-    play('assets/ding.wav')
+def play_key():
+    play('assets/key.wav')
+
+
+def play_typing():
+    play('assets/keys.wav')
 
 
 def play_scratch():

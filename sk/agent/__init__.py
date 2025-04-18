@@ -4,6 +4,7 @@
 from .. import ai
 from . import file
 from . import browser
+from . import control
 from . import wild
 #from ..util import play_error
 
@@ -14,6 +15,7 @@ SET = [
     (file, 'perform filesystem and git commands'),
     (browser, 'access the Internet and interact with the screen, mouse, and '
                 +'keyboard'),
+    (control, 'basic timing control like waiting, looping, scheduling'),
     (wild, 'catch-all for anything not understood or handled by the others'),
 ]
 

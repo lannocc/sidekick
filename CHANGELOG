@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_041725_7 - Now with basic control agent and a browser agent that can type.
+
 saw_041725_6 - Now allow agent actions to loop back and do general prompts.
 
 saw_041725_5 - Indicate with mouse where about to click.
