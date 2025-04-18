@@ -109,3 +109,19 @@ def play_success():
 def play_shot():
     play('assets/shutter.wav')
 
+
+def play_click():
+    play('assets/mouse_click.wav')
+
+
+def play_ding():
+    play('assets/ding.wav')
+
+
+def play_scratch():
+    play('assets/scratch.wav')
+
+
+def play_thinking():
+    play('assets/three_tones.wav')
+

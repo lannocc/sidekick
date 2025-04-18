@@ -5,6 +5,7 @@ from .. import ai
 from . import file
 from . import browser
 from . import wild
+#from ..util import play_error
 
 import json
 
@@ -62,4 +63,22 @@ def prompt_for_agent(text):
         '''
 
     return to_do
+
+
+def just_do_it(text):
+    agents = prompt_for_agent(text)
+
+    for name, agent, prompt in agents:
+        print()
+        print(f'~~{name}~~')
+
+        actions = agent.prompt_for_action(prompt)
+        ok = actions.do()
+
+        if not ok:
+            print('!!! the agent failed to do actions !!!')
+            #play_error()
+            return False
+
+    return True
 

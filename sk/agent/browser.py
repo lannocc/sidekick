@@ -2,7 +2,9 @@
 # @%@~LICENSE~@%@
 
 from .. import ai
+from ..action import ActionsBase
 from ..util import print_flush, open_browser, take_screenshot
+from ..util import play_ding, play_click, play_scratch
 
 import pyautogui
 
@@ -11,10 +13,9 @@ import subprocess
 import time
 
 
+#We act as a web browser agent.
 PRE_PROMPT = '''
-We act as a web browser agent.
-
-Reply with a JSON list of maps where each map has a key named "action" whose value is one of the following: "open", "click", "type", "key", or "help". Each possible type of action map is described with additional keys below (be descriptive or verbatim if possible for the additional prompt key values)...
+Reply with a JSON list of maps for a web browser agent, where each map has a key named "action" whose value is one of the following: "open", "click", "type", "key", or "help". Each possible type of action map is described with additional keys below (be descriptive or verbatim if possible for the additional prompt key values)...
 
 To resolve and open web paes:
 {
@@ -40,7 +41,7 @@ To operate various special keys like enter, control, function keys etc.:
     "special_keys": "(required)"
 }
 
-To get help with anything else (catch-all):
+To get help with anything else (catch-all pass-through to another handler):
 {
     "action": "help",
     "prompt": "(required)"
@@ -82,26 +83,7 @@ def resolve_url(text):
         return url
 
 
-class Actions:
-    def __init__(self, actions):
-        self.to_do = [ ]
-
-        for action in actions:
-            name = action['action']
-            del action['action']
-            fn = getattr(self, 'do_' + name)
-            self.to_do.append((name, fn, action))
-
-    def do(self):
-        for name, fn, args in self.to_do:
-            print(f'        ** {name}( {args} )')
-            ok = fn(**args)
-            if not ok:
-                print(f'!!! action FAIL did not return True !!!')
-                return False
-
-        return True
-
+class Actions(ActionsBase):
     def do_open(self, prompt_to_open):
         url = resolve_url(prompt_to_open)
         if not url:
@@ -114,6 +96,7 @@ class Actions:
         for i in range(10):
             print_flush('.', end='')
             time.sleep(1)
+        print()
 
         return True
 
@@ -138,44 +121,51 @@ class Actions:
                 + 'Be sure to return of the form { "bounding_box": ' \
                 + '[y1,x1,y2,x2] } or { "bounding_box": false }'
 
-        print(f'   >>> {prompt}')
+        #print(f'   >>> {prompt}')
         box = ai.prompt_with_file_for_json(file=file, prompt=prompt, retries=2)
-        print(f'   <<< {box}')
+        #print(f'   <<< {box}')
 
         box = json.loads(box)
 
-        if 'bounding_box' in box and box['bounding_box']:
-            box = box['bounding_box']
-            y1,x1,y2,x2 = box
-            # gemini bounding box training assumes 1000x1000 image
-            x1 = x1 * w / 1000
-            x2 = x2 * w / 1000
-            y1 = y1 * h / 1000
-            y2 = y2 * h / 1000
-
-            pyautogui.moveTo(x1, y1, duration=1)
-            pyautogui.moveTo(x1, y2, duration=.5)
-            pyautogui.moveTo(x2, y2, duration=.5)
-            pyautogui.moveTo(x2, y1, duration=.5)
-            pyautogui.moveTo(x1, y1, duration=.5)
-
-            pyautogui.moveTo(x1 + (x2-x1)/2, y1 + (y2-y1)/2, duration=1)
-
-        else:
+        if not ('bounding_box' in box and box['bounding_box']):
             print(f'            !,!= {box} (coordinates)')
             return None
+
+        box = box['bounding_box']
+        y1,x1,y2,x2 = box
+        # gemini bounding box training assumes 1000x1000 image
+        x1 = x1 * w / 1000
+        x2 = x2 * w / 1000
+        y1 = y1 * h / 1000
+        y2 = y2 * h / 1000
+
+        pyautogui.moveTo(x1, y1, duration=1)
+        play_ding()
+        pyautogui.moveTo(x1, y2, duration=.1)
+        play_ding()
+        pyautogui.moveTo(x2, y2, duration=.1)
+        play_ding()
+        pyautogui.moveTo(x2, y1, duration=.1)
+        play_ding()
+        pyautogui.moveTo(x1, y1, duration=.1)
+        play_ding()
+
+        pyautogui.moveTo(x1 + (x2-x1)/2, y1 + (y2-y1)/2, duration=1)
 
         #print_flush('5(s) delay', end='')
         #for i in range(5):
         #    print_flush('.', end='')
         #    time.sleep(1)
+        #print()
 
+        play_click()
         pyautogui.click()
 
-        print_flush('5(s) delay', end='')
-        for i in range(5):
+        print_flush('7(s) delay', end='')
+        for i in range(7):
             print_flush('.', end='')
             time.sleep(1)
+        print()
 
         return True
 
@@ -186,5 +176,7 @@ class Actions:
         print('FIXME do_key()') # FIXME
 
     def do_help(self, prompt):
-        print('FIXME do_help()') # FIXME
+        play_scratch()
+        from . import just_do_it
+        return just_do_it(prompt)
 

@@ -149,26 +149,19 @@ def do_task(prompt=None, shot=False, file=None):
     print()
 
     try:
-        agents = agent.prompt_for_agent(prompt)
+        ok = agent.just_do_it(prompt)
 
-        for name, agent, prompt in agents:
-            print()
-            print(f'~~{name}~~')
+        if ok:
+            play_success()
+            return True
 
-            actions = agent.prompt_for_action(prompt)
-            ok = actions.do()
-
-            if not ok:
-                print('!!! the agent failed to do actions !!!')
-                play_error()
-                return False
+        else:
+            play_error()
+            return False
 
     except Exception as e:
         play_error()
         raise e
-
-    play_success()
-    return True
 
 
 def help(args):

@@ -2,12 +2,13 @@
 # @%@~LICENSE~@%@
 
 from .. import ai
+from ..action import ActionsBase
 
 import json
 
 
 PRE_PROMPT = '''
-Reply with a JSON list of maps where each map has a key named "action" whose value is one of the following: "move", "copy", "delete", "folder", or "help". Each possible type of action map is described with additional keys below...
+Reply with a JSON list of maps where each map has a key named "action" whose value is one of the following: "move", "copy", "delete", "folder", or "help". Each possible type of action map is described with additional keys below (be descriptive or verbatim if possible for the additional prompt key values)...
 
 To move a file or folder:
 {
@@ -36,7 +37,7 @@ To create a new folder:
     "name": "(required)"
 }
 
-To get help with anything else (catch-all):
+To get help with anything else (catch-all pass-through to another handler):
 {
     "action": "help",
     "prompt": "(required)"
@@ -61,20 +62,7 @@ def prompt_for_action(text):
     return actions
 
 
-class Actions:
-    def __init__(self, actions):
-        self.to_do = [ ]
-
-        for action in actions:
-            name = action['action']
-            del action['action']
-            fn = getattr(self, 'do_' + name)
-            self.to_do.append((name, fn, action))
-
-    def do(self):
-        for name, fn, args in self.to_do:
-            print('        ** {name}( {args} )')
-
+class Actions(ActionsBase):
     def do_move(self, source, destination):
         pass
 
