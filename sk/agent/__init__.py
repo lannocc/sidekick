@@ -2,9 +2,10 @@
 # @%@~LICENSE~@%@
 
 from .. import ai
+from . import control
 from . import file
 from . import browser
-from . import control
+from . import speech
 from . import wild
 #from ..util import play_error
 
@@ -12,10 +13,11 @@ import json
 
 
 SET = [
+    (control, 'basic timing control like waiting, looping, scheduling'),
     (file, 'perform filesystem and git commands'),
     (browser, 'access the Internet and interact with the screen, mouse, and '
                 +'keyboard'),
-    (control, 'basic timing control like waiting, looping, scheduling'),
+    (speech, 'talk aloud or say something'),
     (wild, 'catch-all for anything not understood or handled by the others'),
 ]
 
@@ -33,7 +35,7 @@ for agent, desc in SET:
 
 
 META_PROMPT = '''
-Take the following prompt and select one or more agents from the list of available agents to handle the prompt or a section of it, in the appropriate sequential order. Consecutive agents of the same type should be collapsed into a single prompt.
+Take the following prompt and select one or more agents from the list of available agents to handle the prompt or a section of it, in the appropriate sequential order. Consecutive agents of the same type should be collapsed into a single prompt, so there should not be two of the same agent in a row. Sometimes only one agent is needed. Assume the agents are capable of looking up the information they may need.
 
 PROMPT:
 '''

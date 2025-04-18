@@ -70,8 +70,8 @@ def prompt_for_action(text):
 def resolve_url(text):
     print(f'            @ {text}')
 
-    prompt = 'Return simply the likely URL for the given site, or the word ' \
-            + f"FAIL if the URL isn't known for this site: {text}"
+    prompt = 'Return simply a likely URL for this description, or the word ' \
+            + f"FAIL if a good URL isn't known for this: {text}"
     url = ai.prompt_for_text(prompt)
     if url.upper().startswith('FAIL'):
         print(f'            -!! {url}')

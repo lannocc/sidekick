@@ -21,9 +21,11 @@ def run():
         install_requires=[
             'google-genai',
             'google-generativeai',
+            'gTTS', # text-to-speech (Linux)
             'Pillow',
             'playsound3',
             'pyautogui',
+            'pyttsx3', # text-to-speech (Windows)
             #'simpleaudio',
         ],
         entry_points = {
