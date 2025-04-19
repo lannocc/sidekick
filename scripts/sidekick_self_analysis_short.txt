@@ -1,0 +1,6 @@
+
+ >> give a one paragraph description of this project
+
+PACKAGED DIRECTORY to: /tmp/sidekick-package-t4q2v3kh.txt
+ << SideKick is an AI-powered assistant designed to automate tasks through a modular agent system. It leverages large language models via the Gemini API to interpret prompts and delegate actions to specialized agents like browser control, file management, speech synthesis, and timing control. The project includes a command-line interface (`sk`) for users to interact with the agents, enabling them to ask questions, perform tasks, and manage agent configurations, and supporting integration with external resources such as the web and local file system. Sidekick is built with a focus on flexibility, allowing for the seamless addition of new agents and actions to expand its capabilities.
+

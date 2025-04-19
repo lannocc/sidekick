@@ -1,7 +1,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from .util import print_flush
+from .util import print_flush, package_directory
 
 print = print_flush
 
@@ -28,6 +28,7 @@ def main(args, called=''):
 
     shot = False
     file = None
+    pkg = None
 
     while args and args[0].startswith('-'):
         op = args[0]
@@ -53,6 +54,15 @@ def main(args, called=''):
                     print(f'need a filename to upload')
                     return
 
+            elif op == '-p':
+                if args:
+                    pkg = args[0]
+                    args = args[1:]
+
+                if not pkg:
+                    print(f'need a directory path to package')
+                    return
+
         else:
             print(f'unknown option: {op}')
             return
@@ -67,8 +77,8 @@ def main(args, called=''):
         elif args: prompt = args[0]
         else: prompt = None
 
-        if task: do_task(prompt, shot=shot, file=file)
-        else: ask_question(prompt, shot=shot, file=file)
+        if task: do_task(prompt, shot=shot, file=file, package=pkg)
+        else: ask_question(prompt, shot=shot, file=file, package=pkg)
 
         return
 
@@ -93,7 +103,7 @@ def main(args, called=''):
     cmd[0](args)
 
 
-def ask_question(prompt=None, shot=False, file=None):
+def ask_question(prompt=None, shot=False, file=None, package=None):
     from . import ai
     from .util import take_screenshot
 
@@ -112,13 +122,18 @@ def ask_question(prompt=None, shot=False, file=None):
 
     print()
 
-    if shot or file:
-        if shot and file:
-            print('!!! only screenshot OR file supported at this time !!!')
+    if shot or file or package:
+        if sum([ 1 for item in [ shot, file, package ] if item ]) > 1:
+            print('!!! only one of screenshot OR file OR package at a time !!!')
             return
 
         if shot:
             file, w, h = take_screenshot()
+            print(f'SAVED SCREENSHOT to: {file}')
+
+        elif package:
+            file = package_directory(package)
+            print(f'PACKAGED DIRECTORY to: {file}')
 
         answer = ai.prompt_with_file_for_text(prompt, file)
 
@@ -129,7 +144,7 @@ def ask_question(prompt=None, shot=False, file=None):
     print()
 
 
-def do_task(prompt=None, shot=False, file=None):
+def do_task(prompt=None, shot=False, file=None, package=None):
     from . import agent
     from .util import play_error, play_success
 
@@ -218,11 +233,12 @@ def action(args):
     action_main(args)
 
 
+'''
 def ask(args):
     from .ask.cmd import main as ask_main
 
     ask_main(args)
-
+'''
 
 
 OPTIONS = {
@@ -234,6 +250,8 @@ OPTIONS = {
         'take screenshot to use with prompt'),
     '-f': (None,
         'upload file with -f <filename>'),
+    '-p': (None,
+        'package directory text contents and upload with -p <directory>'),
 }
 
 
@@ -246,7 +264,7 @@ COMMANDS = {
         'agents'),
     'action': (action,
         'actions'),
-    'ask': (ask,
-        'ask commands'),
+    #'ask': (ask,
+    #    'ask commands'),
 }
 

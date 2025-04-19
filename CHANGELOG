@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_041825_3 - We can now package a directory for prompting with the -p option.
+
 saw_041825_2 - Trying to improve control logic and browser url resolution.
 
 saw_041825_1 - Speech agent talks!

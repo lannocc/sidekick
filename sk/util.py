@@ -63,6 +63,91 @@ def take_screenshot():
     return file, w, h
 
 
+def is_ignorable_path(item):
+    return True \
+            if item.startswith('.') \
+            or item == 'build' or item == 'venv' or item == 'scripts' \
+            or item.endswith('.egg-info') or item.endswith('~') else False
+
+
+def get_directory_tree_as_text(path, indent=''):
+    text = ''
+    items = os.listdir(path)
+
+    for i, item in enumerate(sorted(items)):
+        if is_ignorable_path(item):
+            continue
+
+        full_path = os.path.join(path, item)
+
+        if i < len(items) - 1: # not last item
+            prefix = "├── "
+            new_indent = indent + "│   "
+
+        else: # last item in list
+            prefix = "└── "
+            new_indent = indent + "    "
+
+        suffix = ''
+        if os.path.isdir(full_path):
+            suffix = os.sep
+
+        text += indent + prefix + item + suffix + '\n'
+
+        if os.path.isdir(full_path):
+            text += get_directory_tree_as_text(full_path, new_indent)
+
+    return text
+
+
+def get_directory_contents_as_text(path):
+    text = ''
+    items = os.listdir(path)
+
+    for i, item in enumerate(sorted(items)):
+        if is_ignorable_path(item):
+            continue
+
+        full_path = os.path.join(path, item)
+
+        if os.path.isdir(full_path):
+            text += get_directory_contents_as_text(full_path)
+
+        else:
+            hint = 'python' if item.endswith('.py') else \
+                   'svelte' if item.endswith('.svelte') else \
+                   'markdown' if item.endswith('.md') else \
+                   'text' if item.endswith('.txt') else None
+
+            if not hint: # not a text file
+                continue
+
+            text += f'\nFILE {full_path}:\n'
+            text += f'```{hint}\n'
+            with open(full_path, 'r') as file:
+                text += file.read()
+                #text += '\n'
+            text += '```\n\n'
+
+    return text
+
+
+def package_directory(path, label='project'):
+    fd, name = tempfile.mkstemp(prefix='sidekick-package-', suffix='.txt')
+
+    with open(name, 'w') as file:
+        file.write(f'Our {label} is laid out as given in the following file '
+                    'hierarchy:\n\n')
+        file.write(f'{path}{os.sep}\n')
+        file.write(get_directory_tree_as_text(path))
+        file.write('\n\n')
+        file.write('The contents of each file are given in succession below...'
+                   '\n\n')
+        file.write(get_directory_contents_as_text(path))
+
+    return name
+
+
 def play(file_path):
     '''
     system = platform.system()
