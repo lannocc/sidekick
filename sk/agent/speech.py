@@ -5,7 +5,6 @@ from .. import ai
 from ..action import ActionsBase
 from ..util import print_flush, play_scratch
 
-import json
 import time
 import platform
 
@@ -55,7 +54,7 @@ def prompt_for_action(text):
     actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text)
     print(f'      << {actions}')
 
-    actions = Actions(json.loads(actions))
+    actions = Actions(actions)
     return actions
 
 

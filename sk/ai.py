@@ -9,6 +9,7 @@ from google import genai
 from google.genai.types import HttpOptions
 
 from httpx import ReadTimeout, WriteTimeout
+import json
 
 
 model0 = genai0.GenerativeModel(GEMINI_MODEL)
@@ -24,7 +25,7 @@ def prompt_for_json(prompt):
                                   generation_config=genai0.GenerationConfig(
                                       response_mime_type='application/json'))
                                       #timeout=GEMINI_TIMEOUT))
-    return resp.text
+    return json.loads(resp.text)
 
 
 def prompt_with_file_for_text(prompt, file):
@@ -72,5 +73,5 @@ def prompt_with_file_for_json(prompt, file, retries=0):
                 #'timeout': GEMINI_TIMEOUT,
                 })
 
-    return resp.text
+    return json.loads(resp.text)
 

@@ -8,7 +8,6 @@ from ..util import play_ding, play_click, play_scratch, play_key, play_typing
 
 import pyautogui
 
-import json
 import subprocess
 import time
 
@@ -63,25 +62,51 @@ def prompt_for_action(text):
     actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text)
     print(f'      << {actions}')
 
-    actions = Actions(json.loads(actions))
+    actions = Actions(actions)
     return actions
 
 
 def resolve_url(text):
     print(f'            @ {text}')
 
+    '''
     prompt = 'Return simply a likely URL for this description, or the word ' \
             + f"FAIL if a good URL isn't known for this: {text}"
     url = ai.prompt_for_text(prompt)
     if url.upper().startswith('FAIL'):
         print(f'            -!! {url}')
         #return None
-        print(f' ***CONTINUIING ANYWAY***')
+        print(f' ***CONTINUING ANYWAY***')
         return text
 
     else:
         print(f'            --> {url}')
         return url
+    '''
+
+    pre = 'Reply with a JSON map with the following keys:\n' \
+          '{\n' \
+          '    "output": str,\n' \
+          '    "is_url": bool\n' \
+          '}\n\n' \
+          'The JSON map should be a reply to the following prompt:\n\n'
+
+    reply = { 'is_url': False }
+    tries = 0
+
+    while not reply['is_url']:
+        if tries > 3:
+            print(f'            -!! 3 tries @ {url}')
+            return None
+
+        prompt = 'Give a URL or other possible suggestion for: '
+        reply = ai.prompt_for_json(pre + prompt + text)
+
+        tries += 1
+
+    url = reply['output']
+    print(f'            --> {url}')
+    return url
 
 
 def get_screen_region(region_description):
@@ -108,8 +133,6 @@ def get_screen_region(region_description):
     #print(f'   >>> {prompt}')
     box = ai.prompt_with_file_for_json(file=file, prompt=prompt, retries=2)
     #print(f'   <<< {box}')
-
-    box = json.loads(box)
 
     if not ('bounding_box' in box and box['bounding_box']):
         print(f'            !,!= {box} (coordinates)')

@@ -4,8 +4,6 @@
 from .. import ai
 from ..action import ActionsBase
 
-import json
-
 
 PRE_PROMPT = '''
 Reply with a JSON list of maps where each map has a key named "action" whose value is one of the following: "move", "copy", "delete", "folder", or "help". Each possible type of action map is described with additional keys below (be descriptive or verbatim if possible for the additional prompt key values)...
@@ -58,7 +56,7 @@ def prompt_for_action(text):
     actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text)
     print(f'      << {actions}')
 
-    actions = Actions(json.loads(actions))
+    actions = Actions(actions)
     return actions
 
 
