@@ -135,7 +135,7 @@ def get_directory_contents_as_text(path):
 def package_directory(path, label='project'):
     fd, name = tempfile.mkstemp(prefix='sidekick-package-', suffix='.txt')
 
-    with open(name, 'w') as file:
+    with open(name, 'w', encoding='utf-8') as file:
         file.write(f'Our {label} is laid out as given in the following file '
                     'hierarchy:\n\n')
         file.write(f'{path}{os.sep}\n')
