@@ -9,20 +9,6 @@ print = print_flush
 def main(args, called=''):
     print('SIDEKICK: ', end='')
 
-    '''
-    cmd = args[0] if args else 'help'
-    args = args[1:]
-
-    if cmd in SET:
-        cmd = SET[cmd]
-        print(cmd[1])
-        cmd[0](args)
-
-    else:
-        print(f'unknown command: {cmd}')
-        print('Try `ask help` for a list of commands.')
-    '''
-
     task = called.endswith('task')
     ask = not task and called.endswith('ask')
 
@@ -109,18 +95,6 @@ def ask_question(prompt=None, shot=False, file=None, package=None):
     print('Ask a Question')
     print()
 
-    if prompt:
-        print(f' >> {prompt}')
-
-    else:
-        print(' >> ', end='')
-        prompt = input()
-
-    if not prompt:
-        return
-
-    print()
-
     if shot or file or package:
         if sum([ 1 for item in [ shot, file, package ] if item ]) > 1:
             print('!!! only one of screenshot OR file OR package at a time !!!')
@@ -133,13 +107,24 @@ def ask_question(prompt=None, shot=False, file=None, package=None):
         elif package:
             file = package_directory(package)
             print(f'PACKAGED DIRECTORY to: {file}')
-            #raise RuntimeError('JUST A TEST')
 
+    if prompt:
+        print(f' >> {prompt}')
+
+    else:
+        print(' >> ', end='')
+        prompt = input()
+
+    if not prompt:
+        return
+
+    if file:
         answer = ai.prompt_with_file_for_text(prompt, file)
 
     else:
         answer = ai.prompt_for_text(prompt)
 
+    print()
     print(f' << {answer}')
     print()
 
@@ -152,18 +137,6 @@ def do_task(prompt=None, shot=False, file=None, package=None):
     print('Perform a Task')
     print()
 
-    if prompt:
-        print(f' >> {prompt}')
-
-    else:
-        print(' >> ', end='')
-        prompt = input()
-
-    if not prompt:
-        return
-
-    print()
-
     if shot or file or package:
         if sum([ 1 for item in [ shot, file, package ] if item ]) > 1:
             print('!!! only one of screenshot OR file OR package at a time !!!')
@@ -176,10 +149,21 @@ def do_task(prompt=None, shot=False, file=None, package=None):
         elif package:
             file = package_directory(package)
             print(f'PACKAGED DIRECTORY to: {file}')
-            #raise RuntimeError('JUST A TEST')
+
+    if prompt:
+        print(f' >> {prompt}')
+
+    else:
+        print(' >> ', end='')
+        prompt = input()
+
+    if not prompt:
+        return
+
+    print()
+    context = Context(file)
 
     try:
-        context = Context(file)
         result = agent.just_do_it(context, prompt)
 
         if result is not None:

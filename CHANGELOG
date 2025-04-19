@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_041925_1 - Do the packaging early so we have an opportunity to review it.
+
 saw_041825_6 - Each action gets a little bit of context (the previous output).
 
 saw_041825_5 - Better file selection for packaging.

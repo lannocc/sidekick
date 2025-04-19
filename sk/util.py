@@ -122,17 +122,20 @@ def get_directory_contents_as_text(path):
                    'css' if item.endswith('.css') else \
                    'javascript' if item.endswith('.js') else \
                    'json' if item.endswith('.json') else \
+                   'config' if item.endswith('.conf') \
+                        or item.endswith('.theme') else \
                    'text' if item.endswith('.txt') else None
 
             if not hint: # not a text file
                 continue
 
-            text += f'\nFILE {full_path}:\n'
+            text += f'\n>>> BEGIN FILE {full_path}:\n'
             text += f'```{hint}\n'
             with open(full_path, 'r') as file:
                 text += file.read()
                 #text += '\n'
-            text += '```\n\n'
+            text += '```\n'
+            text += '<<< END FILE\n\n'
 
     return text
 
