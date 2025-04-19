@@ -67,6 +67,7 @@ def is_ignorable_path(item):
     return True \
             if item.startswith('.') \
             or item == 'build' or item == 'venv' or item == 'scripts' \
+            or item == 'node_modules' \
             or item.endswith('.egg-info') or item.endswith('~') else False
 
 
@@ -117,6 +118,10 @@ def get_directory_contents_as_text(path):
             hint = 'python' if item.endswith('.py') else \
                    'svelte' if item.endswith('.svelte') else \
                    'markdown' if item.endswith('.md') else \
+                   'html' if item.endswith('.html') else \
+                   'css' if item.endswith('.css') else \
+                   'javascript' if item.endswith('.js') else \
+                   'json' if item.endswith('.json') else \
                    'text' if item.endswith('.txt') else None
 
             if not hint: # not a text file

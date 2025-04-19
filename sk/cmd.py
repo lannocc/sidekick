@@ -134,6 +134,7 @@ def ask_question(prompt=None, shot=False, file=None, package=None):
         elif package:
             file = package_directory(package)
             print(f'PACKAGED DIRECTORY to: {file}')
+            #raise RuntimeError('JUST A TEST')
 
         answer = ai.prompt_with_file_for_text(prompt, file)
 
