@@ -30,6 +30,10 @@ The available agents are:
 for agent, desc in SET:
     name = agent.__name__.split('.')[-1]
     PRE_PROMPT += f'    "{name}" :: {desc}\n'
+PRE_PROMPT += '''
+All agents automatically receive an attachment with the result of the previous
+agent.
+'''
 
 
 META_PROMPT = '''
@@ -39,8 +43,14 @@ PROMPT:
 '''
 
 
-def prompt_for_agent(text):
-    agents = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text)
+def prompt_for_agent(text, attachment=None, exclude=None):
+    attach = '\nWe will also have a file attachment that will get passed to ' \
+             'the first agent.\n' \
+             if attachment else ''
+    exclude = f'\nThe agent choice of "{exclude}" is currently unavailable.\n' \
+            if exclude else ''
+    agents = ai.prompt_for_json(PRE_PROMPT + attach + exclude + META_PROMPT
+                                + text)
     print(agents)
     to_do = [ ]
 
@@ -67,20 +77,25 @@ def prompt_for_agent(text):
     return to_do
 
 
-def just_do_it(text):
-    agents = prompt_for_agent(text)
+def just_do_it(context, text, for_help=False):
+    agents = prompt_for_agent(text, attachment=context.last_result)
+
+    if for_help and agents[0][1].__name__ == context.last_agent.__name__:
+        agents = prompt_for_agent(text, attachment=context.last_result,
+                                  exclude=agents[0][1].__name__.split('.')[-1])
 
     for name, agent, prompt in agents:
         print()
         print(f'~~{name}~~')
+        context.last_agent = agent
 
         actions = agent.prompt_for_action(prompt)
-        ok = actions.do()
+        result = actions.do(context)
 
-        if not ok:
+        if result is None:
             print('!!! the agent failed to do actions !!!')
             #play_error()
-            return False
+            return None
 
-    return True
+    return result
 

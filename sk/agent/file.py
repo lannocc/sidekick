@@ -61,18 +61,18 @@ def prompt_for_action(text):
 
 
 class Actions(ActionsBase):
-    def do_move(self, source, destination):
-        pass
+    def do_move(self, context, source, destination):
+        pass # FIXME
 
-    def do_copy(self, source, destination):
-        pass
+    def do_copy(self, context, source, destination):
+        pass # FIXME
 
-    def do_delete(self, resource):
-        pass
+    def do_delete(self, context, resource):
+        pass # FIXME
 
-    def do_folder(self, parent, name):
-        pass
+    def do_folder(self, context, parent, name):
+        pass # FIXME
 
-    def do_help(self, prompt):
-        pass
+    def do_help(self, context, prompt):
+        pass # FIXME
 

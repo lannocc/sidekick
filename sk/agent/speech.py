@@ -42,7 +42,7 @@ To get help with anything else (catch-all pass-through to another handler):
 
 
 META_PROMPT = '''
-Take the following prompt and select one or more actions from the list of available actions to handle the prompt or a section of it, in the appropriate sequential order.
+Take the following prompt and select one or more actions from the list of available actions to handle the prompt or a section of it, in the appropriate sequential order. Assume there is a file attachment for each action that contains context for the action, and "prompt_for_words" can be true for actions that need to get information from the attachment.
 
 PROMPT:
 '''
@@ -102,31 +102,46 @@ else:
 
 
 class Actions(ActionsBase):
-    def do_whisper(self, what_to_say, prompt_for_words=False):
+    def do_whisper(self, context, what_to_say, prompt_for_words=False):
         if prompt_for_words:
-            what_to_say = ai.prompt_for_text(f'give an example: {what_to_say}')
+            prompt = f'give an example: {what_to_say}'
+            if context.last_result:
+                what_to_say = ai.prompt_with_file_for_text(
+                        prompt, context.last_result.path_name)
+            else:
+                what_to_say = ai.prompt_for_text(prompt)
         print('(whispering)')
         print(f'  ~~<< {what_to_say}')
         speak(what_to_say)
-        return True
+        return what_to_say
 
-    def do_talk(self, what_to_say, prompt_for_words=False):
+    def do_talk(self, context, what_to_say, prompt_for_words=False):
         if prompt_for_words:
-            what_to_say = ai.prompt_for_text(f'give an example: {what_to_say}')
+            prompt = f'give an example: {what_to_say}'
+            if context.last_result:
+                what_to_say = ai.prompt_with_file_for_text(
+                        prompt, context.last_result.path_name)
+            else:
+                what_to_say = ai.prompt_for_text(prompt)
         print(f'  ~~<< {what_to_say}')
         speak(what_to_say)
-        return True
+        return what_to_say
 
-    def do_yell(self, what_to_say, prompt_for_words=False):
+    def do_yell(self, context, what_to_say, prompt_for_words=False):
         if prompt_for_words:
-            what_to_say = ai.prompt_for_text(f'give an example: {what_to_say}')
+            prompt = f'give an example: {what_to_say}'
+            if context.last_result:
+                what_to_say = ai.prompt_with_file_for_text(
+                        prompt, context.last_result.path_name)
+            else:
+                what_to_say = ai.prompt_for_text(prompt)
         print('@YELLING@')
         print(f'  ~~<< {what_to_say}')
         speak(what_to_say)
-        return True
+        return what_to_say
 
-    def do_help(self, prompt):
+    def do_help(self, context, prompt):
         play_scratch()
         from . import just_do_it
-        return just_do_it(prompt)
+        return just_do_it(context, prompt)
 

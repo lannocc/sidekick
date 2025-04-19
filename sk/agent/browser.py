@@ -2,7 +2,7 @@
 # @%@~LICENSE~@%@
 
 from .. import ai
-from ..action import ActionsBase
+from ..action import ActionsBase, FileResult
 from ..util import print_flush, open_browser, take_screenshot
 from ..util import play_ding, play_click, play_scratch, play_key, play_typing
 
@@ -32,7 +32,8 @@ To enter text with the keyboard:
 {
     "action": "type",
     "text_to_type": "(required)",
-    "prompt_where_to_focus": "(optional, description of screen area)"
+    "prompt_where_to_focus": "(optional, description of screen area)",
+    "get_better_text": bool (optional, true if the text is not literal)
 }
 
 To operate various special keys like enter, control, function keys etc.:
@@ -184,42 +185,61 @@ def delay(sec):
 
 
 class Actions(ActionsBase):
-    def do_open(self, prompt_to_open):
+    def do_open(self, context, prompt_to_open):
         url = resolve_url(prompt_to_open)
-        if not url:
-            return False
+        if not url: return None
 
         proc = open_browser(url)
         print(f'   # opened pid {proc.pid}')
 
         delay(10)
-        return True
+        file, w, h = take_screenshot()
 
-    def do_click(self, prompt_to_click):
+        return FileResult(file)
+
+    def do_click(self, context, prompt_to_click):
         region = get_screen_region(prompt_to_click)
-        if not region: return False
+        if not region: return None
 
         mouse_click_region(region)
 
         delay(7)
-        return True
+        file, w, h = take_screenshot()
 
-    def do_type(self, text_to_type, prompt_where_to_focus=None):
+        return FileResult(file)
+
+    def do_type(self, context, text_to_type, prompt_where_to_focus=None,
+                get_better_text=False):
         if prompt_where_to_focus:
             region = get_screen_region(prompt_where_to_focus)
-            if not region: return False
+            if not region: return None
 
             mouse_click_region(region)
 
             delay(1)
 
+        if get_better_text:
+            if prompt_where_to_focus:
+                prompt_where_to_focus = 'in the area that is described by "' \
+                                       f'{prompt_where_to_focus} '
+            else:
+                prompt_where_to_focus = ''
+
+            prompt = f'Give me something to type {prompt_where_to_focus}that '\
+                     f'could be a valid respose for: {text_to_type}'
+
+            text_to_type = ai.prompt_for_text(prompt)
+
+        print(f'    TYPING: {text_to_type}')
         play_typing()
         pyautogui.write(text_to_type, interval=0.2)
 
         delay(3)
-        return True
+        file, w, h = take_screenshot()
 
-    def do_key(self, special_keys):
+        return FileResult(file)
+
+    def do_key(self, context, special_keys):
         for key in special_keys.split(' '):
             play_key()
             pyautogui.press(key)
@@ -227,10 +247,12 @@ class Actions(ActionsBase):
             delay(1)
 
         delay(7)
-        return True
+        file, w, h = take_screenshot()
 
-    def do_help(self, prompt):
+        return FileResult(file)
+
+    def do_help(self, context, prompt):
         play_scratch()
         from . import just_do_it
-        return just_do_it(prompt)
+        return just_do_it(context, prompt, for_help=True)
 

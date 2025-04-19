@@ -1,7 +1,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from .util import print_flush, package_directory
+from .util import print_flush, package_directory, take_screenshot
 
 print = print_flush
 
@@ -105,7 +105,6 @@ def main(args, called=''):
 
 def ask_question(prompt=None, shot=False, file=None, package=None):
     from . import ai
-    from .util import take_screenshot
 
     print('Ask a Question')
     print()
@@ -147,6 +146,7 @@ def ask_question(prompt=None, shot=False, file=None, package=None):
 
 def do_task(prompt=None, shot=False, file=None, package=None):
     from . import agent
+    from .action import Context
     from .util import play_error, play_success
 
     print('Perform a Task')
@@ -164,16 +164,31 @@ def do_task(prompt=None, shot=False, file=None, package=None):
 
     print()
 
-    try:
-        ok = agent.just_do_it(prompt)
+    if shot or file or package:
+        if sum([ 1 for item in [ shot, file, package ] if item ]) > 1:
+            print('!!! only one of screenshot OR file OR package at a time !!!')
+            return
 
-        if ok:
+        if shot:
+            file, w, h = take_screenshot()
+            print(f'SAVED SCREENSHOT to: {file}')
+
+        elif package:
+            file = package_directory(package)
+            print(f'PACKAGED DIRECTORY to: {file}')
+            #raise RuntimeError('JUST A TEST')
+
+    try:
+        context = Context(file)
+        result = agent.just_do_it(context, prompt)
+
+        if result is not None:
             play_success()
-            return True
+            return result
 
         else:
             play_error()
-            return False
+            return None
 
     except Exception as e:
         play_error()

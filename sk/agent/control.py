@@ -59,24 +59,24 @@ def delay(sec):
 
 
 class Actions(ActionsBase):
-    def do_delay(self, seconds_to_wait):
+    def do_delay(self, context, seconds_to_wait):
         delay(int(seconds_to_wait))
-        return True
+        return context.last_result
 
-    def do_loop(self, prompt_to_repeat, times_to_loop):
+    def do_loop(self, context, prompt_to_repeat, times_to_loop):
         from . import just_do_it
 
         for x in range(int(times_to_loop)):
             print(f'   /-\\ LOOP {x+1} of {times_to_loop} /-\\')
-            ok = just_do_it(prompt_to_repeat)
-            if not ok: return False
+            result = just_do_it(context, prompt_to_repeat)
+            if result is None: return None
 
             delay(4)
 
-        return True
+        return result
 
     def do_help(self, prompt):
         play_scratch()
         from . import just_do_it
-        return just_do_it(prompt)
+        return just_do_it(context, prompt)
 
