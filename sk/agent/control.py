@@ -3,10 +3,8 @@
 
 from .. import ai
 from ..action import ActionsBase
-from ..util import print_flush, play_scratch
+from ..util import print_flush, delay, play_scratch
 
-
-import time
 
 
 PRE_PROMPT = '''
@@ -40,43 +38,39 @@ PROMPT:
 '''
 
 
-def prompt_for_action(text):
-    print(f'      >> {text}')
+def prompt_for_action(text, quiet=False, chatter=False):
+    if not quiet: print(f'      >> {text}')
 
-    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text)
-    print(f'      << {actions}')
+    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text,
+                                 chatter=chatter)
+    if not quiet: print(f'      << {actions}')
 
     actions = Actions(actions)
     return actions
 
 
-def delay(sec):
-    print_flush(f'{sec}(s) delay', end='')
-    for i in range(sec):
-        print_flush('.', end='')
-        time.sleep(1)
-    print()
-
-
 class Actions(ActionsBase):
-    def do_delay(self, context, seconds_to_wait):
-        delay(int(seconds_to_wait))
+    def do_delay(self, context, seconds_to_wait, quiet=False, chatter=False):
+        delay(int(seconds_to_wait), quiet=quiet)
         return context.last_result
 
-    def do_loop(self, context, prompt_to_repeat, times_to_loop):
+    def do_loop(self, context, prompt_to_repeat, times_to_loop, quiet=False,
+                chatter=False):
         from . import just_do_it
 
         for x in range(int(times_to_loop)):
-            print(f'   /-\\ LOOP {x+1} of {times_to_loop} /-\\')
-            result = just_do_it(context, prompt_to_repeat)
+            if not quiet: print(f'   /-\\ LOOP {x+1} of {times_to_loop} /-\\')
+            result = just_do_it(context, prompt_to_repeat, quiet=quiet,
+                                chatter=chatter)
             if result is None: return None
 
-            delay(4)
+            delay(4, quiet=quiet)
 
         return result
 
-    def do_help(self, prompt):
+    def do_help(self, prompt, quiet=False, chatter=False):
         play_scratch()
         from . import just_do_it
-        return just_do_it(context, prompt)
+        return just_do_it(context, prompt, for_help=True, quiet=quiet,
+                          chatter=chatter)
 

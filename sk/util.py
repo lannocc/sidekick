@@ -6,18 +6,27 @@ from .config import CHROME_PROFILE
 from PIL import ImageGrab
 from playsound3 import playsound
 #import simpleaudio as sa
+#import cv2
 
 from sys import stdout
 import os
 import subprocess
 import platform
 import tempfile
-#import time
+import time
 
 
 def print_flush(*args, **kwargs):
     print(*args, **kwargs)
     stdout.flush()
+
+
+def delay(sec, quiet=False):
+    if not quiet: print_flush(f'{sec}(s) delay', end='')
+    for i in range(sec):
+        if not quiet: print_flush('.', end='')
+        time.sleep(1)
+    if not quiet: print()
 
 
 def open_browser(url):
@@ -61,6 +70,21 @@ def take_screenshot():
     shot.close()
 
     return file, w, h
+
+
+'''
+def extract_and_save_region(file, x, y, w, h):
+    img = cv2.imread(file)
+    if img is None:
+        raise FileNotFoundError(f"Image not found at '{file}'")
+
+    ext = file.split('.')[-1]
+    fd, name = tempfile.mkstemp(prefix='sidekick-region-', suffix=f'.{ext}')
+    roi = img[y:y+h, x:x+w]
+    cv2.imwrite(name, roi)
+
+    return name
+'''
 
 
 def is_ignorable_path(item):

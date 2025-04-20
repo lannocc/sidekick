@@ -15,20 +15,25 @@ import json
 model0 = genai0.GenerativeModel(GEMINI_MODEL)
 
 
-def prompt_for_text(prompt):
+def prompt_for_text(prompt, chatter=False):
+    if chatter: print(f'  ai >> {prompt}')
     resp = model0.generate_content(prompt)
+    if chatter: print(f'  ai << {resp.text}')
     return resp.text
 
 
-def prompt_for_json(prompt):
+def prompt_for_json(prompt, chatter=False):
+    if chatter: print(f'  ai >> {prompt}')
     resp = model0.generate_content(prompt,
                                   generation_config=genai0.GenerationConfig(
                                       response_mime_type='application/json'))
                                       #timeout=GEMINI_TIMEOUT))
+    if chatter: print(f'  ai << {resp.text}')
     return json.loads(resp.text)
 
 
-def prompt_with_file_for_text(prompt, file):
+def prompt_with_file_for_text(prompt, file, chatter=False):
+    if chatter: print(f'  ai >> {prompt}')
     client = genai.Client(api_key=GEMINI_API_KEY,
                           http_options=HttpOptions(timeout=GEMINI_TIMEOUT))
     file = client.files.upload(file=file)
@@ -41,10 +46,13 @@ def prompt_with_file_for_text(prompt, file):
                 prompt,
             ])
 
+    if chatter: print(f'  ai << {resp.text}')
     return resp.text
 
 
-def prompt_with_file_for_json(prompt, file, retries=0):
+def prompt_with_file_for_json(prompt, file, retries=0, quiet=False,
+                              chatter=False):
+    if chatter: print(f'  ai >> {prompt}')
     client = genai.Client(api_key=GEMINI_API_KEY,
                           http_options=HttpOptions(timeout=GEMINI_TIMEOUT))
 
@@ -54,10 +62,10 @@ def prompt_with_file_for_json(prompt, file, retries=0):
             break
 
         except ReadTimeout:
-            print(f'  -+? RETRY {t+1}')
+            if not quiet: print(f'  -+? RETRY {t+1}')
 
         except WriteTimeout:
-            print(f'  -+? RETRY {t+1}')
+            if not quiet: print(f'  -+? RETRY {t+1}')
 
         play_retry()
 
@@ -73,5 +81,6 @@ def prompt_with_file_for_json(prompt, file, retries=0):
                 #'timeout': GEMINI_TIMEOUT,
                 })
 
+    if chatter: print(f'  ai << {resp.text}')
     return json.loads(resp.text)
 

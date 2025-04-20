@@ -30,28 +30,30 @@ PROMPT:
 '''
 
 
-def prompt_for_action(text):
-    print(f'      >> {text}')
+def prompt_for_action(text, quiet=False, chatter=False):
+    if not quiet: print(f'      >> {text}')
 
-    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text)
-    print(f'      << {actions}')
+    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text,
+                                 chatter=chatter)
+    if not quiet: print(f'      << {actions}')
 
     actions = Actions(actions)
     return actions
 
 
 class Actions(ActionsBase):
-    def do_prompt(self, context, prompt_for_ai):
+    def do_prompt(self, context, prompt_for_ai, quiet=False, chatter=False):
         play_thinking()
         if context.last_result:
             reply = ai.prompt_with_file_for_text(prompt_for_ai,
-                                                 context.last_result.path_name)
+                                                 context.last_result.path_name,
+                                                 chatter=chatter)
         else:
-            reply = ai.prompt_for_text(prompt_for_ai)
-        print(f'   <<< {reply}')
+            reply = ai.prompt_for_text(prompt_for_ai, chatter=chatter)
+        if not quiet: print(f'   <<< {reply}')
         return reply
 
-    def do_help(self, context, prompt):
+    def do_help(self, context, prompt, quiet=False, chatter=False):
         play_scratch()
         play_scratch()
         play_scratch()

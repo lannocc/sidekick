@@ -5,7 +5,6 @@ from .. import ai
 from ..action import ActionsBase
 from ..util import print_flush, play_scratch
 
-import time
 import platform
 
 
@@ -48,22 +47,15 @@ PROMPT:
 '''
 
 
-def prompt_for_action(text):
-    print(f'      >> {text}')
+def prompt_for_action(text, quiet=False, chatter=False):
+    if not quiet: print(f'      >> {text}')
 
-    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text)
-    print(f'      << {actions}')
+    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text,
+                                 chatter=chatter)
+    if not quiet: print(f'      << {actions}')
 
     actions = Actions(actions)
     return actions
-
-
-def delay(sec):
-    print_flush(f'{sec}(s) delay', end='')
-    for i in range(sec):
-        print_flush('.', end='')
-        time.sleep(1)
-    print()
 
 
 def speak_linux(text, lang='en'):
@@ -102,46 +94,56 @@ else:
 
 
 class Actions(ActionsBase):
-    def do_whisper(self, context, what_to_say, prompt_for_words=False):
+    def do_whisper(self, context, what_to_say, prompt_for_words=False,
+                   quiet=False, chatter=False):
         if prompt_for_words:
-            prompt = f'give an example: {what_to_say}'
+            prompt = f'in a few sentences or less: {what_to_say}'
             if context.last_result:
                 what_to_say = ai.prompt_with_file_for_text(
-                        prompt, context.last_result.path_name)
+                        prompt, context.last_result.path_name,
+                        chatter=chatter)
             else:
-                what_to_say = ai.prompt_for_text(prompt)
-        print('(whispering)')
-        print(f'  ~~<< {what_to_say}')
+                what_to_say = ai.prompt_for_text(prompt, chatter=chatter)
+        if not quiet:
+            print('(whispering)')
+            print(f'  ~~<< {what_to_say}')
         speak(what_to_say)
         return what_to_say
 
-    def do_talk(self, context, what_to_say, prompt_for_words=False):
+    def do_talk(self, context, what_to_say, prompt_for_words=False,
+                quiet=False, chatter=False):
         if prompt_for_words:
-            prompt = f'give an example: {what_to_say}'
+            prompt = f'in a few sentences or less: {what_to_say}'
             if context.last_result:
                 what_to_say = ai.prompt_with_file_for_text(
-                        prompt, context.last_result.path_name)
+                        prompt, context.last_result.path_name,
+                        chatter=chatter)
             else:
-                what_to_say = ai.prompt_for_text(prompt)
-        print(f'  ~~<< {what_to_say}')
+                what_to_say = ai.prompt_for_text(prompt, chatter=chatter)
+        if not quiet:
+            print(f'  ~~<< {what_to_say}')
         speak(what_to_say)
         return what_to_say
 
-    def do_yell(self, context, what_to_say, prompt_for_words=False):
+    def do_yell(self, context, what_to_say, prompt_for_words=False,
+                quiet=False, chatter=False):
         if prompt_for_words:
-            prompt = f'give an example: {what_to_say}'
+            prompt = f'in a few sentences or less: {what_to_say}'
             if context.last_result:
                 what_to_say = ai.prompt_with_file_for_text(
-                        prompt, context.last_result.path_name)
+                        prompt, context.last_result.path_name,
+                        chatter=chatter)
             else:
-                what_to_say = ai.prompt_for_text(prompt)
-        print('@YELLING@')
-        print(f'  ~~<< {what_to_say}')
+                what_to_say = ai.prompt_for_text(prompt, chatter=chatter)
+        if not quiet:
+            print('@YELLING@')
+            print(f'  ~~<< {what_to_say}')
         speak(what_to_say)
         return what_to_say
 
-    def do_help(self, context, prompt):
+    def do_help(self, context, prompt, quiet=False, chatter=False):
         play_scratch()
         from . import just_do_it
-        return just_do_it(context, prompt)
+        return just_do_it(context, prompt, for_help=True, quiet=quiet,
+                          chatter=chatter)
 

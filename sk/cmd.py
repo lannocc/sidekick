@@ -7,7 +7,9 @@ print = print_flush
 
 
 def main(args, called=''):
-    print('SIDEKICK: ', end='')
+    quiet = '-q' in args
+    chatter = '-c' in args
+    if not quiet: print('SIDEKICK: ', end='')
 
     task = called.endswith('task')
     ask = not task and called.endswith('ask')
@@ -37,7 +39,7 @@ def main(args, called=''):
                     args = args[1:]
 
                 if not file:
-                    print(f'need a filename to upload')
+                    print(f'!!! need a filename to upload')
                     return
 
             elif op == '-p':
@@ -46,11 +48,11 @@ def main(args, called=''):
                     args = args[1:]
 
                 if not pkg:
-                    print(f'need a directory path to package')
+                    print(f'!!! need a directory path to package')
                     return
 
         else:
-            print(f'unknown option: {op}')
+            print(f'!!! unknown option: {op}')
             return
 
     # prompt mode
@@ -63,8 +65,10 @@ def main(args, called=''):
         elif args: prompt = args[0]
         else: prompt = None
 
-        if task: do_task(prompt, shot=shot, file=file, package=pkg)
-        else: ask_question(prompt, shot=shot, file=file, package=pkg)
+        if task: do_task(prompt, shot=shot, file=file, package=pkg, quiet=quiet,
+                         chatter=chatter)
+        else: ask_question(prompt, shot=shot, file=file, package=pkg,
+                           quiet=quiet, chatter=chatter)
 
         return
 
@@ -74,26 +78,28 @@ def main(args, called=''):
 
     if cmd not in COMMANDS:
         if cmd is None:
-            print('need an option or command')
+            print('!!! need an option or command')
             #help(args)
 
         else:
-            print(f'unknown command: {cmd}')
+            print(f'!!! unknown command: {cmd}')
 
-        print('Try `sk help` for a list of commands.')
+        if not quiet: print('Try `sk help` for a list of commands.')
 
         return
 
     cmd = COMMANDS[cmd]
-    print(cmd[1])
+    if not quiet: print(cmd[1])
     cmd[0](args)
 
 
-def ask_question(prompt=None, shot=False, file=None, package=None):
+def ask_question(prompt=None, shot=False, file=None, package=None, quiet=False,
+                 chatter=False):
     from . import ai
 
-    print('Ask a Question')
-    print()
+    if not quiet:
+        print('Ask a Question')
+        print()
 
     if shot or file or package:
         if sum([ 1 for item in [ shot, file, package ] if item ]) > 1:
@@ -102,11 +108,11 @@ def ask_question(prompt=None, shot=False, file=None, package=None):
 
         if shot:
             file, w, h = take_screenshot()
-            print(f'SAVED SCREENSHOT to: {file}')
+            if not quiet: print(f'SAVED SCREENSHOT to: {file}')
 
         elif package:
             file = package_directory(package)
-            print(f'PACKAGED DIRECTORY to: {file}')
+            if not quiet: print(f'PACKAGED DIRECTORY to: {file}')
 
     if prompt:
         print(f' >> {prompt}')
@@ -119,23 +125,25 @@ def ask_question(prompt=None, shot=False, file=None, package=None):
         return
 
     if file:
-        answer = ai.prompt_with_file_for_text(prompt, file)
+        answer = ai.prompt_with_file_for_text(prompt, file, chatter=chatter)
 
     else:
-        answer = ai.prompt_for_text(prompt)
+        answer = ai.prompt_for_text(prompt, chatter=chatter)
 
     print()
     print(f' << {answer}')
     print()
 
 
-def do_task(prompt=None, shot=False, file=None, package=None):
+def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
+            chatter=False):
     from . import agent
     from .action import Context
     from .util import play_error, play_success
 
-    print('Perform a Task')
-    print()
+    if not quiet:
+        print('Perform a Task')
+        print()
 
     if shot or file or package:
         if sum([ 1 for item in [ shot, file, package ] if item ]) > 1:
@@ -144,14 +152,14 @@ def do_task(prompt=None, shot=False, file=None, package=None):
 
         if shot:
             file, w, h = take_screenshot()
-            print(f'SAVED SCREENSHOT to: {file}')
+            if not quiet: print(f'SAVED SCREENSHOT to: {file}')
 
         elif package:
             file = package_directory(package)
-            print(f'PACKAGED DIRECTORY to: {file}')
+            if not quiet: print(f'PACKAGED DIRECTORY to: {file}')
 
     if prompt:
-        print(f' >> {prompt}')
+        if not quiet: print(f' >> {prompt}')
 
     else:
         print(' >> ', end='')
@@ -160,11 +168,11 @@ def do_task(prompt=None, shot=False, file=None, package=None):
     if not prompt:
         return
 
-    print()
+    if not quiet: print()
     context = Context(file)
 
     try:
-        result = agent.just_do_it(context, prompt)
+        result = agent.just_do_it(context, prompt, quiet=quiet, chatter=chatter)
 
         if result is not None:
             play_success()
@@ -233,6 +241,27 @@ def action(args):
     action_main(args)
 
 
+def tree(args):
+    from .util import get_directory_tree_as_text
+
+    if args:
+        if len(args) != 1:
+            print('1 argument required: <directory>')
+            return
+
+        path = args[0]
+
+    else:
+        print('  >> Directory: ', end='')
+        path = input()
+        if not path: return
+
+        print('  <<')
+        print()
+
+    print(get_directory_tree_as_text(path))
+
+
 '''
 def ask(args):
     from .ask.cmd import main as ask_main
@@ -246,6 +275,10 @@ OPTIONS = {
         'general help for sidekick'),
     '-v': (version,
         'version information'),
+    '-q': (None,
+        'quiet operation (limited effect)'),
+    '-c': (None,
+        'print all chatter (even when quiet is enabled)'),
     '-s': (None,
         'take screenshot to use with prompt'),
     '-f': (None,
@@ -264,6 +297,8 @@ COMMANDS = {
         'agents'),
     'action': (action,
         'actions'),
+    'tree': (tree,
+        'print a directory tree'),
     #'ask': (ask,
     #    'ask commands'),
 }

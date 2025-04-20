@@ -22,6 +22,7 @@ def run():
             'google-genai',
             'google-generativeai',
             'gTTS', # text-to-speech (Linux)
+            #'opencv-python',
             'Pillow',
             'playsound3',
             'pyautogui',

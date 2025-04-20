@@ -50,29 +50,30 @@ PROMPT:
 '''
 
 
-def prompt_for_action(text):
-    print(f'      >> {text}')
+def prompt_for_action(text, quiet=False, chatter=False):
+    if not quiet: print(f'      >> {text}')
 
-    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text)
-    print(f'      << {actions}')
+    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text,
+                                 chatter=chatter)
+    if not quiet: print(f'      << {actions}')
 
     actions = Actions(actions)
     return actions
 
 
 class Actions(ActionsBase):
-    def do_move(self, context, source, destination):
+    def do_move(self, context, source, destination, quiet=False, chatter=False):
         pass # FIXME
 
-    def do_copy(self, context, source, destination):
+    def do_copy(self, context, source, destination, quiet=False, chatter=False):
         pass # FIXME
 
-    def do_delete(self, context, resource):
+    def do_delete(self, context, resource, quiet=False, chatter=False):
         pass # FIXME
 
-    def do_folder(self, context, parent, name):
+    def do_folder(self, context, parent, name, quiet=False, chatter=False):
         pass # FIXME
 
-    def do_help(self, context, prompt):
+    def do_help(self, context, prompt, quiet=False, chatter=False):
         pass # FIXME
 

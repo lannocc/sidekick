@@ -14,10 +14,10 @@ class ActionsBase:
             fn = getattr(self, 'do_' + name)
             self.to_do.append((name, fn, action))
 
-    def do(self, context):
+    def do(self, context, quiet=False, chatter=False):
         for name, fn, args in self.to_do:
-            print(f'        ** {name}( {args} )')
-            result = fn(context, **args)
+            if not quiet: print(f'        ** {name}( {args} )')
+            result = fn(context, **args, quiet=quiet, chatter=chatter)
 
             if result is None:
                 print(f'!!! action did not return a result !!!')
@@ -30,7 +30,7 @@ class ActionsBase:
                 with open(name, 'w', encoding='utf-8') as file:
                     file.write(result)
 
-                print(f'SAVED RESULT to: {name}')
+                if not quiet: print(f'SAVED RESULT to: {name}')
                 result = FileResult(name)
 
             context.last_result = result
