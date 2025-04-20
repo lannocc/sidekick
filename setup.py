@@ -26,6 +26,7 @@ def run():
             'playsound3',
             'pyautogui',
             'pyttsx3', # text-to-speech (Windows)
+            'sphinx', 'sphinx-autoapi', 'piccolo-theme', # for API docs
             #'simpleaudio',
         ],
         entry_points = {

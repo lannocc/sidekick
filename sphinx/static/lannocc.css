@@ -1,0 +1,14 @@
+/*
+ * Copyright (C) 2025 LANNOCC
+ * @%@~LICENSE~@%@
+ */
+
+div.document div.documentwrapper {
+    margin: 0;
+    max-width: 60rem;
+}
+
+div#right_sidebar {
+    width: 30rem;
+}
+

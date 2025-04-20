@@ -21,3 +21,13 @@ If you haven't already, first get the code:
 3. `source venv/bin/activate`
 4. `pip install .`
 
+### Building Documentation
+
+We use Sphinx for generating documentation:
+
+```bash
+cd sidekick
+sphinx-apidoc -o sphinx sk
+make html
+```
+

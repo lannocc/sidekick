@@ -5,6 +5,8 @@
 *.pyc
 
 /build/
+/doc/doctrees/
+/doc/html/
 /dist/
 /old/
 /test/

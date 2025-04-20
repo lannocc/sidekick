@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_041925_3 - Use Sphinx for generating API docs.
+
 saw_041925_2 - More packaging inclusions and exclusions.
 
 saw_041925_1 - Do the packaging early so we have an opportunity to review it.
