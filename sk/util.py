@@ -87,20 +87,36 @@ def extract_and_save_region(file, x, y, w, h):
 '''
 
 
-def is_ignorable_path(item):
+def get_ignore_set(path):
+    name = os.path.join(path, '.skignore')
+
+    if os.path.isfile(name):
+        with open(name, 'r') as file:
+            ignore = file.readlines()
+        ignore = [ line[:-1] for line in ignore ]
+    else:
+        ignore = [ ]
+
+    return set(ignore)
+
+
+def is_ignorable_path(item, ignores=[ ]):
     return True \
             if item.startswith('.') or item.startswith('_') \
-            or item == 'build' or item == 'venv' or item == 'scripts' \
-            or item == 'doc' or item == 'test' or item == 'node_modules' \
-            or item.endswith('.egg-info') or item.endswith('~') else False
+            or item.endswith('~') \
+            or item in ignores else False
+            #or item.endswith('.egg-info')
+            #or item == 'build' or item == 'venv' or item == 'scripts' \
+            #or item == 'doc' or item == 'test' or item == 'node_modules' \
 
 
 def get_directory_tree_as_text(path, indent=''):
     text = ''
     items = os.listdir(path)
+    ignores = get_ignore_set(path)
 
     for i, item in enumerate(sorted(items)):
-        if is_ignorable_path(item):
+        if is_ignorable_path(item, ignores):
             continue
 
         full_path = os.path.join(path, item)
@@ -128,9 +144,10 @@ def get_directory_tree_as_text(path, indent=''):
 def get_directory_contents_as_text(path):
     text = ''
     items = os.listdir(path)
+    ignores = get_ignore_set(path)
 
     for i, item in enumerate(sorted(items)):
-        if is_ignorable_path(item):
+        if is_ignorable_path(item, ignores):
             continue
 
         full_path = os.path.join(path, item)
