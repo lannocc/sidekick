@@ -32,10 +32,10 @@ def delay(sec, quiet=False):
 def open_browser(url):
     if platform.system() == 'Windows':
         chrome_path_candidates = [
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+            r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
             os.path.expanduser(
-                r"~\AppData\Local\Google\Chrome\Application\chrome.exe"),
+                r'~\AppData\Local\Google\Chrome\Application\chrome.exe'),
         ]
 
         chrome_path = None
@@ -110,7 +110,7 @@ def is_ignorable_path(item, ignores=[ ]):
             #or item == 'doc' or item == 'test' or item == 'node_modules' \
 
 
-def get_directory_tree_as_text(path, indent=''):
+def get_directory_tree_as_text(path, indent='', markdown=False):
     text = ''
     items = os.listdir(path)
     ignores = get_ignore_set(path)
@@ -122,21 +122,25 @@ def get_directory_tree_as_text(path, indent=''):
         full_path = os.path.join(path, item)
 
         if i < len(items) - 1: # not last item
-            prefix = "├── "
-            new_indent = indent + "│   "
+            prefix = '* ' if markdown else '├── '
+            new_indent = indent + ('    ' if markdown else '│   ')
 
         else: # last item in list
-            prefix = "└── "
-            new_indent = indent + "    "
+            prefix = '* ' if markdown else '└── '
+            new_indent = indent + '    '
 
         suffix = ''
         if os.path.isdir(full_path):
             suffix = os.sep
 
+        elif markdown:
+            item = f'[{item}]({full_path})'
+
         text += indent + prefix + item + suffix + '\n'
 
         if os.path.isdir(full_path):
-            text += get_directory_tree_as_text(full_path, new_indent)
+            text += get_directory_tree_as_text(full_path, new_indent,
+                                               markdown=markdown)
 
     return text
 

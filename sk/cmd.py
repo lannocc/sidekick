@@ -244,6 +244,32 @@ def action(args):
 def tree(args):
     from .util import get_directory_tree_as_text
 
+    md = False
+
+    while args and args[0].startswith('-'):
+        op = args[0]
+        args = args[1:]
+
+        if op == '-h':
+            print()
+            print('COMMAND USAGE:')
+            #print('     sk [options] <command> [args...]')
+            print('    sk [general-opts] tree [tree-opts] <directory>')
+            print()
+            print('The following tree command options are available:')
+            print(f'   -h  :: help for tree command')
+            print(f'   -md :: markdown compatible output')
+            print()
+            print('See `sk -h` for general options.')
+            return
+
+        elif op == '-md':
+            md = True
+
+        else:
+            print(f'!!! unknown tree option: {op}')
+            return
+
     if args:
         if len(args) != 1:
             print('1 argument required: <directory>')
@@ -259,7 +285,7 @@ def tree(args):
         print('  <<')
         print()
 
-    print(get_directory_tree_as_text(path))
+    print(get_directory_tree_as_text(path, markdown=md))
 
 
 '''

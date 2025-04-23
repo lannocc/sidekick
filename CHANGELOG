@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_042325_1 - Markdown mode for tree command.
+
 saw_041925_5 - Add support for .skignore files.
 
 saw_041925_4 - Add quiet and chatter modes, and directory tree generation.
