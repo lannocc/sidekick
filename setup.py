@@ -19,9 +19,11 @@ def run():
             "Operating System :: OS Independent",
         ],
         install_requires=[
+            'appdirs',
             'google-genai',
             'google-generativeai',
             'gTTS', # text-to-speech (Linux)
+            'mysql-connector-python',
             #'opencv-python',
             'Pillow',
             'playsound3',

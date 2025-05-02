@@ -241,6 +241,30 @@ def action(args):
     action_main(args)
 
 
+def ticket(args):
+    from . import ticket
+
+    if args:
+        if len(args) != 1:
+            print('1 argument required: <ticket-number>')
+            return
+
+        num = args[0]
+
+    else:
+        print('  >> Ticket Number: ', end='')
+        num = input()
+        if not num: return
+
+        print('  <<')
+        print()
+
+    if num.upper().startswith('T'):
+        num = num[1:]
+
+    ticket.view(int(num))
+
+
 def tree(args):
     from .util import get_directory_tree_as_text
 
@@ -323,6 +347,8 @@ COMMANDS = {
         'agents'),
     'action': (action,
         'actions'),
+    'ticket': (ticket,
+        'view ticket'),
     'tree': (tree,
         'print a directory tree'),
     #'ask': (ask,
