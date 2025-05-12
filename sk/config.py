@@ -27,7 +27,7 @@ logging.basicConfig(
 
 
 GEMINI_API_KEY = getenv('GEMINI_API_KEY')
-assert GEMINI_API_KEY
+#assert GEMINI_API_KEY
 
 GEMINI_MODEL = 'gemini-2.0-flash'
 GEMINI_TIMEOUT = 3 * 60 * 1000 # wait up to 3 minutes (file uploads, etc.)

@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_051125_1 - Remove GEMINI_API_KEY assert since it is not needed for tree.
+
 saw_050125_1 - View tickets with `sk ticket` command.
 
 saw_042325_1 - Markdown mode for tree command.
