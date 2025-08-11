@@ -1,0 +1,10 @@
+#!/bin/skrip
+# Copyright (C) 2025 LANNOCC
+# @%@~LICENSE~@%@
+
+PATH=/bin
+
+$ connect gemini
+
+Hello, you are now part of the system.
+

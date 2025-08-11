@@ -320,6 +320,12 @@ def ask(args):
 '''
 
 
+def iosk(args):
+    from .iosk.cmd import main as iosk_main
+
+    iosk_main(args)
+
+
 OPTIONS = {
     '-h': (help,
         'general help for sidekick'),
@@ -353,5 +359,7 @@ COMMANDS = {
         'print a directory tree'),
     #'ask': (ask,
     #    'ask commands'),
+    'iosk': (iosk,
+        'iosk commands'),
 }
 

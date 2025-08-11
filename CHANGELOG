@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_081125_1 - IOSK.
+
 saw_081025_1 - Beginning svelte frontend.
 
 saw_051125_1 - Remove GEMINI_API_KEY assert since it is not needed for tree.
