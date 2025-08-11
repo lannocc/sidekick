@@ -12,5 +12,9 @@
 /test/
 /venv/
 
+node_modules/
+/public/build/
+package-lock.json
+
 __pycache__
 
