@@ -1,0 +1,23 @@
+#!/bin/skrip
+# Copyright (C) 2025 LANNOCC
+# @%@~LICENSE~@%@
+
+
+The following commands are generally available:
+    $ help          - get help on commands (this skrip)
+    $ exit          - leave the system chat
+    $ ls            - list directories
+
+For managing users:
+    $ users         - list connected users
+    $ attach        - connect a user
+    $ detach        - disconnect a user
+
+For system control:
+    $ init          - start the system
+    $ shutdown      - stop the system
+
+More commands might be found by exploring the filesystem bin directories, e.g.:
+    $ ls /bin
+    $ ls /sbin
+

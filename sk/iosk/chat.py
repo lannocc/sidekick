@@ -43,17 +43,28 @@ class AI_Messenger:
             pass
 
         finally:
-            self.exit(handle)
+            self.leave(handle)
 
     def join(self, name, dev=None): # no device means local (self)
         assert name
-        assert name not in self.users
+        #assert name not in self.users
+
+        num = 0
+        while name in self.users:
+            num += 1
+            name = f'{name}{num}'
+
         self.users[name] = dev or self
         print(f':: {name} has entered the chat from {dev or "local"}')
 
-    def exit(self, name):
+    def leave(self, name):
         assert name
-        assert name in self.users
+        #assert name in self.users
+
+        if name not in self.users:
+            print(f'!! {name} is not connected')
+            return
+
         del self.users[name]
         print(f':: {name} has left the chat')
 

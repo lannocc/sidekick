@@ -8,10 +8,12 @@ from .. import ai
 import asyncio
 from datetime import datetime
 import os
-from os.path import join, isdir
+from os.path import join, isdir, exists
+import importlib
 
 
 class IOSK_System:
+
     def __init__(self, root=None):
         self.started = None
         self.ready = asyncio.Condition()
@@ -47,7 +49,8 @@ class IOSK_System:
 
         #await asyncio.sleep(9)
 
-        await self.exec('/sbin/init')
+        ok = await self.exec('/sbin/init')
+        if not ok: return
 
         print(f'IOSK UNIX is ready.')
         async with self.ready: self.ready.notify_all()
@@ -55,35 +58,28 @@ class IOSK_System:
         #await asyncio.sleep(81)
         await asyncio.Future() # run forever
 
-    async def exec(self, path):
-        file = box(self.root, path)
+    async def exec(self, path, args=None): # FIXME use the args
+        file = self.box(path)
+        if not exists(file):
+            print(f'!! path not found: {path}')
+            return
+
         with open(file, 'r') as file:
             shebang = file.readline().rstrip()
 
         if shebang and shebang.startswith('#!'):
             shebang = shebang[2:]
 
-            if shebang == '/bin/skrip': # HACK
-                await self.skrip(path)
+            if shebang.startswith('/bin/'): # HACK
+                return await self.call(shebang[5:] + ' ' + path) # ugly
 
             else:
-                raise ValueError(f'unsupported shebang: {shebang}')
+                print(f'!! bad shebang: {path}')
+                return
 
-    async def skrip(self, path):
-        file = box(self.root, path)
-        with open(file, 'r') as file:
-            for line in file:
-                line = line.rstrip()
-                if not line: continue
-
-                if line.startswith('#'): # comment
-                    continue
-
-                elif line.startswith('$ '): # command
-                    await self.call(line[2:])
-
-                else: # chat
-                    await self.chat.chat(line)
+        else:
+            print(f'!! no shebang: {path}')
+            return
 
     async def send(self, dev, data):
         assert dev.startswith('/dev/')
@@ -91,11 +87,39 @@ class IOSK_System:
         return await getattr(self.dev, dev)(data)
 
     async def call(self, args):
-        #print(f'CALL: {args}')
+        #print(f'CALL:"{args}"')
+        space = args.index(' ') if ' ' in args else len(args)
+        cmd = args[:space]
+        args = args[space+1:]
 
-        if args.startswith('connect '):
-            handle = args[8:]
-            self.chat.join(handle, join('/dev', handle))
+        py = None
+        try: py = importlib.import_module(f'sk.iosk.bin.{cmd}')
+        except ModuleNotFoundError: pass
+
+        if py:
+            return await py.iocall(self, args)
+
+        else:
+            return await self.exec(join('/bin', cmd), args) # HACK
+
+    def box(self, file): # sandbox
+        while file:
+            if file.startswith('/'):
+                file = file[1:]
+                continue
+
+            elif file.startswith('./'):
+                file = file[2:]
+                continue
+
+            elif file.startswith('../'):
+                file = file[3:]
+                continue
+
+            else:
+                break
+
+        return join(self.root, file)
 
 
     class Devices:
@@ -105,24 +129,4 @@ class IOSK_System:
         async def gemini(self, data):
             #print('GEMINI') #FIXME
             return await ai.async_prompt_for_text(data)
-
-
-def box(root, file):
-    while file:
-        if file.startswith('/'):
-            file = file[1:]
-            continue
-
-        elif file.startswith('./'):
-            file = file[2:]
-            continue
-
-        elif file.startswith('../'):
-            file = file[3:]
-            continue
-
-        else:
-            break
-
-    return join(root, file)
 
