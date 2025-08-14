@@ -8,9 +8,13 @@ chat message, except for the special case of lines beginning with these special
 characters:
 
     # Lines starting with hash/pound "#" symbol are comments and do nothing.
-    # Lines starting with dollar sign "$" symbol and a space are commands, e.g.:
-    $ echo 'Use the ls command to list files:'
-    $ ls
+    # Nobody else will see your comments.
 
-Enjoy!
+    # Lines starting with dollar sign "$" symbol and a space are commands, e.g.:
+
+    $ echo 'Use the help command to get more help about commands:'
+    $ help
+
+As this is an interactive system, take your time and reply just one line
+(paragraph) at a time. Enjoy!
 

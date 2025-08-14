@@ -9,10 +9,20 @@ import asyncio
 from datetime import datetime
 import os
 from os.path import join, isdir, exists
-import importlib
+import importlib, importlib.util
+import sys
 
 
 class IOSK_System:
+
+    class Devices:
+        def __init__(self, iosk):
+            self.iosk = iosk
+
+        async def gemini(self, data):
+            #print('GEMINI') #FIXME
+            return await ai.async_prompt_for_text(data)
+
 
     def __init__(self, root=None):
         self.started = None
@@ -94,13 +104,41 @@ class IOSK_System:
         cmd = args[:space]
         args = args[space+1:]
 
+        path = self.box(join('/bin', cmd)) # HACK
+        #fullpath = join(os.getcwd(), path)
+        #modname = fullpath[:-3] if cmd.endswith('.py') else fullpath
+        #modname = modname.replace(os.sep, '.')
+        modname = f'iosk.bin.{cmd}'
+        #print(f'IMPORT {modname} at {path}')
+
         py = None
-        try: py = importlib.import_module(f'sk.iosk.bin.{cmd}')
-        except ModuleNotFoundError: pass
+        try:
+            spec = importlib.util.spec_from_file_location(
+                    modname, path if path.endswith('.py') else f'{path}.py')
+            #print(f'SPEC: {spec}')
+            mod = importlib.util.module_from_spec(spec)
+            #print(f'MOD: {mod}')
+            sys.modules[modname] = mod
+            spec.loader.exec_module(mod)
+            py = mod
+            #print(f'PY1: {py}')
+        except:
+            py = None
+
+        if not py:
+            # original way
+            py = None
+            try: py = importlib.import_module(f'sk.{modname}')
+            except ModuleNotFoundError: pass
+            #print(f'PY2: {py}')
 
         if py:
             #print('  CALL PYTHON')
-            return await py.iocall(self, args)
+            try:
+                return await py.iocall(self, args)
+            except: # FIXME error logging
+                print(f'!! error calling: {args}')
+                return
 
         else:
             #print('  CALL FILE')
@@ -124,13 +162,4 @@ class IOSK_System:
                 break
 
         return join(self.root, file)
-
-
-    class Devices:
-        def __init__(self, iosk):
-            self.iosk = iosk
-
-        async def gemini(self, data):
-            #print('GEMINI') #FIXME
-            return await ai.async_prompt_for_text(data)
 

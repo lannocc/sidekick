@@ -82,7 +82,7 @@ class AI_Messenger:
     async def chat(self, msg, cmd=None, echo=True, handle=None):
         if not msg: return
 
-        ps = '<$' if cmd else '<<'
+        ps = '' if cmd else '<<'
         if handle: handle = f'[@{handle}] '
         else: handle = ''
         if echo: print(f'{ps} {handle}{msg}')
@@ -108,7 +108,7 @@ class AI_Messenger:
 
             dev = self.users[to]
             if not dev or dev is self: # local loopback
-                print(f'<< @{to} {msg}') # echo
+                print(f'<< @[{to}] {msg}') # echo
 
             else:
                 reply = await self.iosk.send(dev, msg)
