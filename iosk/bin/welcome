@@ -2,4 +2,15 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-You have joined the iosk system chat room.
+You have joined the iosk system chat. From here you can send messages to the
+other users or interact with the iosk UNIX environment. Anything you type is a
+chat message, except for the special case of lines beginning with these special
+characters:
+
+    # Lines starting with hash/pound "#" symbol are comments and do nothing.
+    # Lines starting with dollar sign "$" symbol and a space are commands, e.g.:
+    $ echo 'Use the ls command to list files:'
+    $ ls
+
+Enjoy!
+

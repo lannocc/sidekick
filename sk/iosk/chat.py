@@ -11,22 +11,27 @@ class AI_Messenger:
         iosk.chat = self
         self.iosk = iosk
         self.users = { }
+        self.me = None
 
-    async def run(self, handle=None):
-        async with self.iosk.ready:
-            await self.iosk.ready.wait()
-            if not self.iosk.started:
-                return
-
+    async def start(self, handle=None):
         print()
         print('Welcome to the IOSK AI Messenger.')
 
         if not handle: handle = 'super'
         print(f'You are the super-user: {handle}')
+        self.me = handle
+        return handle
 
-        self.join(handle)
+    async def run(self):
+        async with self.iosk.ready: # wait for UNIX to be done starting
+            await self.iosk.ready.wait()
+            if not self.iosk.started:
+                return
+
+        self.join(self.me)
+
         try:
-            while (msg := await self.input(handle, '>> ')) != '$ exit':
+            while (msg := await self.input(self.me, '>> ')) != '$ exit':
                 #print(f'<< {msg}')
                 if not msg: continue
 
@@ -37,13 +42,14 @@ class AI_Messenger:
                     await self.iosk.call(msg[2:])
 
                 else: # chat
-                    await self.chat(msg)
+                    await self.chat(msg, echo=False)
 
         except EOFError:
             pass
 
         finally:
-            self.leave(handle)
+            self.leave(self.me)
+            #self.me = None
 
     def join(self, name, dev=None): # no device means local (self)
         assert name
@@ -73,8 +79,14 @@ class AI_Messenger:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, lambda: input(prompt).rstrip())
 
-    async def chat(self, msg):
+    async def chat(self, msg, cmd=None, echo=True, handle=None):
         if not msg: return
+
+        ps = '<$' if cmd else '<<'
+        if handle: handle = f'[@{handle}] '
+        else: handle = ''
+        if echo: print(f'{ps} {handle}{msg}')
+
         to=None
 
         if msg.startswith('@'):
@@ -83,10 +95,11 @@ class AI_Messenger:
             to = msg[1:split]
             msg = msg[split+1:]
 
-        await self.send(msg, to=to)
+        await self.send(msg, to=to, cmd=cmd)
 
-    async def send(self, msg, to=None):
+    async def send(self, msg, to=None, cmd=None):
         #print(f'...sending to {to or "ALL"}...')
+        #print(f'SEND to={to} cmd={cmd}')
 
         if to:
             if to not in self.users:
@@ -99,7 +112,9 @@ class AI_Messenger:
 
             else:
                 reply = await self.iosk.send(dev, msg)
-                if reply: print(f'<< @{to} {reply}')
+                if reply:
+                    #print(f'<< @{to} {reply}')
+                    await self.chat(reply, cmd=cmd, handle=to)
 
         else: # send to everyone
             for handle, dev in self.users.items():

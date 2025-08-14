@@ -4,7 +4,7 @@
 
 PATH=/bin
 
-$ attach gemini
+#$ attach gemini
 #$ attach chatgpt
 
 #Hello, you are now part of the system.

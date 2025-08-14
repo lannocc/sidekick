@@ -65,7 +65,9 @@ def run(args=sys.argv[1:]):
     async def async_run():
         print()
         try:
-            results = await asyncio.gather(chat.run(handle=handle), unix.run())
+            await chat.start(handle=handle)
+            await unix.start()
+            results = await asyncio.gather(chat.run(), unix.run())
             #print(f'results: {results}')
 
         except asyncio.exceptions.CancelledError:

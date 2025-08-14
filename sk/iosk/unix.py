@@ -21,7 +21,7 @@ class IOSK_System:
         self.chat = None
         self.dev = self.Devices(self)
 
-    async def run(self):
+    async def start(self):
         print(f'IOSK UNIX is starting...')
         self.started = datetime.now()
         fail = None
@@ -53,9 +53,11 @@ class IOSK_System:
         if not ok: return
 
         print(f'IOSK UNIX is ready.')
-        async with self.ready: self.ready.notify_all()
 
         #await asyncio.sleep(81)
+
+    async def run(self):
+        async with self.ready: self.ready.notify_all()
         await asyncio.Future() # run forever
 
     async def exec(self, path, args=None): # FIXME use the args
@@ -97,9 +99,11 @@ class IOSK_System:
         except ModuleNotFoundError: pass
 
         if py:
+            #print('  CALL PYTHON')
             return await py.iocall(self, args)
 
         else:
+            #print('  CALL FILE')
             return await self.exec(join('/bin', cmd), args) # HACK
 
     def box(self, file): # sandbox
