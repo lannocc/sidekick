@@ -14,22 +14,11 @@ import sys
 
 
 class IOSK_System:
-
-    class Devices:
-        def __init__(self, iosk):
-            self.iosk = iosk
-
-        async def gemini(self, data):
-            #print('GEMINI') #FIXME
-            return await ai.async_prompt_for_text(data)
-
-
     def __init__(self, root=None):
         self.started = None
         self.ready = asyncio.Condition()
         self.root = root
         self.chat = None
-        self.dev = self.Devices(self)
 
     async def start(self):
         print(f'IOSK UNIX is starting...')
@@ -96,7 +85,23 @@ class IOSK_System:
     async def send(self, dev, data):
         assert dev.startswith('/dev/')
         dev = dev[5:]
-        return await getattr(self.dev, dev)(data)
+        #return await getattr(self.dev, dev)(data)
+        path = self.box(join('/dev', dev))
+
+        modname = f'iosk.dev.{dev}'
+        py = self.pymod(modname, path)
+
+        if py:
+            #print('  SEND PYTHON')
+            try:
+                return await py.iosend(self, data)
+            except: # FIXME error logging
+                print(f'!! error sending: {args}')
+                return
+
+        else:
+            print(f'  SEND FILE: {path}')
+            #return await self.exec(join('/dev', dev), args)
 
     async def call(self, args):
         #print(f'CALL:"{args}"')
@@ -105,10 +110,22 @@ class IOSK_System:
         args = args[space+1:]
 
         path = self.box(join('/bin', cmd)) # HACK
-        #fullpath = join(os.getcwd(), path)
-        #modname = fullpath[:-3] if cmd.endswith('.py') else fullpath
-        #modname = modname.replace(os.sep, '.')
         modname = f'iosk.bin.{cmd}'
+        py = self.pymod(modname, path)
+
+        if py:
+            #print('  CALL PYTHON')
+            try:
+                return await py.iocall(self, args)
+            except: # FIXME error logging
+                print(f'!! error calling: {args}')
+                return
+
+        else:
+            #print('  CALL FILE')
+            return await self.exec(join('/bin', cmd), args) # HACK
+
+    def pymod(self, modname, path):
         #print(f'IMPORT {modname} at {path}')
 
         py = None
@@ -132,17 +149,7 @@ class IOSK_System:
             except ModuleNotFoundError: pass
             #print(f'PY2: {py}')
 
-        if py:
-            #print('  CALL PYTHON')
-            try:
-                return await py.iocall(self, args)
-            except: # FIXME error logging
-                print(f'!! error calling: {args}')
-                return
-
-        else:
-            #print('  CALL FILE')
-            return await self.exec(join('/bin', cmd), args) # HACK
+        return py
 
     def box(self, file): # sandbox
         while file:
