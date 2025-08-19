@@ -59,6 +59,15 @@ class IOSK_System:
         async with self.ready: self.ready.notify_all()
         await asyncio.Future() # run forever
 
+    async def get(self, path):
+        file = self.box(path)
+        if not exists(file):
+            print(f'!! path not found: {path}')
+            return
+
+        with open(file, 'r', encoding='utf-8') as file:
+            return file.read()
+
     async def exec(self, path, args=None): # FIXME use the args
         file = self.box(path)
         if not exists(file):
@@ -95,9 +104,10 @@ class IOSK_System:
             #print('  SEND PYTHON')
             try:
                 return await py.iosend(self, data)
-            except: # FIXME error logging
-                print(f'!! error sending: {args}')
-                return
+            except Exception as e: # FIXME error logging
+                print(f'!! error sending: {data}')
+                #return
+                raise e
 
         else:
             print(f'  SEND FILE: {path}')

@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_081825_2 - Gemini in iosk looks to /etc/gemini for its API key.
+
 saw_081825_1 - Devices now modular (iosk).
 
 roc_081825_1 - fixed underscored filenames.
