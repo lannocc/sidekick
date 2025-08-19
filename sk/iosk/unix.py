@@ -127,7 +127,7 @@ class IOSK_System:
             try:
                 return await py.iocall(self, args)
             except: # FIXME error logging
-                print(f'!! error calling: {args}')
+                print(f'!! error calling: {cmd} {args}')
                 return
 
         else:
