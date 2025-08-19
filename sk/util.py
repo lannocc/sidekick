@@ -102,8 +102,8 @@ def get_ignore_set(path):
 
 def is_ignorable_path(item, ignores=[ ]):
     return True \
-            if item.startswith('.') or item.startswith('_') \
-            or item.endswith('~') \
+            if item.startswith('.') \
+                or item.endswith('~') \
             or item in ignores else False
             #or item.endswith('.egg-info')
             #or item == 'build' or item == 'venv' or item == 'scripts' \
