@@ -25,6 +25,7 @@ def run():
             'gTTS', # text-to-speech (Linux)
             'mysql-connector-python',
             #'opencv-python',
+            'openai',
             'Pillow',
             'playsound3',
             'pyautogui',

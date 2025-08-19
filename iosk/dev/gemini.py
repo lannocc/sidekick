@@ -14,6 +14,9 @@ async def iosend(iosk, args):
     prompt = args
     api_key = await iosk.get('/etc/gemini')
     api_key = api_key.strip()
+    if not api_key:
+        print('!! no api key')
+        return
 
     client = genai.Client(api_key=api_key,
                           http_options=HttpOptions(timeout=TIMEOUT))

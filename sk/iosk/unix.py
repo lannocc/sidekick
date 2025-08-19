@@ -3,7 +3,6 @@
 
 from ..__version__ import __version__
 from ..util import print_flush as print
-from .. import ai
 
 import asyncio
 from datetime import datetime
