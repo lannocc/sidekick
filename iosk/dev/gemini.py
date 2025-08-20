@@ -9,9 +9,9 @@ MODEL = 'gemini-2.0-flash'
 TIMEOUT = 3 * 60 * 1000 # wait up to 3 minutes (file uploads, etc.)
 
 
-async def iosend(io, args):
-    #print(f'GEMINI: {args}')
-    prompt = args
+async def iosend(io, data):
+    #print(f'GEMINI: {data}')
+    prompt = data
     api_key = await io.os.get('/etc/gemini')
     api_key = api_key.strip()
     if not api_key:

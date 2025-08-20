@@ -66,8 +66,76 @@ def run(args=sys.argv[1:]):
         print()
         try:
             await chat.start(handle=handle)
-            await unix.start()
-            results = await asyncio.gather(chat.run(), unix.run())
+            io = await unix.start()
+            results = await asyncio.gather(chat.run(), unix.run(io))
+            #print(f'results: {results}')
+
+        except asyncio.exceptions.CancelledError:
+            print('Cancelled') # ^CCancelled
+
+    print('GO!!')
+    asyncio.run(async_run())
+
+
+def shell(args=sys.argv[1:]):
+    import asyncio
+
+    if args:
+        if len(args) != 1:
+            print('1 argument required: <root>')
+            return
+
+        root = args[0]
+
+    else:
+        print('  >> Filesystem Root: ', end='')
+        root = input()
+        #if not root: return
+
+    print('Preparing iosk UNIX... ', end='')
+    from . import UNIX
+    unix = UNIX(root=root)
+    print('system loaded.')
+
+    async def async_run():
+        print()
+        try:
+            io = await unix.start()
+            await unix.run(io, interactive=True)
+            #print(f'results: {results}')
+
+        except asyncio.exceptions.CancelledError:
+            print('Cancelled') # ^CCancelled
+
+    print('GO!!')
+    asyncio.run(async_run())
+
+
+def system(args=sys.argv[1:]):
+    import asyncio
+
+    if args:
+        if len(args) != 1:
+            print('1 argument required: <root>')
+            return
+
+        root = args[0]
+
+    else:
+        print('  >> Filesystem Root: ', end='')
+        root = input()
+        #if not root: return
+
+    print('Preparing iosk UNIX... ', end='')
+    from . import UNIX
+    unix = UNIX(root=root)
+    print('system loaded.')
+
+    async def async_run():
+        print()
+        try:
+            io = await unix.start()
+            await unix.run(io)
             #print(f'results: {results}')
 
         except asyncio.exceptions.CancelledError:
@@ -82,5 +150,9 @@ SET = {
         'help for iosk commands'),
     'run': (run,
         'launch iosk system locally and connect to the chat as superuser'),
+    'shell': (shell,
+        'launch iosk system with interactive command shell; no chat'),
+    'system': (system,
+        'launch iosk system only; no chat, no shell'),
 }
 

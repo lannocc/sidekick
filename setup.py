@@ -19,6 +19,7 @@ def run():
             "Operating System :: OS Independent",
         ],
         install_requires=[
+            'aioconsole',
             'appdirs',
             'google-genai',
             'google-generativeai',

@@ -2,6 +2,8 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
+#init start
+
 PATH=/bin
 
 #$ attach gemini
@@ -9,5 +11,8 @@ PATH=/bin
 
 #Hello, you are now part of the system.
 
-$ welcome
+#$ welcome
+
+System initialized.
+#init done
 

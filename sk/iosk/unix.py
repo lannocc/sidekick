@@ -5,6 +5,7 @@ from .io import Context
 from ..util import print_flush as print
 
 import asyncio
+import aioconsole
 from datetime import datetime
 import os
 from os.path import join, isdir, exists
@@ -15,9 +16,11 @@ import sys
 class IOSK_System:
     def __init__(self, root=None):
         self.started = None
-        self.ready = asyncio.Condition()
+        #self.ready = asyncio.Condition()
+        self.ready = asyncio.Event()
         self.root = root
         self.chat = None
+        self.halt = asyncio.Event()
 
     ###
     ### PROCESS
@@ -28,8 +31,10 @@ class IOSK_System:
         self.started = datetime.now()
         fail = None
 
+        io = Context(self, '/dev/console')
+
         if not self.root:
-            print('root: ', end='')
+            await io.print('root: ', end='')
             self.root = input()
 
         if not self.root:
@@ -44,44 +49,68 @@ class IOSK_System:
         '''
 
         if fail:
-            print(f'!! {fail}')
+            await io.error(f'!! {fail}')
             self.started = None
-            async with self.ready: self.ready.notify_all()
+            #async with self.ready: self.ready.notify_all()
+            self.ready.set()
             return
 
-        ok = await self.exec('/sbin/init')
+        ok = await self.exec(io, '/sbin/init')
         if not ok: return
 
-        print(f'IOSK UNIX is ready.')
+        await io.print(f'IOSK UNIX is ready.')
         #await asyncio.sleep(81)
 
-    async def run(self):
-        async with self.ready: self.ready.notify_all()
-        await asyncio.Future() # run forever
+        return io
+
+    async def run(self, io, interactive=False):
+        #async with self.ready: self.ready.notify_all()
+        self.ready.set()
+
+        if interactive:
+            #print(f'SHELL IO {io}')
+            await self.shell(io, True)
+
+        #await asyncio.Future() # run forever
+        await self.halt.wait()
+
+    async def shell(self, io, interactive=False):
+        skrc = self.box('/etc/skrc')
+        if exists(skrc):
+            await self.exec(io, '/etc/skrc')
+
+        if interactive:
+            while not self.halt.is_set():
+                #text = await aioconsole.ainput()
+                #text = await self.recv(io, '/dev/console')
+                text = await io.input()
+                if text == '$ exit': break
+                #await io.print('cool')
+                await self.call(io, f'skrip -e {text}')
 
     ###
     ### FILE I/O
     ###
 
-    async def get(self, path, io=None):
+    async def get(self, io:Context, path:str):
         """Get file contents."""
-        io = io.fork() if io else Context(self)
+        #io = io.fork() if io else Context(self)
 
         file = self.box(path)
         if not exists(file):
-            await io.error(f'!! path not found: {path}')
+            await io.error(f'!! get path not found: {path}')
             return
 
         with open(file, 'r', encoding='utf-8') as file:
             return file.read()
 
-    async def exec(self, path:str, args:list[str]=None, io=None):
+    async def exec(self, io:Context, path:str, args:str=None):
         """When you know what you need and you've come prepared (arguments)."""
-        io = io.fork() if io else Context(self)
+        #io = io.fork() if io else Context(self)
 
         file = self.box(path)
         if not exists(file):
-            await io.error(f'!! path not found: {path}')
+            await io.error(f'!! exec path not found: {path}')
             return
 
         with open(file, 'r') as file:
@@ -93,7 +122,7 @@ class IOSK_System:
             if shebang.startswith('/bin/'): # HACK
                 args = ' ' + ' '.join(args) if args else ''
                 # ugly:
-                return await self.call(shebang[5:] + ' ' + path + args, io=io)
+                return await self.call(io, shebang[5:] + ' ' + path + args)
 
             else:
                 await io.error(f'!! bad shebang: {path}')
@@ -104,9 +133,9 @@ class IOSK_System:
             # TODO support real binaries (executables), etc.
             return
 
-    async def send(self, dev, data, io=None):
+    async def send(self, io:Context, dev:str, data):
         """Send data to device."""
-        io = io.fork() if io else Context(self)
+        #io = io.fork() if io else Context(self)
 
         if not dev.startswith('/dev/'):
             await io.error(f'!! not a device: {dev}')
@@ -115,9 +144,7 @@ class IOSK_System:
         dev = dev[5:]
         #return await getattr(self.dev, dev)(data)
         path = self.box(join('/dev', dev))
-
-        modname = f'iosk.dev.{dev}'
-        py = self.pymod(modname, path)
+        py = self.pymod(f'iosk.dev.{dev}', path)
 
         if py:
             #print('  SEND PYTHON')
@@ -132,12 +159,39 @@ class IOSK_System:
             print(f'  SEND FILE: {path}')
             #return await self.exec(join('/dev', dev), args)
 
+    async def recv(self, io:Context, dev:str):
+        """Receive data from device."""
+        #io = io.fork() if io else Context(self)
+
+        if not dev.startswith('/dev/'):
+            await io.error(f'!! not a device: {dev}')
+            return
+
+        dev = dev[5:]
+        path = self.box(join('/dev', dev))
+        py = self.pymod(f'iosk.dev.{dev}', path)
+
+        if py:
+            #print('  SEND PYTHON')
+            try:
+                return await py.iorecv(io)
+            except Exception as e: # FIXME error logging
+                await io.error(f'!! error receiving from: /dev/{dev}')
+                #return
+                raise e
+
+        else:
+            print(f'  RECV FILE: {path}')
+            #return await self.exec(join('/dev', dev), args)
+
     ###
     ### COMMAND
     ###
 
-    async def call(self, args, io=None):
+    async def call(self, io:Context, args):
         """Interpret arguments for something to invoke (exec)."""
+        #io = io.fork() if io else Context(self)
+
         #print(f'CALL:"{args}"')
         space = args.index(' ') if ' ' in args else len(args)
         cmd = args[:space]
@@ -149,16 +203,16 @@ class IOSK_System:
 
         if py:
             #print('  CALL PYTHON')
-            io = io.fork() if io else Context(self)
             try:
                 return await py.iocall(io, args)
-            except: # FIXME error logging
+            except Exception as e: # FIXME error logging
                 await io.error(f'!! error calling: {cmd} {args}')
-                return
+                #return
+                raise e
 
         else:
             #print('  CALL FILE')
-            return await self.exec(join('/bin', cmd), args, io=io) # HACK
+            return await self.exec(io, join('/bin', cmd), args) # HACK
 
     ###
     ### UTILITY
