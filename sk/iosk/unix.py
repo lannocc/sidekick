@@ -56,6 +56,7 @@ class IOSK_System:
             self.ready.set()
             return
 
+        ##- init -##
         ok = await self.exec(io, '/sbin/init')
         if not ok: return
 
@@ -190,6 +191,7 @@ class IOSK_System:
     ###
 
     async def copy(self, io:Context, from_path:str, to_path:str):
+        """Copy file."""
         from_file = self.box(from_path)
         if not exists(from_file):
             await io.error(f'!! copy from path not found: {from_path}')
@@ -199,6 +201,7 @@ class IOSK_System:
         shutil.copy(from_file, to_file)
 
     async def move(self, io:Context, from_path:str, to_path:str):
+        """Move file/directory."""
         from_file = self.box(from_path)
         if not exists(from_file):
             await io.error(f'!! move from path not found: {from_path}')
@@ -208,6 +211,7 @@ class IOSK_System:
         shutil.move(from_file, to_file)
 
     async def remove(self, io:Context, path:str):
+        """Remove file."""
         file = self.box(path)
         if not exists(file):
             await io.error(f'!! remove path not found: {path}')
