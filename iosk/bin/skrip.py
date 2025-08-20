@@ -27,7 +27,6 @@ async def iocall(io, args):
                     #if io.os.chat: await io.os.chat.chat(multi, cmd=path)
                     await io.print(multi)
                     multi = ''
-                continue
 
             elif line.startswith('$ '): # command
                 if multi:
@@ -42,13 +41,15 @@ async def iocall(io, args):
                     #if io.os.chat: await io.os.chat.chat(multi, cmd=path)
                     await io.print(multi)
                     multi = ''
-                continue # FIXME
 
             else: # chat
                 multi += '\n' + line
 
                 #print(f'  SKRIP CHAT')
-                #await io.os.chat.chat(line, cmd=path)
+                if io.os.chat:
+                    await io.os.chat.chat(line, cmd=path)
+                else:
+                    await io.error('!! no chat')
 
         if multi:
             #if io.os.chat: await io.os.chat.chat(multi, cmd=path)
@@ -71,10 +72,10 @@ async def handle(io, line):
         # FIXME
         pass
 
-    else: # chat
+    elif line: # chat
         #print(f'  SKRIP CHAT')
-        #await io.os.chat.chat(line, cmd=path)
-
-        # FIXME
-        pass
+        if io.os.chat:
+            await io.os.chat.chat(line, cmd=path)
+        else:
+            await io.error('!! no chat')
 

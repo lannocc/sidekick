@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_081925_3 - File operations: copy, move, remove (iosk).
+
 saw_081925_2 - Now system init is separate from shell login (iosk).
 
 saw_081925_1 - Some organization and beginning contexts for iosk.

@@ -2,5 +2,5 @@
 # @%@~LICENSE~@%@
 
 async def iocall(io, args):
-    await io.print(await io.get(args))
+    await io.output(await io.os.get(io, args))
 

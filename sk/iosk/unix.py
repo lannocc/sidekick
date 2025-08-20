@@ -11,6 +11,7 @@ import os
 from os.path import join, isdir, exists
 import importlib, importlib.util
 import sys
+import shutil
 
 
 class IOSK_System:
@@ -183,6 +184,36 @@ class IOSK_System:
         else:
             print(f'  RECV FILE: {path}')
             #return await self.exec(join('/dev', dev), args)
+
+    ###
+    ### FILE OPS
+    ###
+
+    async def copy(self, io:Context, from_path:str, to_path:str):
+        from_file = self.box(from_path)
+        if not exists(from_file):
+            await io.error(f'!! copy from path not found: {from_path}')
+            return
+
+        to_file = self.box(to_path)
+        shutil.copy(from_file, to_file)
+
+    async def move(self, io:Context, from_path:str, to_path:str):
+        from_file = self.box(from_path)
+        if not exists(from_file):
+            await io.error(f'!! move from path not found: {from_path}')
+            return
+
+        to_file = self.box(to_path)
+        shutil.move(from_file, to_file)
+
+    async def remove(self, io:Context, path:str):
+        file = self.box(path)
+        if not exists(file):
+            await io.error(f'!! remove path not found: {path}')
+            return
+
+        os.remove(file)
 
     ###
     ### COMMAND
