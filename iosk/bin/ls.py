@@ -4,6 +4,6 @@
 from sk.util import get_directory_tree_as_text
 
 
-def iocall(iosk, args):
-    print(get_directory_tree_as_text(iosk.box(args)))
+def iocall(io, args):
+    await io.print(get_directory_tree_as_text(io.os.box(args)))
 

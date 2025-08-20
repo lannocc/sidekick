@@ -4,10 +4,10 @@
 import re
 
 
-async def iocall(iosk, args):
+async def iocall(io, args):
     #print(f'SKRIP {args}')
     path = args
-    file = iosk.box(path)
+    file = io.os.box(path)
 
     multi = ''
 
@@ -18,20 +18,20 @@ async def iocall(iosk, args):
 
             if line.startswith('#'): # comment
                 if multi:
-                    await iosk.chat.chat(multi, cmd=path)
+                    await io.os.chat.chat(multi, cmd=path)
                     multi = ''
                 continue
 
             elif line.startswith('$ '): # command
                 if multi:
-                    await iosk.chat.chat(multi, cmd=path)
+                    await io.os.chat.chat(multi, cmd=path)
                     multi = ''
                 #print(f'  SKRIP CMD')
-                await iosk.call(line[2:])
+                await io.os.call(line[2:], io=io)
 
             elif re.match(r'^\w+=', line): # variable assignment
                 if multi:
-                    await iosk.chat.chat(multi, cmd=path)
+                    await io.os.chat.chat(multi, cmd=path)
                     multi = ''
                 continue # FIXME
 
@@ -39,10 +39,10 @@ async def iocall(iosk, args):
                 multi += '\n' + line
 
                 #print(f'  SKRIP CHAT')
-                #await iosk.chat.chat(line, cmd=path)
+                #await io.os.chat.chat(line, cmd=path)
 
         if multi:
-            await iosk.chat.chat(multi, cmd=path)
+            await io.os.chat.chat(multi, cmd=path)
 
     return True
 

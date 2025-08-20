@@ -4,8 +4,8 @@
 from os.path import join
 
 
-async def iocall(iosk, args):
+async def iocall(io, args):
     handle = args
-    iosk.chat.join(handle, join('/dev', handle))
+    io.os.chat.join(handle, join('/dev', handle))
     return True
 

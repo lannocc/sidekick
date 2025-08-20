@@ -1,7 +1,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from ..__version__ import __version__
+from .io import Context
 from ..util import print_flush as print
 
 import asyncio
@@ -18,6 +18,10 @@ class IOSK_System:
         self.ready = asyncio.Condition()
         self.root = root
         self.chat = None
+
+    ###
+    ### PROCESS
+    ###
 
     async def start(self):
         print(f'IOSK UNIX is starting...')
@@ -45,32 +49,39 @@ class IOSK_System:
             async with self.ready: self.ready.notify_all()
             return
 
-        #await asyncio.sleep(9)
-
         ok = await self.exec('/sbin/init')
         if not ok: return
 
         print(f'IOSK UNIX is ready.')
-
         #await asyncio.sleep(81)
 
     async def run(self):
         async with self.ready: self.ready.notify_all()
         await asyncio.Future() # run forever
 
-    async def get(self, path):
+    ###
+    ### FILE I/O
+    ###
+
+    async def get(self, path, io=None):
+        """Get file contents."""
+        io = io.fork() if io else Context(self)
+
         file = self.box(path)
         if not exists(file):
-            print(f'!! path not found: {path}')
+            await io.error(f'!! path not found: {path}')
             return
 
         with open(file, 'r', encoding='utf-8') as file:
             return file.read()
 
-    async def exec(self, path, args=None): # FIXME use the args
+    async def exec(self, path:str, args:list[str]=None, io=None):
+        """When you know what you need and you've come prepared (arguments)."""
+        io = io.fork() if io else Context(self)
+
         file = self.box(path)
         if not exists(file):
-            print(f'!! path not found: {path}')
+            await io.error(f'!! path not found: {path}')
             return
 
         with open(file, 'r') as file:
@@ -80,18 +91,27 @@ class IOSK_System:
             shebang = shebang[2:]
 
             if shebang.startswith('/bin/'): # HACK
-                return await self.call(shebang[5:] + ' ' + path) # ugly
+                args = ' ' + ' '.join(args) if args else ''
+                # ugly:
+                return await self.call(shebang[5:] + ' ' + path + args, io=io)
 
             else:
-                print(f'!! bad shebang: {path}')
+                await io.error(f'!! bad shebang: {path}')
                 return
 
         else:
-            print(f'!! no shebang: {path}')
+            await io.error(f'!! no shebang: {path}')
+            # TODO support real binaries (executables), etc.
             return
 
-    async def send(self, dev, data):
-        assert dev.startswith('/dev/')
+    async def send(self, dev, data, io=None):
+        """Send data to device."""
+        io = io.fork() if io else Context(self)
+
+        if not dev.startswith('/dev/'):
+            await io.error(f'!! not a device: {dev}')
+            return
+
         dev = dev[5:]
         #return await getattr(self.dev, dev)(data)
         path = self.box(join('/dev', dev))
@@ -102,9 +122,9 @@ class IOSK_System:
         if py:
             #print('  SEND PYTHON')
             try:
-                return await py.iosend(self, data)
+                return await py.iosend(io, data)
             except Exception as e: # FIXME error logging
-                print(f'!! error sending: {data}')
+                await io.error(f'!! error sending: {data}')
                 #return
                 raise e
 
@@ -112,7 +132,12 @@ class IOSK_System:
             print(f'  SEND FILE: {path}')
             #return await self.exec(join('/dev', dev), args)
 
-    async def call(self, args):
+    ###
+    ### COMMAND
+    ###
+
+    async def call(self, args, io=None):
+        """Interpret arguments for something to invoke (exec)."""
         #print(f'CALL:"{args}"')
         space = args.index(' ') if ' ' in args else len(args)
         cmd = args[:space]
@@ -124,17 +149,43 @@ class IOSK_System:
 
         if py:
             #print('  CALL PYTHON')
+            io = io.fork() if io else Context(self)
             try:
-                return await py.iocall(self, args)
+                return await py.iocall(io, args)
             except: # FIXME error logging
-                print(f'!! error calling: {cmd} {args}')
+                await io.error(f'!! error calling: {cmd} {args}')
                 return
 
         else:
             #print('  CALL FILE')
-            return await self.exec(join('/bin', cmd), args) # HACK
+            return await self.exec(join('/bin', cmd), args, io=io) # HACK
+
+    ###
+    ### UTILITY
+    ###
+
+    def box(self, file): # sandbox
+        """Sandbox file path."""
+        while file:
+            if file.startswith('/'):
+                file = file[1:]
+                continue
+
+            elif file.startswith('./'):
+                file = file[2:]
+                continue
+
+            elif file.startswith('../'):
+                file = file[3:]
+                continue
+
+            else:
+                break
+
+        return join(self.root, file)
 
     def pymod(self, modname, path):
+        """Import python module at path as the given module name."""
         #print(f'IMPORT {modname} at {path}')
 
         py = None
@@ -159,23 +210,4 @@ class IOSK_System:
             #print(f'PY2: {py}')
 
         return py
-
-    def box(self, file): # sandbox
-        while file:
-            if file.startswith('/'):
-                file = file[1:]
-                continue
-
-            elif file.startswith('./'):
-                file = file[2:]
-                continue
-
-            elif file.startswith('../'):
-                file = file[3:]
-                continue
-
-            else:
-                break
-
-        return join(self.root, file)
 

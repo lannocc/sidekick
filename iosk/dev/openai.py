@@ -8,13 +8,13 @@ from openai import OpenAI
 MODEL='gpt-4o-mini'
 
 
-async def iosend(iosk, args):
+async def iosend(io, args):
     #print(f'OPENAI: {args}')
     prompt = args
-    api_key = await iosk.get('/etc/openai')
+    api_key = await io.os.get('/etc/openai')
     api_key = api_key.strip()
     if not api_key:
-        print('!! no api key')
+        await io.error('!! no api key')
         return
 
     client = OpenAI(api_key=api_key)
