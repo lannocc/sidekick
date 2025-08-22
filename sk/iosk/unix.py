@@ -16,12 +16,14 @@ import shutil
 
 class IOSK_System:
     def __init__(self, root=None):
+        self.root = root # path
         self.started = None
-        #self.ready = asyncio.Condition()
+
         self.ready = asyncio.Event()
-        self.root = root
-        self.chat = None
         self.halt = asyncio.Event()
+
+        self.chat = None
+        self.system = None # Context
 
     ###
     ### PROCESS
@@ -32,7 +34,8 @@ class IOSK_System:
         self.started = datetime.now()
         fail = None
 
-        io = Context(self, '/dev/console')
+        self.system = Context(self, '/dev/console')
+        io = self.system
 
         if not self.root:
             await io.print('root: ', end='')
@@ -52,7 +55,6 @@ class IOSK_System:
         if fail:
             await io.error(f'!! {fail}')
             self.started = None
-            #async with self.ready: self.ready.notify_all()
             self.ready.set()
             return
 
@@ -63,25 +65,25 @@ class IOSK_System:
         await io.print(f'IOSK UNIX is ready.')
         #await asyncio.sleep(81)
 
-        return io
-
-    async def run(self, io, interactive=False):
-        #async with self.ready: self.ready.notify_all()
+    async def run(self):
+        assert self.system
+        io = self.system
         self.ready.set()
 
-        if interactive:
-            #print(f'SHELL IO {io}')
-            await self.shell(io, True)
-
-        #await asyncio.Future() # run forever
         await self.halt.wait()
+        self.system = None
 
-    async def shell(self, io, interactive=False):
+    async def login(self, user, shell:bool=True):
+        """Login to get a Context."""
+        await self.ready.wait()
+        if self.halt.is_set(): return
+        io = self.system.fork()
+
         skrc = self.box('/etc/skrc')
         if exists(skrc):
             await self.exec(io, '/etc/skrc')
 
-        if interactive:
+        if shell:
             while not self.halt.is_set():
                 #text = await aioconsole.ainput()
                 #text = await self.recv(io, '/dev/console')
@@ -90,14 +92,14 @@ class IOSK_System:
                 #await io.print('cool')
                 await self.call(io, f'skrip -e {text}')
 
+        return io
+
     ###
     ### FILE I/O
     ###
 
     async def get(self, io:Context, path:str):
         """Get file contents."""
-        #io = io.fork() if io else Context(self)
-
         file = self.box(path)
         if not exists(file):
             await io.error(f'!! get path not found: {path}')
@@ -108,8 +110,6 @@ class IOSK_System:
 
     async def exec(self, io:Context, path:str, args:str=None):
         """When you know what you need and you've come prepared (arguments)."""
-        #io = io.fork() if io else Context(self)
-
         file = self.box(path)
         if not exists(file):
             await io.error(f'!! exec path not found: {path}')
@@ -137,8 +137,6 @@ class IOSK_System:
 
     async def send(self, io:Context, dev:str, data):
         """Send data to device."""
-        #io = io.fork() if io else Context(self)
-
         if not dev.startswith('/dev/'):
             await io.error(f'!! not a device: {dev}')
             return
@@ -163,8 +161,6 @@ class IOSK_System:
 
     async def recv(self, io:Context, dev:str):
         """Receive data from device."""
-        #io = io.fork() if io else Context(self)
-
         if not dev.startswith('/dev/'):
             await io.error(f'!! not a device: {dev}')
             return
@@ -225,8 +221,6 @@ class IOSK_System:
 
     async def call(self, io:Context, args):
         """Interpret arguments for something to invoke (exec)."""
-        #io = io.fork() if io else Context(self)
-
         #print(f'CALL:"{args}"')
         space = args.index(' ') if ' ' in args else len(args)
         cmd = args[:space]
