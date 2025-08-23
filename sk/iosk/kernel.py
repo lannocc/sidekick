@@ -1,7 +1,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from .io import Context
+from .io import Context, Capture
 from ..util import print_flush as print
 
 import asyncio
@@ -14,7 +14,9 @@ import sys
 import shutil
 
 
-class IOSK_System:
+class IOSK:
+    SYSTEM_LOG = '/var/log/system'
+
     def __init__(self, root=None):
         self.root = root # path
         self.started = None
@@ -26,7 +28,7 @@ class IOSK_System:
         self.system = None # Context
 
     ###
-    ### PROCESS
+    ### SYSTEM LIFECYCLE
     ###
 
     async def start(self):
@@ -34,8 +36,8 @@ class IOSK_System:
         self.started = datetime.now()
         fail = None
 
-        self.system = Context(self, '/dev/console')
-        io = self.system
+        io = self.system = Context(self, '/dev/console',
+                                   Capture.log(self, self.SYSTEM_LOG, True))
 
         if not self.root:
             await io.print('root: ', end='')
@@ -186,6 +188,14 @@ class IOSK_System:
     ### FILE OPS
     ###
 
+    async def create(self, io:Context, path:str):
+        """Create new (empty) file."""
+        file = self.box(path)
+        if exists(file): return
+
+        with open(file, 'w') as f:
+            pass
+
     async def copy(self, io:Context, from_path:str, to_path:str):
         """Copy file."""
         from_file = self.box(from_path)
@@ -214,6 +224,26 @@ class IOSK_System:
             return
 
         os.remove(file)
+
+    async def create_dir(self, io:Context, path:str, parents=False):
+        """Create new directory."""
+        folder = self.box(path)
+        if exists(folder): return
+
+        if parents:
+            os.makedirs(folder)
+
+        else:
+            os.mkdir(folder)
+
+    async def remove_dir(self, io:Context, path:str):
+        """Remove directory."""
+        folder = self.box(path)
+        if not exists(folder):
+            await io.error(f'!! remove dir path not found: {path}')
+            return
+
+        os.rmdir(folder)
 
     ###
     ### COMMAND
