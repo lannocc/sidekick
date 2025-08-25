@@ -21,6 +21,7 @@ class IOSK:
     BOOT_COUNT = '/var/cache/boot'
     INIT_SCRIPT = '/sbin/init'
     SYSTEM_LOG = '/var/log/system'
+    USER_LOG = '/var/log/user'
     SKRC = '/etc/skrc'
 
     def __init__(self, root):
@@ -77,7 +78,6 @@ class IOSK:
         if not ok: return
 
         await io.print(f'IOSK has started.')
-        #await asyncio.sleep(81)
 
     async def run(self):
         assert self.system
@@ -94,23 +94,22 @@ class IOSK:
         await io.print(f'IOSK System halted.')
         self.system = None
 
-    async def login(self, user, shell:bool=True):
-        """Login to get a Context."""
+    async def login(self, user, interactive:bool=True):
+        """Log-in to get a Context."""
         await self.ready.wait()
         if self.halt.is_set(): return
+
         io = self.system.fork()
+        io.log = Capture.log(self, join(self.USER_LOG, user), True)
 
         skrc = self.box(self.SKRC)
         if exists(skrc):
             await self.exec(io, self.SKRC)
 
-        if shell:
+        if interactive:
             while not self.halt.is_set():
-                #text = await aioconsole.ainput()
-                #text = await self.recv(io, self.CONSOLE_DEV)
                 text = await io.input()
                 if text == '$ exit': break
-                #await io.print('cool')
                 await self.call(io, f'skrip -e {text}')
 
         return io

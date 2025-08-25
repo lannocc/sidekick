@@ -1,7 +1,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from datetime import date
+from datetime import datetime, date
 from os import makedirs
 from os.path import join, isdir, exists
 
@@ -28,11 +28,24 @@ class Context:
         return child
 
     async def print(self, args):
+        if self.log:
+            self._log_()
+            #self.log.write('<< ')
+
         await self.output(args)
         await self.output('\n')
 
     async def input(self):
+        if self.log:
+            self._log_()
+            self.log.write('>> ')
+
         data = await self.os.recv(self, self.dev)
+
+        if self.log:
+            self.log.write(data)
+            self.log.write('\n')
+
         return data
 
     async def output(self, args):
@@ -45,6 +58,10 @@ class Context:
 
     async def error(self, args):
         await self.print(args)
+
+    def _log_(self):
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self.log.write(f'=== {now} [{self.os.BOOT}/{self.cid}] === ')
 
 
 class Capture:
