@@ -31,8 +31,9 @@ class IOSK:
         self.ready = asyncio.Event()
         self.halt = asyncio.Event()
 
-        self.chat = None
         self.system = None # Context
+        self.users = { } # handle:device
+        self.chat = None
 
     ###
     ### SYSTEM LIFECYCLE
@@ -91,28 +92,52 @@ class IOSK:
 
         # TODO: any shutdown tasks?
 
-        await io.print(f'IOSK System halted.')
+        await io.print(f'IOSK system halted.')
         self.system = None
 
-    async def login(self, user, interactive:bool=True):
+    async def login(self, user, interactive:bool=True, connect=None):
         """Log-in to get a Context."""
         await self.ready.wait()
         if self.halt.is_set(): return
 
+        if user in self.users:
+            await self.system.error(f'!! already logged in: {user}')
+            return
+
+        await self.system.print(f'IOSK login: {user}')
+
         io = self.system.fork()
         io.log = Capture.log(self, join(self.USER_LOG, user), True)
+        io.user = user
+        self.users[user] = io
+
+        if connect:
+            await io.print(connect) # FIXME send to chat instead
 
         skrc = self.box(self.SKRC)
         if exists(skrc):
             await self.exec(io, self.SKRC)
 
         if interactive:
-            while not self.halt.is_set():
-                text = await io.input()
-                if text == '$ exit': break
-                await self.call(io, f'skrip -e {text}')
+            self.interactive(io)
 
         return io
+
+    async def interactive(self, io):
+        while not self.halt.is_set():
+            text = await io.input('>> ')
+            if text == '$ exit': break
+            await self.call(io, f'skrip -e {text}')
+
+    async def logout(self, io:Context, disconnect=None):
+        if io.user not in self.users:
+            await self.system.error(f'!! not logged in: {io.user}')
+            return
+
+        await self.system.print(f'IOSK logout: {io.user}')
+        if disconnect:
+            await io.print(disconnect) # FIXME send to chat instead
+        del self.users[io.user]
 
     ###
     ### FILE I/O

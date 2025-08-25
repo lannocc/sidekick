@@ -46,11 +46,11 @@ def run(args=sys.argv[1:]):
     else:
         print('  >> Filesystem Root: ', end='')
         root = input()
-        #if not root: return
+        if not root: return
 
         print('  >> Chat Handle (super): ', end='')
         handle = input()
-        #if not handle: return
+        if not handle: return
 
     print('Preparing iosk UNIX... ', end='')
     from . import UNIX
@@ -65,10 +65,9 @@ def run(args=sys.argv[1:]):
     async def async_run():
         print()
         try:
+            await unix.start()
             await chat.start(handle=handle)
-            io = await unix.start()
-            results = await asyncio.gather(chat.run(), unix.run(io))
-            #print(f'results: {results}')
+            await asyncio.gather(unix.run(), chat.run())
 
         except asyncio.exceptions.CancelledError:
             print('Cancelled') # ^CCancelled
@@ -133,9 +132,8 @@ def system(args=sys.argv[1:]):
     async def async_run():
         print()
         try:
-            io = await unix.start()
-            await unix.run(io)
-            #print(f'results: {results}')
+            await unix.start()
+            await unix.run()
 
         except asyncio.exceptions.CancelledError:
             print('Cancelled') # ^CCancelled

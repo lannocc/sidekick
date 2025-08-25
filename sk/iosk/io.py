@@ -22,46 +22,57 @@ class Context:
         chatter = join(self.CHATTER, str(self.os.BOOT), str(self.cid))
         self.chatter = open(self.os.box(chatter), 'w')
 
+        self.user = None
+
     def fork(self):
         child = Context(self.os, self.dev, self.log)
         child.parent = self
         return child
 
-    async def print(self, args):
+    async def print(self, text, indicator='='):
         if self.log:
-            self._log_()
+            self._log_(indicator)
             #self.log.write('<< ')
 
-        await self.output(args)
+        await self.output(text)
         await self.output('\n')
 
-    async def input(self):
-        if self.log:
-            self._log_()
-            self.log.write('>> ')
+    async def input(self, prompt=None):
+        if prompt:
+            await self.os.send(self, self.dev, prompt)
 
         data = await self.os.recv(self, self.dev)
 
         if self.log:
+            self._log_('I') # log timestamped when input received
+            if prompt: self.log.write(prompt)
             self.log.write(data)
             self.log.write('\n')
 
         return data
 
-    async def output(self, args):
-        self.chatter.write(args)
+    async def output(self, text):
+        self.chatter.write(text)
 
         if self.log:
-            self.log.write(args)
+            if text == '\n':
+                ltext = text
+            else:
+                s = (len(f'{self.os.BOOT}/{self.cid}') - 3) * ' '
+                ltext = text.replace('\n',
+                                     f'\n===    ...       ...    [...{s}] =.= ')
+            self.log.write(ltext)
 
-        await self.os.send(self, self.dev, args)
+        await self.os.send(self, self.dev, text)
 
     async def error(self, args):
-        await self.print(args)
+        await self.print(args, indicator='E')
 
-    def _log_(self):
+    def _log_(self, indicator='='):
+        assert len(indicator) == 1
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        self.log.write(f'=== {now} [{self.os.BOOT}/{self.cid}] === ')
+        i = indicator
+        self.log.write(f'=== {now} [{self.os.BOOT}/{self.cid}] ={i}= ')
 
 
 class Capture:

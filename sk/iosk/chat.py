@@ -9,71 +9,41 @@ import asyncio
 class AIMessenger:
     def __init__(self, iosk):
         iosk.chat = self
-        self.iosk = iosk
-        self.users = { }
+        self.os = iosk
         self.me = None
 
     async def start(self, handle=None):
         print()
         print('Welcome to the IOSK AI Messenger.')
 
-        if not handle: handle = 'super'
+        if not handle: handle = 'root'
         print(f'You are the super-user: {handle}')
         self.me = handle
         return handle
 
     async def run(self):
-        async with self.iosk.ready: # wait for UNIX to be done starting
-            await self.iosk.ready.wait()
-            if not self.iosk.started:
-                return
+        await self.os.ready.wait()
+        if self.os.halt.is_set(): return
 
-        self.join(self.me)
+        io = await self.join(self.me)
 
         try:
-            while (msg := await self.input(self.me, '>> ')) != '$ exit':
-                #print(f'<< {msg}')
-                if not msg: continue
-
-                if msg.startswith('#'): # comment
-                    continue
-
-                elif msg.startswith('$ '): # command
-                    await self.iosk.call(msg[2:])
-
-                else: # chat
-                    await self.chat(msg, echo=False)
-
-        except EOFError:
-            pass
+            await self.os.interactive(io)
 
         finally:
-            self.leave(self.me)
+            await self.leave(io)
             #self.me = None
 
-    def join(self, name, dev=None): # no device means local (self)
+    async def join(self, name, dev=None): # no device means local (self)
         assert name
-        #assert name not in self.users
+        connect = f':: {name} has entered the chat from {dev or "local"}'
+        io = await self.os.login(user=name, interactive=False, connect=connect)
+        return io
 
-        num = 0
-        while name in self.users:
-            num += 1
-            name = f'{name}{num}'
+    async def leave(self, io):
+        await self.os.logout(io, disconnect=f':: {io.user} has left the chat')
 
-        self.users[name] = dev or self
-        print(f':: {name} has entered the chat from {dev or "local"}')
-
-    def leave(self, name):
-        assert name
-        #assert name in self.users
-
-        if name not in self.users:
-            print(f'!! {name} is not connected')
-            return
-
-        del self.users[name]
-        print(f':: {name} has left the chat')
-
+    '''
     async def input(self, user, prompt=None):
         assert user
         loop = asyncio.get_event_loop()
@@ -123,4 +93,5 @@ class AIMessenger:
 
                 reply = await self.iosk.send(dev, msg)
                 if reply: print(f'<< @{handle} {reply}')
+    '''
 
