@@ -6,7 +6,7 @@ from ..util import print_flush as print
 import asyncio
 
 
-class AI_Messenger:
+class AIMessenger:
     def __init__(self, iosk):
         iosk.chat = self
         self.iosk = iosk

@@ -2,7 +2,7 @@
 # @%@~LICENSE~@%@
 
 from .kernel import IOSK as UNIX
-from .chat import AI_Messenger as AIM
+from .chat import AIMessenger as AIM
 
 __all__ = [
     'UNIX', # system environment

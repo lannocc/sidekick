@@ -1,2 +1,3 @@
-var/log
+/var/cache
+/var/log
 

@@ -15,9 +15,15 @@ import shutil
 
 
 class IOSK:
-    SYSTEM_LOG = '/var/log/system'
+    BOOT = 0 # current boot number
 
-    def __init__(self, root=None):
+    CONSOLE_DEV = '/dev/console'
+    BOOT_COUNT = '/var/cache/boot'
+    INIT_SCRIPT = '/sbin/init'
+    SYSTEM_LOG = '/var/log/system'
+    SKRC = '/etc/skrc'
+
+    def __init__(self, root):
         self.root = root # path
         self.started = None
 
@@ -32,27 +38,33 @@ class IOSK:
     ###
 
     async def start(self):
-        print(f'IOSK UNIX is starting...')
+        print(f'IOSK is starting...')
         self.started = datetime.now()
         fail = None
 
-        io = self.system = Context(self, '/dev/console',
-                                   Capture.log(self, self.SYSTEM_LOG, True))
-
-        if not self.root:
-            await io.print('root: ', end='')
-            self.root = input()
-
-        if not self.root:
-            fail = 'no root'
-
-        elif not isdir(self.root):
+        if not isdir(self.root):
             fail = 'bad root'
 
-        '''
-        elif not self.chat:
-            fail = 'no chat'
-        '''
+        if not fail:
+            boot = self.box(self.BOOT_COUNT)
+            if exists(boot):
+                with open(boot, 'r') as bf:
+                    self.BOOT = int(bf.read()) + 1
+
+            chatter = self.box(join(Context.CHATTER, str(self.BOOT)))
+            if not exists(chatter):
+                os.makedirs(chatter) # creates /var/cache
+            elif not isdir(chatter):
+                fail = f'not a dir: {chatter}'
+
+            with open(boot, 'w') as boot: # assumes /var/cache exists
+                boot.write(str(self.BOOT))
+
+        if not fail:
+            io = self.system = Context(self, self.CONSOLE_DEV,
+                                       Capture.log(self, self.SYSTEM_LOG, True))
+
+            await io.print(f'IOSK boot number {self.BOOT}...')
 
         if fail:
             await io.error(f'!! {fail}')
@@ -61,18 +73,25 @@ class IOSK:
             return
 
         ##- init -##
-        ok = await self.exec(io, '/sbin/init')
+        ok = await self.exec(io, self.INIT_SCRIPT)
         if not ok: return
 
-        await io.print(f'IOSK UNIX is ready.')
+        await io.print(f'IOSK has started.')
         #await asyncio.sleep(81)
 
     async def run(self):
         assert self.system
         io = self.system
+
+        await io.print(f'IOSK is ready.')
         self.ready.set()
 
-        await self.halt.wait()
+        await self.halt.wait() # wait here for shutdown
+        await io.print(f'IOSK shutdown signal received...')
+
+        # TODO: any shutdown tasks?
+
+        await io.print(f'IOSK System halted.')
         self.system = None
 
     async def login(self, user, shell:bool=True):
@@ -81,14 +100,14 @@ class IOSK:
         if self.halt.is_set(): return
         io = self.system.fork()
 
-        skrc = self.box('/etc/skrc')
+        skrc = self.box(self.SKRC)
         if exists(skrc):
-            await self.exec(io, '/etc/skrc')
+            await self.exec(io, self.SKRC)
 
         if shell:
             while not self.halt.is_set():
                 #text = await aioconsole.ainput()
-                #text = await self.recv(io, '/dev/console')
+                #text = await self.recv(io, self.CONSOLE_DEV)
                 text = await io.input()
                 if text == '$ exit': break
                 #await io.print('cool')

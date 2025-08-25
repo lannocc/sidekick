@@ -13,6 +13,5 @@ $ PATH=/bin
 
 #$ welcome
 
-System initialized.
-#init done
+init done
 

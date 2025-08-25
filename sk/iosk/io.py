@@ -7,11 +7,20 @@ from os.path import join, isdir, exists
 
 
 class Context:
-    def __init__(self, iosk_unix, dev_path='/dev/console', log_file=None):
+    CID = 0 # next "chatter" id
+    CHATTER = '/var/cache/chatter'
+
+    def __init__(self, iosk_unix, dev_path, log_file=None):
+        self.cid = Context.CID
+        Context.CID += 1
+
         self.os = iosk_unix # running system
         self.dev = dev_path # device name path
         self.log = log_file # opened file handle
         self.parent = None  # parent Context
+
+        chatter = join(self.CHATTER, str(self.os.BOOT), str(self.cid))
+        self.chatter = open(self.os.box(chatter), 'w')
 
     def fork(self):
         child = Context(self.os, self.dev, self.log)
@@ -19,29 +28,23 @@ class Context:
         return child
 
     async def print(self, args):
-        #print(args) # FIXME
-        if self.log:
-            self.log.write(args)
-            self.log.write('\n')
-
         await self.output(args)
         await self.output('\n')
 
     async def input(self):
-        #print(args) # FIXME
         data = await self.os.recv(self, self.dev)
         return data
 
     async def output(self, args):
+        self.chatter.write(args)
+
         if self.log:
             self.log.write(args)
 
         await self.os.send(self, self.dev, args)
 
     async def error(self, args):
-        #print(args) # FIXME
         await self.print(args)
-        # FIXME do more
 
 
 class Capture:
