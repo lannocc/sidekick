@@ -43,11 +43,12 @@ class Context:
 
         data = await self.os.recv(self, self.dev)
 
-        if self.log:
+        if data and self.log:
             self._log_('I') # log timestamped when input received
             if prompt: self.log.write(prompt)
             self.log.write(data)
             self.log.write('\n')
+            self.log.flush()
 
         return data
 
@@ -62,6 +63,7 @@ class Context:
                 ltext = text.replace('\n',
                                      f'\n===    ...       ...    [...{s}] =.= ')
             self.log.write(ltext)
+            self.log.flush()
 
         await self.os.send(self, self.dev, text)
 

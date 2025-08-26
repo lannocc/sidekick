@@ -90,12 +90,15 @@ class IOSK:
         await self.halt.wait() # wait here for shutdown
         await io.print(f'IOSK shutdown signal received...')
 
-        # TODO: any shutdown tasks?
+        for user, uio in self.users.copy().items():
+            disconnect = f':: {user} has been disconnected (shutdown)'
+            await self.logout(uio, disconnect=disconnect)
 
         await io.print(f'IOSK system halted.')
         self.system = None
 
-    async def login(self, user, interactive:bool=True, connect=None):
+    async def login(self, user, device, interactive:bool=True,
+                    connect=None):
         """Log-in to get a Context."""
         await self.ready.wait()
         if self.halt.is_set(): return
@@ -108,11 +111,13 @@ class IOSK:
 
         io = self.system.fork()
         io.log = Capture.log(self, join(self.USER_LOG, user), True)
+        io.dev = device
         io.user = user
         self.users[user] = io
 
         if connect:
-            await io.print(connect) # FIXME send to chat instead
+            if self.chat: await self.chat.send(user, connect, sys=True)
+            else: await io.print(connect)
 
         skrc = self.box(self.SKRC)
         if exists(skrc):
@@ -125,9 +130,29 @@ class IOSK:
 
     async def interactive(self, io):
         while not self.halt.is_set():
-            text = await io.input('>> ')
-            if text == '$ exit': break
-            await self.call(io, f'skrip -e {text}')
+            try:
+                start = datetime.now()
+                text = await io.input('>> ')
+
+                while text is None: # for non-blocking inputs
+                    #print('POLL INPUT')
+                    delay = (datetime.now() - start).total_seconds()
+                    if delay < 0.1:
+                        await asyncio.sleep(0.1 - delay)
+                    start = datetime.now()
+                    text = await io.input()
+
+                if text == '$ exit': break
+
+                if text.startswith('#') or text.startswith('$ '):
+                    await self.call(io, f'skrip -e {text}')
+
+                elif text:
+                    if self.chat: await self.chat.send(io.user, text)
+                    else: await io.print(text)
+
+            except EOFError:
+                pass
 
     async def logout(self, io:Context, disconnect=None):
         if io.user not in self.users:
@@ -136,7 +161,8 @@ class IOSK:
 
         await self.system.print(f'IOSK logout: {io.user}')
         if disconnect:
-            await io.print(disconnect) # FIXME send to chat instead
+            if self.chat: await self.chat.send(io.user, disconnect, sys=True)
+            else: await io.print(disconnect)
         del self.users[io.user]
 
     ###
@@ -304,7 +330,7 @@ class IOSK:
         py = self.pymod(modname, path)
 
         if py:
-            #print('  CALL PYTHON')
+            #print(f'CALL PYTHON: {py}')
             try:
                 return await py.iocall(io, args)
             except Exception as e: # FIXME error logging
@@ -342,17 +368,23 @@ class IOSK:
 
     def pymod(self, modname, path):
         """Import python module at path as the given module name."""
+        modname = f'sk.{modname}'
+        if not path.endswith('.py'): path += '.py'
         #print(f'IMPORT {modname} at {path}')
+
+        if modname in sys.modules:
+            # TODO: check for file modification / reload?
+            #print(f'MOD FOUND: {modname}: {sys.modules[modname]}')
+            return sys.modules[modname]
 
         py = None
         try:
-            spec = importlib.util.spec_from_file_location(
-                    modname, path if path.endswith('.py') else f'{path}.py')
+            spec = importlib.util.spec_from_file_location(modname, path)
             #print(f'SPEC: {spec}')
             mod = importlib.util.module_from_spec(spec)
-            #print(f'MOD: {mod}')
-            sys.modules[modname] = mod
+            #print(f'SETTING SYS MOD {modname}: {mod}')
             spec.loader.exec_module(mod)
+            sys.modules[modname] = mod
             py = mod
             #print(f'PY1: {py}')
         except:
@@ -361,7 +393,7 @@ class IOSK:
         if not py:
             # original way
             py = None
-            try: py = importlib.import_module(f'sk.{modname}')
+            try: py = importlib.import_module(modname)
             except ModuleNotFoundError: pass
             #print(f'PY2: {py}')
 

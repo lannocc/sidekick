@@ -10,6 +10,6 @@ async def iocall(io, args):
         return
 
     handle = args
-    io.os.chat.join(handle, join('/dev', handle))
+    await io.os.chat.join(handle, join('/dev', handle))
     return True
 

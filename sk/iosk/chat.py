@@ -4,6 +4,7 @@
 from ..util import print_flush as print
 
 import asyncio
+from datetime import datetime
 
 
 class AIMessenger:
@@ -11,6 +12,8 @@ class AIMessenger:
         iosk.chat = self
         self.os = iosk
         self.me = None
+
+        self.engagements = { }
 
     async def start(self, handle=None):
         print()
@@ -37,61 +40,74 @@ class AIMessenger:
     async def join(self, name, dev=None): # no device means local (self)
         assert name
         connect = f':: {name} has entered the chat from {dev or "local"}'
-        io = await self.os.login(user=name, interactive=False, connect=connect)
+        engage = True if dev else False
+        if not dev: dev = self.os.CONSOLE_DEV
+
+        if engage:
+            self.engagements[dev] = Engagement()
+
+        io = await self.os.login(user=name, device=dev, interactive=False,
+                                 connect=connect)
+
+        if engage:
+            asyncio.create_task(self.os.interactive(io))
+            asyncio.create_task(self.engage(dev))
+
+        print(f'RETURN FROM JOIN: {name}')
         return io
 
     async def leave(self, io):
+        if io.user in self.engagements:
+            del self.engagements[io.user]
+
         await self.os.logout(io, disconnect=f':: {io.user} has left the chat')
 
-    '''
-    async def input(self, user, prompt=None):
-        assert user
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, lambda: input(prompt).rstrip())
-
-    async def chat(self, msg, cmd=None, echo=True, handle=None):
+    async def send(self, from_user, msg, sys=False):
         if not msg: return
+        if not sys: msg = f'<< [{from_user}] {msg}'
 
-        ps = '' if cmd else '<<'
-        if handle: handle = f'[@{handle}] '
-        else: handle = ''
-        if echo: print(f'{ps} {handle}{msg}')
+        for user, uio in self.os.users.items():
+            if user is from_user: continue
+            await uio.print(msg)
 
-        to=None
+    async def engage(self, dev): # buffer outputs
+        while dev in self.engagements:
+            eng = self.engagements[dev]
 
-        if msg.startswith('@'):
-            try: split = msg.index(' ')
-            except ValueError: split = len(msg)
-            to = msg[1:split]
-            msg = msg[split+1:]
+            if eng.buf and (datetime.now() - eng.now).total_seconds() >= 1:
+                #print(f'SENDING TO {dev}: {eng.buf}')
 
-        await self.send(msg, to=to, cmd=cmd)
+                prompt = eng.buf
+                eng.buf = None
+                eng.now = None
 
-    async def send(self, msg, to=None, cmd=None):
-        #print(f'...sending to {to or "ALL"}...')
-        #print(f'SEND to={to} cmd={cmd}')
+                reply = await eng.trip(prompt)
+                if eng.inbuf: eng.inbuf += '\n\n' + reply
+                else: eng.inbuf = reply
 
-        if to:
-            if to not in self.users:
-                print(f'!! {to} is not online')
-                return
+            await asyncio.sleep(0.1)
 
-            dev = self.users[to]
-            if not dev or dev is self: # local loopback
-                print(f'<< @[{to}] {msg}') # echo
 
-            else:
-                reply = await self.iosk.send(dev, msg)
-                if reply:
-                    #print(f'<< @{to} {reply}')
-                    await self.chat(reply, cmd=cmd, handle=to)
+class Engagement:
+    def __init__(self):
+        self.history = ''
+        self.buf = None
+        self.now = None
+        self.trip = None
+        self.inbuf = None
 
-        else: # send to everyone
-            for handle, dev in self.users.items():
-                if not dev or dev is self: # local loopback
-                    continue # ignore
+    def append(self, text, trip):
+        self.trip = trip
+        self.now = datetime.now()
 
-                reply = await self.iosk.send(dev, msg)
-                if reply: print(f'<< @{handle} {reply}')
-    '''
+        self.history += text
+        if self.buf: self.buf += text
+        else: self.buf = self.history
+
+    def input(self):
+        data = self.inbuf
+        if data is not None:
+            self.history += data
+        self.inbuf = None
+        return data
 

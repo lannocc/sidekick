@@ -11,7 +11,7 @@ MODEL='gpt-4o-mini'
 async def iosend(io, data):
     #print(f'OPENAI: {data}')
     prompt = data
-    api_key = await io.os.get('/etc/openai')
+    api_key = await io.os.get(io, '/etc/openai')
     api_key = api_key.strip()
     if not api_key:
         await io.error('!! no api key')
