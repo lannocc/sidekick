@@ -47,6 +47,8 @@ class IOSK:
         if not isdir(self.root):
             fail = 'bad root'
 
+        io = None
+
         if not fail:
             boot = self.box(self.BOOT_COUNT)
             if exists(boot):
@@ -69,7 +71,8 @@ class IOSK:
             await io.print(f'IOSK boot number {self.BOOT}...')
 
         if fail:
-            await io.error(f'!! {fail}')
+            if io: await io.error(f'!! {fail}')
+            else: print(f'!! {fail}')
             self.started = None
             self.ready.set()
             return
