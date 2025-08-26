@@ -348,7 +348,7 @@ class IOSK:
 
         except Exception as e:
             # FIXME error handling
-            io.error(f'!! error calling {cmd}: {e}')
+            await io.error(f'!! error calling {cmd}: {e}')
 
     ###
     ### UTILITY
