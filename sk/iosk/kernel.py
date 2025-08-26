@@ -132,7 +132,8 @@ class IOSK:
         while not self.halt.is_set():
             try:
                 start = datetime.now()
-                text = await io.input('>> ')
+                #text = await io.input('>> ')
+                text = await io.input()
 
                 while text is None: # for non-blocking inputs
                     #print('POLL INPUT')
@@ -142,14 +143,16 @@ class IOSK:
                     start = datetime.now()
                     text = await io.input()
 
-                if text == '$ exit': break
+                for line in text.split('\n'):
+                    line = line.rstrip()
+                    if line == '$ exit': return
 
-                if text.startswith('#') or text.startswith('$ '):
-                    await self.call(io, f'skrip -e {text}')
+                    if line.startswith('#') or line.startswith('$ '):
+                        await self.call(io, f'skrip -e {line}')
 
-                elif text:
-                    if self.chat: await self.chat.send(io.user, text)
-                    else: await io.print(text)
+                    elif line:
+                        if self.chat: await self.chat.send(io.user, line)
+                        else: await io.print(line)
 
             except EOFError:
                 pass
@@ -329,18 +332,23 @@ class IOSK:
         modname = f'iosk.bin.{cmd}'
         py = self.pymod(modname, path)
 
-        if py:
-            #print(f'CALL PYTHON: {py}')
-            try:
+        try:
+            if py:
+                #print(f'CALL PYTHON: {py}')
+                #try:
                 return await py.iocall(io, args)
-            except Exception as e: # FIXME error logging
-                await io.error(f'!! error calling: {cmd} {args}')
-                #return
-                raise e
+                #except Exception as e: # FIXME error logging
+                #    await io.error(f'!! error calling: {cmd} {args}')
+                    #return
+                #    raise e
 
-        else:
-            #print('  CALL FILE')
-            return await self.exec(io, join('/bin', cmd), args) # HACK
+            else:
+                #print('  CALL FILE')
+                return await self.exec(io, join('/bin', cmd), args) # HACK
+
+        except Exception as e:
+            # FIXME error handling
+            io.error(f'!! error calling {cmd}: {e}')
 
     ###
     ### UTILITY

@@ -8,7 +8,7 @@ import asyncio
 from datetime import datetime, timedelta
 
 
-MODEL = 'gemini-2.0-flash'
+MODEL = 'gemini-2.5-flash'
 TIMEOUT = 3 * 60 * 1000 # wait up to 3 minutes (file uploads, etc.)
 
 client = None
@@ -39,7 +39,7 @@ async def iorecv(io):
 
 
 async def trip(prompt): # round trip
-    print(f'SENDING TO GEMINI: {prompt}')
+    #print(f'SENDING TO GEMINI: {prompt}')
     resp = await client.aio.models.generate_content(
             model=MODEL,
             contents=prompt,
@@ -49,7 +49,7 @@ async def trip(prompt): # round trip
         )
 
     reply = resp.text
-    print(f'GOT GEMINI REPLY: {reply}')
+    #print(f'GOT GEMINI REPLY: {reply}')
 
     return reply
 

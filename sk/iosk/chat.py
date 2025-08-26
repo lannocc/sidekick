@@ -49,11 +49,15 @@ class AIMessenger:
         io = await self.os.login(user=name, device=dev, interactive=False,
                                  connect=connect)
 
+        async def go(io):
+            await self.os.interactive(io)
+            await self.leave(io)
+
         if engage:
-            asyncio.create_task(self.os.interactive(io))
+            asyncio.create_task(go(io))
             asyncio.create_task(self.engage(dev))
 
-        print(f'RETURN FROM JOIN: {name}')
+        #print(f'RETURN FROM JOIN: {name}')
         return io
 
     async def leave(self, io):
@@ -71,6 +75,8 @@ class AIMessenger:
             await uio.print(msg)
 
     async def engage(self, dev): # buffer outputs
+        last = None
+
         while dev in self.engagements:
             eng = self.engagements[dev]
 
@@ -82,8 +88,16 @@ class AIMessenger:
                 eng.now = None
 
                 reply = await eng.trip(prompt)
-                if eng.inbuf: eng.inbuf += '\n\n' + reply
+                if eng.inbuf: eng.inbuf += '\n' + reply
                 else: eng.inbuf = reply
+                last = datetime.now()
+
+            elif not eng.buf and (datetime.now() - last).total_seconds() >= 5:
+                #print('POLLING FOR REPLY')
+                reply = await eng.trip(eng.history)
+                if eng.inbuf: eng.inbuf += '\n' + reply
+                else: eng.inbuf = reply
+                last = datetime.now()
 
             await asyncio.sleep(0.1)
 
