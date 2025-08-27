@@ -12,7 +12,7 @@ characters:
 
     # Lines starting with dollar sign "$" symbol and a space are commands, e.g.:
 
-    $ echo 'Use the help command to get more help about commands:'
+    $ echo 'Use the "$ help" command to get more help about commands:'
     $ help
 
 As this is an interactive system, take your time and reply just one line

@@ -12,6 +12,7 @@ from os.path import join, isdir, exists
 import importlib, importlib.util
 import sys
 import shutil
+import traceback
 
 
 class IOSK:
@@ -32,7 +33,7 @@ class IOSK:
         self.halt = asyncio.Event()
 
         self.system = None # Context
-        self.users = { } # handle:device
+        self.users = { } # handle:Context
         self.chat = None
 
     ###
@@ -100,6 +101,10 @@ class IOSK:
         await io.print(f'IOSK system halted.')
         self.system = None
 
+    ###
+    ### USER LIFECYCLE
+    ###
+
     async def login(self, user, device, interactive:bool=True,
                     connect=None):
         """Log-in to get a Context."""
@@ -133,10 +138,9 @@ class IOSK:
 
     async def interactive(self, io):
         while not self.halt.is_set():
+            start = datetime.now()
             try:
-                start = datetime.now()
-                #text = await io.input('>> ')
-                text = await io.input()
+                text = await io.input('[me] >> ')
 
                 while text is None: # for non-blocking inputs
                     #print('POLL INPUT')
@@ -158,7 +162,7 @@ class IOSK:
                         else: await io.print(line)
 
             except EOFError:
-                pass
+                return
 
     async def logout(self, io:Context, disconnect=None):
         if io.user not in self.users:
@@ -172,18 +176,38 @@ class IOSK:
         del self.users[io.user]
 
     ###
-    ### FILE I/O
+    ### COMMAND
     ###
 
-    async def get(self, io:Context, path:str):
-        """Get file contents."""
-        file = self.box(path)
-        if not exists(file):
-            await io.error(f'!! get path not found: {path}')
-            return
+    async def call(self, io:Context, args):
+        """Interpret arguments for something to invoke (exec)."""
+        #print(f'CALL:"{args}"')
+        space = args.index(' ') if ' ' in args else len(args)
+        cmd = args[:space]
+        args = args[space+1:]
 
-        with open(file, 'r', encoding='utf-8') as file:
-            return file.read()
+        path = self.box(join('/bin', cmd)) # HACK
+        modname = f'iosk.bin.{cmd}'
+        py = self.pymod(modname, path)
+
+        try:
+            if py:
+                #print(f'CALL PYTHON: {py}')
+                #try:
+                return await py.iocall(io, args)
+                #except Exception as e: # FIXME error logging
+                #    await io.error(f'!! error calling: {cmd} {args}')
+                    #return
+                #    raise e
+
+            else:
+                #print('  CALL FILE')
+                return await self.exec(io, join('/bin', cmd), args) # HACK
+
+        except Exception as e:
+            # FIXME error handling
+            await io.error(f'!! exception calling {cmd}')
+            traceback.print_exc()
 
     async def exec(self, io:Context, path:str, args:str=None):
         """When you know what you need and you've come prepared (arguments)."""
@@ -211,6 +235,20 @@ class IOSK:
             await io.error(f'!! no shebang: {path}')
             # TODO support real binaries (executables), etc.
             return
+
+    ###
+    ### FILE I/O
+    ###
+
+    async def get(self, io:Context, path:str):
+        """Get file contents."""
+        file = self.box(path)
+        if not exists(file):
+            await io.error(f'!! get path not found: {path}')
+            return
+
+        with open(file, 'r', encoding='utf-8') as file:
+            return file.read()
 
     async def send(self, io:Context, dev:str, data):
         """Send data to device."""
@@ -319,39 +357,6 @@ class IOSK:
             return
 
         os.rmdir(folder)
-
-    ###
-    ### COMMAND
-    ###
-
-    async def call(self, io:Context, args):
-        """Interpret arguments for something to invoke (exec)."""
-        #print(f'CALL:"{args}"')
-        space = args.index(' ') if ' ' in args else len(args)
-        cmd = args[:space]
-        args = args[space+1:]
-
-        path = self.box(join('/bin', cmd)) # HACK
-        modname = f'iosk.bin.{cmd}'
-        py = self.pymod(modname, path)
-
-        try:
-            if py:
-                #print(f'CALL PYTHON: {py}')
-                #try:
-                return await py.iocall(io, args)
-                #except Exception as e: # FIXME error logging
-                #    await io.error(f'!! error calling: {cmd} {args}')
-                    #return
-                #    raise e
-
-            else:
-                #print('  CALL FILE')
-                return await self.exec(io, join('/bin', cmd), args) # HACK
-
-        except Exception as e:
-            # FIXME error handling
-            await io.error(f'!! error calling {cmd}: {e}')
 
     ###
     ### UTILITY

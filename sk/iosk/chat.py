@@ -44,7 +44,8 @@ class AIMessenger:
         if not dev: dev = self.os.CONSOLE_DEV
 
         if engage:
-            self.engagements[dev] = Engagement()
+            engage = Engagement(dev)
+            self.engagements[dev] = engage
 
         io = await self.os.login(user=name, device=dev, interactive=False,
                                  connect=connect)
@@ -55,14 +56,15 @@ class AIMessenger:
 
         if engage:
             asyncio.create_task(go(io))
-            asyncio.create_task(self.engage(dev))
+            asyncio.create_task(engage.engage())
 
         #print(f'RETURN FROM JOIN: {name}')
         return io
 
     async def leave(self, io):
-        if io.user in self.engagements:
-            del self.engagements[io.user]
+        if io.dev in self.engagements:
+            self.engagements[io.dev].enabled = False
+            del self.engagements[io.dev]
 
         await self.os.logout(io, disconnect=f':: {io.user} has left the chat')
 
@@ -74,45 +76,24 @@ class AIMessenger:
             if user is from_user: continue
             await uio.print(msg)
 
-    async def engage(self, dev): # buffer outputs
-        last = None
-
-        while dev in self.engagements:
-            eng = self.engagements[dev]
-
-            if eng.buf and (datetime.now() - eng.now).total_seconds() >= 1:
-                #print(f'SENDING TO {dev}: {eng.buf}')
-
-                prompt = eng.buf
-                eng.buf = None
-                eng.now = None
-
-                reply = await eng.trip(prompt)
-                if eng.inbuf: eng.inbuf += '\n' + reply
-                else: eng.inbuf = reply
-                last = datetime.now()
-
-            elif not eng.buf and (datetime.now() - last).total_seconds() >= 5:
-                #print('POLLING FOR REPLY')
-                reply = await eng.trip(eng.history)
-                if eng.inbuf: eng.inbuf += '\n' + reply
-                else: eng.inbuf = reply
-                last = datetime.now()
-
-            await asyncio.sleep(0.1)
-
 
 class Engagement:
-    def __init__(self):
+    SECS_SEND_AFTER_IDLE = 1.7
+    SECS_POLL_REPLY_AFTER = 27
+
+    def __init__(self, dev):
+        self.dev = dev
+        self.enabled = True
+
         self.history = ''
         self.buf = None
-        self.now = None
+        self.last_buf = None
         self.trip = None
         self.inbuf = None
 
     def append(self, text, trip):
         self.trip = trip
-        self.now = datetime.now()
+        self.last_buf = datetime.now()
 
         self.history += text
         if self.buf: self.buf += text
@@ -124,4 +105,36 @@ class Engagement:
             self.history += data
         self.inbuf = None
         return data
+
+    async def engage(self): # buffer outputs and poll for replies
+        last_talk = datetime.now()
+
+        while self.enabled:
+            prompt = None
+
+            # is buffered output waiting and ready to send?
+            if self.buf and (datetime.now() - self.last_buf).total_seconds() \
+                    >= self.SECS_SEND_AFTER_IDLE:
+                #print(f'SENDING TO {self.dev}: {self.buf}')
+
+                prompt = self.buf # buffer starts with full history
+                self.buf = None
+                self.last_buf = None
+
+            # or is there no output but we're ready to check for input?
+            elif not self.buf and (datetime.now() - last_talk).total_seconds() \
+                    >= self.SECS_POLL_REPLY_AFTER:
+                #print('POLLING FOR REPLY')
+                prompt = self.history
+
+            if prompt:
+                reply = await self.trip(prompt)
+                if reply:
+                    reply += '\n' # they hit the enter key (keeps history good)
+                    if self.inbuf: self.inbuf += '\n' + reply
+                    else: self.inbuf = reply
+
+                last_talk = datetime.now()
+
+            await asyncio.sleep(0.1)
 

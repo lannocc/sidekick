@@ -1,0 +1,10 @@
+#!/bin/skrip
+# Copyright (C) 2025 LANNOCC
+# @%@~LICENSE~@%@
+
+You are currently logged in as:
+$ whoami
+
+Users currently online:
+$ users
+

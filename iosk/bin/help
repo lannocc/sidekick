@@ -22,3 +22,5 @@ More commands might be found by exploring the filesystem bin directories, e.g.:
     $ ls /bin
     $ ls /sbin
 
+Note: bin files (commands) with a .py extension are called without an extension.
+
