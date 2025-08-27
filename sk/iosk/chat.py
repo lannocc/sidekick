@@ -48,7 +48,11 @@ class AIMessenger:
             self.engagements[dev] = engage
 
         io = await self.os.login(user=name, device=dev, interactive=False,
-                                 connect=connect)
+                                 connect=connect,
+                                 io_callback=engage.start if engage else None)
+
+        if not io:
+            return
 
         async def go(io):
             await self.os.interactive(io)
@@ -78,33 +82,38 @@ class AIMessenger:
 
 
 class Engagement:
-    SECS_SEND_AFTER_IDLE = 1.7
+    SECS_SEND_AFTER_IDLE = 2.3
     SECS_POLL_REPLY_AFTER = 27
 
     def __init__(self, dev):
         self.dev = dev
         self.enabled = True
 
-        self.history = ''
+        #self.history = ''
         self.buf = None
         self.last_buf = None
         self.trip = None
         self.inbuf = None
 
+        self.io = None
+
     def append(self, text, trip):
         self.trip = trip
         self.last_buf = datetime.now()
 
-        self.history += text
+        #self.history += text
         if self.buf: self.buf += text
-        else: self.buf = self.history
+        #else: self.buf = self.history
+        else: self.buf = text
 
     def input(self):
         data = self.inbuf
-        if data is not None:
-            self.history += data
+        #if data is not None: self.history += data
         self.inbuf = None
         return data
+
+    async def start(self, io):
+        self.io = io
 
     async def engage(self): # buffer outputs and poll for replies
         last_talk = datetime.now()
@@ -117,7 +126,9 @@ class Engagement:
                     >= self.SECS_SEND_AFTER_IDLE:
                 #print(f'SENDING TO {self.dev}: {self.buf}')
 
-                prompt = self.buf # buffer starts with full history
+                #prompt = self.buf # buffer starts with full history
+                self.io.session.seek(0)
+                prompt = self.io.session.read() + self.buf
                 self.buf = None
                 self.last_buf = None
 
@@ -125,7 +136,9 @@ class Engagement:
             elif not self.buf and (datetime.now() - last_talk).total_seconds() \
                     >= self.SECS_POLL_REPLY_AFTER:
                 #print('POLLING FOR REPLY')
-                prompt = self.history
+                #prompt = self.history
+                self.io.session.seek(0)
+                prompt = self.io.session.read()
 
             if prompt:
                 reply = await self.trip(prompt)
@@ -137,4 +150,7 @@ class Engagement:
                 last_talk = datetime.now()
 
             await asyncio.sleep(0.1)
+
+    def read_history(self):
+        pass
 

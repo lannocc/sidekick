@@ -106,10 +106,15 @@ class IOSK:
     ###
 
     async def login(self, user, device, interactive:bool=True,
-                    connect=None):
+                    connect=None, io_callback=None):
         """Log-in to get a Context."""
         await self.ready.wait()
         if self.halt.is_set(): return
+
+        if device != self.CONSOLE_DEV \
+                and not await self.exists(self.system, device):
+            await self.system.error(f'!! device not found: {device}')
+            return
 
         if user in self.users:
             await self.system.error(f'!! already logged in: {user}')
@@ -121,7 +126,11 @@ class IOSK:
         io.log = Capture.log(self, join(self.USER_LOG, user), True)
         io.dev = device
         io.user = user
+        io.user_base = True
         self.users[user] = io
+
+        if io_callback:
+            await io_callback(io)
 
         if connect:
             if self.chat: await self.chat.send(user, connect, sys=True)
@@ -140,7 +149,8 @@ class IOSK:
         while not self.halt.is_set():
             start = datetime.now()
             try:
-                text = await io.input('[me] >> ')
+                #text = await io.input('[me] >> ')
+                text = await io.input(f'[{io.user}] >> ')
 
                 while text is None: # for non-blocking inputs
                     #print('POLL INPUT')
@@ -187,8 +197,7 @@ class IOSK:
         args = args[space+1:]
 
         path = self.box(join('/bin', cmd)) # HACK
-        modname = f'iosk.bin.{cmd}'
-        py = self.pymod(modname, path)
+        py = self.pymod(f'bin.{cmd}', path)
 
         try:
             if py:
@@ -237,69 +246,15 @@ class IOSK:
             return
 
     ###
-    ### FILE I/O
-    ###
-
-    async def get(self, io:Context, path:str):
-        """Get file contents."""
-        file = self.box(path)
-        if not exists(file):
-            await io.error(f'!! get path not found: {path}')
-            return
-
-        with open(file, 'r', encoding='utf-8') as file:
-            return file.read()
-
-    async def send(self, io:Context, dev:str, data):
-        """Send data to device."""
-        if not dev.startswith('/dev/'):
-            await io.error(f'!! not a device: {dev}')
-            return
-
-        dev = dev[5:]
-        #return await getattr(self.dev, dev)(data)
-        path = self.box(join('/dev', dev))
-        py = self.pymod(f'iosk.dev.{dev}', path)
-
-        if py:
-            #print('  SEND PYTHON')
-            try:
-                return await py.iosend(io, data)
-            except Exception as e: # FIXME error logging
-                await io.error(f'!! error sending: {data}')
-                #return
-                raise e
-
-        else:
-            print(f'  SEND FILE: {path}')
-            #return await self.exec(join('/dev', dev), args)
-
-    async def recv(self, io:Context, dev:str):
-        """Receive data from device."""
-        if not dev.startswith('/dev/'):
-            await io.error(f'!! not a device: {dev}')
-            return
-
-        dev = dev[5:]
-        path = self.box(join('/dev', dev))
-        py = self.pymod(f'iosk.dev.{dev}', path)
-
-        if py:
-            #print('  SEND PYTHON')
-            try:
-                return await py.iorecv(io)
-            except Exception as e: # FIXME error logging
-                await io.error(f'!! error receiving from: /dev/{dev}')
-                #return
-                raise e
-
-        else:
-            print(f'  RECV FILE: {path}')
-            #return await self.exec(join('/dev', dev), args)
-
-    ###
     ### FILE OPS
     ###
+
+    async def exists(self, io:Context, path:str):
+        """Test if path exists."""
+        name = path.replace('/', '.')
+        file = self.box(path)
+        py = self.pymod(f'proc.exists.{name}', file)
+        return py or exists(file)
 
     async def create(self, io:Context, path:str):
         """Create new (empty) file."""
@@ -359,6 +314,67 @@ class IOSK:
         os.rmdir(folder)
 
     ###
+    ### FILE I/O
+    ###
+
+    async def get(self, io:Context, path:str):
+        """Get file contents."""
+        file = self.box(path)
+        if not exists(file):
+            await io.error(f'!! get path not found: {path}')
+            return
+
+        with open(file, 'r', encoding='utf-8') as file:
+            return file.read()
+
+    async def send(self, io:Context, dev:str, data):
+        """Send data to device."""
+        if not dev.startswith('/dev/'):
+            await io.error(f'!! not a device: {dev}')
+            return
+
+        dev = dev[5:]
+        #return await getattr(self.dev, dev)(data)
+        path = self.box(join('/dev', dev))
+        py = self.pymod(f'dev.{dev}', path)
+
+        if py:
+            #print('  SEND PYTHON')
+            try:
+                return await py.iosend(io, data)
+            except Exception as e: # FIXME error logging
+                await io.error(f'!! error sending: {data}')
+                #return
+                raise e
+
+        else:
+            print(f'  SEND FILE: {path}')
+            #return await self.exec(join('/dev', dev), args)
+
+    async def recv(self, io:Context, dev:str):
+        """Receive data from device."""
+        if not dev.startswith('/dev/'):
+            await io.error(f'!! not a device: {dev}')
+            return
+
+        dev = dev[5:]
+        path = self.box(join('/dev', dev))
+        py = self.pymod(f'dev.{dev}', path)
+
+        if py:
+            #print('  SEND PYTHON')
+            try:
+                return await py.iorecv(io)
+            except Exception as e: # FIXME error logging
+                await io.error(f'!! error receiving from: /dev/{dev}')
+                #return
+                raise e
+
+        else:
+            print(f'  RECV FILE: {path}')
+            #return await self.exec(join('/dev', dev), args)
+
+    ###
     ### UTILITY
     ###
 
@@ -384,7 +400,7 @@ class IOSK:
 
     def pymod(self, modname, path):
         """Import python module at path as the given module name."""
-        modname = f'sk.{modname}'
+        modname = f'sk.iosk.{modname}'
         if not path.endswith('.py'): path += '.py'
         #print(f'IMPORT {modname} at {path}')
 

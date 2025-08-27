@@ -4,6 +4,7 @@
 from datetime import datetime, date
 from os import makedirs
 from os.path import join, isdir, exists
+from io import StringIO
 
 
 class Context:
@@ -23,6 +24,8 @@ class Context:
         self.chatter = open(self.os.box(chatter), 'w')
 
         self.user = None
+        self.user_base = False # True if this is the root Context for the user
+        self.session = StringIO()
 
     def fork(self):
         child = Context(self.os, self.dev, self.log)
@@ -43,12 +46,22 @@ class Context:
 
         data = await self.os.recv(self, self.dev)
 
-        if data and self.log:
-            self._log_('I') # log timestamped when input received
-            if prompt: self.log.write(prompt)
-            self.log.write(data)
-            self.log.write('\n')
-            self.log.flush()
+        if self.user_base:
+            #self.session.write('[me] >> ')
+            if prompt: self.session.write(prompt)
+
+        if data:
+            if self.log:
+                self._log_('I') # log timestamped when input received
+                if prompt: self.log.write(prompt)
+                self.log.write(data)
+                self.log.write('\n')
+                self.log.flush()
+
+            if self.user_base:
+                self.session.write(data)
+                self.session.write('\n')
+                self.session.flush()
 
         return data
 
@@ -64,6 +77,10 @@ class Context:
                                      f'\n===    ...       ...    [...{s}] =.= ')
             self.log.write(ltext)
             self.log.flush()
+
+        if self.user_base:
+            self.session.write(text)
+            self.session.flush()
 
         await self.os.send(self, self.dev, text)
 

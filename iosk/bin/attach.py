@@ -10,6 +10,7 @@ async def iocall(io, args):
         return
 
     handle = args
-    await io.os.chat.join(handle, join('/dev', handle))
-    return True
+    io = await io.os.chat.join(handle, join('/dev', handle))
+    return True if io else False
+
 
