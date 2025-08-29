@@ -105,13 +105,16 @@ class IOSK:
     ### USER LIFECYCLE
     ###
 
-    async def login(self, user, device, interactive:bool=True,
+    async def login(self, user, device=None, interactive:bool=True,
                     connect=None, io_callback=None):
         """Log-in to get a Context."""
         await self.ready.wait()
         if self.halt.is_set(): return
 
-        if device != self.CONSOLE_DEV \
+        if not device:
+            device = self.CONSOLE_DEV
+
+        elif device != self.CONSOLE_DEV \
                 and not await self.exists(self.system, device):
             await self.system.error(f'!! device not found: {device}')
             return
@@ -141,7 +144,7 @@ class IOSK:
             await self.exec(io, self.SKRC)
 
         if interactive:
-            self.interactive(io)
+            await self.interactive(io)
 
         return io
 
