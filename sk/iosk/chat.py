@@ -83,7 +83,7 @@ class AIMessenger:
 
 
 class Engagement:
-    SECS_IDLE_FOR_TRIP = 2.3
+    SECS_IDLE_BEFORE_TRIP = 2.3
     SECS_NOISY_WAIT_REPLY = 33
     SECS_QUIET_IDLE_POLL = 42
 
@@ -139,7 +139,7 @@ class Engagement:
             # is buffered output waiting?
             if self.buf:
                 # and it's time to respond?
-                if secs_since_buf >= self.SECS_IDLE_FOR_TRIP \
+                if secs_since_buf >= self.SECS_IDLE_BEFORE_TRIP \
                         or secs_since_trip >= self.SECS_NOISY_WAIT_REPLY:
                     #print(f'SENDING TO {self.dev}: {self.buf}')
 
@@ -170,6 +170,13 @@ class Engagement:
                         pre = self.io.pre.read()
                     else: pre = ''
 
+                    # solid banking
+                    banking = ''
+                    if self.io.banks:
+                        for bank_acct, data in self.io.banks.items():
+                            banking += '\n~~~' + bank_acct.upper() + '::\n'
+                            banking += data + '\n'
+
                     # so hacky...
                     self.io.stage_post()
                     post = self.io.os.box(self.POSTAMBLE)
@@ -181,6 +188,9 @@ class Engagement:
                     else: post = ''
 
                     prompt = pre \
+                       + '\n=================== CORE RULES/MEMORY BEGIN ===\n' \
+                       + banking \
+                       + '\n=================== CORE RULES/MEMORY   END ===\n' \
                        + '\n=================== IOSK CHAT HISTORY BEGIN ===\n' \
                        + prompt \
                        + '\n=================== IOSK CHAT HISTORY   END ===\n' \

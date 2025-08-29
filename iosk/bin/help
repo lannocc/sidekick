@@ -13,6 +13,11 @@ The following commands are generally available:
     $ exit          - leave the system chat
     $ ls            - list directories
 
+For memory management:
+    $ bank          - load some skrip accounts from /bank into core memory
+    $ banks         - list accounts currently open
+    $ bankrupt      - clear core memory bank
+
 For managing users:
     $ whoami        - see your current username
     $ users         - list connected users

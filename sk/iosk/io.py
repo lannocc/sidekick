@@ -11,7 +11,8 @@ class Context:
     CID = 0 # next "chatter" id
     CHATTER = '/var/cache/chatter'
 
-    STAGE_PRE = -1
+    STAGE_PRE = -2
+    STAGE_BANK = -1
     STAGE_NORMAL = 0
     STAGE_POST = 1
 
@@ -31,11 +32,12 @@ class Context:
         self.base = False # True if this is the root Context
         self.bot = False # True if this is a bot user
         self.session = StringIO() # the chat history
-        self.sess_prompt = False # true if last session write() was prompt
+        self.banks = { } # core memory
 
         self.stage = self.STAGE_NORMAL
         self.pre = None
         self.post = None
+        self.banking = None
 
     def fork(self):
         child = Context(self.os, self.dev, self.log)
@@ -83,6 +85,10 @@ class Context:
             self.pre.write(text)
             return
 
+        elif self.stage == self.STAGE_BANK:
+            self.banking[2].write(text)
+            if self.bot: return
+
         elif self.stage == self.STAGE_POST:
             self.post.write(text)
             return
@@ -112,7 +118,20 @@ class Context:
         self.pre = StringIO()
         self.stage = self.STAGE_PRE
 
+    def stage_bank(self, bank, acct):
+        self.banking = (bank, acct, StringIO())
+        self.stage = self.STAGE_BANK
+
     def stage_normal(self):
+        if self.banking:
+            bank = self.banking[0]
+            acct = self.banking[1]
+            data = self.banking[2]
+            data.seek(0)
+            data = data.read()
+            self.banking = None
+            self.banks[f'{bank} {acct}'] = data
+
         self.stage = self.STAGE_NORMAL
 
     def stage_post(self):
