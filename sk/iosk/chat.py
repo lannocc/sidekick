@@ -4,123 +4,153 @@
 from ..util import print_flush as print
 
 import asyncio
+from datetime import datetime
 
 
-class AI_Messenger:
+class AIMessenger:
     def __init__(self, iosk):
         iosk.chat = self
-        self.iosk = iosk
-        self.users = { }
+        self.os = iosk
         self.me = None
+
+        self.engagements = { }
 
     async def start(self, handle=None):
         print()
         print('Welcome to the IOSK AI Messenger.')
 
-        if not handle: handle = 'super'
+        if not handle: handle = 'root'
         print(f'You are the super-user: {handle}')
         self.me = handle
         return handle
 
     async def run(self):
-        async with self.iosk.ready: # wait for UNIX to be done starting
-            await self.iosk.ready.wait()
-            if not self.iosk.started:
-                return
+        await self.os.ready.wait()
+        if self.os.halt.is_set(): return
 
-        self.join(self.me)
+        io = await self.join(self.me)
 
         try:
-            while (msg := await self.input(self.me, '>> ')) != '$ exit':
-                #print(f'<< {msg}')
-                if not msg: continue
-
-                if msg.startswith('#'): # comment
-                    continue
-
-                elif msg.startswith('$ '): # command
-                    await self.iosk.call(msg[2:])
-
-                else: # chat
-                    await self.chat(msg, echo=False)
-
-        except EOFError:
-            pass
+            await self.os.interactive(io)
 
         finally:
-            self.leave(self.me)
+            await self.leave(io)
             #self.me = None
 
-    def join(self, name, dev=None): # no device means local (self)
+    async def join(self, name, dev=None): # no device means local (self)
         assert name
-        #assert name not in self.users
+        connect = f':: {name} has entered the chat from {dev or "local"}'
+        engage = True if dev else False
+        if not dev: dev = self.os.CONSOLE_DEV
 
-        num = 0
-        while name in self.users:
-            num += 1
-            name = f'{name}{num}'
+        if engage:
+            engage = Engagement(dev)
+            self.engagements[dev] = engage
 
-        self.users[name] = dev or self
-        print(f':: {name} has entered the chat from {dev or "local"}')
+        io = await self.os.login(user=name, device=dev, interactive=False,
+                                 connect=connect,
+                                 io_callback=engage.start if engage else None)
 
-    def leave(self, name):
-        assert name
-        #assert name in self.users
-
-        if name not in self.users:
-            print(f'!! {name} is not connected')
+        if not io:
             return
 
-        del self.users[name]
-        print(f':: {name} has left the chat')
+        async def go(io):
+            await self.os.interactive(io)
+            await self.leave(io)
 
-    async def input(self, user, prompt=None):
-        assert user
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, lambda: input(prompt).rstrip())
+        if engage:
+            asyncio.create_task(go(io))
+            asyncio.create_task(engage.engage())
 
-    async def chat(self, msg, cmd=None, echo=True, handle=None):
+        #print(f'RETURN FROM JOIN: {name}')
+        return io
+
+    async def leave(self, io):
+        if io.dev in self.engagements:
+            self.engagements[io.dev].enabled = False
+            del self.engagements[io.dev]
+
+        await self.os.logout(io, disconnect=f':: {io.user} has left the chat')
+
+    async def send(self, from_user, msg, sys=False):
         if not msg: return
+        if not sys: msg = f'<< [{from_user}] {msg}'
 
-        ps = '' if cmd else '<<'
-        if handle: handle = f'[@{handle}] '
-        else: handle = ''
-        if echo: print(f'{ps} {handle}{msg}')
+        for user, uio in self.os.users.items():
+            if user is from_user: continue
+            await uio.print(msg)
 
-        to=None
 
-        if msg.startswith('@'):
-            try: split = msg.index(' ')
-            except ValueError: split = len(msg)
-            to = msg[1:split]
-            msg = msg[split+1:]
+class Engagement:
+    SECS_SEND_AFTER_IDLE = 2.3
+    SECS_POLL_REPLY_AFTER = 27
 
-        await self.send(msg, to=to, cmd=cmd)
+    def __init__(self, dev):
+        self.dev = dev
+        self.enabled = True
 
-    async def send(self, msg, to=None, cmd=None):
-        #print(f'...sending to {to or "ALL"}...')
-        #print(f'SEND to={to} cmd={cmd}')
+        #self.history = ''
+        self.buf = None
+        self.last_buf = None
+        self.trip = None
+        self.inbuf = None
 
-        if to:
-            if to not in self.users:
-                print(f'!! {to} is not online')
-                return
+        self.io = None
 
-            dev = self.users[to]
-            if not dev or dev is self: # local loopback
-                print(f'<< @[{to}] {msg}') # echo
+    def append(self, text, trip):
+        self.trip = trip
+        self.last_buf = datetime.now()
 
-            else:
-                reply = await self.iosk.send(dev, msg)
+        #self.history += text
+        if self.buf: self.buf += text
+        #else: self.buf = self.history
+        else: self.buf = text
+
+    def input(self):
+        data = self.inbuf
+        #if data is not None: self.history += data
+        self.inbuf = None
+        return data
+
+    async def start(self, io):
+        self.io = io
+
+    async def engage(self): # buffer outputs and poll for replies
+        last_talk = datetime.now()
+
+        while self.enabled:
+            prompt = None
+
+            # is buffered output waiting and ready to send?
+            if self.buf and (datetime.now() - self.last_buf).total_seconds() \
+                    >= self.SECS_SEND_AFTER_IDLE:
+                #print(f'SENDING TO {self.dev}: {self.buf}')
+
+                #prompt = self.buf # buffer starts with full history
+                self.io.session.seek(0)
+                prompt = self.io.session.read() + self.buf
+                self.buf = None
+                self.last_buf = None
+
+            # or is there no output but we're ready to check for input?
+            elif not self.buf and (datetime.now() - last_talk).total_seconds() \
+                    >= self.SECS_POLL_REPLY_AFTER:
+                #print('POLLING FOR REPLY')
+                #prompt = self.history
+                self.io.session.seek(0)
+                prompt = self.io.session.read()
+
+            if prompt:
+                reply = await self.trip(prompt)
                 if reply:
-                    #print(f'<< @{to} {reply}')
-                    await self.chat(reply, cmd=cmd, handle=to)
+                    reply += '\n' # they hit the enter key (keeps history good)
+                    if self.inbuf: self.inbuf += '\n' + reply
+                    else: self.inbuf = reply
 
-        else: # send to everyone
-            for handle, dev in self.users.items():
-                if not dev or dev is self: # local loopback
-                    continue # ignore
+                last_talk = datetime.now()
 
-                reply = await self.iosk.send(dev, msg)
-                if reply: print(f'<< @{handle} {reply}')
+            await asyncio.sleep(0.1)
+
+    def read_history(self):
+        pass
 

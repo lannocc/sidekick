@@ -4,7 +4,7 @@
 
 #init start
 
-PATH=/bin
+$ PATH=/bin
 
 #$ attach gemini
 #$ attach chatgpt
@@ -13,6 +13,5 @@ PATH=/bin
 
 #$ welcome
 
-System initialized.
-#init done
+init done
 

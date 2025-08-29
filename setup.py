@@ -25,6 +25,7 @@ def run():
             'google-generativeai',
             'gTTS', # text-to-speech (Linux)
             'mysql-connector-python',
+            'ollama',
             #'opencv-python',
             'openai',
             'Pillow',

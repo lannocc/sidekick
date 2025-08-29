@@ -9,6 +9,7 @@ The following commands are generally available:
     $ ls            - list directories
 
 For managing users:
+    $ whoami        - see your current username
     $ users         - list connected users
     $ attach        - connect a user
     $ detach        - disconnect a user
@@ -20,4 +21,6 @@ For system control:
 More commands might be found by exploring the filesystem bin directories, e.g.:
     $ ls /bin
     $ ls /sbin
+
+Note: bin files (commands) with a .py extension are called without an extension.
 

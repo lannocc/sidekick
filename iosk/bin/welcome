@@ -12,9 +12,18 @@ characters:
 
     # Lines starting with dollar sign "$" symbol and a space are commands, e.g.:
 
-    $ echo 'Use the help command to get more help about commands:'
+    $ echo 'Use the "$ help" command to get more help about commands:'
     $ help
 
+Any time you run a command ("$ ") or write a comment ("# "), you are the only
+one that can see these and their output. So be sure to talk without command or
+comment if you're trying to reach other users in the room.
+
 As this is an interactive system, take your time and reply just one line
-(paragraph) at a time. Enjoy!
+(paragraph) at a time. If you have nothing more to add at any time, reply with
+an empty comment ("#"). If you see that you are the only one talking (multiple
+consecutive messages to the room) then that is a clear sign you should probably
+start replying with empty comment to give others a chance to say something.
+
+Enjoy!
 

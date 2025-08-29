@@ -1,8 +1,8 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from .unix import IOSK_System as UNIX
-from .chat import AI_Messenger as AIM
+from .kernel import IOSK as UNIX
+from .chat import AIMessenger as AIM
 
 __all__ = [
     'UNIX', # system environment
