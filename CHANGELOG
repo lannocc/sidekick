@@ -3,6 +3,10 @@ Copyright (C) 2025 LANNOCC
 
 saw_082825_1 - Fix for `sk iosk shell` (single-user) mode.
 
+saw_082725_2 - Ollama has entered the chat.
+
+saw_082725_1 - Better welcome skrip.
+
 saw_082625_2 - Actually had a useful interaction with openai in iosk.
 
 saw_082625_1 - Getting a better handle on iosk chatting. More commands, etc.
