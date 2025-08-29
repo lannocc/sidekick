@@ -83,8 +83,9 @@ class AIMessenger:
 
 
 class Engagement:
-    SECS_SEND_AFTER_IDLE = 2.3
-    SECS_POLL_REPLY_AFTER = 27
+    SECS_IDLE_FOR_TRIP = 2.3
+    SECS_NOISY_WAIT_REPLY = 33
+    SECS_QUIET_IDLE_POLL = 42
 
     PREAMBLE = '/sbin/preamble'
     POSTAMBLE = '/sbin/postamble'
@@ -100,6 +101,7 @@ class Engagement:
         self.inbuf = None
 
         self.io = None
+        self.waiting = False # True if currently waiting for reply
 
     def append(self, text, trip):
         self.trip = trip
@@ -120,24 +122,34 @@ class Engagement:
         self.io = io
 
     async def engage(self): # buffer outputs and poll for replies
-        last_talk = datetime.now()
+        last_trip = datetime.now()
 
         while self.enabled:
+            await asyncio.sleep(0.42)
+
+            if self.waiting:
+                continue
+
             prompt = None
+            now = datetime.now()
+            secs_since_buf = (now - self.last_buf).total_seconds() \
+                    if self.last_buf else None
+            secs_since_trip = (now - last_trip).total_seconds()
 
-            # is buffered output waiting and ready to send?
-            if self.buf and (datetime.now() - self.last_buf).total_seconds() \
-                    >= self.SECS_SEND_AFTER_IDLE:
-                #print(f'SENDING TO {self.dev}: {self.buf}')
+            # is buffered output waiting?
+            if self.buf:
+                # and it's time to respond?
+                if secs_since_buf >= self.SECS_IDLE_FOR_TRIP \
+                        or secs_since_trip >= self.SECS_NOISY_WAIT_REPLY:
+                    #print(f'SENDING TO {self.dev}: {self.buf}')
 
-                self.io.session.seek(0)
-                prompt = self.io.session.read() #+ self.buf
-                self.buf = None
-                self.last_buf = None
+                    self.io.session.seek(0)
+                    prompt = self.io.session.read() #+ self.buf
+                    self.buf = None
+                    self.last_buf = None
 
             # or is there no output but we're ready to check for input?
-            elif not self.buf and (datetime.now() - last_talk).total_seconds() \
-                    >= self.SECS_POLL_REPLY_AFTER:
+            elif secs_since_trip >= self.SECS_QUIET_IDLE_POLL:
                 #print('POLLING FOR REPLY')
                 self.io.session.seek(0)
                 prompt = self.io.session.read()
@@ -181,7 +193,12 @@ class Engagement:
                 #print(prompt)
                 #print('++++++++++++++++++++++++++++++++++++++ PROMPT   END +++')
 
-                reply = await self.trip(prompt)
+                self.waiting = True
+                try:
+                    reply = await self.trip(prompt)
+
+                finally:
+                    self.waiting = False
 
                 #print('-------------------------------------- REPLY  BEGIN ---')
                 #print(reply)
@@ -192,9 +209,7 @@ class Engagement:
                     if self.inbuf: self.inbuf += '\n' + reply
                     else: self.inbuf = reply
 
-                last_talk = datetime.now()
-
-            await asyncio.sleep(0.1)
+                last_trip = datetime.now()
 
     def read_history(self):
         pass
