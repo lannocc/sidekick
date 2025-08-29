@@ -3,6 +3,11 @@
 # @%@~LICENSE~@%@
 
 
+HELP FOR IOSK
+
+Any time you run a command ("$ ") or write a comment ("# "), you are the only one that can see these and their output. So be sure to talk without command or comment if you're trying to reach other users in the room.
+
+
 The following commands are generally available:
     $ help          - get help on commands (this skrip)
     $ exit          - leave the system chat

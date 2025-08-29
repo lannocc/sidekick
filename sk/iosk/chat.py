@@ -5,6 +5,7 @@ from ..util import print_flush as print
 
 import asyncio
 from datetime import datetime
+from os.path import exists
 
 
 class AIMessenger:
@@ -49,7 +50,7 @@ class AIMessenger:
 
         io = await self.os.login(user=name, device=dev, interactive=False,
                                  connect=connect,
-                                 io_callback=engage.start if engage else None)
+                                 io_callback=engage.ioset if engage else None)
 
         if not io:
             return
@@ -85,12 +86,15 @@ class Engagement:
     SECS_SEND_AFTER_IDLE = 2.3
     SECS_POLL_REPLY_AFTER = 27
 
+    PREAMBLE = '/sbin/preamble'
+    POSTAMBLE = '/sbin/postamble'
+
     def __init__(self, dev):
         self.dev = dev
         self.enabled = True
 
         #self.history = ''
-        self.buf = None
+        self.buf = None # FIXME this has been replaced by Context.session ?
         self.last_buf = None
         self.trip = None
         self.inbuf = None
@@ -112,7 +116,7 @@ class Engagement:
         self.inbuf = None
         return data
 
-    async def start(self, io):
+    async def ioset(self, io):
         self.io = io
 
     async def engage(self): # buffer outputs and poll for replies
@@ -126,9 +130,8 @@ class Engagement:
                     >= self.SECS_SEND_AFTER_IDLE:
                 #print(f'SENDING TO {self.dev}: {self.buf}')
 
-                #prompt = self.buf # buffer starts with full history
                 self.io.session.seek(0)
-                prompt = self.io.session.read() + self.buf
+                prompt = self.io.session.read() #+ self.buf
                 self.buf = None
                 self.last_buf = None
 
@@ -136,12 +139,54 @@ class Engagement:
             elif not self.buf and (datetime.now() - last_talk).total_seconds() \
                     >= self.SECS_POLL_REPLY_AFTER:
                 #print('POLLING FOR REPLY')
-                #prompt = self.history
                 self.io.session.seek(0)
                 prompt = self.io.session.read()
 
+            # FIXME: note we didn't actually use the buffer directly...
+            #       just an indicator above that there was data waiting
+            #       (Context already has the data in its session buffer)
+
             if prompt:
+                try:
+                    # so hacky...
+                    self.io.stage_pre()
+                    pre = self.io.os.box(self.PREAMBLE)
+                    if exists(pre):
+                        await self.io.os.exec(self.io, self.PREAMBLE)
+                    if self.io.pre:
+                        self.io.pre.seek(0)
+                        pre = self.io.pre.read()
+                    else: pre = ''
+
+                    # so hacky...
+                    self.io.stage_post()
+                    post = self.io.os.box(self.POSTAMBLE)
+                    if exists(post):
+                        await self.io.os.exec(self.io, self.POSTAMBLE)
+                    if self.io.post:
+                        self.io.post.seek(0)
+                        post = self.io.post.read()
+                    else: post = ''
+
+                    prompt = pre \
+                       + '\n=================== IOSK CHAT HISTORY BEGIN ===\n' \
+                       + prompt \
+                       + '\n=================== IOSK CHAT HISTORY   END ===\n' \
+                       + post
+
+                finally:
+                    self.io.stage_normal()
+
+                #print('++++++++++++++++++++++++++++++++++++++ PROMPT BEGIN +++')
+                #print(prompt)
+                #print('++++++++++++++++++++++++++++++++++++++ PROMPT   END +++')
+
                 reply = await self.trip(prompt)
+
+                #print('-------------------------------------- REPLY  BEGIN ---')
+                #print(reply)
+                #print('-------------------------------------- REPLY    END ---')
+
                 if reply:
                     reply += '\n' # they hit the enter key (keeps history good)
                     if self.inbuf: self.inbuf += '\n' + reply

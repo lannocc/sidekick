@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_082925_1 - Better structure for the iosk chat session given to the bots.
+
 saw_082825_1 - Fix for `sk iosk shell` (single-user) mode.
 
 saw_082725_2 - Ollama has entered the chat.

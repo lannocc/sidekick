@@ -26,6 +26,7 @@ async def handle(io, line):
     line = line.rstrip()
 
     if line.startswith('#'): # comment
+        #await io.comment(line)
         pass
 
     elif line.startswith('$ '): # command

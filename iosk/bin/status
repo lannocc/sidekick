@@ -2,6 +2,9 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
+The current date and time is:
+$ date
+
 You are currently logged in as:
 $ whoami
 

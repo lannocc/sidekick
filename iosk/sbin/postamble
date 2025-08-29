@@ -1,0 +1,8 @@
+#!/bin/skrip
+# Copyright (C) 2025 LANNOCC
+# @%@~LICENSE~@%@
+
+$ status
+
+Do you have anything more messages for the chat or commands to run at this time? If no, simply use the empty comment ("#"). Remember, if running commands run only a single command right now so you see its output before continuing.
+
