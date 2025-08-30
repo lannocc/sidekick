@@ -144,6 +144,11 @@ class IOSK:
         if exists(skrc):
             await self.exec(io, self.SKRC)
 
+        skrc = join('/home', user, '.skrc')
+        if exists(self.box(skrc)):
+            #print('@@@@@@@@@@@@@ HERE WE GO @@@@@@@@@@@@@')
+            await self.exec(io, skrc)
+
         if interactive:
             await self.interactive(io)
 

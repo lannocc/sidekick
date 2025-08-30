@@ -1,0 +1,12 @@
+#!/bin/skrip
+# Copyright (C) 2025 LANNOCC
+# @%@~LICENSE~@%@
+
+#$ bank tone gloomy
+$ bank tone aggressive
+#$ bank tone robotic
+#$ bank role intern
+#$ bank access admin
+$ bank role moderator
+$ bank access user
+
