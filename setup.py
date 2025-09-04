@@ -21,6 +21,7 @@ def run():
         install_requires=[
             'aioconsole',
             'appdirs',
+            'binaryornot',
             'google-genai',
             'google-generativeai',
             'gTTS', # text-to-speech (Linux)
@@ -34,6 +35,7 @@ def run():
             'pyttsx3', # text-to-speech (Windows)
             'sphinx', 'sphinx-autoapi', 'piccolo-theme', # for API docs
             #'simpleaudio',
+            'tiktoken',
         ],
         entry_points = {
             'console_scripts': [

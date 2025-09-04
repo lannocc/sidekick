@@ -7,6 +7,8 @@ from PIL import ImageGrab
 from playsound3 import playsound
 #import simpleaudio as sa
 #import cv2
+from binaryornot.check import is_binary
+import tiktoken
 
 from sys import stdout
 import os
@@ -101,16 +103,13 @@ def get_ignore_set(path):
 
 
 def is_ignorable_path(item, ignores=[ ]):
-    return True \
-            if item.startswith('.') \
+    return item.startswith('.') \
                 or item.endswith('~') \
-            or item in ignores else False
-            #or item.endswith('.egg-info')
-            #or item == 'build' or item == 'venv' or item == 'scripts' \
-            #or item == 'doc' or item == 'test' or item == 'node_modules' \
+                or item == '__pycache__' \
+                or item in ignores
 
 
-def get_directory_tree_as_text(path, indent='', markdown=False):
+def get_directory_tree_as_text(path, indent='', markdown=False, count=False):
     text = ''
     items = os.listdir(path)
     ignores = get_ignore_set(path)
@@ -141,6 +140,13 @@ def get_directory_tree_as_text(path, indent='', markdown=False):
         if os.path.isdir(full_path):
             text += get_directory_tree_as_text(full_path, new_indent,
                                                markdown=markdown)
+
+    if count:
+        data = text + get_directory_contents_as_text(path)
+        data_bytes = data.encode('utf-8')
+        text += f'\nTotal Bytes: {len(data_bytes):,}'
+        tokens = tiktoken.get_encoding('cl100k_base').encode(data)
+        text += f'\nEst. Tokens: {len(tokens):,}'
 
     return text
 
@@ -175,8 +181,9 @@ def get_directory_contents_as_text(path):
                    'bash' if item.endswith('.bash') else \
                    'text' if item.endswith('.txt') else None
 
-            if not hint: # not a text file
-                continue
+            if not hint:
+                if is_binary(full_path): continue # not text
+                else: hint = ''
 
             text += f'\n>>> BEGIN FILE {full_path}:\n'
             text += f'```{hint}\n'
