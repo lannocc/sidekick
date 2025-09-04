@@ -15,5 +15,7 @@ This is the iosk system, a live chat. From here you can send messages to the oth
     $ echo 'Use the "$ help" command for more about the system and commands:'
     $ help
 
+How to make new files or change existing files on the system? When you output markdown code blocks in the chat, they are automatically saved to file for you. After you are satisfied, you can then copy the file with cp to save it in the appropropriate place.
+
 Only you see the output of "$" commands that you run, so if you feel the need to use echo, you're just talking to yourself (so send a message to the room instead). You can use comments to think things out or make personal notes that you can refer back to later.
 
