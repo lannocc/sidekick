@@ -5,7 +5,9 @@ from ..util import print_flush as print
 
 import asyncio
 from datetime import datetime
-from os.path import exists
+from os.path import exists, join
+import re
+import tempfile
 
 
 class AIMessenger:
@@ -83,12 +85,17 @@ class AIMessenger:
 
 
 class Engagement:
+    CODE = 0 # per-run code instance counter
+
     SECS_IDLE_BEFORE_TRIP = 2.3
     SECS_NOISY_WAIT_REPLY = 13
     SECS_QUIET_IDLE_POLL = 22
 
     PREAMBLE = '/sbin/preamble'
     POSTAMBLE = '/sbin/postamble'
+
+    CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w+)\n(?P<code>.*?)\n```',
+                                 re.DOTALL)
 
     def __init__(self, user):
         self.user = user
@@ -115,6 +122,7 @@ class Engagement:
     def input(self):
         data = self.inbuf
         #if data is not None: self.history += data
+        if data: data = self._handle_code_blocks_(data)
         self.inbuf = None
         return data
 
@@ -224,4 +232,34 @@ class Engagement:
 
     def read_history(self):
         pass
+
+    def _handle_code_blocks_(self, text):
+        matches = self.CODEBLOCK_REGEX.finditer(text)
+        replacements = { }
+
+        for match in matches:
+            print('YEAHHHHHHHHHHHHHHHHHHHHHHHHHH')
+            lang = match.group('language')
+            code = match.group('code')
+
+            #fd, temp_file_name = tempfile.mkstemp(prefix=f'iosk_codeblock_',
+            #                                      suffix=f'.{lang}')
+            #with open(temp_file_name, 'w') as temp_file:
+            #    temp_file.write(code)
+            #replacements[match.group(0)] = temp_file_name
+
+            self.CODE += 1
+            name = f'{self.io.user}-{self.io.os.BOOT}-{self.CODE}.{lang}'
+            name = join(self.io.CODE, name)
+            path = self.io.os.box(name)
+
+            with open(path, 'w') as file:
+                file.write(code)
+
+            replacements[match.group(0)] = name
+
+        for old, new in replacements.items():
+            text = text.replace(old, f'IOSK SAVED {new}')
+
+        return text
 

@@ -10,6 +10,7 @@ from io import StringIO
 class Context:
     CID = 0 # next "chatter" id
     CHATTER = '/var/cache/chatter'
+    CODE = '/var/code'
 
     STAGE_PRE = -2
     STAGE_BANK = -1

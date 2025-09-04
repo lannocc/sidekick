@@ -62,6 +62,14 @@ class IOSK:
             elif not isdir(chatter):
                 fail = f'not a dir: {chatter}'
 
+        if not fail:
+            code = self.box(Context.CODE)
+            if not exists(code):
+                os.makedirs(code)
+            elif not isdir(code):
+                fail = f'not a dir: {code}'
+
+        if not fail:
             with open(boot, 'w') as boot: # assumes /var/cache exists
                 boot.write(str(self.BOOT))
 
