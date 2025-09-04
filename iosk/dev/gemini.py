@@ -19,7 +19,7 @@ async def iosend(io, data):
     #print(f'GEMINI: {data}')
     prompt = data
 
-    io.os.chat.engagements[io.dev].append(prompt, trip)
+    io.os.chat.engagements[io.user].append(prompt, trip)
 
     if not client:
         #print('GETTING GEMINI CLIENT')
@@ -33,8 +33,8 @@ async def iosend(io, data):
 
 
 async def iorecv(io):
-    if io.dev not in io.os.chat.engagements: return None
-    data = io.os.chat.engagements[io.dev].input()
+    if io.user not in io.os.chat.engagements: return None
+    data = io.os.chat.engagements[io.user].input()
     return data
 
 

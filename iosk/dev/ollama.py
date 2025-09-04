@@ -17,15 +17,15 @@ async def iosend(io, data):
     #print(f'OLLAMA: {data}')
     prompt = data
 
-    io.os.chat.engagements[io.dev].append(prompt, trip)
+    io.os.chat.engagements[io.user].append(prompt, trip)
 
     if not client:
         client = AsyncClient()
 
 
 async def iorecv(io):
-    if io.dev not in io.os.chat.engagements: return None
-    data = io.os.chat.engagements[io.dev].input()
+    if io.user not in io.os.chat.engagements: return None
+    data = io.os.chat.engagements[io.user].input()
     return data
 
 

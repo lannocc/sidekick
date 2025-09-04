@@ -2,12 +2,18 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
+
 #$ bank tone gloomy
 #$ bank tone aggressive
 #$ bank tone robotic
+#$ bank tone humorous
+#$ bank tone optimistic
+
 #$ bank role intern
+#$ bank role moderator
+
 #$ bank access admin
-$ bank access admin
-$ bank tone humorous
-$ bank tone optimistic
+#$ bank access admin
+#$ bank access guest
+#$ bank access user
 

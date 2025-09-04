@@ -45,8 +45,8 @@ class AIMessenger:
         if not dev: dev = self.os.CONSOLE_DEV
 
         if engage:
-            engage = Engagement(dev)
-            self.engagements[dev] = engage
+            engage = Engagement(name)
+            self.engagements[name] = engage
 
         io = await self.os.login(user=name, device=dev, interactive=False,
                                  connect=connect,
@@ -67,9 +67,9 @@ class AIMessenger:
         return io
 
     async def leave(self, io):
-        if io.dev in self.engagements:
-            self.engagements[io.dev].enabled = False
-            del self.engagements[io.dev]
+        if io.user in self.engagements:
+            self.engagements[io.user].enabled = False
+            del self.engagements[io.user]
 
         await self.os.logout(io, disconnect=f':: {io.user} has left the chat')
 
@@ -84,14 +84,14 @@ class AIMessenger:
 
 class Engagement:
     SECS_IDLE_BEFORE_TRIP = 2.3
-    SECS_NOISY_WAIT_REPLY = 33
-    SECS_QUIET_IDLE_POLL = 42
+    SECS_NOISY_WAIT_REPLY = 13
+    SECS_QUIET_IDLE_POLL = 22
 
     PREAMBLE = '/sbin/preamble'
     POSTAMBLE = '/sbin/postamble'
 
-    def __init__(self, dev):
-        self.dev = dev
+    def __init__(self, user):
+        self.user = user
         self.enabled = True
 
         #self.history = ''
@@ -174,8 +174,8 @@ class Engagement:
                     banking = ''
                     if self.io.banks:
                         for bank_acct, data in self.io.banks.items():
-                            banking += '\n~~~' + bank_acct.upper() + '::\n'
-                            banking += data + '\n'
+                            #banking += '\n~~~' + bank_acct.upper() + '::\n'
+                            banking += '\n' + data + '\n'
 
                     # so hacky...
                     self.io.stage_post()
@@ -188,12 +188,13 @@ class Engagement:
                     else: post = ''
 
                     prompt = pre \
-                       + '\n=================== CORE RULES/MEMORY BEGIN ===\n' \
+                       + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
+                       + '\nTHIS SECTION IS MOST IMPORTANT, ALWAYS REMEMBER:\n'\
                        + banking \
-                       + '\n=================== CORE RULES/MEMORY   END ===\n' \
-                       + '\n=================== IOSK CHAT HISTORY BEGIN ===\n' \
+                       + '\n=== END   CORE RULES/MEMORY ===\n' \
+                       + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
                        + prompt \
-                       + '\n=================== IOSK CHAT HISTORY   END ===\n' \
+                       + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
                        + post
 
                 finally:

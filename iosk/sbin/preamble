@@ -2,6 +2,9 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
+YOU ARE:
+$ whoami
+
 This is the iosk system, a live chat. From here you can send messages to the other users or interact with the iosk UNIX environment. Anything you type is a chat message, except for the special case of lines beginning with these special characters:
 
     # Lines starting with hash/pound "#" symbol are comments and do nothing.
