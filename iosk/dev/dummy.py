@@ -7,12 +7,12 @@ import random
 
 
 async def iosend(io, data):
-    io.os.chat.engagements[io.dev].append(data, trip)
+    io.os.chat.engagements[io.user].append(data, trip)
 
 
 async def iorecv(io):
-    if io.dev not in io.os.chat.engagements: return None
-    data = io.os.chat.engagements[io.dev].input()
+    if io.user not in io.os.chat.engagements: return None
+    data = io.os.chat.engagements[io.user].input()
     return data
 
 

@@ -16,7 +16,7 @@ async def iosend(io, data):
     #print(f'OPENAI: {data}')
     prompt = data
 
-    io.os.chat.engagements[io.dev].append(prompt, trip)
+    io.os.chat.engagements[io.user].append(prompt, trip)
 
     if not client:
         api_key = await io.os.get(io, '/etc/openai')
@@ -30,8 +30,8 @@ async def iosend(io, data):
 
 
 async def iorecv(io):
-    if io.dev not in io.os.chat.engagements: return None
-    data = io.os.chat.engagements[io.dev].input()
+    if io.user not in io.os.chat.engagements: return None
+    data = io.os.chat.engagements[io.user].input()
     return data
 
 

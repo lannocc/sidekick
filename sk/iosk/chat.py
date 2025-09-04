@@ -5,6 +5,9 @@ from ..util import print_flush as print
 
 import asyncio
 from datetime import datetime
+from os.path import exists, join
+import re
+import tempfile
 
 
 class AIMessenger:
@@ -44,12 +47,12 @@ class AIMessenger:
         if not dev: dev = self.os.CONSOLE_DEV
 
         if engage:
-            engage = Engagement(dev)
-            self.engagements[dev] = engage
+            engage = Engagement(name)
+            self.engagements[name] = engage
 
         io = await self.os.login(user=name, device=dev, interactive=False,
                                  connect=connect,
-                                 io_callback=engage.start if engage else None)
+                                 io_callback=engage.ioset if engage else None)
 
         if not io:
             return
@@ -66,9 +69,9 @@ class AIMessenger:
         return io
 
     async def leave(self, io):
-        if io.dev in self.engagements:
-            self.engagements[io.dev].enabled = False
-            del self.engagements[io.dev]
+        if io.user in self.engagements:
+            self.engagements[io.user].enabled = False
+            del self.engagements[io.user]
 
         await self.os.logout(io, disconnect=f':: {io.user} has left the chat')
 
@@ -82,20 +85,30 @@ class AIMessenger:
 
 
 class Engagement:
-    SECS_SEND_AFTER_IDLE = 2.3
-    SECS_POLL_REPLY_AFTER = 27
+    CODE = 0 # per-run code instance counter
 
-    def __init__(self, dev):
-        self.dev = dev
+    SECS_IDLE_BEFORE_TRIP = 2.3
+    SECS_NOISY_WAIT_REPLY = 13
+    SECS_QUIET_IDLE_POLL = 22
+
+    PREAMBLE = '/sbin/preamble'
+    POSTAMBLE = '/sbin/postamble'
+
+    CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```',
+                                 re.DOTALL)
+
+    def __init__(self, user):
+        self.user = user
         self.enabled = True
 
         #self.history = ''
-        self.buf = None
+        self.buf = None # FIXME this has been replaced by Context.session ?
         self.last_buf = None
         self.trip = None
         self.inbuf = None
 
         self.io = None
+        self.waiting = False # True if currently waiting for reply
 
     def append(self, text, trip):
         self.trip = trip
@@ -109,48 +122,139 @@ class Engagement:
     def input(self):
         data = self.inbuf
         #if data is not None: self.history += data
+        if data: data = self._handle_code_blocks_(data)
         self.inbuf = None
         return data
 
-    async def start(self, io):
+    async def ioset(self, io):
         self.io = io
 
     async def engage(self): # buffer outputs and poll for replies
-        last_talk = datetime.now()
+        last_trip = datetime.now()
 
         while self.enabled:
+            await asyncio.sleep(0.42)
+
+            if self.waiting:
+                continue
+
             prompt = None
+            now = datetime.now()
+            secs_since_buf = (now - self.last_buf).total_seconds() \
+                    if self.last_buf else None
+            secs_since_trip = (now - last_trip).total_seconds()
 
-            # is buffered output waiting and ready to send?
-            if self.buf and (datetime.now() - self.last_buf).total_seconds() \
-                    >= self.SECS_SEND_AFTER_IDLE:
-                #print(f'SENDING TO {self.dev}: {self.buf}')
+            # is buffered output waiting?
+            if self.buf:
+                # and it's time to respond?
+                if secs_since_buf >= self.SECS_IDLE_BEFORE_TRIP \
+                        or secs_since_trip >= self.SECS_NOISY_WAIT_REPLY:
+                    #print(f'SENDING TO {self.dev}: {self.buf}')
 
-                #prompt = self.buf # buffer starts with full history
-                self.io.session.seek(0)
-                prompt = self.io.session.read() + self.buf
-                self.buf = None
-                self.last_buf = None
+                    self.io.session.seek(0)
+                    prompt = self.io.session.read() #+ self.buf
+                    self.buf = None
+                    self.last_buf = None
 
             # or is there no output but we're ready to check for input?
-            elif not self.buf and (datetime.now() - last_talk).total_seconds() \
-                    >= self.SECS_POLL_REPLY_AFTER:
+            elif secs_since_trip >= self.SECS_QUIET_IDLE_POLL:
                 #print('POLLING FOR REPLY')
-                #prompt = self.history
                 self.io.session.seek(0)
                 prompt = self.io.session.read()
 
+            # FIXME: note we didn't actually use the buffer directly...
+            #       just an indicator above that there was data waiting
+            #       (Context already has the data in its session buffer)
+
             if prompt:
-                reply = await self.trip(prompt)
+                try:
+                    # so hacky...
+                    self.io.stage_pre()
+                    pre = self.io.os.box(self.PREAMBLE)
+                    if exists(pre):
+                        await self.io.os.exec(self.io, self.PREAMBLE)
+                    if self.io.pre:
+                        self.io.pre.seek(0)
+                        pre = self.io.pre.read()
+                    else: pre = ''
+
+                    # solid banking
+                    banking = ''
+                    if self.io.banks:
+                        for bank_acct, data in self.io.banks.items():
+                            #banking += '\n~~~' + bank_acct.upper() + '::\n'
+                            banking += '\n' + data + '\n'
+
+                    # so hacky...
+                    self.io.stage_post()
+                    post = self.io.os.box(self.POSTAMBLE)
+                    if exists(post):
+                        await self.io.os.exec(self.io, self.POSTAMBLE)
+                    if self.io.post:
+                        self.io.post.seek(0)
+                        post = self.io.post.read()
+                    else: post = ''
+
+                    prompt = pre \
+                       + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
+                       + '\nTHIS SECTION IS MOST IMPORTANT, ALWAYS REMEMBER:\n'\
+                       + banking \
+                       + '\n=== END   CORE RULES/MEMORY ===\n' \
+                       + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
+                       + prompt \
+                       + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
+                       + post
+
+                finally:
+                    self.io.stage_normal()
+
+                #print('++++++++++++++++++++++++++++++++++++++ PROMPT BEGIN +++')
+                #print(prompt)
+                #print('++++++++++++++++++++++++++++++++++++++ PROMPT   END +++')
+
+                self.waiting = True
+                try:
+                    reply = await self.trip(prompt)
+
+                finally:
+                    self.waiting = False
+
+                #print('-------------------------------------- REPLY  BEGIN ---')
+                #print(reply)
+                #print('-------------------------------------- REPLY    END ---')
+
                 if reply:
                     reply += '\n' # they hit the enter key (keeps history good)
                     if self.inbuf: self.inbuf += '\n' + reply
                     else: self.inbuf = reply
 
-                last_talk = datetime.now()
-
-            await asyncio.sleep(0.1)
+                last_trip = datetime.now()
 
     def read_history(self):
         pass
+
+    def _handle_code_blocks_(self, text):
+        matches = self.CODEBLOCK_REGEX.finditer(text)
+        replacements = { }
+
+        for match in matches:
+            lang = match.group('language')
+            code = match.group('code')
+
+            self.CODE += 1
+            ext = f'.{lang}' if lang else ''
+            name = f'{self.io.user}-{self.io.os.BOOT}-{self.CODE}{ext}'
+            name = join(self.io.CODE, name)
+            path = self.io.os.box(name)
+
+            with open(path, 'w') as file:
+                file.write(code)
+                file.write('\n')
+
+            replacements[match.group(0)] = name
+
+        for old, new in replacements.items():
+            text = text.replace(old, f':: iosk auto-saved output to {new}')
+
+        return text
 

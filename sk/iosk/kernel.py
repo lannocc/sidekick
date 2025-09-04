@@ -62,6 +62,14 @@ class IOSK:
             elif not isdir(chatter):
                 fail = f'not a dir: {chatter}'
 
+        if not fail:
+            code = self.box(Context.CODE)
+            if not exists(code):
+                os.makedirs(code)
+            elif not isdir(code):
+                fail = f'not a dir: {code}'
+
+        if not fail:
             with open(boot, 'w') as boot: # assumes /var/cache exists
                 boot.write(str(self.BOOT))
 
@@ -105,13 +113,16 @@ class IOSK:
     ### USER LIFECYCLE
     ###
 
-    async def login(self, user, device, interactive:bool=True,
+    async def login(self, user, device=None, interactive:bool=True,
                     connect=None, io_callback=None):
         """Log-in to get a Context."""
         await self.ready.wait()
         if self.halt.is_set(): return
 
-        if device != self.CONSOLE_DEV \
+        if not device:
+            device = self.CONSOLE_DEV
+
+        elif device != self.CONSOLE_DEV \
                 and not await self.exists(self.system, device):
             await self.system.error(f'!! device not found: {device}')
             return
@@ -120,13 +131,18 @@ class IOSK:
             await self.system.error(f'!! already logged in: {user}')
             return
 
+        elif user == 'iosk': # reserved
+            await self.system.error(f'!! invalid login name: {user}')
+            return
+
         await self.system.print(f'IOSK login: {user}')
 
         io = self.system.fork()
         io.log = Capture.log(self, join(self.USER_LOG, user), True)
         io.dev = device
         io.user = user
-        io.user_base = True
+        io.base = True
+        io.bot = device != self.CONSOLE_DEV
         self.users[user] = io
 
         if io_callback:
@@ -140,8 +156,13 @@ class IOSK:
         if exists(skrc):
             await self.exec(io, self.SKRC)
 
+        skrc = join('/home', user, '.skrc')
+        if exists(self.box(skrc)):
+            #print('@@@@@@@@@@@@@ HERE WE GO @@@@@@@@@@@@@')
+            await self.exec(io, skrc)
+
         if interactive:
-            self.interactive(io)
+            await self.interactive(io)
 
         return io
 
@@ -149,22 +170,24 @@ class IOSK:
         while not self.halt.is_set():
             start = datetime.now()
             try:
-                #text = await io.input('[me] >> ')
-                text = await io.input(f'[{io.user}] >> ')
-
-                while text is None: # for non-blocking inputs
+                while (text := await io.input(f'[{io.user}] >> ')) is None:
+                    # non-blocking inputs return None until data
                     #print('POLL INPUT')
                     delay = (datetime.now() - start).total_seconds()
                     if delay < 0.1:
                         await asyncio.sleep(0.1 - delay)
                     start = datetime.now()
-                    text = await io.input()
 
                 for line in text.split('\n'):
                     line = line.rstrip()
                     if line == '$ exit': return
 
-                    if line.startswith('#') or line.startswith('$ '):
+                    if line.startswith('#'):
+                        #await io.comment(line)
+                        pass
+
+                    elif line.startswith('$ '):
+                        #print('$$$$$ COMMAND INPUT $$$$$$')
                         await self.call(io, f'skrip -e {line}')
 
                     elif line:
@@ -343,9 +366,11 @@ class IOSK:
             try:
                 return await py.iosend(io, data)
             except Exception as e: # FIXME error logging
-                await io.error(f'!! error sending: {data}')
-                #return
-                raise e
+                #await io.error(f'!! error sending: {data}')
+                await self.system.error(f'!! error sending: {data}')
+                traceback.print_exc()
+                return
+                #raise e
 
         else:
             print(f'  SEND FILE: {path}')
@@ -366,9 +391,11 @@ class IOSK:
             try:
                 return await py.iorecv(io)
             except Exception as e: # FIXME error logging
-                await io.error(f'!! error receiving from: /dev/{dev}')
-                #return
-                raise e
+                #await io.error(f'!! error receiving from: /dev/{dev}')
+                await self.system.error(f'!! error receiving from: /dev/{dev}')
+                traceback.print_exc()
+                return
+                #raise e
 
         else:
             print(f'  RECV FILE: {path}')
@@ -404,10 +431,11 @@ class IOSK:
         if not path.endswith('.py'): path += '.py'
         #print(f'IMPORT {modname} at {path}')
 
-        if modname in sys.modules:
-            # TODO: check for file modification / reload?
-            #print(f'MOD FOUND: {modname}: {sys.modules[modname]}')
-            return sys.modules[modname]
+        # CACHE -- disabled for now (TODO)
+        #if modname in sys.modules:
+        #    # TODO: check for file modification / reload?
+        #    #print(f'MOD FOUND: {modname}: {sys.modules[modname]}')
+        #    return sys.modules[modname]
 
         py = None
         try:

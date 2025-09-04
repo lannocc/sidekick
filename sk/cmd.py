@@ -18,6 +18,7 @@ def main(args, called=''):
     file = None
     pkg = None
 
+    # options
     while args and args[0].startswith('-'):
         op = args[0]
         args = args[1:]
@@ -269,6 +270,7 @@ def tree(args):
     from .util import get_directory_tree_as_text
 
     md = False
+    count = False
 
     while args and args[0].startswith('-'):
         op = args[0]
@@ -281,14 +283,18 @@ def tree(args):
             print('    sk [general-opts] tree [tree-opts] <directory>')
             print()
             print('The following tree command options are available:')
-            print(f'   -h  :: help for tree command')
-            print(f'   -md :: markdown compatible output')
+            print('   -h  :: help for tree command')
+            print('   -md :: markdown compatible output')
+            print('   -c  :: count bytes and tokens')
             print()
             print('See `sk -h` for general options.')
             return
 
         elif op == '-md':
             md = True
+
+        elif op == '-c':
+            count = True
 
         else:
             print(f'!!! unknown tree option: {op}')
@@ -309,7 +315,7 @@ def tree(args):
         print('  <<')
         print()
 
-    print(get_directory_tree_as_text(path, markdown=md))
+    print(get_directory_tree_as_text(path, markdown=md, count=count))
 
 
 '''

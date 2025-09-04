@@ -1,0 +1,10 @@
+#!/bin/skrip
+# Copyright (C) 2025 LANNOCC
+# @%@~LICENSE~@%@
+
+My name is Bill Lumbergh.
+
+$ bank role supervisor
+$ bank tone optimistic
+$ bank access user
+
