@@ -131,6 +131,10 @@ class IOSK:
             await self.system.error(f'!! already logged in: {user}')
             return
 
+        elif user == 'iosk': # reserved
+            await self.system.error(f'!! invalid login name: {user}')
+            return
+
         await self.system.print(f'IOSK login: {user}')
 
         io = self.system.fork()

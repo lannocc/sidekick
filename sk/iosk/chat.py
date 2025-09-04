@@ -94,7 +94,7 @@ class Engagement:
     PREAMBLE = '/sbin/preamble'
     POSTAMBLE = '/sbin/postamble'
 
-    CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w+)\n(?P<code>.*?)\n```',
+    CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```',
                                  re.DOTALL)
 
     def __init__(self, user):
@@ -238,28 +238,23 @@ class Engagement:
         replacements = { }
 
         for match in matches:
-            #print('YEAHHHHHHHHHHHHHHHHHHHHHHHHHH')
             lang = match.group('language')
             code = match.group('code')
 
-            #fd, temp_file_name = tempfile.mkstemp(prefix=f'iosk_codeblock_',
-            #                                      suffix=f'.{lang}')
-            #with open(temp_file_name, 'w') as temp_file:
-            #    temp_file.write(code)
-            #replacements[match.group(0)] = temp_file_name
-
             self.CODE += 1
-            name = f'{self.io.user}-{self.io.os.BOOT}-{self.CODE}.{lang}'
+            ext = f'.{lang}' if lang else ''
+            name = f'{self.io.user}-{self.io.os.BOOT}-{self.CODE}{ext}'
             name = join(self.io.CODE, name)
             path = self.io.os.box(name)
 
             with open(path, 'w') as file:
                 file.write(code)
+                file.write('\n')
 
             replacements[match.group(0)] = name
 
         for old, new in replacements.items():
-            text = text.replace(old, f'IOSK SAVED {new}')
+            text = text.replace(old, f':: iosk auto-saved output to {new}')
 
         return text
 

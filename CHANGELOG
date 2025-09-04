@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_090425_1 - A couple tweaks to the output saving; reserve username iosk.
+
 saw_090325_6 - This actually works.
 
 saw_090325_5 - Any code blocks in chat are automatically saved to file.
