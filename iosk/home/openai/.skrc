@@ -17,3 +17,6 @@
 #$ bank access guest
 #$ bank access user
 
+$ bank iosk limitations
+$ bank iosk workflow
+
