@@ -78,7 +78,9 @@ class AIMessenger:
 
     async def send(self, from_user, msg, sys=False):
         if not msg: return
-        if not sys: msg = f'<< [{from_user}] {msg}'
+        if not sys:
+            now = datetime.now()
+            msg = f'<< {now} [{from_user}] {msg}'
 
         for user, uio in self.os.users.items():
             if user is from_user: continue
@@ -196,15 +198,20 @@ class Engagement:
                         post = self.io.post.read()
                     else: post = ''
 
-                    prompt = pre \
-                       + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
-                       + '\nTHIS SECTION IS MOST IMPORTANT, ALWAYS REMEMBER:\n'\
-                       + banking \
-                       + '\n=== END   CORE RULES/MEMORY ===\n' \
+                    if banking:
+                        banking = '' \
+                            + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
+                            + 'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS ' \
+                            + 'REMEMBER:\n' \
+                            + banking \
+                            + '\n=== END   CORE RULES/MEMORY ===\n'
+
+                    prompt = pre + banking \
                        + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
                        + prompt \
                        + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
-                       + post
+                       + '\n' + post \
+                       + f'\n[{self.io.user}] >> '
 
                 finally:
                     self.io.stage_normal()

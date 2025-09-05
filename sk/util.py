@@ -219,7 +219,6 @@ def package_directory(path, label='project'):
 
 def get_md_code_block(language, text):
     matches = CODEBLOCK_REGEX.finditer(text)
-    replacements = { }
 
     for match in matches:
         lang = match.group('language')
