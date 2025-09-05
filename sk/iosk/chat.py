@@ -1,7 +1,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from ..util import print_flush as print
+from .io import print_flush as print
 
 import asyncio
 from datetime import datetime
@@ -73,7 +73,8 @@ class AIMessenger:
             self.engagements[io.user].enabled = False
             del self.engagements[io.user]
 
-        await self.os.logout(io, disconnect=f':: {io.user} has left the chat')
+        msg = f':: {io.user} has left the chat'
+        return await self.os.logout(io, disconnect=msg)
 
     async def send(self, from_user, msg, sys=False):
         if not msg: return

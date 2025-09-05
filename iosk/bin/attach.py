@@ -1,6 +1,3 @@
-# Copyright (C) 2025 LANNOCC
-# @%@~LICENSE~@%@
-
 from os.path import join
 
 

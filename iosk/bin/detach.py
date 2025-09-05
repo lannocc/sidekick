@@ -1,8 +1,4 @@
-# Copyright (C) 2025 LANNOCC
-# @%@~LICENSE~@%@
-
 from os.path import join
-
 
 async def iocall(io, args):
     if not io.os.chat:
@@ -14,6 +10,5 @@ async def iocall(io, args):
         await io.error(f'!! not attached: {handle}')
         return
 
-    await io.os.chat.leave(io.os.users[handle])
-    return True
+    return await io.os.chat.leave(io.os.users[handle])
 

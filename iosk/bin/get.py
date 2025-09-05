@@ -1,6 +1,5 @@
-# Copyright (C) 2025 LANNOCC
-# @%@~LICENSE~@%@
-
 async def iocall(io, args):
-    await io.output(await io.os.get(io, args))
+    data = await io.os.get(io, args)
+    if data is None: return
+    await io.output(data)
 

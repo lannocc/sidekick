@@ -1,7 +1,7 @@
-# Copyright (C) 2025 LANNOCC
-# @%@~LICENSE~@%@
-
-
 async def iocall(io, args):
-    await io.os.create(io, args)
+    if await io.os.create(io, args):
+        await io.print(':: file created')
+    else:
+        await io.print(':: path exists')
+
 

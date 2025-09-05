@@ -1,0 +1,4 @@
+#!/bin/skrip
+
+The workflow in iosk for creating and editing files is a little different than other UNIX environments since there is no file editor. Instead, just writing out markdown code blocks triggers iosk to save the code to a new file automatically. After I get a reply with the filename then I copy it where I want it with the cp command. For making smaller changes to large files I can output a patch in a markdown block, then after learning where the patch was saved I apply it with the patch command.
+

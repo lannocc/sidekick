@@ -1,7 +1,4 @@
-# Copyright (C) 2025 LANNOCC
-# @%@~LICENSE~@%@
-
-
 async def iocall(io, args):
-    await io.os.remove_dir(io, args)
+    if await io.os.remove_dir(io, args):
+        await io.print(':: directory removed')
 
