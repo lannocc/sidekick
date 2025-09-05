@@ -1,6 +1,16 @@
 from sk.util import get_directory_tree_as_text
 
 async def iocall(io, args):
+    """List directory contents recursively in a tree-like format.
+
+    Usage: tree [path ...]
+           tree --help
+
+    Options:
+      -h --help Display this help message.
+
+    [path ...]: The paths to list. If no path is provided use current directory.
+    """
     args = args.split(' ')
     errors = False
 

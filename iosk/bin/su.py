@@ -1,6 +1,20 @@
 #!/bin/skrip
 
 async def iocall(io, args):
+    """Execute a command as another user.
+
+    Usage: su <user> <command> [args]
+           su --help
+
+    <user>: The username to switch to.
+    <command>: The command to execute.
+    [args]: Arguments for the command.
+    --help: Displays this help message.
+    """
+    if '--help' in args:
+        await io.print(iocall.__doc__)
+        return
+
     if not io.su:
         await io.error('!! must be super-user to su')
         return

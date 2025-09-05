@@ -7,7 +7,7 @@ print = print_flush
 
 
 def main(args, called=''):
-    quiet = '-q' in args
+    quiet = '-q' in args or (args and args[0] == 'md')
     chatter = '-c' in args
     if not quiet: print('SIDEKICK: ', end='')
 
@@ -318,6 +318,24 @@ def tree(args):
     print(get_directory_tree_as_text(path, markdown=md, count=count))
 
 
+def md(args):
+    from .util import get_md_code_block
+    import sys
+
+    if args:
+        if len(args) != 1:
+            print('1 argument required: <language>')
+            return
+
+        lang = args[0]
+
+    else:
+        lang = None
+
+    code = get_md_code_block(lang, sys.stdin.read())
+    if code: print(code)
+
+
 '''
 def ask(args):
     from .ask.cmd import main as ask_main
@@ -363,6 +381,8 @@ COMMANDS = {
         'view ticket'),
     'tree': (tree,
         'print a directory tree'),
+    'md': (md,
+        'extract markdown code block'),
     #'ask': (ask,
     #    'ask commands'),
     'iosk': (iosk,

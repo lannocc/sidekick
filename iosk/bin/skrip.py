@@ -2,6 +2,21 @@ import re
 
 
 async def iocall(io, args):
+    """Execute a skrip file or command.
+
+    Usage: skrip <filename>
+           skrip -e <command>
+           skrip --help
+
+    <filename>: The path to the skrip file to execute.
+    -e <command>: Execute the given command string.
+    --help: Displays this help message.
+    """
+
+    if args == '--help':
+        await io.print(iocall.__doc__)
+        return
+
     #print(f'SKRIP {args}')
 
     if args.startswith('-e '):

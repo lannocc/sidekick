@@ -2,9 +2,25 @@ import os
 from os.path import exists, isdir, join
 
 async def iocall(io, args):
+    """List directory contents.
+
+    Usage: ls [options] [path ...]
+           ls --help
+
+    Options:
+      -l        Use a long listing format.
+      -a        List all entries, including those starting with '.'.
+      -h --help Display this help message.
+
+    [path ...]: The paths to list. If no path is provided use current directory.
+    """
     args = args.split(' ')
     long = False
     allp = False
+
+    if '--help' in args:
+        await io.print(iocall.__doc__)
+        return
 
     paths = [ ]
     for arg in args:
@@ -16,6 +32,9 @@ async def iocall(io, args):
         for c in arg:
             if c == 'l': long = True
             elif c == 'a': allp = True
+            elif c == 'h':
+                await io.print(iocall.__doc__)
+                return
             else:
                 await io.error(f'!! ls: unknown option: -{c}')
                 return

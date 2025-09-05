@@ -3,11 +3,13 @@
 
 from .io import Context, Capture, print_flush as print
 
+from binaryornot.check import is_binary
+
 import asyncio
 import aioconsole
 from datetime import datetime
 import os
-from os.path import join, isdir, exists
+from os.path import join, isdir, isfile, exists
 import importlib, importlib.util
 import sys
 import shutil
@@ -350,7 +352,15 @@ class IOSK:
         """Get file contents."""
         file = self.box(path)
         if not exists(file):
-            await io.error(f'!! get path not found: {path}')
+            await io.error(f'!! path not found: {path}')
+            return
+
+        if not isfile(file):
+            await io.error(f'!! not a file: {path}')
+            return
+
+        if is_binary(file):
+            await io.error(f'!! refusing binary file: {path}')
             return
 
         with open(file, 'r', encoding='utf-8') as file:
