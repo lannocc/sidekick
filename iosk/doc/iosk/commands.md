@@ -12,7 +12,9 @@ These commands are generally available to users within the IOSK environment.
 *   **detach**: Disconnects a user from a device. Requires a handle/username. Usage: `$ detach <handle>`
 *   **echo**:  Prints the given arguments. Usage: `$ echo <text>`
 *   **get**: Outputs file contents without formatting/prefixing. Usage: `$ get <filename>`
+*   **head**: Displays the first N lines of a file. Usage: `$ head [-n <number>] <filename>`
 *   **help**:  Displays help information about available commands. Usage: `$ help`
+*   **ll**: Lists directory contents using the long listing format (alias for `ls -l`). Usage: `$ ll [path]`
 *   **ls**: Lists directory contents. Takes an optional directory path. Usage: `$ ls [path]`
 *   **mkdir**: Creates a new directory.  Supports creating parent directories with the `-p` flag. Usage: `$ mkdir [-p] <directory>`
 *   **mv**: Moves a file or directory from source to destination. Usage: `$ mv <src> <dst>`
@@ -21,7 +23,10 @@ These commands are generally available to users within the IOSK environment.
 *   **skrip**: Executes a skrip file. Usage: `$ skrip <path>`
     *   `-e`: executes a string as a skrip line.
 *   **status**: Displays system status information (date, user, users). Usage: `$ status`
+*   **su**: Execute a command as another user. Usage: `$ su <user> <command> [args]`
+*   **tail**: Displays the last N lines of a file. Usage: `$ tail [-n <number>] <filename>`
 *   **touch**: Creates a new, empty file. Usage: `$ touch <filename>`
+*   **tree**: Lists directory contents recursively in a tree-like format. Usage: `$ tree [path ...]`
 *   **users**: Lists currently connected users. Usage: `$ users`
 *   **whoami**: Displays the current username. Usage: `$ whoami`
 
