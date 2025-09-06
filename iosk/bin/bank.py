@@ -1,7 +1,3 @@
-# Copyright (C) 2025 LANNOCC
-# @%@~LICENSE~@%@
-
-
 async def iocall(io, args):
     args = args.split(' ')
     if len(args) != 2:

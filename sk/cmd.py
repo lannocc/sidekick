@@ -7,7 +7,7 @@ print = print_flush
 
 
 def main(args, called=''):
-    quiet = '-q' in args
+    quiet = '-q' in args or (args and args[0] == 'md')
     chatter = '-c' in args
     if not quiet: print('SIDEKICK: ', end='')
 
@@ -17,11 +17,14 @@ def main(args, called=''):
     shot = False
     file = None
     pkg = None
+    lang = None
+    save = None
 
     # options
     while args and args[0].startswith('-'):
         op = args[0]
         args = args[1:]
+        if op == '--help': op = '-h'
 
         if op in OPTIONS:
             ops = OPTIONS[op]
@@ -52,6 +55,16 @@ def main(args, called=''):
                     print(f'!!! need a directory path to package')
                     return
 
+            elif op == '-e':
+                if len(args) < 3 or args[0].startswith('-') \
+                        or args[1].startswith('-'):
+                    print(f'!!! -e needs 2 arguments: <language> <file>')
+                    return
+
+                lang = args[0]
+                save = args[1]
+                args = args[2:]
+
         else:
             print(f'!!! unknown option: {op}')
             return
@@ -69,7 +82,8 @@ def main(args, called=''):
         if task: do_task(prompt, shot=shot, file=file, package=pkg, quiet=quiet,
                          chatter=chatter)
         else: ask_question(prompt, shot=shot, file=file, package=pkg,
-                           quiet=quiet, chatter=chatter)
+                           mdlang=lang, mdsave=save, quiet=quiet,
+                           chatter=chatter)
 
         return
 
@@ -94,9 +108,10 @@ def main(args, called=''):
     cmd[0](args)
 
 
-def ask_question(prompt=None, shot=False, file=None, package=None, quiet=False,
-                 chatter=False):
+def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
+                 mdsave=None, quiet=False, chatter=False):
     from . import ai
+    from .util import get_md_code_block
 
     if not quiet:
         print('Ask a Question')
@@ -115,6 +130,10 @@ def ask_question(prompt=None, shot=False, file=None, package=None, quiet=False,
             file = package_directory(package)
             if not quiet: print(f'PACKAGED DIRECTORY to: {file}')
 
+    if (mdlang and not mdsave) or (mdsave and not mdlang):
+        print('!!! need either both mdlang and mdsave, or neither')
+        return
+
     if prompt:
         print(f' >> {prompt}')
 
@@ -131,9 +150,23 @@ def ask_question(prompt=None, shot=False, file=None, package=None, quiet=False,
     else:
         answer = ai.prompt_for_text(prompt, chatter=chatter)
 
+    if mdlang:
+        md = get_md_code_block(mdlang or None, answer)
+        if md: answer = answer.replace(md, '$$$ CODE EXTRACTED $$$')
+
     print()
     print(f' << {answer}')
     print()
+
+    if mdsave:
+        if md:
+            with open(mdsave, 'w') as fout:
+                fout.write(md)
+                fout.write('\n')
+            print(f':: SAVED {mdlang} TO {mdsave}')
+
+        else:
+            print(f'!! NO CODE TO SAVE')
 
 
 def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
@@ -276,14 +309,14 @@ def tree(args):
         op = args[0]
         args = args[1:]
 
-        if op == '-h':
+        if op == '-h' or op == '--help':
             print()
             print('COMMAND USAGE:')
             #print('     sk [options] <command> [args...]')
             print('    sk [general-opts] tree [tree-opts] <directory>')
             print()
             print('The following tree command options are available:')
-            print('   -h  :: help for tree command')
+            print('   -h  :: help for tree command (also --help)')
             print('   -md :: markdown compatible output')
             print('   -c  :: count bytes and tokens')
             print()
@@ -318,6 +351,24 @@ def tree(args):
     print(get_directory_tree_as_text(path, markdown=md, count=count))
 
 
+def md(args):
+    from .util import get_md_code_block
+    import sys
+
+    if args:
+        if len(args) != 1:
+            print('1 argument required: <language>')
+            return
+
+        lang = args[0]
+
+    else:
+        lang = None
+
+    code = get_md_code_block(lang, sys.stdin.read())
+    if code: print(code)
+
+
 '''
 def ask(args):
     from .ask.cmd import main as ask_main
@@ -334,7 +385,7 @@ def iosk(args):
 
 OPTIONS = {
     '-h': (help,
-        'general help for sidekick'),
+        'general help for sidekick (also --help)'),
     '-v': (version,
         'version information'),
     '-q': (None,
@@ -347,6 +398,8 @@ OPTIONS = {
         'upload file with -f <filename>'),
     '-p': (None,
         'package directory text contents and upload with -p <directory>'),
+    '-e': (None,
+        '(ask only) extract markdown code and save with -e <language> <file>'),
 }
 
 
@@ -363,6 +416,8 @@ COMMANDS = {
         'view ticket'),
     'tree': (tree,
         'print a directory tree'),
+    'md': (md,
+        'extract markdown code block'),
     #'ask': (ask,
     #    'ask commands'),
     'iosk': (iosk,

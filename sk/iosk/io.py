@@ -5,6 +5,12 @@ from datetime import datetime, date
 from os import makedirs
 from os.path import join, isdir, exists
 from io import StringIO
+import sys
+
+
+def print_flush(*args, **kwargs):
+    print(*args, **kwargs)
+    sys.stdout.flush()
 
 
 class Context:
@@ -30,6 +36,7 @@ class Context:
         self.chatter = open(self.os.box(chatter), 'w')
 
         self.user = None
+        self.su = False # superuser privileges?
         self.base = False # True if this is the root Context
         self.bot = False # True if this is a bot user
         self.session = StringIO() # the chat history
@@ -43,8 +50,10 @@ class Context:
     def fork(self):
         child = Context(self.os, self.dev, self.log)
         child.parent = self
+
         child.user = self.user
         child.bot = self.bot
+
         return child
 
     async def print(self, text, indicator='='):
@@ -82,6 +91,8 @@ class Context:
         return data
 
     async def output(self, text):
+        if text is None: return
+
         if self.stage == self.STAGE_PRE:
             self.pre.write(text)
             return

@@ -1,7 +1,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from ..util import print_flush as print
+from .io import print_flush as print
 
 import asyncio
 from datetime import datetime
@@ -73,11 +73,14 @@ class AIMessenger:
             self.engagements[io.user].enabled = False
             del self.engagements[io.user]
 
-        await self.os.logout(io, disconnect=f':: {io.user} has left the chat')
+        msg = f':: {io.user} has left the chat'
+        return await self.os.logout(io, disconnect=msg)
 
     async def send(self, from_user, msg, sys=False):
         if not msg: return
-        if not sys: msg = f'<< [{from_user}] {msg}'
+        if not sys:
+            now = datetime.now()
+            msg = f'<< {now} [{from_user}] {msg}'
 
         for user, uio in self.os.users.items():
             if user is from_user: continue
@@ -195,15 +198,20 @@ class Engagement:
                         post = self.io.post.read()
                     else: post = ''
 
-                    prompt = pre \
-                       + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
-                       + '\nTHIS SECTION IS MOST IMPORTANT, ALWAYS REMEMBER:\n'\
-                       + banking \
-                       + '\n=== END   CORE RULES/MEMORY ===\n' \
+                    if banking:
+                        banking = '' \
+                            + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
+                            + 'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS ' \
+                            + 'REMEMBER:\n' \
+                            + banking \
+                            + '\n=== END   CORE RULES/MEMORY ===\n'
+
+                    prompt = pre + banking \
                        + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
                        + prompt \
                        + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
-                       + post
+                       + '\n' + post \
+                       + f'\n[{self.io.user}] >> '
 
                 finally:
                     self.io.stage_normal()
@@ -215,6 +223,19 @@ class Engagement:
                 self.waiting = True
                 try:
                     reply = await self.trip(prompt)
+
+                except Exception as e: # overloaded?
+                    await self.io.os.system.error(f'!! trip for {self.io.user}:'
+                                                  f' {e}')
+                    await asyncio.sleep(1)
+                    try:
+                        reply = await self.trip(prompt)
+
+                    except Exception as e: # still overloaded?
+                        await self.io.os.system.error(
+                                f'!! trip (2) for {self.io.user}: {e}')
+                        await asyncio.sleep(3)
+                        reply = await self.trip(prompt)
 
                 finally:
                     self.waiting = False

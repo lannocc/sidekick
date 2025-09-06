@@ -1,6 +1,16 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_090525_3 - Timing builds character. Also try handling overloads.
+
+saw_090525_2 - Timestamps in chat. A patch command. More help.
+
+saw_090525_1 - Add `sk md` for extracting markdown code. Add --help to commands.
+
+saw_090425_3 - Who's the boss? Prime gemini and openai with iosk memory bank.
+
+saw_090425_2 - Trim boilerplate; ls, ll, tree, su commands; first-person; docs.
+
 saw_090425_1 - A couple tweaks to the output saving; reserve username iosk.
 
 saw_090325_6 - This actually works.

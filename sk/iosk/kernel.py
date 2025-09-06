@@ -1,14 +1,15 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from .io import Context, Capture
-from ..util import print_flush as print
+from .io import Context, Capture, print_flush as print
+
+from binaryornot.check import is_binary
 
 import asyncio
 import aioconsole
 from datetime import datetime
 import os
-from os.path import join, isdir, exists
+from os.path import join, isdir, isfile, exists
 import importlib, importlib.util
 import sys
 import shutil
@@ -141,6 +142,7 @@ class IOSK:
         io.log = Capture.log(self, join(self.USER_LOG, user), True)
         io.dev = device
         io.user = user
+        io.su = device == self.CONSOLE_DEV # if you have console, you're super
         io.base = True
         io.bot = device != self.CONSOLE_DEV
         self.users[user] = io
@@ -207,6 +209,7 @@ class IOSK:
             if self.chat: await self.chat.send(io.user, disconnect, sys=True)
             else: await io.print(disconnect)
         del self.users[io.user]
+        return True
 
     ###
     ### COMMAND
@@ -286,6 +289,7 @@ class IOSK:
 
         with open(file, 'w') as f:
             pass
+        return True
 
     async def copy(self, io:Context, from_path:str, to_path:str):
         """Copy file."""
@@ -296,6 +300,7 @@ class IOSK:
 
         to_file = self.box(to_path)
         shutil.copy(from_file, to_file)
+        return True
 
     async def move(self, io:Context, from_path:str, to_path:str):
         """Move file/directory."""
@@ -306,6 +311,7 @@ class IOSK:
 
         to_file = self.box(to_path)
         shutil.move(from_file, to_file)
+        return True
 
     async def remove(self, io:Context, path:str):
         """Remove file."""
@@ -315,17 +321,18 @@ class IOSK:
             return
 
         os.remove(file)
+        return True
 
     async def create_dir(self, io:Context, path:str, parents=False):
         """Create new directory."""
         folder = self.box(path)
-        if exists(folder): return
+        if exists(folder):
+            await io.error(f'!! path already exists: {path}')
+            return
 
-        if parents:
-            os.makedirs(folder)
-
-        else:
-            os.mkdir(folder)
+        if parents: os.makedirs(folder)
+        else: os.mkdir(folder)
+        return True
 
     async def remove_dir(self, io:Context, path:str):
         """Remove directory."""
@@ -335,6 +342,7 @@ class IOSK:
             return
 
         os.rmdir(folder)
+        return True
 
     ###
     ### FILE I/O
@@ -344,7 +352,15 @@ class IOSK:
         """Get file contents."""
         file = self.box(path)
         if not exists(file):
-            await io.error(f'!! get path not found: {path}')
+            await io.error(f'!! path not found: {path}')
+            return
+
+        if not isfile(file):
+            await io.error(f'!! not a file: {path}')
+            return
+
+        if is_binary(file):
+            await io.error(f'!! refusing binary file: {path}')
             return
 
         with open(file, 'r', encoding='utf-8') as file:

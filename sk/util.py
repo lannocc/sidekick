@@ -16,6 +16,11 @@ import subprocess
 import platform
 import tempfile
 import time
+import re
+
+
+CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```',
+                             re.DOTALL)
 
 
 def print_flush(*args, **kwargs):
@@ -210,6 +215,17 @@ def package_directory(path, label='project'):
         file.write(get_directory_contents_as_text(path))
 
     return name
+
+
+def get_md_code_block(language, text):
+    matches = CODEBLOCK_REGEX.finditer(text)
+
+    for match in matches:
+        lang = match.group('language')
+        if language is not None and lang != language: continue
+
+        code = match.group('code')
+        return code
 
 
 def play(file_path):
