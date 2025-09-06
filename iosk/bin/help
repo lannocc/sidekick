@@ -21,7 +21,8 @@ For managing users:
     $ detach        - disconnect a user
 
 For working with paths (files and directories):
-    $ ls            - list files and directories (also: ll, tree)
+    $ ls            - list files and directories (also: ll)
+    $ tree          - recursively list as a tree (efficient; some folders hidden)
     $ mkdir         - Create empty directory
     $ rmdir         - Remove empty directory
     $ touch         - Create empty file
