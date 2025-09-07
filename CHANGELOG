@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_090625_1 - Rearrange the iosk src symbolic link so that patch works.
+
 saw_090525_3 - Timing builds character. Also try handling overloads.
 
 saw_090525_2 - Timestamps in chat. A patch command. More help.
