@@ -3,13 +3,6 @@
 
 from .config import CHROME_PROFILE
 
-from PIL import ImageGrab
-from playsound3 import playsound
-#import simpleaudio as sa
-#import cv2
-from binaryornot.check import is_binary
-import tiktoken
-
 from sys import stdout
 import os
 import subprocess
@@ -69,6 +62,8 @@ def open_browser(url):
 
 
 def take_screenshot():
+    from PIL import ImageGrab
+
     fd, file = tempfile.mkstemp(prefix='sidekick-shot-', suffix='.png')
     shot = ImageGrab.grab()
     play_shot()
@@ -115,6 +110,8 @@ def is_ignorable_path(item, ignores=[ ]):
 
 
 def get_directory_tree_as_text(path, indent='', markdown=False, count=False):
+    import tiktoken
+
     text = ''
     items = os.listdir(path)
     ignores = get_ignore_set(path)
@@ -157,6 +154,8 @@ def get_directory_tree_as_text(path, indent='', markdown=False, count=False):
 
 
 def get_directory_contents_as_text(path):
+    from binaryornot.check import is_binary
+
     text = ''
     items = os.listdir(path)
     ignores = get_ignore_set(path)
@@ -229,6 +228,8 @@ def get_md_code_block(language, text):
 
 
 def play(file_path):
+    from playsound3 import playsound
+
     '''
     system = platform.system()
 

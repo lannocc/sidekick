@@ -1,6 +1,20 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_090625_7 - Alpha (gpt5) created describe, diff, history, and search.
+
+saw_090625_6 - Removing more boilerplate in iosk.
+
+saw_090625_5 - Alpha (gemini) found the todo list and created the wc command.
+
+saw_090625_4 - I said hello. Alpha created a welcome skrip.
+
+saw_090625_3 - 3rd party imports only where needed in utils (for performance).
+
+saw_090625_2 - Remove more boilerplate. Add alpha.
+
+saw_090625_1 - Rearrange the iosk src symbolic link so that patch works.
+
 saw_090525_3 - Timing builds character. Also try handling overloads.
 
 saw_090525_2 - Timestamps in chat. A patch command. More help.

@@ -1,0 +1,4 @@
+#!/bin/skrip
+
+In IOSK, skrip is the main shell scripting language. It's a powerfully-simple concept tuned to user/agent chat engagements. Any normal text is simply printed as normal text (thus echo is the default operation). Normal comments (lines beginning with '#') are ignored. Finally, lines beginning with '$ ' (dollar-sign followed by space) are commands to run. The skrip command is not usually called directly, instead it is automatically called by the chat system or it is invoked by skrip files which start with the '#!/bin/skrip' shebang line.
+

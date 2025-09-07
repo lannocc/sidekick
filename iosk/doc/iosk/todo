@@ -4,7 +4,7 @@ Based on the existing commands in `/bin` and the philosophy of IOSK as described
 
 2.  **`diff <file1> <file2>`:** Displays the differences between two files. Useful for comparing code versions, configuration files, or outputs, especially when working collaboratively or debugging.
 
-3.  **`wc <filename>`:** Word count. Displays the number of lines, words, and characters in a file. This is a standard UNIX command, and its addition would enhance the completeness of the OS.
+~DONE 3.  **`wc <filename>`:** Word count. Displays the number of lines, words, and characters in a file. This is a standard UNIX command, and its addition would enhance the completeness of the OS.
 
 ~DONE 4.  **`head <filename>`:** Displays the first few lines of a file. Useful for quickly inspecting a file's content without having to `cat` the entire file, especially when working with large log files.
 
