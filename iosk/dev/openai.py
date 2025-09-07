@@ -2,7 +2,8 @@
 from openai import AsyncOpenAI
 
 #MODEL='gpt-3.5-turbo'
-MODEL='gpt-4o-mini'
+#MODEL='gpt-4o-mini'
+MODEL='gpt-5'
 
 client = None
 
