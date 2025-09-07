@@ -1,0 +1,13 @@
+#!/bin/skrip
+
+$ bank role devops
+$ bank boss lannocc
+$ bank access admin
+$ bank timing 5min_turbo
+
+$ bank iosk limitations
+$ bank iosk workflow
+$ bank iosk tree
+
+$ bank instinct gut
+
