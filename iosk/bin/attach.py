@@ -24,6 +24,7 @@ async def iocall(io, args):
 
     device = args[0]
     handle = args[1] if len(args) > 1 else device
+    handle = handle.replace('/', '-')
 
     io = await io.os.chat.join(handle, join('/dev', device))
     return True if io else False

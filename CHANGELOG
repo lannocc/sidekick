@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_090725_1 - Now with choice of models for Google and OpenAI.
+
 saw_090625_7 - Alpha (gpt5) created describe, diff, history, and search.
 
 saw_090625_6 - Removing more boilerplate in iosk.
