@@ -1,6 +1,8 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_090625_3 - 3rd party imports only where needed in utils (for performance).
+
 saw_090625_2 - Remove more boilerplate. Add alpha.
 
 saw_090625_1 - Rearrange the iosk src symbolic link so that patch works.
