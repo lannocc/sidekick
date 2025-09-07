@@ -1,8 +1,4 @@
-# Copyright (C) 2025 LANNOCC
-# @%@~LICENSE~@%@
-
 from ollama import AsyncClient
-
 
 #MODEL='deepseek-r1'
 #MODEL='deepseek-coder'
@@ -10,7 +6,6 @@ from ollama import AsyncClient
 MODEL='gemma3'
 
 client = None
-
 
 async def iosend(io, data):
     global client
@@ -22,12 +17,10 @@ async def iosend(io, data):
     if not client:
         client = AsyncClient()
 
-
 async def iorecv(io):
     if io.user not in io.os.chat.engagements: return None
     data = io.os.chat.engagements[io.user].input()
     return data
-
 
 async def trip(prompt): # round trip
     #print(f'SENDING TO OLLAMA: {prompt}')

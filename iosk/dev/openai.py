@@ -1,15 +1,10 @@
-# Copyright (C) 2025 LANNOCC
-# @%@~LICENSE~@%@
-
 #from openai import OpenAI
 from openai import AsyncOpenAI
-
 
 #MODEL='gpt-3.5-turbo'
 MODEL='gpt-4o-mini'
 
 client = None
-
 
 async def iosend(io, data):
     global client
@@ -28,12 +23,10 @@ async def iosend(io, data):
         #client = OpenAI(api_key=api_key)
         client = AsyncOpenAI(api_key=api_key)
 
-
 async def iorecv(io):
     if io.user not in io.os.chat.engagements: return None
     data = io.os.chat.engagements[io.user].input()
     return data
-
 
 async def trip(prompt): # round trip
     #print(f'SENDING TO CHATGPT: {prompt}')

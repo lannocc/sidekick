@@ -1,8 +1,4 @@
-# Copyright (C) 2025 LANNOCC
-# @%@~LICENSE~@%@
-
 import aioconsole
-
 
 async def iosend(io, data):
     #print(data)

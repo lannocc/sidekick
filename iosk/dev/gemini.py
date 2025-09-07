@@ -1,18 +1,13 @@
-# Copyright (C) 2025 LANNOCC
-# @%@~LICENSE~@%@
-
 from google import genai
 from google.genai.types import HttpOptions, GenerateContentConfig
 
 import asyncio
 from datetime import datetime, timedelta
 
-
 MODEL = 'gemini-2.5-flash'
 TIMEOUT = 3 * 60 * 1000 # wait up to 3 minutes (file uploads, etc.)
 
 client = None
-
 
 async def iosend(io, data):
     global client
@@ -31,12 +26,10 @@ async def iosend(io, data):
         client = genai.Client(api_key=api_key,
                               http_options=HttpOptions(timeout=TIMEOUT))
 
-
 async def iorecv(io):
     if io.user not in io.os.chat.engagements: return None
     data = io.os.chat.engagements[io.user].input()
     return data
-
 
 async def trip(prompt): # round trip
     #print(f'SENDING TO GEMINI: {prompt}')
