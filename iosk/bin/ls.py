@@ -1,5 +1,7 @@
 import os
 from os.path import exists, isdir, join
+from sk.util import get_ignore_set
+
 
 async def iocall(io, args):
     """List directory contents.
@@ -13,6 +15,8 @@ async def iocall(io, args):
       -h --help Display this help message.
 
     [path ...]: The paths to list. If no path is provided use current directory.
+
+    Note: This command honors .skignore files in listed directories.
     """
     args = args.split(' ')
     long = False
@@ -61,9 +65,20 @@ async def iocall(io, args):
     for path, listing in dirs:
         if (errors or files or len(dirs) > 1):
             await io.print(f'\n{path}:')
+
+        bpath = io.os.box(path)
+        ignores = get_ignore_set(bpath)
+
+        def is_hidden_by_default(item):
+            return item.startswith('.') or item.endswith('~') or item == '__pycache__'
+
+        filtered_listing = [
+            item for item in listing
+            if item not in ignores and (allp or not is_hidden_by_default(item))
+        ]
+
         await io.print(c.join(
             [ f'{file}{"/" if isdir(io.os.box(join(path, file))) else ""}'
-              for file in listing if allp or not file.startswith('.') ]))
+              for file in filtered_listing ]))
 
     return not errors
-
