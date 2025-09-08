@@ -3,29 +3,56 @@ from sk.util import get_directory_tree_as_text
 async def iocall(io, args):
     """List directory contents recursively in a tree-like format.
 
-    Usage: tree [path ...]
+    Usage: tree [options] [path ...]
            tree --help
 
     Options:
+      -c        Count bytes and estimate tokens for the content.
       -h --help Display this help message.
 
     [path ...]: The paths to list. If no path is provided use current directory.
     """
-    args = args.split(' ')
-    errors = False
+    args = args or ''
+    args_list = [arg for arg in args.split(' ') if arg]
 
-    for path in args:
-        await io.print(f'{path}:')
+    count = False
+    paths = []
+
+    for arg in args_list:
+        if arg.startswith('-'):
+            if arg == '-c':
+                count = True
+            elif arg in ('-h', '--help'):
+                await io.print(iocall.__doc__)
+                return
+            else:
+                await io.error(f'!! tree: unknown option: {arg}')
+                return
+        else:
+            paths.append(arg)
+
+    if not paths:
+        paths = ['.']
+
+    errors = False
+    for i, path in enumerate(paths):
+        # Add a header for multiple paths
+        if len(paths) > 1:
+            if i > 0:
+                await io.print("")
+            await io.print(f'{path}:')
 
         if not await io.os.exists(io, path):
-            await io.error('!! tree: path does not exist\n')
+            await io.error(f'!! tree: path does not exist: {path}\n')
             errors = True
+            continue
 
-        else:
-            try: await io.print(get_directory_tree_as_text(io.os.box(path)))
-            except Exception as e:
-                await io.error('!! tree: failed to traverse path\n')
-                errors = True
+        try:
+            tree_text = get_directory_tree_as_text(io.os.box(path), count=count)
+            await io.print(tree_text)
+        except Exception as e:
+            await io.error(f'!! tree: failed to traverse path for {path}\n')
+            errors = True
 
     return not errors
 
