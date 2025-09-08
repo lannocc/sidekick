@@ -35,8 +35,17 @@ The `IOSK` class in `src/iosk/kernel.py` would be augmented with a central event
 
 This method would:
 1.  Consult `/etc/daemons.conf` to find the registered handler for `event_name`.
-2.  If a handler is found, prepare a prompt or arguments based on the `context` provided.
+2.  If a handler is found, prepare a prompt or arguments based on the `context` provided. For AI agent handlers, this prompt is constructed by combining standardized `preamble` and `postamble` files (e.g., from `/etc/daemons/`) with the dynamic context of the event. This standardizes how different parts of the system (chat, daemons, the `ask` command) build their prompts.
 3.  Invoke the handler in-line with the original `io` context, pausing the current operation to await the daemon's completion.
+
+#### Prompt Standardization
+
+A key part of the system's design is standardizing how prompts are constructed for AI agents. Rather than hardcoding prompts, the system uses a file-based approach within the `/etc/` directory. For example:
+-   Standard chat interactions use `/etc/chat/preamble` and `/etc/chat/postamble`.
+-   The `ask` command would use files in `/etc/ask/`.
+-   Daemon events, as described here, use files located in `/etc/daemons/`.
+
+This allows system administrators to easily customize and tune the behavior of AI interactions across the entire OS.
 
 #### In-line Execution
 
@@ -66,9 +75,9 @@ This primary use case demonstrates the power of the proposed system.
     )
     ```
 
-4.  **Daemon Invocation**: The `fire_event` method in the kernel reads `/etc/daemons.conf` and identifies `/dev/google/gemini-2.5-pro` as the handler. The kernel then constructs a specialized prompt for this AI daemon.
+4.  **Daemon Invocation**: The `fire_event` method in the kernel reads `/etc/daemons.conf` and identifies `/dev/google/gemini-2.5-pro` as the handler.
 
-5.  **Daemon Prompt**:
+5.  **Daemon Prompt**: The kernel constructs the prompt by combining `/etc/daemons/preamble`, the dynamic event context, and `/etc/daemons/postamble`. For instance, `/etc/daemons/preamble` might contain the static instructions, and the kernel injects the context in between:
     ```
     SYSTEM TASK: FILE ORGANIZATION
 
@@ -111,3 +120,37 @@ This primary use case demonstrates the power of the proposed system.
     -   A `USER_LOGIN` daemon to check for system messages, prepare a daily summary, or restore a user's previous session state.
     -   A `PRE_COMMAND_EXEC` daemon to act as a safety layer, warning users before executing potentially destructive commands like `rm -rf /`.
     -   A monitoring daemon to watch for specific patterns in `/var/log` and proactively alert users or other agents.
+
+
+### A Simpler Approach: Daemons as UNIX Pipes
+
+In keeping with the UNIX philosophy of "do one thing and do it well," the proposed daemon system could be simplified. Instead of a specialized `fire_event` kernel mechanism, we can leverage the well-understood concept of standard input/output and pipes.
+
+In this model:
+
+1.  **Events as Text Streams**: When an event occurs, the kernel serializes the event context (e.g., filenames, user, chat history) into a simple text format (like plain text or JSON) and pipes it to the standard input of the handler process.
+2.  **Handlers as Filters**: A daemon handler becomes a standard executable (a skrip, a Python program, etc.) that reads from `stdin`, performs its logic, and writes any resulting commands to `stdout`. It acts as a filter, transforming event data into executable commands.
+3.  **Simple Execution**: The kernel's only job is to execute the handler specified in `/etc/daemons.conf`, pipe the context to it, and then execute whatever commands the handler prints to its standard output.
+
+An example workflow for the `POST_CODE_SAVE` event would be:
+
+```bash
+# Kernel internally prepares the context and pipes it to the handler
+$ echo "/var/code/openai-1-1.py" | /sbin/daemons/organizer.sk
+```
+
+The `/sbin/daemons/organizer.sk` handler would read the filename from stdin, decide on a new location, and print the command:
+
+```bash
+# Output from organizer.sk
+$ mv /var/code/openai-1-1.py /home/alpha/workspace/log-parser/parser.py
+```
+
+The kernel then executes this output.
+
+**Benefits of this approach:**
+
+*   **Simplicity**: It removes the need for a complex event API within the kernel, relying instead on standard process management and I/O redirection.
+*   **Composability**: Any program that can read from stdin and write to stdout can be a daemon handler, not just specialized AI agents. Handlers can be chained together using standard shell pipes.
+*   **Testability**: Daemon handlers can be easily tested from the command line without needing the full IOSK kernel, simply by piping test data to them: `cat test_event.txt | /sbin/daemons/organizer.sk`.
+*   **Flexibility**: This aligns perfectly with the "everything is a file" philosophy, treating events as streams of data to be processed by simple, focused tools.
