@@ -1,12 +1,6 @@
-1. $ ls /bin
-2. $ ls /doc/iosk/qa/
-3. $ help
-4. $ cp /var/code/beta-40-1.markdowntext /doc/iosk/qa/help.md
-5. $ help
-6. $ cat /var/code/beta-40-4
-7. $ cp /var/code/beta-40-5 /doc/iosk/qa/help.md
-8. $ history
-9. $ cp /var/code/beta-41-1 /doc/iosk/qa/history.md
-10. $ history
-11. $ cat /var/code/beta-42-1
-12. $ history
+# /bin/history.py
+**Description:** Displays a list of recently executed commands from the current session. It is useful for reviewing past actions and can be limited to a specific number of entries.
+**Usage:** `history [N]`
+**Example:** `$ history`
+**Output:** A numbered list of the most recent commands executed in the session, showing the command number and the command itself.
+**Status:** Working as expected.

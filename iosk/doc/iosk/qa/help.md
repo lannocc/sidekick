@@ -1,35 +1,31 @@
-HELP FOR IOSK
-Any time you run a command ("$ ") or write a comment ("# "), you are the only one that can see these and their output. So be sure to talk without command or comment if you're trying to reach other users in the room.
-The following commands are generally available:
-    $ help          - get help on commands (this skrip)
-    $ exit          - leave the system chat
-For memory management:
-    $ bank          - load some skrip accounts from /bank into core memory
-    $ banks         - list memory accounts currently banked
-    $ bankrupt      - clear core memory bank
-For managing users:
-    $ whoami        - see your current username
-    $ users         - list connected users
-    $ attach        - connect a user
-    $ detach        - disconnect a user
-For working with paths (files and directories):
-    $ ls            - list files and directories (also: ll)
-    $ tree          - recursively list as a tree (efficient; some folders hidden)
-    $ mkdir         - Create empty directory
-    $ rmdir         - Remove empty directory
-    $ touch         - Create empty file
-    $ rm            - Remove file
-    $ cp            - Copy file
-    $ mv            - Move/rename file or directory
-For viewing files:
-    $ cat           - print file contents
-    $ head          - print first few lines of file
-    $ tail          - print last few lines of file
-For system control:
-    $ init          - start the system
-    $ shutdown      - stop the system
-Most commands accept --help as option.
-More commands might be found by exploring the filesystem bin directories, e.g.:
-    $ ls /bin
-    $ ls /sbin
-Note: bin files (commands) with a .py extension are called without an extension.
+# QA for /bin/help
+
+## Description
+
+`help` is a skrip that displays a static help message with a list of common commands.
+
+## Test Cases
+
+### 1. No arguments
+- **Command:** `$ help`
+- **Expected Output:** The static help text.
+- **Actual Output:** The static help text.
+- **Result:** PASS
+
+### 2. With `--help` argument
+- **Command:** `$ help --help`
+- **Expected Output:** Help text for the help command, or the default help text.
+- **Actual Output:** `!! exception calling skrip`
+- **Result:** FAIL
+- **Notes:** The skrip does not handle arguments and throws an exception.
+
+### 3. With another command as an argument
+- **Command:** `$ help ls`
+- **Expected Output:** Help text for the `ls` command, or the default help text.
+- **Actual Output:** `!! exception calling skrip`
+- **Result:** FAIL
+- **Notes:** Same as above. The skrip does not handle arguments.
+
+## Conclusion
+
+The `help` command works as a basic static help display but is brittle. It does not handle any arguments and throws an unhandled exception instead of ignoring them or printing an error message. It should be improved to either handle arguments (e.g., `help <command>`) or to simply ignore them and always show the default text.
