@@ -1,10 +1,9 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from .config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT_HTTP
+from . import config
 from .util import play_retry
 
-import google.generativeai as genai0
 from google import genai
 from google.genai.types import HttpOptions, GenerateContentConfig
 
@@ -12,27 +11,27 @@ from httpx import ReadTimeout, WriteTimeout
 import json
 
 
-model0 = genai0.GenerativeModel(GEMINI_MODEL)
 
-
-def prompt_for_text(prompt, chatter=False):
+def prompt_for_text(prompt, chatter=False, model=config.GEMINI_MODEL_SMART):
     if chatter: print(f'  ai >> {prompt}')
-    client = genai.Client(api_key=GEMINI_API_KEY,
-                          http_options=HttpOptions(timeout=GEMINI_TIMEOUT_HTTP))
+    client = genai.Client(api_key=config.GEMINI_API_KEY,
+                          http_options=HttpOptions(
+                              timeout=config.GEMINI_TIMEOUT_HTTP))
     resp = client.models.generate_content(
-            model=GEMINI_MODEL,
+            model=model,
             contents=prompt,
             )
     if chatter: print(f'  ai << {resp.text}')
     return resp.text
 
 
-def prompt_for_json(prompt, chatter=False):
+def prompt_for_json(prompt, chatter=False, model=config.GEMINI_MODEL_SMART):
     if chatter: print(f'  ai >> {prompt}')
-    client = genai.Client(api_key=GEMINI_API_KEY,
-                          http_options=HttpOptions(timeout=GEMINI_TIMEOUT_HTTP))
+    client = genai.Client(api_key=config.GEMINI_API_KEY,
+                          http_options=HttpOptions(
+                              timeout=config.GEMINI_TIMEOUT_HTTP))
     resp = client.models.generate_content(
-            model=GEMINI_MODEL,
+            model=model,
             contents=prompt,
             config={
                 'response_mime_type': 'application/json',
@@ -42,13 +41,15 @@ def prompt_for_json(prompt, chatter=False):
     return json.loads(resp.text)
 
 
-def prompt_with_file_for_text(prompt, file, chatter=False):
+def prompt_with_file_for_text(prompt, file, chatter=False,
+                              model=config.GEMINI_MODEL_SMART):
     if chatter: print(f'  ai >> {prompt}')
-    client = genai.Client(api_key=GEMINI_API_KEY,
-                          http_options=HttpOptions(timeout=GEMINI_TIMEOUT_HTTP))
+    client = genai.Client(api_key=config.GEMINI_API_KEY,
+                          http_options=HttpOptions(
+                              timeout=config.GEMINI_TIMEOUT_HTTP))
     file = client.files.upload(file=file)
     resp = client.models.generate_content(
-            model=GEMINI_MODEL,
+            model=model,
             contents=[
                 file,
                 '\n\n',
@@ -61,10 +62,11 @@ def prompt_with_file_for_text(prompt, file, chatter=False):
 
 
 def prompt_with_file_for_json(prompt, file, retries=0, quiet=False,
-                              chatter=False):
+                              chatter=False, model=config.GEMINI_MODEL_SMART):
     if chatter: print(f'  ai >> {prompt}')
-    client = genai.Client(api_key=GEMINI_API_KEY,
-                          http_options=HttpOptions(timeout=GEMINI_TIMEOUT_HTTP))
+    client = genai.Client(api_key=config.GEMINI_API_KEY,
+                          http_options=HttpOptions(
+                              timeout=config.GEMINI_TIMEOUT_HTTP))
 
     for t in range(retries+1):
         try:
@@ -80,7 +82,7 @@ def prompt_with_file_for_json(prompt, file, retries=0, quiet=False,
         play_retry()
 
     resp = client.models.generate_content(
-            model=GEMINI_MODEL,
+            model=model,
             contents=[
                 file,
                 '\n\n',
@@ -95,12 +97,14 @@ def prompt_with_file_for_json(prompt, file, retries=0, quiet=False,
     return json.loads(resp.text)
 
 
-async def async_prompt_for_text(prompt, chatter=False):
+async def async_prompt_for_text(prompt, chatter=False,
+                                model=config.GEMINI_MODEL_SMART):
     if chatter: print(f'  ai >> {prompt}')
-    client = genai.Client(api_key=GEMINI_API_KEY,
-                          http_options=HttpOptions(timeout=GEMINI_TIMEOUT_HTTP))
+    client = genai.Client(api_key=config.GEMINI_API_KEY,
+                          http_options=HttpOptions(
+                              timeout=config.GEMINI_TIMEOUT_HTTP))
     resp = await client.aio.models.generate_content(
-            model=GEMINI_MODEL,
+            model=model,
             contents=prompt,
             config=GenerateContentConfig(
                 response_modalities=['TEXT'],

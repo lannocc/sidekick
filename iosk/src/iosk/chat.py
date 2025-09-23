@@ -227,14 +227,14 @@ class Engagement:
                 except Exception as e: # overloaded?
                     await self.io.os.system.error(f'!! trip for {self.io.user}:'
                                                   f' {e}')
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(1.8)
                     try:
                         reply = await self.trip(prompt)
 
                     except Exception as e: # still overloaded?
                         await self.io.os.system.error(
                                 f'!! trip (2) for {self.io.user}: {e}')
-                        await asyncio.sleep(3)
+                        await asyncio.sleep(4.2)
                         reply = await self.trip(prompt)
 
                 finally:
