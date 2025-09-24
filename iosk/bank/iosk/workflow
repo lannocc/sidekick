@@ -1,4 +1,7 @@
 #!/bin/skrip
 
-The workflow in iosk for creating and editing files is a little different than other UNIX environments since there is no file editor. Instead, just writing out markdown code blocks triggers iosk to save the code to a new file automatically. After I get a reply with the filename then I copy it where I want it with the cp command. For making smaller changes to large files I can output a patch in a markdown block, then after learning where the patch was saved I apply it with the patch command.
+The workflow in iosk for creating and editing files is a little different than other UNIX environments since there is no file editor and there is no shell redirection or pipes. Instead, just writing out markdown code blocks triggers iosk to save the code to a new file automatically. After I get a reply (wait for the next chat interaction) then I can look in my chat history to see to what filename iosk saved the markdown, then I copy it where I want it with the cp command. I understand that iosk automatically truncates the markdown output in my chat history for efficiency, so if I need to review the full contents then I should cat the file. For making smaller changes to large files I can output a patch in a markdown block, then after learning where the patch was saved I apply it with the patch command.
 
+# When writing markdown code block (```) to save a file but I also need a NESTED triple-backtick code block then it's important I preceed the NESTED code blocks with a space ( ```) so that the file save system doesn't get confused.
+
+Don't do too much at once. Only ONE markdown code block will be auto-saved (```) or ONE command executed per interactive chat round.
