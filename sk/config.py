@@ -29,9 +29,10 @@ logging.basicConfig(
 GEMINI_API_KEY = getenv('GEMINI_API_KEY')
 #assert GEMINI_API_KEY
 
-#GEMINI_MODEL = 'gemini-2.0-flash'
-GEMINI_MODEL = 'gemini-2.5-pro'
-GEMINI_TIMEOUT = 3 * 60 * 1000 # wait up to 3 minutes (file uploads, etc.)
+GEMINI_MODEL_QUICK_1 = 'gemini-2.0-flash'
+GEMINI_MODEL_QUICK_2 = 'gemini-2.5-flash'
+GEMINI_MODEL_SMART = 'gemini-2.5-pro'
+GEMINI_TIMEOUT_HTTP = 7 * 60 * 1000 # wait up to 7 minutes (file uploads, etc.)
 
 CHROME_PROFILE = 'Default'
 

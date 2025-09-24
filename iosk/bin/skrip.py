@@ -37,12 +37,15 @@ async def iocall(io, args):
 async def handle(io, line):
     line = line.rstrip()
 
-    if line.startswith('#'): # comment
+    if line.startswith('#'): # chat comment
         #await io.comment(line)
         pass
 
     elif line.startswith('$ '): # command
         line = line[2:]
+
+        if line.startswith('#'): # command comment
+            pass
 
         if re.match(r'^\w+=', line): # variable assignment
             try:
