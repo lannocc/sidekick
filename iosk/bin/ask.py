@@ -79,7 +79,7 @@ async def package_directory(io, path):
 
     return text
 
-async def iocall(io, args):
+async def iocall(io, argv): # Changed 'args' to 'argv'
     """Ask an AI user a question, with optional file/directory context.
 
     Usage: ask [options] <user> <prompt>
@@ -100,30 +100,30 @@ async def iocall(io, args):
     Note: The screenshot option (-s) is not available in the iosk environment.
           Only one of -f or -p can be used at a time.
     """
-    if not args or '--help' in args:
+    if not argv or '--help' in argv: # Changed 'args' to 'argv'
         await io.print(iocall.__doc__)
         return
 
-    args_list = [a for a in args.split(' ') if a]
+    # Removed: args_list = [a for a in args.split(' ') if a]
     options = {}
     user = None
     prompt_parts = []
     
     i = 0
-    while i < len(args_list):
-        arg = args_list[i]
+    while i < len(argv): # Changed 'args_list' to 'argv'
+        arg = argv[i]    # Changed 'args_list' to 'argv'
         if arg in ['-d', '-f', '-p']:
-            if i + 1 >= len(args_list):
+            if i + 1 >= len(argv): # Changed 'args_list' to 'argv'
                 await io.error(f"!! ask: option '{arg}' requires an argument.")
                 return
-            options[arg[1]] = args_list[i+1]
+            options[arg[1]] = argv[i+1] # Changed 'args_list' to 'argv'
             i += 2
         elif arg == '-e':
-            if i + 2 >= len(args_list):
+            if i + 2 >= len(argv): # Changed 'args_list' to 'argv'
                 await io.error("!! ask: option '-e' requires <language> and <file> arguments.")
                 return
-            options['e_lang'] = args_list[i+1]
-            options['e_file'] = args_list[i+2]
+            options['e_lang'] = argv[i+1] # Changed 'args_list' to 'argv'
+            options['e_file'] = argv[i+2] # Changed 'args_list' to 'argv'
             i += 3
         elif not user:
             user = arg
@@ -211,3 +211,4 @@ async def iocall(io, args):
     await io.print(response.strip())
     
     return True
+

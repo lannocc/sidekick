@@ -1,11 +1,11 @@
 import asyncio
 
-async def iocall(io, args):
-    if not args:
+async def iocall(io, argv):
+    if not argv:
         await io.error('Usage: $ wc <filename>')
         return
 
-    filename = args.strip()
+    filename = argv[0]
 
     try:
         content = await io.os.get(io, filename)

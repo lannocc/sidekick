@@ -3,7 +3,7 @@ from os.path import exists, isdir, join
 from sk.util import get_ignore_set
 
 
-async def iocall(io, args):
+async def iocall(io, argv):
     """List directory contents.
 
     Usage: ls [options] [path ...]
@@ -18,16 +18,15 @@ async def iocall(io, args):
 
     Note: This command honors .skignore files in listed directories.
     """
-    args = args.split(' ')
     long = False
     allp = False
 
-    if '--help' in args:
+    if '--help' in argv:
         await io.print(iocall.__doc__)
         return
 
     paths = [ ]
-    for arg in args:
+    for arg in argv:
         if not arg.startswith('-'):
             paths.append(arg)
             continue

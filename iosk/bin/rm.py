@@ -1,4 +1,4 @@
-async def iocall(io, args):
+async def iocall(io, argv):
     """Remove a file.
 
     Usage: rm <filename>
@@ -8,16 +8,18 @@ async def iocall(io, args):
     --help: Displays this help message.
     """
 
-    if '--help' in args:
+    if '--help' in argv:
         await io.print(iocall.__doc__)
         return
 
-    if not args:
+    if not argv:
         await io.error('!! rm: filename required')
         return
 
-    if not await io.os.remove(io, args):
-        await io.error(f'!! rm: cannot remove file: {args}')
+    filename = argv[0]
+
+    if not await io.os.remove(io, filename):
+        await io.error(f'!! rm: cannot remove file: {filename}')
         return
 
     await io.print(':: file removed')

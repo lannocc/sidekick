@@ -4,7 +4,7 @@ import os
 from os.path import isfile, join, relpath
 from binaryornot.check import is_binary
 
-async def iocall(io, args):
+async def iocall(io, argv):
     """Search for a term within text files.
 
     Usage: search [-i] [-n] [-l] [-c] <term> [path ...]
@@ -21,12 +21,7 @@ async def iocall(io, args):
       - No quoting is supported; <term> cannot contain spaces.
       - If no paths are provided, defaults to /home/<user> if it exists; otherwise "/".
     """
-    if args is None:
-        await io.error('!! search: missing arguments')
-        return
-
-    tokens = [t for t in args.split(' ') if t]
-    if '--help' in tokens or not tokens:
+    if not argv or '--help' in argv:
         await io.print(iocall.__doc__)
         return
 
@@ -36,8 +31,8 @@ async def iocall(io, args):
     count_only = False
 
     i = 0
-    while i < len(tokens) and tokens[i].startswith('-') and tokens[i] != '-':
-        t = tokens[i]
+    while i < len(argv) and argv[i].startswith('-') and argv[i] != '-':
+        t = argv[i]
         if t == '-i': insensitive = True
         elif t == '-n': show_lineno = True
         elif t == '-l': list_only = True
@@ -50,14 +45,14 @@ async def iocall(io, args):
             return
         i += 1
 
-    if i >= len(tokens):
+    if i >= len(argv):
         await io.error('!! search: <term> required')
         return
 
-    term = tokens[i]
+    term = argv[i]
     i += 1
 
-    paths = tokens[i:]
+    paths = argv[i:]
     # Default search root
     if not paths:
         default_home = f'/home/{io.user}'
@@ -151,3 +146,4 @@ async def iocall(io, args):
                     any_errors = True
 
     return not any_errors
+

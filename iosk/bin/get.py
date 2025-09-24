@@ -1,4 +1,4 @@
-async def iocall(io, args):
+async def iocall(io, argv):
     """Get the contents of a file.
 
     Usage: get <filename>
@@ -8,16 +8,17 @@ async def iocall(io, args):
     --help: Displays this help message.
     """
 
-    if '--help' in args:
+    if '--help' in argv:
         await io.print(iocall.__doc__)
         return
 
-    if not args:
+    if not argv:
         await io.error('!! get: filename required')
         return
 
+    filename = argv[0]
     try:
-        content = await io.os.get(io, args)
+        content = await io.os.get(io, filename)
         if content is None:
             return
 
@@ -25,4 +26,4 @@ async def iocall(io, args):
         return True
 
     except Exception as e:
-        await io.error(f'!! get: error reading {args}: {e}')
+        await io.error(f'!! get: error reading {filename}: {e}')

@@ -1,4 +1,4 @@
-async def iocall(io, args):
+async def iocall(io, argv):
     """List connected users.
 
     Usage: users
@@ -7,7 +7,7 @@ async def iocall(io, args):
     --help: Displays this help message.
     """
 
-    if '--help' in args:
+    if '--help' in argv:
         await io.print(iocall.__doc__)
         return
 
@@ -18,4 +18,3 @@ async def iocall(io, args):
     await io.print(' '.join(io.os.users.keys()))
     count = len(io.os.users)
     await io.print(f':: {count} user{"s" if count != 1 else ""} connected')
-

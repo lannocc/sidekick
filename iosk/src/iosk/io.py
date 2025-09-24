@@ -42,6 +42,7 @@ class Context:
         self.session = StringIO() # the chat history
         self.banks = { } # core memory
         self.env = {} # environment variables
+        self.aliases = {} # Aliases for the current user/session
 
         self.stage = self.STAGE_NORMAL
         self.pre = None
