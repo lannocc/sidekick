@@ -41,6 +41,7 @@ class Context:
         self.bot = False # True if this is a bot user
         self.session = StringIO() # the chat history
         self.banks = { } # core memory
+        self.env = {} # environment variables
 
         self.stage = self.STAGE_NORMAL
         self.pre = None
@@ -55,6 +56,26 @@ class Context:
         child.bot = self.bot
 
         return child
+
+    def environ(self):
+        """
+        Retrieves the complete environment for this context.
+        It traverses up the parent chain, merging environment dictionaries,
+        with child values overriding parent values.
+        """
+        # Build the hierarchy from root to current context
+        hierarchy = []
+        ctx = self
+        while ctx:
+            hierarchy.insert(0, ctx)
+            ctx = ctx.parent
+
+        # Merge environments, parents first, so children override
+        full_env = {}
+        for ctx_in_chain in hierarchy:
+            full_env.update(ctx_in_chain.env)
+
+        return full_env
 
     async def print(self, text, indicator='='):
         if self.log and self.stage == self.STAGE_NORMAL:
@@ -180,4 +201,3 @@ class Capture:
             file = open(file_path, 'a')
             cls.logs[file_path] = file
             return file
-

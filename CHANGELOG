@@ -3,7 +3,25 @@ Copyright (C) 2025 LANNOCC
 
 saw_092325_7 - Model options for the ask command. Default is gemini-2.5-flash.
 
+saw_092325_6 - Trimmed down the to-do list (only 1 item left!).
+
+saw_092325_5 - Working environment variables (limited support: echo only).
+
+saw_092325_4 - Updated commands document, now complete.
+
 saw_092325_3 - Tweaks for improvement based on beta testing.
+
+saw_092325_2 - I fixed patch and beta tested the remaining commands.
+
+saw_092325_1 - Beta tested cp command.
+
+saw_092225_5 - These test results are hit and miss (hallucinated outputs).
+
+saw_092225_4 - Beta was busy, but somewhat misunderstood the assignment.
+
+saw_092225_3 - Beta has tested about half the commands.
+
+saw_092225_2 - Possibly fixed version of patch (/bin/patch2.py for now).
 
 saw_092225_1 - Just small things.
 

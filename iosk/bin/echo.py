@@ -12,5 +12,15 @@ async def iocall(io, args):
         return
 
     if args:
+        # variable substitution (hack until proper shell support)
+        env = io.environ()
+        while '$' in args:
+            i = args.index('$')
+            try: s = args.index(' ', i)
+            except ValueError: s = len(args)
+            name = args[i+1:s]
+            val = env[name] if name in env else ''
+            args = args[:i] + val + args[s:]
+
         await io.print(args)
     return True

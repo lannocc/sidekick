@@ -48,9 +48,12 @@ async def handle(io, line):
             pass
 
         if re.match(r'^\w+=', line): # variable assignment
-
-            # FIXME
-            pass
+            try:
+                key, value = line.split('=', 1)
+                io.env[key] = value
+            except ValueError:
+                # Failsafe: if split fails, treat as a normal command
+                await io.os.call(io, line)
 
         else:
             await io.os.call(io, line)
