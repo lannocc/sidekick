@@ -15,7 +15,7 @@ import re
 CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```',
                              re.DOTALL)
 
-BYTES_SEPARATOR = '\n____________/=='
+BYTES_SEPARATOR = '\n___________:________'
 
 
 def print_flush(*args, **kwargs):
