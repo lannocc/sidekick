@@ -12,7 +12,7 @@ import json
 
 
 
-def prompt_for_text(prompt, chatter=False, model=config.GEMINI_MODEL_SMART):
+def prompt_for_text(prompt, chatter=False, model=config.GEMINI_MODEL_QUICK_2):
     if chatter: print(f'  ai >> {prompt}')
     client = genai.Client(api_key=config.GEMINI_API_KEY,
                           http_options=HttpOptions(
@@ -25,7 +25,7 @@ def prompt_for_text(prompt, chatter=False, model=config.GEMINI_MODEL_SMART):
     return resp.text
 
 
-def prompt_for_json(prompt, chatter=False, model=config.GEMINI_MODEL_SMART):
+def prompt_for_json(prompt, chatter=False, model=config.GEMINI_MODEL_QUICK_2):
     if chatter: print(f'  ai >> {prompt}')
     client = genai.Client(api_key=config.GEMINI_API_KEY,
                           http_options=HttpOptions(
@@ -42,7 +42,7 @@ def prompt_for_json(prompt, chatter=False, model=config.GEMINI_MODEL_SMART):
 
 
 def prompt_with_file_for_text(prompt, file, chatter=False,
-                              model=config.GEMINI_MODEL_SMART):
+                              model=config.GEMINI_MODEL_QUICK_2):
     if chatter: print(f'  ai >> {prompt}')
     client = genai.Client(api_key=config.GEMINI_API_KEY,
                           http_options=HttpOptions(
@@ -62,7 +62,7 @@ def prompt_with_file_for_text(prompt, file, chatter=False,
 
 
 def prompt_with_file_for_json(prompt, file, retries=0, quiet=False,
-                              chatter=False, model=config.GEMINI_MODEL_SMART):
+                              chatter=False, model=config.GEMINI_MODEL_QUICK_2):
     if chatter: print(f'  ai >> {prompt}')
     client = genai.Client(api_key=config.GEMINI_API_KEY,
                           http_options=HttpOptions(
@@ -98,7 +98,7 @@ def prompt_with_file_for_json(prompt, file, retries=0, quiet=False,
 
 
 async def async_prompt_for_text(prompt, chatter=False,
-                                model=config.GEMINI_MODEL_SMART):
+                                model=config.GEMINI_MODEL_QUICK_2):
     if chatter: print(f'  ai >> {prompt}')
     client = genai.Client(api_key=config.GEMINI_API_KEY,
                           http_options=HttpOptions(
