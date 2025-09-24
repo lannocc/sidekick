@@ -15,6 +15,8 @@ import re
 CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```',
                              re.DOTALL)
 
+BYTES_SEPARATOR = '\n____________/=='
+
 
 def print_flush(*args, **kwargs):
     print(*args, **kwargs)
@@ -146,6 +148,8 @@ def get_directory_tree_as_text(path, indent='', markdown=False, count=False):
     if count:
         data = text + get_directory_contents_as_text(path)
         data_bytes = data.encode('utf-8')
+
+        text +=  BYTES_SEPARATOR
         text += f'\nTotal Bytes: {len(data_bytes):,}'
         tokens = tiktoken.get_encoding('cl100k_base').encode(data)
         text += f'\nEst. Tokens: {len(tokens):,}'
@@ -207,13 +211,19 @@ def package_directory(path, label='project'):
         file.write(f'Our {label} is laid out as given in the following file '
                     'hierarchy:\n\n')
         file.write(f'{path}{os.sep}\n')
-        file.write(get_directory_tree_as_text(path))
+
+        tree = get_directory_tree_as_text(path, count=True)
+        sep = tree.index(BYTES_SEPARATOR)
+        counts = tree[sep+len(BYTES_SEPARATOR):]
+        tree = tree[:sep]
+
+        file.write(tree)
         file.write('\n\n')
         file.write('The contents of each file are given in succession below...'
                    '\n\n')
         file.write(get_directory_contents_as_text(path))
 
-    return name
+    return name, counts
 
 
 def get_md_code_block(language, text):

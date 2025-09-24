@@ -1,16 +1,7 @@
 #!/bin/skrip
 
-#$ bank tone gloomy
-#$ bank tone aggressive
-#$ bank tone robotic
-
-#$ bank role devops
-#$ bank role moderator
-#$ bank role intern
-
-#$ bank access admin
-#$ bank access user
-
 $ bank iosk limitations
+$ bank iosk skrip
 $ bank iosk workflow
+$ bank iosk tree
 
