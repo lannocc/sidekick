@@ -1,4 +1,4 @@
-async def iocall(io, args):
+async def iocall(io, argv):
     """Remove a directory.
 
     Usage: rmdir <directory>
@@ -8,16 +8,18 @@ async def iocall(io, args):
     --help: Displays this help message.
     """
 
-    if '--help' in args:
+    if '--help' in argv:
         await io.print(iocall.__doc__)
         return
 
-    if not args:
+    if not argv:
         await io.error('!! rmdir: directory name required')
         return
 
-    if not await io.os.remove_dir(io, args):
-        await io.error(f'!! rmdir: cannot remove directory: {args}')
+    directory_name = argv[0]
+
+    if not await io.os.remove_dir(io, directory_name):
+        await io.error(f'!! rmdir: cannot remove directory: {directory_name}')
         return
 
     await io.print(':: directory removed')

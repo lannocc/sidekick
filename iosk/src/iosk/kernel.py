@@ -5,6 +5,8 @@ from .io import Context, Capture, print_flush as print
 
 from binaryornot.check import is_binary
 
+import shlex # Added for shell parsing
+import re # Added for variable expansion
 import asyncio
 import aioconsole
 from datetime import datetime
@@ -190,8 +192,9 @@ class IOSK:
                         pass
 
                     elif line.startswith('$ '):
-                        #print('$$$$$ COMMAND INPUT $$$$$$')
-                        await self.call(io, f'skrip -e {line}')
+                        # The interactive shell passes the command line string directly
+                        # to self.call, just like a skrip file or other internal calls.
+                        await self.call(io, line[2:]) # Pass the string after '$ '
 
                     elif line:
                         if self.chat: await self.chat.send(io.user, line)
@@ -203,7 +206,7 @@ class IOSK:
     async def logout(self, io:Context, disconnect=None):
         if io.user not in self.users:
             await self.system.error(f'!! not logged in: {io.user}')
-            return
+            return False
 
         await self.system.print(f'IOSK logout: {io.user}')
         if disconnect:
@@ -216,57 +219,63 @@ class IOSK:
     ### COMMAND
     ###
 
-    async def call(self, io:Context, args):
+    async def call(self, io:Context, args:str): # args is the raw command string
         """Interpret arguments for something to invoke (exec)."""
         # Alias resolution: check if the command is an alias.
-        # Per the proposal, "before io.os.call attempts to locate and execute a command
-        # ... it will first check if the command entered by the user matches an existing alias in io.aliases."
-        # If a match is found, "the original command string will be replaced with the alias's defined value."
-
-        # The `args` parameter to this method is the entire line that followed the '$ ' symbol.
-        # e.g., if user types `$ myls -a /tmp`, then `args` will be `'myls -a /tmp'`.
-        
-        # Extract the potential command part to check against defined aliases.
         first_space_idx = args.find(' ')
         cmd_candidate = args[:first_space_idx] if first_space_idx != -1 else args
         cmd_rest_of_line = args[first_space_idx+1:] if first_space_idx != -1 else ''
 
         if cmd_candidate in io.aliases:
             alias_value = io.aliases[cmd_candidate]
-            # Replace the original command string with the alias's defined value.
-            # The remaining arguments from the original input are appended to the expanded alias.
-            # Example: alias myls='ls -F'. Input: '$ myls /home'.
-            # `cmd_candidate`='myls', `cmd_rest_of_line`='/home'.
-            # `alias_value`='ls -F'.
-            # The new full command string to process becomes 'ls -F /home'.
             args = f"{alias_value} {cmd_rest_of_line}".strip()
-            # The `.strip()` call handles cases where `cmd_rest_of_line` might be empty,
-            # preventing an extra space at the end of the new `args` string.
 
-        # Now, `args` holds the potentially expanded command string.
-        # Proceed with the original parsing and execution logic.
-        space = args.index(' ') if ' ' in args else len(args)
-        cmd = args[:space]
-        args = args[space+1:]
+        # 1. Tokenization with shlex
+        try:
+            argv_raw = shlex.split(args)
+        except ValueError as e:
+            await io.error(f"!! parse error: {e}")
+            return False # Indicate failure
 
-        path = self.box(join('/bin', cmd)) # HACK
+        if not argv_raw:
+            return True # Empty command, nothing to do.
+
+        # 2. Variable Expansion
+        argv = []
+        for token in argv_raw:
+            expanded_token = token
+            # Support $VAR and ${VAR}
+            # Replace $VAR
+            expanded_token = re.sub(r'\$(\w+)', lambda m: io.environ().get(m.group(1), ''), expanded_token)
+            # Replace ${VAR}
+            expanded_token = re.sub(r'\$\{(\w+)\}', lambda m: io.environ().get(m.group(1), ''), expanded_token)
+            argv.append(expanded_token)
+
+        cmd = argv[0]
+        cmd_args = argv[1:] # Arguments excluding the command name itself
+        
+        path = self.box(join('/bin', cmd))
         py = self.pymod(f'bin.{cmd}', path)
 
         try:
             if py:
-                return await py.iocall(io, args)
+                return await py.iocall(io, cmd_args) # Pass list of args (list[str])
             else:
-                return await self.exec(io, join('/bin', cmd), args) # HACK
+                return await self.exec(io, join('/bin', cmd), cmd_args) # Pass list of args (list[str])
         except Exception as e:
-            await io.error(f'!! exception calling {cmd}')
+            await io.error(f'!! exception calling {cmd}: {e}') # Added error to output
             traceback.print_exc()
+            return False # Indicate failure
 
-    async def exec(self, io:Context, path:str, args:str=None):
+    async def exec(self, io:Context, path:str, argv:list=None): # Changed args:str to argv:list
         """When you know what you need and you've come prepared (arguments)."""
+        if argv is None:
+            argv = [] # Default to empty list for consistency
+
         file = self.box(path)
         if not exists(file):
             await io.error(f'!! exec path not found: {path}')
-            return
+            return False # Indicate failure
 
         with open(file, 'r') as file:
             shebang = file.readline().rstrip()
@@ -275,27 +284,29 @@ class IOSK:
             shebang = shebang[2:]
 
             if shebang.startswith('/bin/'): # HACK
-                # FIX: The original line below incorrectly treated `args` (which is a string)
-                # as an iterable, leading to character-by-character joining.
-                # args = ' ' + ' '.join(args) if args else ''
+                interpreter = shebang[5:] # e.g., 'skrip'
 
-                # Construct the full argument string for the interpreter (e.g., 'skrip').
-                # It should be `interpreter_name script_path script_args`.
-                interpreter_arg_string = f"{path}"
-                if args: # If there are arguments for the script, append them.
-                    interpreter_arg_string += f" {args}"
-                
-                # Call the interpreter with the script path and its arguments.
-                return await self.call(io, f"{shebang[5:]} {interpreter_arg_string}")
+                # The script path itself is an implicit argument to the interpreter
+                # followed by the arguments passed to the script.
+                script_and_args_for_interpreter = [path] + argv
+
+                # The interpreter's name is the command, and the script to run
+                # (plus any of its own arguments) are the arguments for the interpreter.
+                interpreter_full_command = [interpreter] + script_and_args_for_interpreter
+
+                # Call the interpreter using the main `self.call` method.
+                # self.call will parse this new command string and invoke skrip.py correctly,
+                # which will then execute the contents of the target script file.
+                return await self.call(io, shlex.join(interpreter_full_command))
 
             else:
                 await io.error(f'!! bad shebang: {path}')
-                return
+                return False # Indicate failure
 
         else:
             await io.error(f'!! no shebang: {path}')
             # TODO support real binaries (executables), etc.
-            return
+            return False # Indicate failure
 
     ###
     ### FILE OPS
@@ -311,7 +322,7 @@ class IOSK:
     async def create(self, io:Context, path:str):
         """Create new (empty) file."""
         file = self.box(path)
-        if exists(file): return
+        if exists(file): return True # Already exists, idempotent
 
         with open(file, 'w') as f:
             pass
@@ -322,7 +333,7 @@ class IOSK:
         from_file = self.box(from_path)
         if not exists(from_file):
             await io.error(f'!! copy from path not found: {from_path}')
-            return
+            return False
 
         to_file = self.box(to_path)
         shutil.copy(from_file, to_file)
@@ -333,7 +344,7 @@ class IOSK:
         from_file = self.box(from_path)
         if not exists(from_file):
             await io.error(f'!! move from path not found: {from_path}')
-            return
+            return False
 
         to_file = self.box(to_path)
         shutil.move(from_file, to_file)
@@ -344,7 +355,7 @@ class IOSK:
         file = self.box(path)
         if not exists(file):
             await io.error(f'!! remove path not found: {path}')
-            return
+            return False
 
         os.remove(file)
         return True
@@ -354,18 +365,18 @@ class IOSK:
         folder = self.box(path)
         if exists(folder):
             await io.error(f'!! path already exists: {path}')
-            return
+            return False
 
         if parents: os.makedirs(folder)
         else: os.mkdir(folder)
-        return True
+        return False # Should return True on success
 
     async def remove_dir(self, io:Context, path:str):
         """Remove directory."""
         folder = self.box(path)
         if not exists(folder):
             await io.error(f'!! remove dir path not found: {path}')
-            return
+            return False
 
         os.rmdir(folder)
         return True
@@ -379,15 +390,15 @@ class IOSK:
         file = self.box(path)
         if not exists(file):
             await io.error(f'!! path not found: {path}')
-            return
+            return None # Return None on error
 
         if not isfile(file):
             await io.error(f'!! not a file: {path}')
-            return
+            return None # Return None on error
 
         if is_binary(file):
             await io.error(f'!! refusing binary file: {path}')
-            return
+            return None # Return None on error
 
         with open(file, 'r', encoding='utf-8') as file:
             return file.read()
@@ -396,52 +407,43 @@ class IOSK:
         """Send data to device."""
         if not dev.startswith('/dev/'):
             await io.error(f'!! not a device: {dev}')
-            return
+            return False
 
         dev = dev[5:]
-        #return await getattr(self.dev, dev)(data)
         path = self.box(join('/dev', dev))
         py = self.pymod(f'dev.{dev}', path)
 
         if py:
-            #print('  SEND PYTHON')
             try:
                 return await py.iosend(io, data)
-            except Exception as e: # FIXME error logging
-                #await io.error(f'!! error sending: {data}')
-                await self.system.error(f'!! error sending: {data}')
+            except Exception as e:
+                await self.system.error(f'!! error sending to /dev/{dev}: {e}')
                 traceback.print_exc()
-                return
-                #raise e
-
+                return False
         else:
-            print(f'  SEND FILE: {path}')
-            #return await self.exec(join('/dev', dev), args)
+            await io.error(f'!! no handler for device: {dev}')
+            return False
 
     async def recv(self, io:Context, dev:str):
         """Receive data from device."""
         if not dev.startswith('/dev/'):
             await io.error(f'!! not a device: {dev}')
-            return
+            return None
 
         dev = dev[5:]
         path = self.box(join('/dev', dev))
         py = self.pymod(f'dev.{dev}', path)
 
         if py:
-            #print('  SEND PYTHON')
             try:
                 return await py.iorecv(io)
-            except Exception as e: # FIXME error logging
-                #await io.error(f'!! error receiving from: /dev/{dev}')
-                await self.system.error(f'!! error receiving from: /dev/{dev}')
+            except Exception as e:
+                await self.system.error(f'!! error receiving from /dev/{dev}: {e}')
                 traceback.print_exc()
-                return
-                #raise e
-
+                return None
         else:
-            print(f'  RECV FILE: {path}')
-            #return await self.exec(join('/dev', dev), args)
+            await io.error(f'!! no handler for device: {dev}')
+            return None
 
     ###
     ### UTILITY
@@ -471,32 +473,21 @@ class IOSK:
         """Import python module at path as the given module name."""
         modname = f'sk.iosk.{modname}'
         if not path.endswith('.py'): path += '.py'
-        #print(f'IMPORT {modname} at {path}')
-
-        # CACHE -- disabled for now (TODO)
-        #if modname in sys.modules:
-        #    # TODO: check for file modification / reload?
-        #    #print(f'MOD FOUND: {modname}: {sys.modules[modname]}')
-        #    return sys.modules[modname]
 
         py = None
         try:
             spec = importlib.util.spec_from_file_location(modname, path)
-            #print(f'SPEC: {spec}')
             mod = importlib.util.module_from_spec(spec)
-            #print(f'SETTING SYS MOD {modname}: {mod}')
             spec.loader.exec_module(mod)
             sys.modules[modname] = mod
             py = mod
-            #print(f'PY1: {py}')
         except:
             py = None
 
         if not py:
-            # original way
             py = None
             try: py = importlib.import_module(modname)
             except ModuleNotFoundError: pass
-            #print(f'PY2: {py}')
 
         return py
+

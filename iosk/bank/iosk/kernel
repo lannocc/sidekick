@@ -1,0 +1,4 @@
+#!/bin/skrip
+
+When hacking the iosk kernel.py (or io.py/chat.py), these changes will not take effect immediately. When you are ready to restart for testing, use /sbin/shutdown.
+

@@ -1,4 +1,4 @@
-async def iocall(io, args):
+async def iocall(io, argv):
     """Manage IOSK command aliases.
 
     Usage: alias
@@ -9,7 +9,7 @@ async def iocall(io, args):
     NAME=VALUE: Define a new alias or update an existing one. NAME is the alias, VALUE is the command it expands to.
     --help: Displays this help message.
     """
-    if '--help' in args:
+    if '--help' in argv:
         await io.print(iocall.__doc__)
         return
 
@@ -17,16 +17,16 @@ async def iocall(io, args):
     if not hasattr(io, 'aliases'):
         io.aliases = {}
 
-    if not args:
+    if not argv:
         # List aliases
         if io.aliases:
             for name, value in io.aliases.items():
                 await io.print(f"{name}='{value}'")
         else:
             await io.print("No aliases defined.")
-    elif '=' in args:
+    elif len(argv) == 1 and '=' in argv[0]:
         # Define an alias
-        name, value = args.split('=', 1)
+        name, value = argv[0].split('=', 1)
         if name: # Ensure name is not empty
             # Strip quotes from the value
             value = value.strip("'").strip('"')

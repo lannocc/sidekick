@@ -2,7 +2,7 @@
 
 import difflib
 
-async def iocall(io, args):
+async def iocall(io, argv):
     """Show differences between two text files.
 
     Usage: diff [-u N] <file1> <file2>
@@ -15,12 +15,12 @@ async def iocall(io, args):
     Notes:
       - Files must be text; binary files are refused by the system.
     """
-    if args is None:
+    if not argv:
         await io.error('!! diff: missing arguments')
         return
 
-    tokens = [t for t in args.split(' ') if t]
-    if not tokens or '--help' in tokens:
+    tokens = argv
+    if '--help' in tokens:
         await io.print(iocall.__doc__)
         return
 
@@ -68,3 +68,4 @@ async def iocall(io, args):
         await io.print(output.rstrip('\n'))
     # If identical, print nothing (like standard diff)
     return True
+

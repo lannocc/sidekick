@@ -1,4 +1,4 @@
-async def iocall(io, args):
+async def iocall(io, argv):
     """Set or display environment variables.
 
     Usage: export [NAME=VALUE] ...
@@ -7,16 +7,11 @@ async def iocall(io, args):
     With no arguments, `export` prints a list of all environment variables.
     Otherwise, it sets each `NAME` to `VALUE`.
     """
-    if args is None:
-        args = ''
-
-    tokens = args.split()
-
-    if args.strip() == '--help' or '--help' in tokens:
+    if '--help' in argv:
         await io.print(iocall.__doc__)
         return True
 
-    if not tokens:
+    if not argv:
         # No arguments, print all environment variables
         env = io.environ()
         if env:
@@ -27,7 +22,7 @@ async def iocall(io, args):
         return True
 
     # Arguments are present, so we're setting variables.
-    for token in tokens:
+    for token in argv:
         if '=' not in token:
             await io.error(f"!! export: invalid argument: '{token}'. Use NAME=VALUE.")
             return False
