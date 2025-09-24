@@ -4,18 +4,21 @@ import re
 
 # iocall is the entry point for IOSK commands that are .py files.
 async def iocall(io, args):
-    if '--help' in args:
-        await io.print("Usage: patch2 <patchfile>")
-        await io.print("Applies a diff to a file and outputs the new content as a markdown block.")
+    #if '--help' in args:
+    if args == '--help':
+        await io.print("Usage: patch <targetfile> <patchfile>")
+        await io.print("Applies a diff to a file.")
         await io.print("Note: This initial version can apply simple line-based patches.")
-        await io.print("After execution, manually move the auto-saved file to replace the original (e.g., 'mv /var/code/alpha-XX-Y <target_file_path>').")
+        return
+        
+    args = args.split(' ')
+
+    if len(args) != 2:
+        await io.error("Usage: patch <targetfile> <patchfile>")
         return
 
-    if len(args) != 1:
-        await io.error("Usage: patch2 <patchfile>")
-        return
-
-    patch_path = args[0]
+    target_file_path = args[0]
+    patch_path = args[1]
 
     # 1. Read the patch content
     try:
@@ -24,6 +27,7 @@ async def iocall(io, args):
         await io.error(f"Error: Patch file not found at {patch_path}")
         return
 
+    '''
     # 2. Extract the target file path from the patch headers
     target_file_path = None
     original_file_header_pattern = re.compile(r'--- (.*)')
@@ -40,6 +44,8 @@ async def iocall(io, args):
     if not target_file_path:
         await io.error("Error: Could not determine target file path from patch headers.")
         return
+    '''
+    
 
     # 3. Read the content of the original file from the IOSK filesystem
     try:
@@ -86,7 +92,7 @@ async def iocall(io, args):
         if line.startswith('-'):
             # This line is removed from the original. Advance original_idx.
             if original_idx >= len(original_lines) or original_lines[original_idx] != line[1:]:
-                await io.error(f"Error: Mismatch in removed line at original_idx {original_idx}. Expected '{original_lines[original_idx]}' but diff shows '{line[1:]}'.")
+                await io.error(f"Error: Mismatch in removed line at original_idx {original_idx}.")
                 return
             original_idx += 1
         elif line.startswith('+'):
@@ -95,7 +101,7 @@ async def iocall(io, args):
         elif line.startswith(' '):
             # This is a context line. Append it to new_lines and advance original_idx.
             if original_idx >= len(original_lines) or original_lines[original_idx] != line[1:]:
-                await io.error(f"Error: Mismatch in context line at original_idx {original_idx}. Expected '{original_lines[original_idx]}' but diff shows '{line[1:]}'.")
+                await io.error(f"Error: Mismatch in context line at original_idx {original_idx}.")
                 return
             new_lines.append(line[1:])
             original_idx += 1
@@ -116,7 +122,11 @@ async def iocall(io, args):
     if original_content.endswith('\n') and not final_content.endswith('\n'):
         final_content += '\n'
 
-    await io.print(f"Patched content for '{target_file_path}' has been generated:")
-    await io.print(f"```skrip\n{final_content}\n```")
-    await io.print(f"Please use 'mv' to replace the original file with the auto-saved output from this markdown block.")
-
+    #await io.print(f"Patched content for '{target_file_path}' has been generated:")
+    #await io.print(f"```skrip\n{final_content}\n```")
+    #await io.print(f"Please use 'mv' to replace the original file with the auto-saved output from this markdown block.")
+    
+    with open(io.os.box(target_file_path), 'w') as f:
+        f.write(final_content)
+        
+    await io.print(f':: file successfully patched: {target_file_path}')
