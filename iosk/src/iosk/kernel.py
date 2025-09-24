@@ -218,7 +218,33 @@ class IOSK:
 
     async def call(self, io:Context, args):
         """Interpret arguments for something to invoke (exec)."""
-        #print(f'CALL:"{args}"')
+        # Alias resolution: check if the command is an alias.
+        # Per the proposal, "before io.os.call attempts to locate and execute a command
+        # ... it will first check if the command entered by the user matches an existing alias in io.aliases."
+        # If a match is found, "the original command string will be replaced with the alias's defined value."
+
+        # The `args` parameter to this method is the entire line that followed the '$ ' symbol.
+        # e.g., if user types `$ myls -a /tmp`, then `args` will be `'myls -a /tmp'`.
+        
+        # Extract the potential command part to check against defined aliases.
+        first_space_idx = args.find(' ')
+        cmd_candidate = args[:first_space_idx] if first_space_idx != -1 else args
+        cmd_rest_of_line = args[first_space_idx+1:] if first_space_idx != -1 else ''
+
+        if cmd_candidate in io.aliases:
+            alias_value = io.aliases[cmd_candidate]
+            # Replace the original command string with the alias's defined value.
+            # The remaining arguments from the original input are appended to the expanded alias.
+            # Example: alias myls='ls -F'. Input: '$ myls /home'.
+            # `cmd_candidate`='myls', `cmd_rest_of_line`='/home'.
+            # `alias_value`='ls -F'.
+            # The new full command string to process becomes 'ls -F /home'.
+            args = f"{alias_value} {cmd_rest_of_line}".strip()
+            # The `.strip()` call handles cases where `cmd_rest_of_line` might be empty,
+            # preventing an extra space at the end of the new `args` string.
+
+        # Now, `args` holds the potentially expanded command string.
+        # Proceed with the original parsing and execution logic.
         space = args.index(' ') if ' ' in args else len(args)
         cmd = args[:space]
         args = args[space+1:]
@@ -228,20 +254,10 @@ class IOSK:
 
         try:
             if py:
-                #print(f'CALL PYTHON: {py}')
-                #try:
                 return await py.iocall(io, args)
-                #except Exception as e: # FIXME error logging
-                #    await io.error(f'!! error calling: {cmd} {args}')
-                    #return
-                #    raise e
-
             else:
-                #print('  CALL FILE')
                 return await self.exec(io, join('/bin', cmd), args) # HACK
-
         except Exception as e:
-            # FIXME error handling
             await io.error(f'!! exception calling {cmd}')
             traceback.print_exc()
 
@@ -259,9 +275,18 @@ class IOSK:
             shebang = shebang[2:]
 
             if shebang.startswith('/bin/'): # HACK
-                args = ' ' + ' '.join(args) if args else ''
-                # ugly:
-                return await self.call(io, shebang[5:] + ' ' + path + args)
+                # FIX: The original line below incorrectly treated `args` (which is a string)
+                # as an iterable, leading to character-by-character joining.
+                # args = ' ' + ' '.join(args) if args else ''
+
+                # Construct the full argument string for the interpreter (e.g., 'skrip').
+                # It should be `interpreter_name script_path script_args`.
+                interpreter_arg_string = f"{path}"
+                if args: # If there are arguments for the script, append them.
+                    interpreter_arg_string += f" {args}"
+                
+                # Call the interpreter with the script path and its arguments.
+                return await self.call(io, f"{shebang[5:]} {interpreter_arg_string}")
 
             else:
                 await io.error(f'!! bad shebang: {path}')
@@ -475,4 +500,3 @@ class IOSK:
             #print(f'PY2: {py}')
 
         return py
-
