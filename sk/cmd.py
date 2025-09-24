@@ -1,6 +1,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
+from . import config
 from .util import print_flush, package_directory, take_screenshot
 
 print = print_flush
@@ -19,6 +20,7 @@ def main(args, called=''):
     pkg = None
     lang = None
     save = None
+    model = config.GEMINI_MODEL_QUICK_2
 
     # options
     while args and args[0].startswith('-'):
@@ -56,7 +58,7 @@ def main(args, called=''):
                     return
 
             elif op == '-e':
-                if len(args) < 3 or args[0].startswith('-') \
+                if len(args) < 2 or args[0].startswith('-') \
                         or args[1].startswith('-'):
                     print(f'!!! -e needs 2 arguments: <language> <file>')
                     return
@@ -64,6 +66,15 @@ def main(args, called=''):
                 lang = args[0]
                 save = args[1]
                 args = args[2:]
+
+            elif op == '-1':
+                model = config.GEMINI_MODEL_QUICK_1
+
+            elif op == '-2':
+                model = config.GEMINI_MODEL_QUICK_2
+
+            elif op == '-3':
+                model = config.GEMINI_MODEL_SMART
 
         else:
             print(f'!!! unknown option: {op}')
@@ -80,10 +91,10 @@ def main(args, called=''):
         else: prompt = None
 
         if task: do_task(prompt, shot=shot, file=file, package=pkg, quiet=quiet,
-                         chatter=chatter)
+                         chatter=chatter, model=model)
         else: ask_question(prompt, shot=shot, file=file, package=pkg,
                            mdlang=lang, mdsave=save, quiet=quiet,
-                           chatter=chatter)
+                           chatter=chatter, model=model)
 
         return
 
@@ -109,7 +120,8 @@ def main(args, called=''):
 
 
 def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
-                 mdsave=None, quiet=False, chatter=False):
+                 mdsave=None, quiet=False, chatter=False,
+                 model=config.GEMINI_MODEL_QUICK_2):
     from . import ai
     from .util import get_md_code_block
 
@@ -127,8 +139,10 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
             if not quiet: print(f'SAVED SCREENSHOT to: {file}')
 
         elif package:
-            file = package_directory(package)
-            if not quiet: print(f'PACKAGED DIRECTORY to: {file}')
+            file, counts = package_directory(package)
+            if not quiet:
+                print(f'PACKAGED DIRECTORY to: {file}')
+                print(counts)
 
     if (mdlang and not mdsave) or (mdsave and not mdlang):
         print('!!! need either both mdlang and mdsave, or neither')
@@ -145,10 +159,11 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         return
 
     if file:
-        answer = ai.prompt_with_file_for_text(prompt, file, chatter=chatter)
+        answer = ai.prompt_with_file_for_text(prompt, file, chatter=chatter,
+                                              model=model)
 
     else:
-        answer = ai.prompt_for_text(prompt, chatter=chatter)
+        answer = ai.prompt_for_text(prompt, chatter=chatter, model=model)
 
     if mdlang:
         md = get_md_code_block(mdlang or None, answer)
@@ -189,8 +204,10 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
             if not quiet: print(f'SAVED SCREENSHOT to: {file}')
 
         elif package:
-            file = package_directory(package)
-            if not quiet: print(f'PACKAGED DIRECTORY to: {file}')
+            file, counts = package_directory(package)
+            if not quiet:
+                print(f'PACKAGED DIRECTORY to: {file}')
+                print(counts)
 
     if prompt:
         if not quiet: print(f' >> {prompt}')
@@ -402,6 +419,12 @@ OPTIONS = {
         'package directory text contents and upload with -p <directory>'),
     '-e': (None,
         '(ask only) extract markdown code and save with -e <language> <file>'),
+    '-1': (None,
+        '(ask only) use QUICK_1 model (gemini-2.0-flash)'),
+    '-2': (None,
+        '(ask only) use QUICK_2 model (gemini-2.5-flash) [DEFAULT]'),
+    '-3': (None,
+        '(ask only) use SMART model (gemini-2.5-pro)'),
 }
 
 
