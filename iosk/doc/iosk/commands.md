@@ -14,7 +14,7 @@ These commands are generally available to users within the IOSK environment.
 *   **detach**: Disconnects a user from a device. Requires a handle/username. Usage: `$ detach <handle>`
 *   **diff**: Compares two files and shows their differences. Usage: `$ diff <file1> <file2>`
 *   **echo**: Prints the given arguments. Usage: `$ echo <text>`
-*   **export**: Displays environment variables. Usage: `$ export`
+*   **export**: Displays or sets environment variables. Usage: `$ export` or `$ export FOO=bar`
 *   **get**: Outputs file contents without formatting/prefixing. Usage: `$ get <filename>`
 *   **head**: Displays the first N lines of a file. Usage: `$ head [-n <number>] <filename>`
 *   **help**: Displays help information about available commands. Usage: `$ help`
