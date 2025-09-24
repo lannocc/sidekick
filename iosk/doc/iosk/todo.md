@@ -24,7 +24,7 @@ This document outlines the next set of proposed features, fixes, and enhancement
 6.  **User Home Directory Auto-Creation**
     The login process in the kernel should be enhanced to automatically create a home directory (`/home/<user>`) for a user if one does not already exist. This process could also populate the new directory with a default `.skrc` file, providing a smoother onboarding experience for new users and a clear place for them to store personal configurations.
 
-7.  **Filesystem Event API (`inotify` equivalent)**
+7.  **Filesystem Event API (`inotify` equivalent)** [MAYBE]
     To make the OS more reactive, we should introduce a kernel API that allows processes or daemons to "watch" files and directories for changes (creation, modification, deletion). An AI agent could use this to monitor a log file for new error entries, or a developer could have a skrip that automatically runs tests whenever a source file in their workspace is saved. This goes beyond the proposed daemon system by allowing for fine-grained, real-time filesystem monitoring.
 
 8.  NO: **Structured "System Call" API for Agents** [DO NOT DO]
@@ -34,10 +34,10 @@ This document outlines the next set of proposed features, fixes, and enhancement
 
 ### New Commands
 
-9.  **`ps` - Process Status**
+9.  **`ps` - Process Status** [MAYBE]
     Introduce a `ps` command to list "processes" running within IOSK. A process could be defined as an active user session, an attached AI agent, or a long-running skrip launched in the background. This command would provide visibility into system activity and a way to identify agents for management.
 
-10. **`kill` - Terminate Process**
+10. **`kill` - Terminate Process** [MAYBE]
     Paired with `ps`, a `kill` command is needed to terminate these processes. This would be essential for managing stuck or misbehaving AI agents without having to detach them, or for stopping a skrip that is caught in an infinite loop.
 
 11. **`grep` - Advanced Text Search**
@@ -52,8 +52,10 @@ This document outlines the next set of proposed features, fixes, and enhancement
 14. **`man` - Manual Page Reader**
     The documentation in `/doc/qa` is a good start, but it's not easily accessible from the command line. A `man` command should be created to display formatted help pages for any given command (e.g., `$ man ls`). This command would look for a corresponding markdown file in a new `/doc/man/` directory and display it, making the system self-documenting.
 
-15. **`top` - System Activity Monitor**
+15. NO: **`top` - System Activity Monitor** [DO NOT DO]
     A `top`-like command would provide a real-time dashboard of system activity. In the context of IOSK, it wouldn't monitor CPU/RAM in the traditional sense, but rather metrics like active user sessions, number of commands processed per second, AI token usage rates per device, and bank memory utilization. This would be invaluable for system administration and performance tuning.
+    
+    LANNOCC: Only the superuser has console so interactive commands are a VERY LOW priority.
 
 16. **`chmod`/`chown` - Permission Management**
     As IOSK grows, a more formal permission system will be needed beyond the simple `su` check. Implementing basic `chmod` and `chown` commands, along with a simple read/write/execute permission model on files, would create a more secure and robust multi-user environment, preventing users and agents from modifying critical system files unintentionally.
@@ -66,7 +68,7 @@ This document outlines the next set of proposed features, fixes, and enhancement
 18. **Comprehensive Documentation Overhaul**
     A dedicated effort is needed to improve and centralize documentation. This includes creating `man` pages for every command, updating the core system architecture documents (`kernel.md`, `chat.md`, etc.) to reflect recent changes, and writing tutorials for common workflows, such as "Creating your first AI daemon."
 
-19. **Interactive `skrip` Debugger (`skdb`)**
+19. **Interactive `skrip` Debugger (`skdb`)** [MAYBE]
     To aid in the development of more complex skrips and daemons, an interactive debugger is proposed. A command like `$ skdb /path/to/my.skrip` would launch the skrip in a controlled environment, allowing the developer to set breakpoints, step through lines of execution, and inspect the state of environment variables (`io.env`) and banks (`io.banks`).
 
 20. **"The Gauntlet" - AI Self-Improvement Test Suite**
