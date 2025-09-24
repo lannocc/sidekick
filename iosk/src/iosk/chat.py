@@ -97,7 +97,12 @@ class Engagement:
     PREAMBLE = '/sbin/preamble'
     POSTAMBLE = '/sbin/postamble'
 
-    CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```',
+    # not greedy:
+    #CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```',
+    #                             re.DOTALL)
+
+    # greedy (to last ```):
+    CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*)\n```',
                                  re.DOTALL)
 
     def __init__(self, user):
@@ -227,14 +232,14 @@ class Engagement:
                 except Exception as e: # overloaded?
                     await self.io.os.system.error(f'!! trip for {self.io.user}:'
                                                   f' {e}')
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(1.8)
                     try:
                         reply = await self.trip(prompt)
 
                     except Exception as e: # still overloaded?
                         await self.io.os.system.error(
                                 f'!! trip (2) for {self.io.user}: {e}')
-                        await asyncio.sleep(3)
+                        await asyncio.sleep(4.2)
                         reply = await self.trip(prompt)
 
                 finally:
@@ -264,7 +269,8 @@ class Engagement:
 
             self.CODE += 1
             ext = f'.{lang}' if lang else ''
-            name = f'{self.io.user}-{self.io.os.BOOT}-{self.CODE}{ext}'
+            name = f'{self.io.user}-{self.io.os.BOOT}-{self.io.cid}-{self.CODE}'
+            name = f'{name}{ext}'
             name = join(self.io.CODE, name)
             path = self.io.os.box(name)
 
@@ -274,8 +280,19 @@ class Engagement:
 
             replacements[match.group(0)] = name
 
-        for old, new in replacements.items():
-            text = text.replace(old, f':: iosk auto-saved output to {new}')
+            break # only do ONE per round
+
+        #for old, new in replacements.items():
+        #    text = text.replace(old, f':: iosk auto-saved output to {new}')
+
+        num = 1
+        for old, file in replacements.items():
+            lines = old.split('\n')
+            if len(lines) > 10:
+                new = '\n'.join(lines[:10]) + '\n[[[IOSK TRUNCATED]]]\n```'
+                text = text.replace(old, new)
+            text += f'\n<< [iosk] auto-saved markdown block {num} to {file}'
+            num += 1
 
         return text
 

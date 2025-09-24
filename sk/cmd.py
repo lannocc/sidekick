@@ -239,6 +239,7 @@ def help(args):
     print()
     print('SEE ALSO:')
     print('     sk help')
+    print('   iosk')
 
 
 def version(args):
@@ -261,6 +262,7 @@ def help_cmds(args):
     print('SEE ALSO:')
     print('    ask -h')
     print('   task -h')
+    print('   iosk')
 
 
 def agent(args):

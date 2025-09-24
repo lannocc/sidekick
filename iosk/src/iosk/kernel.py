@@ -101,6 +101,7 @@ class IOSK:
         self.ready.set()
 
         await self.halt.wait() # wait here for shutdown
+        #-------------------------------------------------#
         await io.print(f'IOSK shutdown signal received...')
 
         for user, uio in self.users.copy().items():
