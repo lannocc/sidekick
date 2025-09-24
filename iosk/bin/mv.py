@@ -21,10 +21,14 @@ async def iocall(io, args):
     source = args[0]
     destination = args[1]
 
-    if not await io.os.move(io, source, destination):
-        await io.error('!! mv: move failed')
+    try:
+        success = await io.os.move(io, source, destination)
+        if not success:
+            await io.error('!! mv: move failed')
+            return
+    except Exception as e:
+        await io.error(f'!! mv: move failed: {e}')
         return
 
     await io.print(':: path moved')
-    return True
-
+    return
