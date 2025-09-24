@@ -1,5 +1,7 @@
 # Proposal: An Advanced Shell Parser for IOSK
 
+**Status**: [alpha] coded and submitted for QA.
+
 ### Introduction
 
 The current command parsing mechanism within the IOSK kernel is rudimentary, relying on simple string splitting (e.g., `args.split(' ')`). This approach is brittle and has several significant limitations:
