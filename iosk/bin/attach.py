@@ -1,13 +1,13 @@
 from os.path import join
 
 async def iocall(io, argv):
-    """Attach a user to a device.
+    """Attach a device as a user.
 
     Usage: attach <device> [handle]
            attach --help
     """
 
-    if not argv or len(argv) < 2:
+    if not argv or len(argv) < 1 or len(argv) > 2:
         await io.error('!! 1-2 arguments required: <device> [handle]')
         return
 
