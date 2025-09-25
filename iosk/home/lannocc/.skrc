@@ -1,4 +1,6 @@
 #!/bin/skrip
 
+$ bank dmx project
+
 $ alias ll='ls -l'
 

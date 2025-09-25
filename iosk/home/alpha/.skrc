@@ -10,7 +10,9 @@ $ bank iosk limitations
 $ bank iosk skrip
 $ bank iosk kernel
 $ bank iosk workflow
-$ bank iosk tree
+#$ bank iosk tree
+
+$ bank dmx project
 
 $ alias ll='ls -l'
 
