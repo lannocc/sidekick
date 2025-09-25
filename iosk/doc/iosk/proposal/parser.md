@@ -1,6 +1,6 @@
 # Proposal: An Advanced Shell Parser for IOSK
 
-**Status**: [alpha] coded and submitted for QA.
+**Status**: Passing QA (with caveats - alias quoting issues are not a high priority).
 
 ### Introduction
 
