@@ -48,7 +48,7 @@ async def iocall(io, argv):
     dirs = [ ]
 
     for path in paths:
-        bpath = io.os.box(path)
+        bpath = io.os.box(path, io_context=io)
         if not exists(bpath):
             await io.error(f'!! ls: path does not exist: {path}')
             errors = True
@@ -65,7 +65,7 @@ async def iocall(io, argv):
         if (errors or files or len(dirs) > 1):
             await io.print(f'\n{path}:')
 
-        bpath = io.os.box(path)
+        bpath = io.os.box(path, io_context=io)
         ignores = get_ignore_set(bpath)
 
         def is_hidden_by_default(item):
@@ -77,7 +77,7 @@ async def iocall(io, argv):
         ]
 
         await io.print(c.join(
-            [ f'{file}{"/" if isdir(io.os.box(join(path, file))) else ""}'
+            [ f'{file}{"/" if isdir(io.os.box(join(path, file), io_context=io)) else ""}'
               for file in filtered_listing ]))
 
     return not errors

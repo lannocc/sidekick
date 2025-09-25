@@ -19,7 +19,7 @@ async def iocall(io, argv): # Changed 'args' to 'argv'
         return
 
     path = argv[0] # Changed from args.strip() to argv[0]
-    box = io.os.box(path)
+    box = io.os.box(path, io_context=io)
 
     if not exists(box):
         await io.error(f'!! describe: path not found: {path}')

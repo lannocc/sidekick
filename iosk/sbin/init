@@ -4,8 +4,8 @@
 
 $ PATH=/bin
 
-#$ attach gemini
-#$ attach chatgpt
+#$ attach google
+#$ attach openai/gpt-4
 
 #Hello, you are now part of the system.
 

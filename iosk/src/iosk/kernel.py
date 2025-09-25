@@ -5,8 +5,8 @@ from .io import Context, Capture, print_flush as print
 
 from binaryornot.check import is_binary
 
-import shlex # Added for shell parsing
-import re # Added for variable expansion
+import shlex
+import re
 import asyncio
 import aioconsole
 from datetime import datetime
@@ -150,6 +150,22 @@ class IOSK:
         io.bot = device != self.CONSOLE_DEV
         self.users[user] = io
 
+        # --- CWD and Home Directory Initialization ---
+        home_dir_virtual = f'/home/{user}'
+        # Box the home directory path to get its actual location on the host filesystem.
+        # Pass io_context=io for consistency, though an absolute path ignores io.pwd in box().
+        home_dir_host = self.box(home_dir_virtual, io_context=io)
+
+        if not os.path.exists(home_dir_host):
+            try:
+                os.makedirs(home_dir_host)
+                await io.print(f":: created home directory: {home_dir_virtual}")
+            except Exception as e:
+                await self.system.error(f"!! failed to create home directory {home_dir_virtual}: {e}")
+                # For now, allow login to proceed but log the error.
+
+        io.pwd = home_dir_virtual # Set the current working directory for the user
+
         if io_callback:
             await io_callback(io)
 
@@ -219,7 +235,7 @@ class IOSK:
     ### COMMAND
     ###
 
-    async def call(self, io:Context, args:str): # args is the raw command string
+    async def call(self, io:Context, args:str):
         """Interpret arguments for something to invoke (exec)."""
         # Alias resolution: check if the command is an alias.
         first_space_idx = args.find(' ')
@@ -235,10 +251,10 @@ class IOSK:
             argv_raw = shlex.split(args)
         except ValueError as e:
             await io.error(f"!! parse error: {e}")
-            return False # Indicate failure
+            return False
 
         if not argv_raw:
-            return True # Empty command, nothing to do.
+            return True
 
         # 2. Variable Expansion
         argv = []
@@ -252,27 +268,89 @@ class IOSK:
             argv.append(expanded_token)
 
         cmd = argv[0]
-        cmd_args = argv[1:] # Arguments excluding the command name itself
-        
-        path = self.box(join('/bin', cmd))
-        py = self.pymod(f'bin.{cmd}', path)
+        cmd_args = argv[1:]
 
-        try:
-            if py:
-                return await py.iocall(io, cmd_args) # Pass list of args (list[str])
+        resolved_internal_path = None # This will store the internal sandboxed path, e.g., '/bin/ls'
+        is_python_module = False
+
+        potential_base_paths = [] # Paths relative to the sandboxed root, e.g., '/bin/ls' or 'mycmd'
+
+        # Case 1: Command is an absolute or explicit relative path (e.g., /usr/local/bin/mytool, ./script.sh)
+        if cmd.startswith('/') or cmd.startswith('./') or cmd.startswith('../'):
+            potential_base_paths.append(cmd)
+        else:
+            # Case 2: Command is a bare name, search PATH or default to /bin
+            path_env = io.environ().get('PATH')
+            if path_env:
+                path_dirs = path_env.split(os.pathsep)
+                for p_dir in path_dirs:
+                    if p_dir: # Ensure path_dir is not empty
+                        potential_base_paths.append(join(p_dir, cmd))
             else:
-                return await self.exec(io, join('/bin', cmd), cmd_args) # Pass list of args (list[str])
+                # Default to /bin if PATH is not set
+                potential_base_paths.append(join('/bin', cmd))
+
+        # Search through potential_base_paths to find the executable
+        for p_base in potential_base_paths:
+            # 2a. Try to find it as a Python module (.py file)
+            sandboxed_py_path = self.box(f'{p_base}.py', io_context=io)
+            if exists(sandboxed_py_path):
+                # We need to confirm it's a valid Python module before setting resolved_internal_path
+                # without actually importing it yet.
+                modname_for_spec = f'sk.iosk.{p_base.strip("/").replace("/", ".")}'
+                try:
+                    spec = importlib.util.spec_from_file_location(modname_for_spec, sandboxed_py_path)
+                    if spec and spec.loader:
+                        resolved_internal_path = p_base
+                        is_python_module = True
+                        break # Found a Python module, prioritize it
+                except Exception:
+                    # Ignore errors in spec creation, means it's not a valid Python module for us
+                    pass
+
+            # 2b. If not a Python module, try to find it as a regular executable (e.g., a skrip script)
+            if not resolved_internal_path: # Only check if not already resolved as Python module
+                sandboxed_file_path = self.box(p_base, io_context=io)
+                if exists(sandboxed_file_path) and isfile(sandboxed_file_path):
+                    resolved_internal_path = p_base
+                    is_python_module = False # Explicitly not a Python module for iocall
+                    break # Found a script/executable
+
+        if not resolved_internal_path:
+            await io.error(f"!! command not found: {cmd}")
+            return False
+
+        # --- Execution ---
+        try:
+            if is_python_module:
+                # Load the Python module for real and call its iocall
+                modname_for_pymod = resolved_internal_path.strip("/").replace("/", ".")
+                # pymod will prepend 'sk.iosk.' to this name during import
+                py_mod = self.pymod(modname_for_pymod, self.box(f'{resolved_internal_path}.py'))
+                if py_mod and hasattr(py_mod, 'iocall'):
+                    return await py_mod.iocall(io, cmd_args)
+                else:
+                    await io.error(f"!! Python module {resolved_internal_path}.py found but missing iocall method.")
+                    return False
+            else:
+                # Execute as a script (e.g., skrip) using self.exec
+                # self.exec will handle shebang logic and then potentially call self.call again
+                return await self.exec(io, resolved_internal_path, cmd_args)
         except Exception as e:
-            await io.error(f'!! exception calling {cmd}: {e}') # Added error to output
+            await io.error(f'!! exception calling {cmd}: {e}')
             traceback.print_exc()
-            return False # Indicate failure
+            return False
 
-    async def exec(self, io:Context, path:str, argv:list=None): # Changed args:str to argv:list
-        """When you know what you need and you've come prepared (arguments)."""
+
+    async def exec(self, io:Context, path:str, argv:list=None):
+        """When you know what you need and you've come prepared (arguments).
+        This method expects `path` to be an absolute path within the sandboxed
+        filesystem (e.g., /bin/myscript). It does not search the PATH environment
+        variable for the executable itself."""
         if argv is None:
-            argv = [] # Default to empty list for consistency
+            argv = []
 
-        file = self.box(path)
+        file = self.box(path) # path is expected to be an absolute virtual path from `call`
         if not exists(file):
             await io.error(f'!! exec path not found: {path}')
             return False # Indicate failure
@@ -314,14 +392,14 @@ class IOSK:
 
     async def exists(self, io:Context, path:str):
         """Test if path exists."""
-        name = path.replace('/', '.')
-        file = self.box(path)
+        name = path.replace('/', '.') # Used only for pymod name, not path resolution
+        file = self.box(path, io_context=io)
         py = self.pymod(f'proc.exists.{name}', file)
         return py or exists(file)
 
     async def create(self, io:Context, path:str):
         """Create new (empty) file."""
-        file = self.box(path)
+        file = self.box(path, io_context=io)
         if exists(file): return True # Already exists, idempotent
 
         with open(file, 'w') as f:
@@ -330,29 +408,29 @@ class IOSK:
 
     async def copy(self, io:Context, from_path:str, to_path:str):
         """Copy file."""
-        from_file = self.box(from_path)
+        from_file = self.box(from_path, io_context=io)
         if not exists(from_file):
             await io.error(f'!! copy from path not found: {from_path}')
             return False
 
-        to_file = self.box(to_path)
+        to_file = self.box(to_path, io_context=io)
         shutil.copy(from_file, to_file)
         return True
 
     async def move(self, io:Context, from_path:str, to_path:str):
         """Move file/directory."""
-        from_file = self.box(from_path)
+        from_file = self.box(from_path, io_context=io)
         if not exists(from_file):
             await io.error(f'!! move from path not found: {from_path}')
             return False
 
-        to_file = self.box(to_path)
-        shutil.move(from_file, to_file)
+        to_file = self.box(to_path, io_context=io)
+        shutil.move(from_file, to_file) # shutil.move handles both file and dir
         return True
 
     async def remove(self, io:Context, path:str):
         """Remove file."""
-        file = self.box(path)
+        file = self.box(path, io_context=io)
         if not exists(file):
             await io.error(f'!! remove path not found: {path}')
             return False
@@ -362,7 +440,7 @@ class IOSK:
 
     async def create_dir(self, io:Context, path:str, parents=False):
         """Create new directory."""
-        folder = self.box(path)
+        folder = self.box(path, io_context=io)
         if exists(folder):
             await io.error(f'!! path already exists: {path}')
             return False
@@ -373,7 +451,7 @@ class IOSK:
 
     async def remove_dir(self, io:Context, path:str):
         """Remove directory."""
-        folder = self.box(path)
+        folder = self.box(path, io_context=io)
         if not exists(folder):
             await io.error(f'!! remove dir path not found: {path}')
             return False
@@ -387,7 +465,7 @@ class IOSK:
 
     async def get(self, io:Context, path:str):
         """Get file contents."""
-        file = self.box(path)
+        file = self.box(path, io_context=io)
         if not exists(file):
             await io.error(f'!! path not found: {path}')
             return None # Return None on error
@@ -449,25 +527,34 @@ class IOSK:
     ### UTILITY
     ###
 
-    def box(self, file): # sandbox
-        """Sandbox file path."""
-        while file:
-            if file.startswith('/'):
-                file = file[1:]
-                continue
+    def box(self, virtual_path_input: str, io_context=None) -> str:
+        """
+        Sandboxes a given virtual path to the host filesystem.
+        If io_context is provided and the path is relative, it resolves it relative to io_context.pwd.
+        Returns the absolute host filesystem path.
+        """
+        # Step 1: Determine the effective virtual path
+        effective_virtual_path = virtual_path_input
+        if io_context and io_context.pwd and not virtual_path_input.startswith('/'):
+            # Path is relative, resolve it against the current working directory of the context
+            effective_virtual_path = os.path.join(io_context.pwd, virtual_path_input)
 
-            elif file.startswith('./'):
-                file = file[2:]
-                continue
+        # Step 2: Normalize the virtual path to handle '.', '..', and multiple slashes
+        # This converts paths like '/a/./b' to '/a/b' and '/a/../b' to '/b'
+        normalized_virtual_path = os.path.normpath(effective_virtual_path)
 
-            elif file.startswith('../'):
-                file = file[3:]
-                continue
+        # Step 3: Ensure the normalized path is absolute within the virtual filesystem
+        # os.path.normpath might return '..' if the path resolves above the virtual root (e.g., /a/../../b -> /b)
+        if not normalized_virtual_path.startswith('/'):
+            normalized_virtual_path = '/' + normalized_virtual_path
 
-            else:
-                break
+        # Step 4: Convert the normalized virtual path into a host path by joining it with self.root
+        # Strip the leading '/' from the normalized virtual path for os.path.join
+        path_relative_to_virtual_root = normalized_virtual_path.lstrip('/')
+        host_path = os.path.join(self.root, path_relative_to_virtual_root)
+        abs_path = os.path.abspath(host_path)
 
-        return join(self.root, file)
+        return abs_path
 
     def pymod(self, modname, path):
         """Import python module at path as the given module name."""

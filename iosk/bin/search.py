@@ -72,7 +72,7 @@ async def iocall(io, argv):
             any_errors = True
             continue
 
-        base_fs = io.os.box(path)
+        base_fs = io.os.box(path, io_context=io)
         if not os.path.isdir(base_fs):
             # treat as single file
             file_list = [('', os.path.basename(base_fs))]
