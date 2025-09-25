@@ -1,6 +1,6 @@
 # history.py
 
-async def iocall(io, args):
+async def iocall(io, argv):
     """Show recent command history for this session.
 
     Usage: history [N]
@@ -10,23 +10,18 @@ async def iocall(io, args):
     Notes:
       - Only lines that were entered as commands ("$ ...") are shown.
     """
-    if args is None:
-        await io.error('!! history: bad args')
-        return
-
-    tokens = [t for t in args.split(' ') if t]
-    if '--help' in tokens:
+    if '--help' in argv:
         await io.print(iocall.__doc__)
         return
 
     n = 20
-    if len(tokens) == 1:
+    if len(argv) == 1:
         try:
-            n = int(tokens[0])
+            n = int(argv[0])
         except ValueError:
             await io.error('!! history: N must be a number')
             return
-    elif len(tokens) > 1:
+    elif len(argv) > 1:
         await io.error('!! history: too many arguments')
         return
 

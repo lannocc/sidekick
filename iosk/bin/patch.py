@@ -3,22 +3,19 @@
 import re
 
 # iocall is the entry point for IOSK commands that are .py files.
-async def iocall(io, args):
-    #if '--help' in args:
-    if args == '--help':
+async def iocall(io, argv):
+    if '--help' in argv:
         await io.print("Usage: patch <targetfile> <patchfile>")
         await io.print("Applies a diff to a file.")
         await io.print("Note: This initial version can apply simple line-based patches.")
         return
         
-    args = args.split(' ')
-
-    if len(args) != 2:
+    if len(argv) != 2:
         await io.error("Usage: patch <targetfile> <patchfile>")
         return
 
-    target_file_path = args[0]
-    patch_path = args[1]
+    target_file_path = argv[0]
+    patch_path = argv[1]
 
     # 1. Read the patch content
     try:

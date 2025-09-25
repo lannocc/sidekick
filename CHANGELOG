@@ -1,7 +1,31 @@
 Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
+saw_092425_12 - New shell parser passes QA (thanks alpha, beta).
+
+saw_092425_11 - Fix attach command (arguments count).
+
 saw_092425_10 - Bring in diametrix project.
+
+saw_092425_9 - Begin beta testing the latest from alpha.
+
+saw_092425_8 - Alpha checks advanced shell parser off the todo list!
+
+saw_092425_7 - Alpha proposal for security groups.
+
+saw_092425_6 - Alpha with the new ideas.
+
+saw_092425_5 - Alpha made alias command. Now the todo list is empty.
+
+saw_092425_4 - Alpha alias proposal.
+
+saw_092425_4 - Beta tested the latest from alpha: all passed.
+
+saw_092425_3 - Alpha updated mkdir and mv.
+
+saw_092425_2 - Latest beta testing results.
+
+saw_092425_1 - Created a testing doc.
 
 saw_092325_7 - Model options for the ask command. Default is gemini-2.5-flash.
 

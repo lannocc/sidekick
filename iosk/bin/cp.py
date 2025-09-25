@@ -1,4 +1,4 @@
-async def iocall(io, args):
+async def iocall(io, argv):
     """Copy a file or directory.
 
     Usage: cp <source> <destination>
@@ -9,17 +9,16 @@ async def iocall(io, args):
     --help: Displays this help message.
     """
 
-    if '--help' in args:
+    if '--help' in argv:
         await io.print(iocall.__doc__)
         return
 
-    args = args.split(' ')
-    if len(args) != 2:
+    if len(argv) != 2:
         await io.error('!! cp needs 2 arguments: <source> <destination>')
         return
 
-    source = args[0]
-    destination = args[1]
+    source = argv[0]
+    destination = argv[1]
 
     if await io.os.copy(io, source, destination):
         await io.print(':: path copied')
@@ -27,4 +26,3 @@ async def iocall(io, args):
 
     else:
         await io.error('!! cp: copy failed')
-

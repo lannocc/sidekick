@@ -1,7 +1,7 @@
 import re
 
 
-async def iocall(io, args):
+async def iocall(io, argv):
     """Execute a skrip file or command.
 
     Usage: skrip <filename>
@@ -12,26 +12,34 @@ async def iocall(io, args):
     -e <command>: Execute the given command string.
     --help: Displays this help message.
     """
-
-    if args == '--help':
+    if not argv or '--help' in argv:
         await io.print(iocall.__doc__)
-        return
+        return True
 
-    #print(f'SKRIP {args}')
-
-    if args.startswith('-e '):
-        line = args[3:]
-        #print(f'SKRIP -e {line}')
+    if argv[0] == '-e':
+        if len(argv) < 2:
+            await io.error("!! skrip: -e option requires a command to execute.")
+            return False
+        line = ' '.join(argv[1:])
         return await handle(io, line)
 
-    path = args
-    file = io.os.box(path)
+    if len(argv) > 1:
+        await io.error("!! skrip: only one filename can be provided.")
+        return False
 
-    with open(file, 'r') as file:
-        for line in file:
+    path = argv[0]
+    try:
+        content = await io.os.get(io, path)
+        if content is None:
+            return False # Error already printed by io.os.get
+
+        for line in content.splitlines():
             await handle(io, line)
 
-    return True
+        return True
+    except Exception as e:
+        await io.error(f"!! skrip: error executing file '{path}': {e}")
+        return False
 
 
 async def handle(io, line):

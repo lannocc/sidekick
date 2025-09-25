@@ -2,47 +2,96 @@
 
 These commands are generally available to users within the IOSK environment.
 
-*   **ask**: Asks an AI agent a question. Usage: `$ ask <agent> "<prompt>"`
-*   **attach**: Connects a user to a device. Takes a device name and optional handle. Usage: `$ attach <device> [handle]`
-*   **bank**: Loads a skrip account from `/bank` into core memory. Requires a bank and account name. Usage: `$ bank <bank> <account>`
-*   **bankrupt**: Clears all loaded banks from core memory. Usage: `$ bankrupt`
-*   **banks**: Lists currently loaded banks in core memory. Usage: `$ banks`
-*   **cat**: Displays the contents of a file. Usage: `$ cat <filename>`
-*   **cp**: Copies a file from source to destination. Usage: `$ cp <src> <dst>`
-*   **date**: Displays the current date and time. Usage: `$ date`
-*   **describe**: Provides a concise summary of a file or directory. Usage: `$ describe <path>`
-*   **detach**: Disconnects a user from a device. Requires a handle/username. Usage: `$ detach <handle>`
-*   **diff**: Compares two files and shows their differences. Usage: `$ diff <file1> <file2>`
-*   **echo**: Prints the given arguments. Usage: `$ echo <text>`
-*   **export**: Displays or sets environment variables. Usage: `$ export` or `$ export FOO=bar`
-*   **get**: Outputs file contents without formatting/prefixing. Usage: `$ get <filename>`
-*   **head**: Displays the first N lines of a file. Usage: `$ head [-n <number>] <filename>`
-*   **help**: Displays help information about available commands. Usage: `$ help`
-*   **history**: Displays the command history for the current session. Usage: `$ history [N]`
-*   **ll**: Lists directory contents using the long listing format (alias for `ls -l`). Usage: `$ ll [path]`
-*   **ls**: Lists directory contents. Takes an optional directory path. Usage: `$ ls [path]`
-*   **mkdir**: Creates a new directory. Supports creating parent directories with the `-p` flag. Usage: `$ mkdir [-p] <directory>`
-*   **mv**: Moves a file or directory from source to destination. Usage: `$ mv <src> <dst>`
-*   **patch**: Applies a diff file to a target file. Usage: `$ patch <target_file> <patch_file>`
-*   **rm**: Removes a file. Usage: `$ rm <path>`
-*   **rmdir**: Removes a directory. Usage: `$ rmdir <directory>`
-*   **search**: Searches for a specified term within text files. Usage: `$ search <term> [path ...]`
-*   **skrip**: Executes a skrip file. Usage: `$ skrip <path>`
-    *   `-e`: executes a string as a skrip line.
-*   **status**: Displays system status information (date, user, users). Usage: `$ status`
-*   **su**: Execute a command as another user. Usage: `$ su <user> <command> [args]`
-*   **tail**: Displays the last N lines of a file. Usage: `$ tail [-n <number>] <filename>`
-*   **touch**: Creates a new, empty file. Usage: `$ touch <filename>`
-*   **tree**: Lists directory contents recursively in a tree-like format. Usage: `$ tree [path ...]`
-*   **users**: Lists currently connected users. Usage: `$ users`
-*   **wc**: Counts the number of lines, words, and characters in a file. Usage: `$ wc <filename>`
-*   **welcome**: Displays a welcome message. Usage: `$ welcome`
-*   **whoami**: Displays the current username. Usage: `$ whoami`
+*   **alias**: Manage IOSK command aliases.
+    Usage: `$ alias` (list) or `$ alias NAME=VALUE` (define/update).
+*   **ask**: Asks an AI user a question, with optional file/directory context.
+    Usage: `$ ask [options] <user> <prompt>`.
+    Options: `-d <device>` (specify device model), `-f <file>` (attach file content), `-p <directory>` (package directory content), `-e <lang> <file>` (extract code block).
+*   **attach**: Attach a user to a device.
+    Usage: `$ attach <device> [handle]`.
+*   **bank**: Load a skrip account from `/bank` into core memory.
+    Usage: `$ bank <bank> <account>`.
+*   **bankrupt**: Clear all loaded banks from core memory.
+    Usage: `$ bankrupt`.
+*   **banks**: Lists the names of memory accounts currently banked.
+    Usage: `$ banks`.
+*   **cat**: Display the contents of a file.
+    Usage: `$ cat <filename>`.
+*   **cp**: Copy a file or directory.
+    Usage: `$ cp <source> <destination>`.
+*   **date**: Display the current date and time.
+    Usage: `$ date`.
+*   **describe**: Describe a file or directory. Provides a concise summary: type, size, line/word counts for text, simple type heuristics.
+    Usage: `$ describe <path>`.
+*   **detach**: Detach a user from a device.
+    Usage: `$ detach <handle>`.
+*   **diff**: Show differences between two text files.
+    Usage: `$ diff [-u N] <file1> <file2>`.
+    Options: `-u N` (unified context lines).
+*   **echo**: Echo the given arguments.
+    Usage: `$ echo [arguments]`.
+*   **export**: Set or display environment variables. With no arguments, prints a list of all environment variables. Otherwise, sets `NAME` to `VALUE`.
+    Usage: `$ export [NAME=VALUE] ...`.
+*   **get**: Get the contents of a file.
+    Usage: `$ get <filename>`.
+*   **head**: Display the first N lines of a file.
+    Usage: `$ head [-n <number>] <filename>`.
+*   **help**: Displays system-wide help information about available commands (this skrip).
+    Usage: `$ help`.
+*   **history**: Show recent command history for this session.
+    Usage: `$ history [N]`.
+    `N`: Number of most recent commands to show (default 20).
+*   **ll**: Lists directory contents using the long listing format (alias for `ls -l`). Provides one entry per line.
+    Usage: `$ ll [options] [path ...]`.
+    Options: Inherited from `ls`.
+*   **ls**: List directory contents.
+    Usage: `$ ls [options] [path ...]`.
+    Options: `-l` (long listing format), `-a` (list all entries, including those starting with '.').
+*   **mkdir**: Create a directory.
+    Usage: `$ mkdir [-p] <directory>`.
+    `-p`: Allows parent directories to be created.
+*   **mv**: Move or rename a file or directory.
+    Usage: `$ mv <source> <destination>`.
+*   **patch**: Apply a diff to a file. Note: This initial version can apply simple line-based patches.
+    Usage: `$ patch <targetfile> <patchfile>`.
+*   **rm**: Remove a file.
+    Usage: `$ rm <filename>`.
+*   **rmdir**: Remove a directory.
+    Usage: `$ rmdir <directory>`.
+*   **search**: Search for a term within text files.
+    Usage: `$ search [-i] [-n] [-l] [-c] <term> [path ...]`.
+    Options: `-i` (case-insensitive), `-n` (show line numbers), `-l` (list filenames), `-c` (count matches per file).
+*   **skrip**: Execute a skrip file or command string.
+    Usage: `$ skrip <filename>` or `$ skrip -e <command>`.
+*   **status**: Displays system status information (date, user, users).
+    Usage: `$ status`.
+*   **su**: Execute a command as another user.
+    Usage: `$ su <user> <command> [args]`.
+*   **tail**: Display the last N lines of a file.
+    Usage: `$ tail [-n <number>] <filename>`.
+*   **touch**: Create an empty file.
+    Usage: `$ touch <filename>`.
+*   **tree**: List directory contents recursively in a tree-like format.
+    Usage: `$ tree [options] [path ...]`.
+    Options: `-c` (count bytes and estimate tokens).
+*   **users**: List connected users.
+    Usage: `$ users`.
+*   **wc**: Counts the number of lines, words, and characters in a file.
+    Usage: `$ wc <filename>`.
+*   **welcome**: Displays a welcome message.
+    Usage: `$ welcome`.
+*   **whoami**: Display the current username.
+    Usage: `$ whoami`.
+
+Most `/bin` commands also accept `--help` as an option to display their specific help message.
 
 ## /sbin Commands
 
 These commands are typically used for system administration tasks.
 
-*   **init**: Starts the IOSK system. Usage: `$ init`
-*   **shutdown**: Stops the IOSK system. Usage: `$ shutdown`
+*   **init**: Starts the IOSK system.
+    Usage: `$ init`.
+*   **shutdown**: Stops the IOSK system.
+    Usage: `$ shutdown`.
 
+Most `/sbin` commands also accept `--help` as an option to display their specific help message.

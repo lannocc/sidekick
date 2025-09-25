@@ -6,7 +6,7 @@ from binaryornot.check import is_binary
 import json
 import ast
 
-async def iocall(io, args):
+async def iocall(io, argv): # Changed 'args' to 'argv'
     """Describe a file or directory.
 
     Usage: describe <path>
@@ -14,11 +14,11 @@ async def iocall(io, args):
 
     Provides a concise summary: type, size, line/word counts for text, simple type heuristics.
     """
-    if args is None or not args.strip() or '--help' in args:
+    if not argv or '--help' in argv: # Updated check for empty argv or --help
         await io.print(iocall.__doc__)
         return
 
-    path = args.strip()
+    path = argv[0] # Changed from args.strip() to argv[0]
     box = io.os.box(path)
 
     if not exists(box):
