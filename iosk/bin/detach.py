@@ -1,22 +1,21 @@
 from os.path import join
 
-async def iocall(io, args):
+async def iocall(io, argv):
     """Detach a user from a device.
 
     Usage: detach <handle>
            attach --help
     """
 
-    if args:
-        handle = args
-
-    else:
+    if not argv:
         await io.error('!! 1 argument required: <handle>')
         return
 
-    if '--help' in args:
+    if '--help' in argv:
         await io.print(iocall.__doc__)
         return
+
+    handle = argv[0]
 
     if not io.os.chat:
         await io.error('!! no chat')

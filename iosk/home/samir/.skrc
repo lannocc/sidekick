@@ -6,3 +6,5 @@ $ bank role devops
 $ bank tone aggressive
 $ bank access admin
 
+$ alias ll='ls -l'
+

@@ -143,6 +143,7 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
             if not quiet:
                 print(f'PACKAGED DIRECTORY to: {file}')
                 print(counts)
+                print()
 
     if (mdlang and not mdsave) or (mdsave and not mdlang):
         print('!!! need either both mdlang and mdsave, or neither')
@@ -208,6 +209,7 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
             if not quiet:
                 print(f'PACKAGED DIRECTORY to: {file}')
                 print(counts)
+                print()
 
     if prompt:
         if not quiet: print(f' >> {prompt}')

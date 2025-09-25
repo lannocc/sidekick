@@ -1,11 +1,10 @@
-async def iocall(io, args):
-    args = args.split(' ')
-    if len(args) != 2:
+async def iocall(io, argv):
+    if len(argv) != 2:
         await io.error('!! bank needs 2 arguments: <bank> <account>')
         return
 
-    bank = args[0]
-    acct = args[1]
+    bank = argv[0]
+    acct = argv[1]
 
     if not await io.os.exists(io, f'/bank/{bank}'):
         await io.error(f'!! bank does not exist: {bank}')
@@ -21,4 +20,3 @@ async def iocall(io, args):
 
     finally:
         io.stage_normal()
-

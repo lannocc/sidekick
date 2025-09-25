@@ -1,4 +1,4 @@
-async def iocall(io, args):
+async def iocall(io, argv):
     """Display the first N lines of a file.
 
     Usage: head [-n <number>] <filename>
@@ -8,41 +8,40 @@ async def iocall(io, args):
     <filename>:  The name of the file to read.
     --help: Displays this help message.
     """
-    args = args.split(' ')
     n = 10  # Default number of lines to show
     filename = None
 
-    if '--help' in args:
+    if '--help' in argv:
         await io.print(iocall.__doc__)
         return
 
-    try:
-        if len(args) >= 1:
-            if args[0].startswith('-n'):
-                try:
-                    if len(args[0]) > 2:
-                        n = int(args[0][2:])  # Handle -n3 case
-                        filename = args[1] if len(args) > 1 else None
-                    else:
-                        try:
-                            n = int(args[1])
-                            filename = args[2] if len(args) > 2 else None
-                        except (ValueError, IndexError):
-                            await io.error('!! head: invalid number of lines')
-                            return
-                except ValueError:
-                    await io.error('!! head: invalid number of lines')
-                    return
-                if filename is None:
-                    await io.error('!! head: filename required')
-                    return
-            else:
-                filename = args[0]
-        else:
-            await io.error('!! head: filename required')
-            return
-    except IndexError:
-        await io.error('!! head: missing operand')
+    arg_idx = 0
+
+    if len(argv) > arg_idx and argv[arg_idx].startswith('-n'):
+        opt = argv[arg_idx]
+        if len(opt) > 2: # Case: -n3
+            try:
+                n = int(opt[2:])
+            except ValueError:
+                await io.error('!! head: invalid number of lines for -n option')
+                return
+            arg_idx += 1
+        else: # Case: -n <number>
+            arg_idx += 1
+            if len(argv) <= arg_idx:
+                await io.error('!! head: -n option requires a number')
+                return
+            try:
+                n = int(argv[arg_idx])
+            except ValueError:
+                await io.error('!! head: invalid number of lines for -n option')
+                return
+            arg_idx += 1
+
+    if len(argv) > arg_idx:
+        filename = argv[arg_idx]
+    else:
+        await io.error('!! head: filename required')
         return
 
     if filename is None:
