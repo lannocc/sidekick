@@ -45,7 +45,7 @@ async def package_directory(io, path):
     text += "\n\nThe contents of each file are given below:\n\n"
 
     # 2. Walk the directory and append file contents.
-    root_box = io.os.box(path)
+    root_box = io.os.box(path, io_context=io)
     if not os.path.isdir(root_box):
         await io.error(f"!! ask: path '{path}' is not a directory.")
         return None
