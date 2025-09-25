@@ -1,4 +1,3 @@
 #!/bin/skrip
 
-There are some differences between iosk and other UNIX systems and shell environments. For one, the iosk shell does not support quoting, piping, or redirection. Each command currently processes the argument line on its own. IOSK currently has limited support for environment variables, thus there is no $PATH or $PWD yet (all paths are relative to the root path / and commands are automatically searched for in /bin), but variables may be used with the echo command.
-
+There are some differences between iosk and other UNIX systems and shell environments. For one, the iosk shell does not support piping or redirection.

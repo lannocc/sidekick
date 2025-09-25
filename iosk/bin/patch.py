@@ -123,7 +123,7 @@ async def iocall(io, argv):
     #await io.print(f"```skrip\n{final_content}\n```")
     #await io.print(f"Please use 'mv' to replace the original file with the auto-saved output from this markdown block.")
     
-    with open(io.os.box(target_file_path), 'w') as f:
+    with open(io.os.box(target_file_path, io_context=io), 'w') as f:
         f.write(final_content)
         
     await io.print(f':: file successfully patched: {target_file_path}')

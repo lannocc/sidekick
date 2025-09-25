@@ -47,7 +47,7 @@ async def iocall(io, argv):
             continue
 
         try:
-            tree_text = get_directory_tree_as_text(io.os.box(path), count=count)
+            tree_text = get_directory_tree_as_text(io.os.box(path, io_context=io), count=count)
             await io.print(tree_text)
         except Exception as e:
             await io.error(f'!! tree: failed to traverse path for {path}\n')
