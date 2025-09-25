@@ -74,3 +74,13 @@
 
 21. **"The Gauntlet" - AI Self-Improvement Test Suite**
     Create a new directory, `/challenge`, containing a series of increasingly difficult problems that can only be solved through interacting with the IOSK environment. Challenges could range from "find the password hidden in the log files and write it to `/home/challenge/solution1.txt`" to "write a daemon that monitors `/var/tmp` and reorganizes files based on their content, then write a report on its actions." This would serve as a benchmark for AI agent capabilities and could even be used as a framework for an AI to attempt to improve its own problem-solving skrips over time.
+
+22. **Intelligent `diff` Code Block Handling**
+    **Description:** Enhance the `Engagement._handle_code_blocks_` method (in `src/iosk/chat.py`) to recognize and automatically apply `diff` code blocks.
+    **Details:**
+    *   When a Markdown code block is identified as a `diff` (e.g., ````diff`), the system should attempt to extract the target filename(s) from the `--- a/` and `+++ b/` lines within the diff content.
+    *   If a clear target file is identified, the diff content should be temporarily saved to a `.diff` file in `/var/code/`.
+    *   Immediately following this, the kernel should automatically invoke the `/bin/patch` command, passing the identified target file and the temporary diff file as arguments (e.g., `$ patch <target_file> <temp_diff_file>`).
+    *   The output of the `patch` command should be injected directly into the user's session stream, providing immediate feedback on the patch operation.
+    *   This prevents the AI from needing to explicitly issue a `$ patch` command after generating a diff, making AI interactions more seamless for applying proposed changes.
+    **Impact:** Improves AI-driven workflows, especially for code review and automated corrections.
