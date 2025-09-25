@@ -2,3 +2,5 @@
 
 Diametrix (dmx) is the flagship loan-processing application. The entire git project is mounted at /dmx. Other documentation as relates to dmx work within iosk may be found in /doc/dmx.
 
+$ alias dmx='system dmx'
+
