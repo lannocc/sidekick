@@ -3,3 +3,5 @@
 #$ welcome
 #$ status
 
+$ alias ll='ls -l'
+

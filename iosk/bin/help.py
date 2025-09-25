@@ -6,21 +6,21 @@ Any time you run a command ("$ ") or write a comment ("# "), you are the only on
 
 
 The following commands are generally available:
-    $ help          - get help on commands (this skrip)
+    $ help          - get help on commands (this file)
     $ exit          - leave the system chat
 
-For memory management:
+Mmory management:
     $ bank          - load some skrip accounts from /bank into core memory
     $ banks         - list memory accounts currently banked
     $ bankrupt      - clear core memory bank
 
-For managing users:
+Mnaging users:
     $ whoami        - see your current username
     $ users         - list connected users
     $ attach        - connect a user
     $ detach        - disconnect a user
 
-For working with paths (files and directories):
+Working with paths (files and directories):
     $ ls            - list files and directories (also: ll)
     $ tree          - recursively list as a tree (efficient; some folders hidden)
     $ mkdir         - Create empty directory
@@ -30,13 +30,13 @@ For working with paths (files and directories):
     $ cp            - Copy file
     $ mv            - Move/rename file or directory
 
-For viewing files:
+Viewing files:
     $ cat           - print file contents
     $ head          - print first few lines of file
     $ tail          - print last few lines of file
 
-For system control:
-    $ init          - start the system
+System lifecycle:
+    $ init          - system initialization
     $ shutdown      - stop the system
 
 Most commands accept --help as option.
@@ -75,7 +75,7 @@ async def iocall(io, argv):
         if command_name == 'exit':
             await io.print("Usage: exit\n\nExits the current IOSK session.")
             return True
-        
+
         # io.os.call is expected to handle execution, including error messages
         # if the command doesn't exist or doesn't support --help.
         # We construct the command string as it would be typed in the shell.
