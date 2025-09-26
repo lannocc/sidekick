@@ -1,0 +1,84 @@
+Copyright (C) 2025 LANNOCC
+@%@~LICENSE~@%@
+
+
+v0.3.2
+======
+
+Date: September 26, 2025
+
+    * Shell redirection and piping.
+    * Intelligent diff markdown block handling.
+    * Updated documentation and complete `help` command.
+    * Allow multiple -p paths to package for ask/task commands.
+
+
+v0.3.1
+======
+
+Date: September 24, 2025
+
+    * Add `alias`, `cd`, `pwd`, and `system` commands.
+    * Advanced shell parser (quoted strings and variables).
+
+
+v0.3.0
+======
+
+Date: September 24, 2025
+
+    * Add model options to the `ask` command.
+    * Environment variables added to shell.
+    * Proposal for daemons.
+    * Fixed `patch` command.
+
+
+v0.2.3
+======
+
+Date: September 7, 2025
+
+    * Now have a selection of models for Google and OpenAI.
+
+
+v0.2.2
+======
+
+Date: September 7, 2025
+
+    * Removing more boilerplate.
+    * Add `describe`, `diff`, `history`, `search`, and `wc` commands.
+
+
+v0.2.1
+======
+
+Date: September 5, 2025
+
+    * Trim boilerplate; first-person voicing.
+    * Add `ls`, `ll`, `tree`, and `su` commands.
+    * Add `sk md` for extracting markdown code.
+
+
+v0.2.0
+======
+
+Date: September 4, 2025
+
+    * Banking is here, so is timing.
+    * Code blocks are automatically saved to file.
+    * Add -c option to `sk tree` for count of bytes and estimated tokens.
+
+
+v0.1.0
+======
+
+Date: August 28, 2025
+
+First tagged release.
+
+    * Begin system and user logging.
+    * Chat is back.
+    * Chatter.
+    * Ollama has entered the chat.
+
