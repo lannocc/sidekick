@@ -1,10 +1,7 @@
-# Copyright (C) 2025 LANNOCC
-# @%@~LICENSE~@%@
-
 import re
 import shlex
 import traceback
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional, List, Tuple
 
 # Prevent circular imports during runtime for type hints
 if TYPE_CHECKING:
@@ -234,4 +231,58 @@ class CommandLineParser:
         except ValueError as e:
             await io.error(f"!! parse error: {e}")
             return None
+
+    async def parse_pipeline(self, io: 'Context', command_line: str) -> Tuple[Optional[List[List[str]]], Optional[str], bool]:
+        """
+        Parses a command line into a pipeline of commands and identifies I/O redirection.
+        Returns a tuple of (commands, redirect_path, append_mode).
+        On parsing error, the 'commands' list will be None.
+        """
+        # Step 1: Tokenize the fully substituted and expanded command line
+        argv = await self.parse_and_tokenize(io, command_line)
+        if argv is None: # A parsing error (e.g., unmatched quotes) occurred
+            return None, None, False
+        if not argv: # Empty command line is valid, but results in no commands
+            return [], None, False
+
+        # Step 2: Split the token list into a pipeline of commands and identify redirection
+        commands = []
+        current_command = []
+        redirect_out_path = None
+        redirect_append = False
+
+        i = 0
+        while i < len(argv):
+            token = argv[i]
+            if token == '|':
+                if not current_command:
+                    await io.error("!! parse error: empty command before pipe")
+                    return None, None, False
+                commands.append(current_command)
+                current_command = []
+            elif token in ('>', '>>'):
+                if i + 1 >= len(argv):
+                    await io.error(f"!! parse error: missing filename for redirection '{token}'")
+                    return None, None, False
+                if redirect_out_path:
+                    await io.error("!! parse error: multiple redirections are not supported")
+                    return None, None, False
+                redirect_out_path = argv[i+1]
+                redirect_append = (token == '>>')
+                i += 1 # Skip the filename token
+            else:
+                current_command.append(token)
+            i += 1
+
+        if current_command:
+            commands.append(current_command)
+        elif commands and not redirect_out_path: # Case like `ls |`
+            await io.error("!! parse error: empty command after pipe")
+            return None, None, False
+
+        if not commands and redirect_out_path:
+             await io.error("!! parse error: redirection with no command")
+             return None, None, False
+
+        return commands, redirect_out_path, redirect_append
 

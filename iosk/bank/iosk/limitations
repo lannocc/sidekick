@@ -1,3 +1,6 @@
 #!/bin/skrip
 
-There are some differences between iosk and other UNIX systems and shell environments. For one, the iosk shell does not support piping or redirection.
+There are some differences between iosk and other UNIX systems and shell environments. Although iosk has a smaller command set, the shell still supports single- and double-quoted strings, variable expansion, inline command substitution with backticks or $(...), redirection and multi-command chaining with pipes.
+
+The markdown-block auto-capture system is very useful, but diff blocks (```diff) are finicky (must cd to a directory higher than the file so the diff block can apply relatively via the auto-patch system). Careful attention to the original content of the file (especially context and removed lines) is crucial for patches to apply successfully without "Mismatch" errors. The system functions well when the diffs are accurate.
+
