@@ -15,23 +15,25 @@ class AIMessenger:
         iosk.chat = self
         self.os = iosk
         self.me = None
+        self.device = None
 
         self.engagements = { }
 
-    async def start(self, handle=None):
+    async def start(self, handle=None, device=None):
         print()
         print('Welcome to the IOSK AI Messenger.')
 
         if not handle: handle = 'root'
         print(f'You are the super-user: {handle}')
         self.me = handle
+        self.device = device
         return handle
 
     async def run(self):
         await self.os.ready.wait()
         if self.os.halt.is_set(): return
 
-        io = await self.join(self.me)
+        io = await self.join(self.me, dev=self.device)
 
         try:
             await self.os.interactive(io)
@@ -79,7 +81,7 @@ class AIMessenger:
     async def send(self, from_user, msg, sys=False):
         if not msg: return
         if not sys:
-            now = datetime.now()
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             msg = f'<< {now} [{from_user}] {msg}'
 
         for user, uio in self.os.users.items():

@@ -147,9 +147,9 @@ class IOSK:
         io.log = Capture.log(self, join(self.USER_LOG, user), True)
         io.dev = device
         io.user = user
-        io.su = device == self.CONSOLE_DEV # if you have console, you're super
+        io.su = device in (self.CONSOLE_DEV, '/dev/terminal') # if you have console, you're super
         io.base = True
-        io.bot = device != self.CONSOLE_DEV
+        io.bot = device not in (self.CONSOLE_DEV, '/dev/terminal')
         self.users[user] = io
 
         # --- CWD and Home Directory Initialization ---
@@ -502,7 +502,7 @@ class IOSK:
             await io.error(f'!! no handler for device: {dev}')
             return False
 
-    async def recv(self, io:Context, dev:str):
+    async def recv(self, io:Context, dev:str, prompt=None):
         """Receive data from device."""
         if not dev.startswith('/dev/'):
             await io.error(f'!! not a device: {dev}')
@@ -514,7 +514,7 @@ class IOSK:
 
         if py:
             try:
-                return await py.iorecv(io)
+                return await py.iorecv(io, prompt=prompt)
             except Exception as e:
                 await self.system.error(f'!! error receiving from /dev/{dev}: {e}')
                 traceback.print_exc()

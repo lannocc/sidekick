@@ -1,5 +1,7 @@
 # Proposal: A Rich Interactive Console Experience
 
+Status: 2025-09-26 Implemented as /dev/terminal.py instead of dev/console.py and now in testing.
+
 ### Introduction
 
 The current IOSK console provides a basic, line-by-line interactive experience for the superuser. While functional, it suffers from several usability limitations common to simple `input`/`print` loops:

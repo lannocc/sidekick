@@ -92,11 +92,12 @@ class Context:
         if self.base and self.bot:
             self.session.write(text + '\n')
 
-    async def input(self, prompt=None):
-        if prompt and not self.bot:
-            await self.os.send(self, self.dev, prompt)
 
-        data = await self.os.recv(self, self.dev)
+    async def input(self, prompt=None):
+        #if prompt and not self.bot:
+        #    await self.os.send(self, self.dev, prompt)
+
+        data = await self.os.recv(self, self.dev, prompt=prompt)
 
         if data:
             if self.log:
