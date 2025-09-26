@@ -447,7 +447,7 @@ class IOSK:
 
         if parents: os.makedirs(folder)
         else: os.mkdir(folder)
-        return False # Should return True on success
+        return True
 
     async def remove_dir(self, io:Context, path:str):
         """Remove directory."""

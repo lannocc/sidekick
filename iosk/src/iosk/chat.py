@@ -256,9 +256,6 @@ class Engagement:
 
                 last_trip = datetime.now()
 
-    def read_history(self):
-        pass
-
     def _handle_code_blocks_(self, text):
         matches = self.CODEBLOCK_REGEX.finditer(text)
         replacements = { }

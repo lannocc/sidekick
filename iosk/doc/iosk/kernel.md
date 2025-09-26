@@ -1,6 +1,6 @@
 ## IOSK Class Summary
 
-The `IOSK` class (found in kernel.py) represents the core operating system kernel, managing the system's lifecycle, user sessions, command execution, file system operations, and device interactions.  It acts as the central coordinator for all activities within the system.
+The `IOSK` class (found in kernel.py) represents the core operating system kernel, managing the system's lifecycle, user sessions, command execution, file system operations, and device interactions. It acts as the central coordinator for all activities within the system.
 
 **Class Attributes:**
 
@@ -25,15 +25,15 @@ The `IOSK` class (found in kernel.py) represents the core operating system kerne
 **Methods:**
 
 *   `__init__(self, root)`:
-    *   Initializes the IOSK instance with the given `root` directory.
+    *   Constructor. Initializes the `IOSK` instance with the given `root` directory.
     *   Sets `started` to `None`, creates asyncio Events for `ready` and `halt`, and initializes the `system` and `users` attributes.
 
 *   `async start(self)`:
-    *   Starts the IOSK system.  This involves the following steps:
+    *   Starts the IOSK system. This involves the following steps:
         *   Prints "IOSK is starting...".
         *   Validates that `self.root` is a directory.
         *   Reads the boot count from `self.BOOT_COUNT` and increments it.
-        *   Creates directories for chatter and code if they don't exist.
+        *   Creates directories for chatter (`/var/cache/chatter/<boot_number>`) and code (`/var/code`) if they don't exist, and ensures they are directories.
         *   Writes the updated boot count to `self.BOOT_COUNT`.
         *   Creates the `self.system` Context and redirects output to the system log.
         *   Executes the system initialization script (`self.INIT_SCRIPT`).
@@ -41,7 +41,7 @@ The `IOSK` class (found in kernel.py) represents the core operating system kerne
     *   Sets the `ready` event if everything starts successfully. If an error occurs, it prints an error message and halts the startup process.
 
 *   `async run(self)`:
-    *   Runs the IOSK system.  This function performs these actions:
+    *   Runs the IOSK system. This function performs these actions:
         *   Waits for the `ready` event to be set (i.e., waits for the system to be initialized).
         *   Prints "IOSK is ready."
         *   Waits for the `halt` event to be set, indicating a shutdown signal.
@@ -56,7 +56,10 @@ The `IOSK` class (found in kernel.py) represents the core operating system kerne
     *   Validates that the user is not already logged in and that the username is not reserved.
     *   Creates a forked `Context` from the `self.system` Context.
     *   Sets up user-specific logging, the device, and the username within the `Context`.
-    *   Executes `skrc` init scripts.
+    *   **New**: Automatically creates the user's home directory (`/home/<user>`) on the host filesystem if it does not exist.
+    *   **New**: Sets the user's current working directory (`io.pwd`) to `/home/<user>`.
+    *   Executes the system-wide `skrc` script (`/etc/skrc`).
+    *   **New**: Executes the user-specific `skrc` script (`/home/<user>/.skrc`) if it exists.
     *   Starts an interactive shell (if `interactive` is `True`).
     *   Returns the created `Context`.
 
@@ -64,8 +67,7 @@ The `IOSK` class (found in kernel.py) represents the core operating system kerne
     *   Provides an interactive shell for the given `Context`.
     *   Continuously prompts the user for input, executes commands, and handles chat messages.
     *   Supports exiting the shell with `$ exit`.
-    *   Supports commands starting with `$ ` which executes shell commands.
-    *   Supports comments starting with `#`.
+    *   **Updated**: Passes the raw command line string (after the `$ ` prefix) directly to `self.call` for advanced parsing.
     *   Sends other lines to the chat (if a chat interface is available) or prints them to the console.
     *   Handles `EOFError` for clean exit.
 
@@ -76,71 +78,97 @@ The `IOSK` class (found in kernel.py) represents the core operating system kerne
     *   Sends a disconnect message to the chat (if available) or prints it to the console.
     *   Removes the user's `Context` from the `self.users` dictionary.
 
-*   `async call(self, io: Context, args)`:
-    *   Interprets arguments and invokes a command.
-    *   Parses the command name and arguments.
-    *   Checks if a Python module exists for the command.
-    *   If a Python module exists, it calls the `iocall` function within the module.
-    *   Otherwise, it executes the command as a file.
-    *   Handles exceptions during command execution.
+*   `async call(self, io: Context, args: str)`:
+    *   **Completely overhauled** to provide robust command parsing. It takes a raw command string (`args`) and performs the following pipeline:
+        1.  **Alias Resolution**: Checks if the first word of the command (`cmd_candidate`) matches an alias in `io.aliases`. If so, it expands the alias value into the `args` string *before* further parsing.
+        2.  **Tokenization**: Uses Python's `shlex.split()` to robustly tokenize the (potentially expanded) `args` string into a list of arguments (`argv_raw`), correctly handling spaces and quotes. Catches `ValueError` for malformed commands.
+        3.  **Variable Expansion**: Iterates through `argv_raw` and expands environment variables using `$VAR` and `${VAR}` syntax, substituting them with values from `io.environ()` (which includes inherited environment variables).
+        4.  **Command Lookup**: Determines the executable path by:
+            *   Checking if `cmd` is an absolute path or explicit relative path (e.g., `/bin/ls`, `./script`).
+            *   If `cmd` is a bare name (e.g., `ls`), it searches directories listed in the `PATH` environment variable (`io.environ().get('PATH')`). If `PATH` is not set, it defaults to searching in `/bin`.
+            *   For each potential path, it first attempts to load it as a Python module (`.py` file with an `iocall` function).
+            *   If not a Python module, it attempts to find it as a regular executable file (e.g., a `.skrip` script).
+        5.  **Execution**:
+            *   If resolved as a Python module, it imports the module and calls its `iocall(io, cmd_args)` method, passing `cmd_args` as a `list` of strings (excluding the command name itself).
+            *   If resolved as a script, it calls `self.exec(io, resolved_internal_path, cmd_args)`.
+    *   Handles exceptions during command execution, logging them with `io.error` and `traceback.print_exc()`. Returns `True` on success, `False` on failure.
 
-*   `async exec(self, io: Context, path: str, args: str = None)`:
-    *   Executes a script at the given path.
-    *   Checks if the file exists.
-    *   Reads the shebang line (if any).
-    *   If a shebang line exists, it calls the corresponding interpreter.
-    *   Otherwise, it logs an error.
+*   `async exec(self, io: Context, path: str, argv: list = None)`:
+    *   Executes a script at the given `path`. This method expects `path` to be an absolute virtual path within the sandboxed filesystem (e.g., `/bin/myscript`). It does not search the `PATH` environment variable for the executable itself.
+    *   **Updated**: Accepts `argv` as a `list` of strings.
+    *   Reads the shebang line. If it specifies an interpreter (e.g., `#!/bin/skrip`), it constructs a new command string using `shlex.join()` to invoke the interpreter (e.g., `skrip /path/to/script.skrip arg1 arg2`) and recursively calls `self.call()` to execute it.
+    *   Logs an error if there's no shebang or a bad shebang. Returns `True` on success, `False` on failure.
 
 *   `async exists(self, io: Context, path: str)`:
     *   Tests whether a file exists.
-    *   Checks if a python module named 'proc.exists' exists.
-    *   If it doesn't, checks if the file exists on disk.
+    *   Uses `self.box(path, io_context=io)` to resolve the path on the host filesystem.
+    *   Optionally checks for a special `proc.exists.<name>` Python module for custom existence logic, but primarily checks `os.path.exists()`.
 
 *   `async create(self, io: Context, path: str)`:
     *   Creates a new (empty) file.
+    *   Uses `self.box(path, io_context=io)` for path resolution.
+    *   If the file already exists, it is considered a success (idempotent) and returns `True`.
+    *   Creates the file on the host filesystem. Returns `True` on success.
 
 *   `async copy(self, io: Context, from_path: str, to_path: str)`:
-    *   Copies a file from one path to another.
+    *   Copies a file from `from_path` to `to_path`.
+    *   Uses `self.box()` with `io_context=io` for both paths.
+    *   Errors if `from_path` does not exist. Uses `shutil.copy()`. Returns `True` on success, `False` on failure.
 
 *   `async move(self, io: Context, from_path: str, to_path: str)`:
-    *   Moves a file or directory from one path to another.
+    *   Moves a file or directory from `from_path` to `to_path`.
+    *   Uses `self.box()` with `io_context=io` for both paths.
+    *   Errors if `from_path` does not exist. Uses `shutil.move()` (which handles both files and directories). Returns `True` on success, `False` on failure.
 
 *   `async remove(self, io: Context, path: str)`:
-    *   Removes a file.
+    *   Removes a file at `path`.
+    *   Uses `self.box(path, io_context=io)` for path resolution.
+    *   Errors if `path` does not exist. Returns `True` on success, `False` on failure.
 
 *   `async create_dir(self, io: Context, path: str, parents=False)`:
-    *   Creates a new directory.
-    *   `parents`: if `True`, creates parent directories as needed.
+    *   Creates a new directory at `path`.
+    *   Uses `self.box(path, io_context=io)` for path resolution.
+    *   If `parents` is `True`, creates parent directories as needed.
+    *   Errors if `path` already exists. Returns `True` on success, `False` on failure.
 
 *   `async remove_dir(self, io: Context, path: str)`:
-    *   Removes a directory.
+    *   Removes an empty directory at `path`.
+    *   Uses `self.box(path, io_context=io)` for path resolution.
+    *   Errors if `path` does not exist. Returns `True` on success, `False` on failure (e.g., directory not empty).
 
 *   `async get(self, io: Context, path: str)`:
-    *   Gets the contents of a file.
+    *   Gets the text contents of a file.
+    *   Uses `self.box(path, io_context=io)` for path resolution.
+    *   Errors and returns `None` if the path is not found, not a file, or if it's detected as a binary file.
+    *   Reads the file with UTF-8 encoding.
 
 *   `async send(self, io: Context, dev: str, data)`:
-    *   Sends data to a device.
-    *   Checks if a Python module exists for the device.
-    *   If a Python module exists, it calls the `iosend` function within the module.
-    *   Otherwise, it executes the device as a file.
+    *   Sends data to a device (e.g., `/dev/console`).
+    *   Resolves the device path to a Python module (`dev.<device_name>`).
+    *   Calls the `iosend(io, data)` function within that module.
+    *   Logs errors, including `traceback.print_exc()`. Returns `True` on success, `False` on failure.
 
 *   `async recv(self, io: Context, dev: str)`:
     *   Receives data from a device.
-    *   Checks if a Python module exists for the device.
-    *   If a Python module exists, it calls the `iorecv` function within the module.
-    *   Otherwise, it executes the device as a file.
+    *   Resolves the device path to a Python module (`dev.<device_name>`).
+    *   Calls the `iorecv(io)` function within that module.
+    *   Logs errors, including `traceback.print_exc()`. Returns the received data (or `None` on error or no data).
 
-*   `box(self, file)`:
-    *   Sandboxes a file path by ensuring it's within the root directory.
-    *   Removes leading slashes, `./`, and `../` from the path.
-    *   Joins the resulting path with the root directory (`self.root`).
+*   `box(self, virtual_path_input: str, io_context=None) -> str`:
+    *   Sandboxes a given `virtual_path_input` to its equivalent absolute path on the host filesystem.
+    *   **Enhanced Functionality**:
+        1.  If `io_context` is provided and `virtual_path_input` is a relative path, it first resolves the path relative to `io_context.pwd` (the current working directory of the user context).
+        2.  Normalizes the resulting virtual path (e.g., resolves `.` and `..`, collapses multiple slashes).
+        3.  Ensures the normalized path is absolute within the virtual filesystem (prepends `/` if necessary).
+        4.  Combines this normalized virtual path (relative to the virtual root) with `self.root` (the actual host root of the IOSK filesystem) to get the final host path.
+        5.  Returns the absolute host filesystem path.
 
 *   `pymod(self, modname, path)`:
-    *   Imports a Python module at the given path as the given module name.
-    *   Attempts to import the module using `importlib.util.spec_from_file_location`.
-    *   If that fails, it tries `importlib.import_module`.
+    *   Imports a Python module from the given `path` with the specified `modname`.
+    *   It internally prefixes `modname` with `sk.iosk.`
+    *   Handles adding the `.py` extension if missing.
+    *   Uses `importlib.util.spec_from_file_location` and `spec.loader.exec_module` for robust module loading.
+    *   Stores the module in `sys.modules` for subsequent access.
+    *   Includes a fallback to `importlib.import_module` and handles potential `ModuleNotFoundError`. Returns the loaded module object or `None` on failure.
 
-In essence, the `IOSK` class provides a virtualized operating system environment, enabling the execution of scripts, management of user sessions, and interaction with virtual devices, all within a sandboxed environment.
-
-
-
+In essence, the `IOSK` class provides a virtualized operating system environment, enabling the execution of scripts and Python commands, management of user sessions, and interaction with virtual devices, all within a sandboxed environment. The command parsing and file system interaction mechanisms have been significantly enhanced for robustness and `PATH` awareness.
