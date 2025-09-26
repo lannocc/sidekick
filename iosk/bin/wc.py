@@ -1,22 +1,36 @@
-import asyncio
-
 async def iocall(io, argv):
-    if not argv:
-        await io.error('Usage: $ wc <filename>')
-        return
+    """Count lines, words, and characters in a file or stdin.
 
-    filename = argv[0]
+    Usage: wc [file]
+           wc --help
 
-    try:
+    If no file is specified, reads from standard input.
+    """
+    if '--help' in argv:
+        await io.print(iocall.__doc__)
+        return True
+
+    content = None
+    filename = ''
+
+    if argv:
+        filename = argv[0]
         content = await io.os.get(io, filename)
-        
-        lines = content.count('\n') + (1 if content.strip() else 0)
+        if content is None:
+            return False # Error already printed by get
+    elif hasattr(io, 'stdin') and io.stdin:
+        content = io.stdin.read()
+    else:
+        await io.error("!! wc: missing file operand and no piped input")
+        return False
+
+    if not content.strip():
+        lines, words, chars = 0, 0, 0
+    else:
+        lines = content.count('\n')
         words = len(content.split())
         chars = len(content)
 
-        await io.print(f"{lines}\t{words}\t{chars}\t{filename}")
+    await io.print(f"{lines}\t{words}\t{chars}\t{filename}")
+    return True
 
-    except FileNotFoundError:
-        await io.error(f"wc: {filename}: No such file or directory")
-    except Exception as e:
-        await io.error(f"wc: Error processing {filename}: {e}")
