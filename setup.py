@@ -31,6 +31,7 @@ def run():
             'openai',
             'Pillow',
             'playsound3',
+            'prompt_toolkit',
             'pyautogui',
             'pyttsx3', # text-to-speech (Windows)
             'sphinx', 'sphinx-autoapi', 'piccolo-theme', # for API docs

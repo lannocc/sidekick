@@ -1,4 +1,3 @@
-# Constants for general help message to match original /bin/help
 GENERAL_HELP_MESSAGE = """
 HELP FOR IOSK
 
@@ -6,37 +5,61 @@ Any time you run a command ("$ ") or write a comment ("# "), you are the only on
 
 
 The following commands are generally available:
-    $ help          - get help on commands (this skrip)
-    $ exit          - leave the system chat
 
-For memory management:
+General Utilities:
+    $ help          - get help on commands (this file)
+    $ alias         - manage IOSK command aliases
+    $ date          - display the current date and time
+    $ echo          - display the given arguments
+    $ export        - set or display environment variables
+    $ history       - show recent command history for this session
+    $ status        - display system status (date, whoami, users)
+    $ which         - locate a command executable in the PATH
+    $ welcome       - display a welcome message (auto-called on login)
+    $ exit          - leave the system chat (logout)
+
+Memory Management (Skrip Banks):
     $ bank          - load some skrip accounts from /bank into core memory
     $ banks         - list memory accounts currently banked
     $ bankrupt      - clear core memory bank
 
-For managing users:
+User Management:
     $ whoami        - see your current username
     $ users         - list connected users
-    $ attach        - connect a user
-    $ detach        - disconnect a user
+    $ attach        - attach a device as a user (bring user online)
+    $ detach        - disconnect a device user (forced exit)
+    $ ask           - ask an AI device (user) a question, with optional files
+    $ su            - execute a command as another user (superuser only)
 
-For working with paths (files and directories):
+File and Directory Management:
+    $ pwd           - print the name of the current working directory
+    $ cd            - change the current working directory
     $ ls            - list files and directories (also: ll)
     $ tree          - recursively list as a tree (efficient; some folders hidden)
-    $ mkdir         - Create empty directory
-    $ rmdir         - Remove empty directory
-    $ touch         - Create empty file
-    $ rm            - Remove file
-    $ cp            - Copy file
-    $ mv            - Move/rename file or directory
+    $ mkdir         - create empty directory
+    $ rmdir         - remove empty directory
+    $ touch         - create empty file
+    $ rm            - remove file
+    $ cp            - copy file or directory
+    $ mv            - move/rename file or directory
+    $ patch         - apply a diff to a file
 
-For viewing files:
+Viewing and Analyzing Files:
     $ cat           - print file contents
+    $ get           - get the contents of a file (alias for cat)
     $ head          - print first few lines of file
     $ tail          - print last few lines of file
+    $ describe      - describe a file or directory (type, size, counts)
+    $ diff          - show differences between two text files
+    $ search        - search for a term within text files
+    $ wc            - count lines, words, and characters in a file
 
-For system control:
-    $ init          - start the system
+System Interaction:
+    $ skrip         - execute a skrip file or command string
+    $ system        - execute a command in the underlying host system
+
+System Lifecycle (kernel commands):
+    $ init          - system initialization
     $ shutdown      - stop the system
 
 Most commands accept --help as option.
@@ -75,7 +98,7 @@ async def iocall(io, argv):
         if command_name == 'exit':
             await io.print("Usage: exit\n\nExits the current IOSK session.")
             return True
-        
+
         # io.os.call is expected to handle execution, including error messages
         # if the command doesn't exist or doesn't support --help.
         # We construct the command string as it would be typed in the shell.

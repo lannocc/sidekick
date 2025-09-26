@@ -35,11 +35,7 @@ async def iocall(io, argv):
 
     errors = False
     for i, path in enumerate(paths):
-        # Add a header for multiple paths
-        if len(paths) > 1:
-            if i > 0:
-                await io.print("")
-            await io.print(f'{path}:')
+        await io.print(f'{path}{"/" if not path.endswith("/") else ""}:')
 
         if not await io.os.exists(io, path):
             await io.error(f'!! tree: path does not exist: {path}\n')

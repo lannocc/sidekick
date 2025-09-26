@@ -6,5 +6,3 @@ $ bank role sveltepyguy
 $ bank tone assertive
 $ bank access user
 
-$ alias ll='ls -l'
-

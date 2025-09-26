@@ -1,10 +1,10 @@
 from os.path import join
 
 async def iocall(io, argv):
-    """Detach a user from a device.
+    """Detach a device user.
 
     Usage: detach <handle>
-           attach --help
+           detach --help
     """
 
     if not argv:

@@ -15,23 +15,25 @@ class AIMessenger:
         iosk.chat = self
         self.os = iosk
         self.me = None
+        self.device = None
 
         self.engagements = { }
 
-    async def start(self, handle=None):
+    async def start(self, handle=None, device=None):
         print()
         print('Welcome to the IOSK AI Messenger.')
 
         if not handle: handle = 'root'
         print(f'You are the super-user: {handle}')
         self.me = handle
+        self.device = device
         return handle
 
     async def run(self):
         await self.os.ready.wait()
         if self.os.halt.is_set(): return
 
-        io = await self.join(self.me)
+        io = await self.join(self.me, dev=self.device)
 
         try:
             await self.os.interactive(io)
@@ -79,7 +81,7 @@ class AIMessenger:
     async def send(self, from_user, msg, sys=False):
         if not msg: return
         if not sys:
-            now = datetime.now()
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             msg = f'<< {now} [{from_user}] {msg}'
 
         for user, uio in self.os.users.items():
@@ -127,10 +129,10 @@ class Engagement:
         #else: self.buf = self.history
         else: self.buf = text
 
-    def input(self):
+    async def input(self):
         data = self.inbuf
         #if data is not None: self.history += data
-        if data: data = self._handle_code_blocks_(data)
+        if data: data = await self._handle_code_blocks_(data)
         self.inbuf = None
         return data
 
@@ -216,7 +218,7 @@ class Engagement:
                        + prompt \
                        + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
                        + '\n' + post \
-                       + f'\n[{self.io.user}] >> '
+                       + f'\n[{self.io.user} {self.io.pwd}] >> '
 
                 finally:
                     self.io.stage_normal()
@@ -256,43 +258,62 @@ class Engagement:
 
                 last_trip = datetime.now()
 
-    def read_history(self):
-        pass
+    def _extract_target_from_diff(self, diff_content):
+        """Extracts the target filename from a diff's '---' line."""
+        # Pattern to find '--- a/path/to/file' or '--- path/to/file'
+        match = re.search(r'^--- (?:a/)?([^\t\n]+)', diff_content, re.MULTILINE)
+        if match:
+            return match.group(1).strip()
+        return None
 
-    def _handle_code_blocks_(self, text):
-        matches = self.CODEBLOCK_REGEX.finditer(text)
-        replacements = { }
+    async def _handle_code_blocks_(self, text):
+        match = next(self.CODEBLOCK_REGEX.finditer(text), None)
+        if not match:
+            return text
 
-        for match in matches:
-            lang = match.group('language')
-            code = match.group('code')
+        lang = match.group('language')
+        code = match.group('code')
+        original_block = match.group(0)
 
-            self.CODE += 1
-            ext = f'.{lang}' if lang else ''
-            name = f'{self.io.user}-{self.io.os.BOOT}-{self.io.cid}-{self.CODE}'
-            name = f'{name}{ext}'
-            name = join(self.io.CODE, name)
-            path = self.io.os.box(name)
+        self.CODE += 1
+        # Determine file extension and virtual path
+        ext = f'.{lang}' if lang else ''
+        if lang == 'diff':
+            ext = '.diff'
 
-            with open(path, 'w') as file:
-                file.write(code)
-                file.write('\n')
+        filename_stem = f'{self.io.user}-{self.io.os.BOOT}-{self.io.cid}-{self.CODE}'
+        filename = f'{filename_stem}{ext}'
+        virtual_path = join(self.io.CODE, filename)
+        host_path = self.io.os.box(virtual_path)
 
-            replacements[match.group(0)] = name
+        # Save the code block to the host file system
+        with open(host_path, 'w') as file:
+            file.write(code)
+            file.write('\n')
 
-            break # only do ONE per round
+        # Special handling for 'diff' blocks
+        if lang == 'diff':
+            target_file = self._extract_target_from_diff(code)
+            if target_file:
+                # Replace the block first, so the AI's reply appears before the command output
+                replacement_message = f'\n<< [iosk] diff block detected. Attempting to auto-patch `{target_file}`... >>'
+                text = text.replace(original_block, replacement_message)
 
-        #for old, new in replacements.items():
-        #    text = text.replace(old, f':: iosk auto-saved output to {new}')
+                # Construct and run the patch command. Its output will go directly to the user's console.
+                patch_command = f"patch {target_file} {virtual_path}"
+                await self.io.os.call(self.io, patch_command)
+            else:
+                # Could not find a target file, fall back to just saving
+                replacement_message = f'\n<< [iosk] auto-saved diff block to {virtual_path} (could not determine target file to patch) >>'
+                text = text.replace(original_block, replacement_message)
+            return text
 
-        num = 1
-        for old, file in replacements.items():
-            lines = old.split('\n')
-            if len(lines) > 10:
-                new = '\n'.join(lines[:10]) + '\n[[[IOSK TRUNCATED]]]\n```'
-                text = text.replace(old, new)
-            text += f'\n<< [iosk] auto-saved markdown block {num} to {file}'
-            num += 1
+        # Fallback for non-diff code blocks (existing logic for one block)
+        lines = original_block.split('\n')
+        if len(lines) > 10:
+            truncated_block = '\n'.join(lines[:10]) + '\n[[[IOSK TRUNCATED]]]\n```'
+            text = text.replace(original_block, truncated_block)
 
+        text += f'\n<< [iosk] auto-saved markdown block 1 to {virtual_path}'
         return text
 

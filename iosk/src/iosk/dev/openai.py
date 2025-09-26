@@ -24,9 +24,9 @@ async def iosender(io, data, model):
     await online(io)
 
 
-async def iorecv(io):
+async def iorecv(io, prompt=None):
     if io.user not in io.os.chat.engagements: return None
-    data = io.os.chat.engagements[io.user].input()
+    data = await io.os.chat.engagements[io.user].input()
     return data
 
 
