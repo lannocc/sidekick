@@ -3,6 +3,7 @@
 
 from .io import Context, Capture, print_flush as print
 from .parser import CommandLineParser
+from .pipeline import CommandPipelineExecutor
 
 from binaryornot.check import is_binary
 
@@ -41,6 +42,7 @@ class IOSK:
         self.chat = None
 
         self.parser = CommandLineParser(self)
+        self.pipeline_executor = CommandPipelineExecutor(self) # Instantiate the executor
 
     ###
     ### SYSTEM LIFECYCLE
@@ -196,7 +198,6 @@ class IOSK:
             try:
                 while (text := await io.input(f'[{io.user}] >> ')) is None:
                     # non-blocking inputs return None until data
-                    #print('POLL INPUT')
                     delay = (datetime.now() - start).total_seconds()
                     if delay < 0.1:
                         await asyncio.sleep(0.1 - delay)
@@ -207,12 +208,9 @@ class IOSK:
                     if line == '$ exit': return
 
                     if line.startswith('#'):
-                        #await io.comment(line)
                         pass
 
                     elif line.startswith('$ '):
-                        # The interactive shell passes the command line string directly
-                        # to self.call, just like a skrip file or other internal calls.
                         command_line = line[2:]
                         if command_line: # Don't add empty commands to history
                             io.history.append(command_line)
@@ -243,181 +241,8 @@ class IOSK:
 
     async def call(self, io:Context, args:str):
         """Interpret arguments, parse for pipes/redirection, and invoke commands."""
-        # Step 1: Alias resolution
-        first_space_idx = args.find(' ')
-        cmd_candidate = args[:first_space_idx] if first_space_idx != -1 else args
-        cmd_rest_of_line = args[first_space_idx+1:] if first_space_idx != -1 else ''
-
-        alias_resolved_args = args
-        if cmd_candidate in io.aliases:
-            alias_value = io.aliases[cmd_candidate]
-            alias_resolved_args = f"{alias_value} {cmd_rest_of_line}".strip()
-
-        # Step 2: Parsing, Substitution, Expansion, Tokenization
-        argv = await self.parser.parse_and_tokenize(io, alias_resolved_args)
-
-        if argv is None: # Parsing failed
-            return False
-        if not argv: # Empty command line
-            return True
-
-        # Step 3: Pipeline and Redirection Parsing
-        commands = []
-        current_command = []
-        redirect_out_path = None
-        redirect_append = False
-
-        i = 0
-        while i < len(argv):
-            token = argv[i]
-            if token == '|':
-                if not current_command:
-                    await io.error("!! parse error: empty command before pipe")
-                    return False
-                commands.append(current_command)
-                current_command = []
-            elif token in ('>', '>>'):
-                if i + 1 >= len(argv):
-                    await io.error(f"!! parse error: missing filename for redirection '{token}'")
-                    return False
-                if redirect_out_path:
-                    await io.error("!! parse error: multiple redirections are not supported")
-                    return False
-                redirect_out_path = argv[i+1]
-                redirect_append = (token == '>>')
-                i += 1 # Skip the filename token
-            else:
-                current_command.append(token)
-            i += 1
-
-        if current_command:
-            commands.append(current_command)
-        elif commands: # Case like `ls |`
-            await io.error("!! parse error: empty command after pipe")
-            return False
-
-        if not commands:
-            return True
-
-        # Step 4: Differentiate between simple command and pipeline
-        num_commands = len(commands)
-
-        # If it's a single command with no redirection, execute it directly in the current context.
-        if num_commands == 1 and not redirect_out_path:
-            return await self._execute_single_command(io, commands[0])
-
-        # Otherwise, handle the full pipeline with forked contexts.
-        # Step 4b: Pipeline Execution
-        pipe_buffer = None
-        success = True
-
-        for idx, command_argv in enumerate(commands):
-            is_last_cmd = (idx == num_commands - 1)
-
-            cmd_io = io.fork()
-
-            # Configure stdin from the previous command's output
-            if pipe_buffer:
-                pipe_buffer.seek(0)
-                cmd_io.stdin = pipe_buffer
-
-            redirect_file_handle = None
-            try:
-                # Configure stdout
-                if is_last_cmd and redirect_out_path:
-                    mode = 'a' if redirect_append else 'w'
-                    host_path = self.box(redirect_out_path, io_context=io)
-                    parent_dir = os.path.dirname(host_path)
-                    if not os.path.exists(parent_dir): os.makedirs(parent_dir)
-                    redirect_file_handle = open(host_path, mode, encoding='utf-8')
-                    cmd_io.stdout = redirect_file_handle
-                elif not is_last_cmd:
-                    pipe_buffer = StringIO()
-                    cmd_io.stdout = pipe_buffer
-                else:
-                    # For the last command in a pipe without redirection, it should inherit
-                    # the original io's stdout (which could be the console or another redirect).
-                    cmd_io.stdout = io.stdout
-
-                # Execute the single command segment
-                success = await self._execute_single_command(cmd_io, command_argv)
-
-            except Exception as e:
-                await io.error(f"!! error during pipeline execution: {e}")
-                traceback.print_exc()
-                success = False
-            finally:
-                if redirect_file_handle:
-                    redirect_file_handle.close()
-
-            if not success:
-                break # If any command fails, stop the pipeline
-
-        return success
-
-    async def _execute_single_command(self, io: Context, argv: list) -> bool:
-        """Resolves and executes a single command with its arguments."""
-        if not argv:
-            return True
-
-        cmd = argv[0]
-        cmd_args = argv[1:]
-
-        resolved_internal_path = None
-        is_python_module = False
-        potential_base_paths = []
-
-        if cmd.startswith('/') or cmd.startswith('./') or cmd.startswith('../'):
-            if cmd.startswith('./') or cmd.startswith('../'):
-                potential_base_paths.append(os.path.normpath(os.path.join(io.pwd if io.pwd else '/', cmd)))
-            else:
-                potential_base_paths.append(cmd)
-        else:
-            path_env = io.environ().get('PATH', '/bin')
-            path_dirs = path_env.split(os.pathsep)
-            for p_dir in path_dirs:
-                if p_dir:
-                    potential_base_paths.append(join(p_dir, cmd))
-
-        for p_base in potential_base_paths:
-            sandboxed_py_path = self.box(f'{p_base}.py', io_context=io)
-            if exists(sandboxed_py_path) and isfile(sandboxed_py_path):
-                modname_for_spec = f'sk.iosk.{p_base.strip("/").replace("/", ".")}'
-                try:
-                    spec = importlib.util.spec_from_file_location(modname_for_spec, sandboxed_py_path)
-                    if spec and spec.loader:
-                        resolved_internal_path = p_base
-                        is_python_module = True
-                        break
-                except Exception:
-                    pass
-
-            sandboxed_file_path = self.box(p_base, io_context=io)
-            if exists(sandboxed_file_path) and isfile(sandboxed_file_path):
-                resolved_internal_path = p_base
-                is_python_module = False
-                break
-
-        if not resolved_internal_path:
-            await io.error(f"!! command not found: {cmd}")
-            return False
-
-        try:
-            if is_python_module:
-                modname_for_pymod = resolved_internal_path.strip("/").replace("/", ".")
-                py_mod = self.pymod(modname_for_pymod, self.box(f'{resolved_internal_path}.py'))
-                if py_mod and hasattr(py_mod, 'iocall'):
-                    result = await py_mod.iocall(io, cmd_args)
-                    return result is not False
-                else:
-                    await io.error(f"!! Python module {resolved_internal_path}.py found but missing iocall method.")
-                    return False
-            else:
-                return await self.exec(io, resolved_internal_path, cmd_args)
-        except Exception as e:
-            await io.error(f'!! exception calling {cmd}: {e}')
-            traceback.print_exc()
-            return False
+        # Delegate the entire pipeline execution to the CommandPipelineExecutor
+        return await self.pipeline_executor.execute_pipeline(io, args, self.parser)
 
     async def exec(self, io:Context, path:str, argv:list=None):
         """When you know what you need and you've come prepared (arguments).
