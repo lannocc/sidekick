@@ -1,4 +1,3 @@
-# Constants for general help message to match original /bin/help
 GENERAL_HELP_MESSAGE = """
 HELP FOR IOSK
 
@@ -15,6 +14,7 @@ General Utilities:
     $ export        - set or display environment variables
     $ history       - show recent command history for this session
     $ status        - display system status (date, whoami, users)
+    $ which         - locate a command executable in the PATH
     $ welcome       - display a welcome message (auto-called on login)
     $ exit          - leave the system chat (logout)
 

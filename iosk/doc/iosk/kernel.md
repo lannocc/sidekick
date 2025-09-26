@@ -21,12 +21,14 @@ The `IOSK` class (found in kernel.py) represents the core operating system kerne
 *   `system`: (Context) The system-level `Context` instance representing the system environment. This is used for system-level logging, error reporting, and command execution.
 *   `users`: (dict) A dictionary storing currently logged-in users. The keys are user handles (usernames), and the values are `Context` instances associated with each user.
 *   `chat`: (obj) A chat interface (instance of AIMessenger of chat.py), used for communicating between users and bots. Can be `None` if not available.
+*   `parser`: (CommandLineParser) An instance of `CommandLineParser` responsible for handling command line tokenization and variable expansion.
 
 **Methods:**
 
 *   `__init__(self, root)`:
     *   Constructor. Initializes the `IOSK` instance with the given `root` directory.
     *   Sets `started` to `None`, creates asyncio Events for `ready` and `halt`, and initializes the `system` and `users` attributes.
+    *   Initializes `self.parser` with a reference to itself, to enable robust command-line parsing.
 
 *   `async start(self)`:
     *   Starts the IOSK system. This involves the following steps:
@@ -56,18 +58,19 @@ The `IOSK` class (found in kernel.py) represents the core operating system kerne
     *   Validates that the user is not already logged in and that the username is not reserved.
     *   Creates a forked `Context` from the `self.system` Context.
     *   Sets up user-specific logging, the device, and the username within the `Context`.
-    *   **New**: Automatically creates the user's home directory (`/home/<user>`) on the host filesystem if it does not exist.
-    *   **New**: Sets the user's current working directory (`io.pwd`) to `/home/<user>`.
+    *   Automatically creates the user's home directory (`/home/<user>`) on the host filesystem if it does not exist, and logs this action.
+    *   Sets the user's current working directory (`io.pwd`) to `/home/<user>`.
     *   Executes the system-wide `skrc` script (`/etc/skrc`).
-    *   **New**: Executes the user-specific `skrc` script (`/home/<user>/.skrc`) if it exists.
-    *   Starts an interactive shell (if `interactive` is `True`).
+    *   Executes the user-specific `skrc` script (`/home/<user>/.skrc`) if it exists.
+    *   If `interactive` is `True`, starts an interactive shell for the user.
     *   Returns the created `Context`.
 
 *   `async interactive(self, io)`:
     *   Provides an interactive shell for the given `Context`.
     *   Continuously prompts the user for input, executes commands, and handles chat messages.
     *   Supports exiting the shell with `$ exit`.
-    *   **Updated**: Passes the raw command line string (after the `$ ` prefix) directly to `self.call` for advanced parsing.
+    *   Passes the raw command line string (after the `$ ` prefix) directly to `self.call` for advanced parsing and execution.
+    *   Adds non-empty commands to `io.history`.
     *   Sends other lines to the chat (if a chat interface is available) or prints them to the console.
     *   Handles `EOFError` for clean exit.
 
@@ -81,21 +84,23 @@ The `IOSK` class (found in kernel.py) represents the core operating system kerne
 *   `async call(self, io: Context, args: str)`:
     *   **Completely overhauled** to provide robust command parsing. It takes a raw command string (`args`) and performs the following pipeline:
         1.  **Alias Resolution**: Checks if the first word of the command (`cmd_candidate`) matches an alias in `io.aliases`. If so, it expands the alias value into the `args` string *before* further parsing.
-        2.  **Tokenization**: Uses Python's `shlex.split()` to robustly tokenize the (potentially expanded) `args` string into a list of arguments (`argv_raw`), correctly handling spaces and quotes. Catches `ValueError` for malformed commands.
-        3.  **Variable Expansion**: Iterates through `argv_raw` and expands environment variables using `$VAR` and `${VAR}` syntax, substituting them with values from `io.environ()` (which includes inherited environment variables).
-        4.  **Command Lookup**: Determines the executable path by:
-            *   Checking if `cmd` is an absolute path or explicit relative path (e.g., `/bin/ls`, `./script`).
+        2.  **Advanced Parsing and Tokenization**: The (potentially alias-expanded) command string is passed to `self.parser.parse_and_tokenize()`. This method (located in `src/iosk/parser.py`) is responsible for:
+            *   **Command Substitution**: Handles `...` and `$(...)` syntax.
+            *   **Variable Expansion**: Expands environment variables using `$VAR` and `${VAR}` syntax, substituting them with values from `io.environ()`.
+            *   **Tokenization**: Uses `shlex.split()` to robustly tokenize the fully expanded string into a list of arguments (`argv`), correctly handling spaces and quotes.
+        3.  **Command Lookup**: Determines the executable path by:
+            *   Checking if `cmd` (the first token in `argv`) is an absolute path or explicit relative path (e.g., `/bin/ls`, `./script`).
             *   If `cmd` is a bare name (e.g., `ls`), it searches directories listed in the `PATH` environment variable (`io.environ().get('PATH')`). If `PATH` is not set, it defaults to searching in `/bin`.
-            *   For each potential path, it first attempts to load it as a Python module (`.py` file with an `iocall` function).
+            *   For each potential path, it first attempts to load it as a Python module (`.py` file with an `iocall` function) by creating a module spec without full import.
             *   If not a Python module, it attempts to find it as a regular executable file (e.g., a `.skrip` script).
-        5.  **Execution**:
-            *   If resolved as a Python module, it imports the module and calls its `iocall(io, cmd_args)` method, passing `cmd_args` as a `list` of strings (excluding the command name itself).
+        4.  **Execution**:
+            *   If resolved as a Python module, it imports the module (using `self.pymod`) and calls its `iocall(io, cmd_args)` method, passing `cmd_args` as a `list` of strings (excluding the command name itself).
             *   If resolved as a script, it calls `self.exec(io, resolved_internal_path, cmd_args)`.
     *   Handles exceptions during command execution, logging them with `io.error` and `traceback.print_exc()`. Returns `True` on success, `False` on failure.
 
 *   `async exec(self, io: Context, path: str, argv: list = None)`:
     *   Executes a script at the given `path`. This method expects `path` to be an absolute virtual path within the sandboxed filesystem (e.g., `/bin/myscript`). It does not search the `PATH` environment variable for the executable itself.
-    *   **Updated**: Accepts `argv` as a `list` of strings.
+    *   Accepts `argv` as a `list` of strings (defaulting to empty).
     *   Reads the shebang line. If it specifies an interpreter (e.g., `#!/bin/skrip`), it constructs a new command string using `shlex.join()` to invoke the interpreter (e.g., `skrip /path/to/script.skrip arg1 arg2`) and recursively calls `self.call()` to execute it.
     *   Logs an error if there's no shebang or a bad shebang. Returns `True` on success, `False` on failure.
 
@@ -171,4 +176,4 @@ The `IOSK` class (found in kernel.py) represents the core operating system kerne
     *   Stores the module in `sys.modules` for subsequent access.
     *   Includes a fallback to `importlib.import_module` and handles potential `ModuleNotFoundError`. Returns the loaded module object or `None` on failure.
 
-In essence, the `IOSK` class provides a virtualized operating system environment, enabling the execution of scripts and Python commands, management of user sessions, and interaction with virtual devices, all within a sandboxed environment. The command parsing and file system interaction mechanisms have been significantly enhanced for robustness and `PATH` awareness.
+In essence, the `IOSK` class provides a virtualized operating system environment, enabling the execution of scripts and Python commands, management of user sessions, and interaction with virtual devices, all within a sandboxed environment. The command parsing and file system interaction mechanisms have been significantly enhanced for robustness and `PATH` awareness, now leveraging a dedicated `CommandLineParser`.

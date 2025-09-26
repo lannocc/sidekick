@@ -44,6 +44,7 @@ class Context:
         self.env = {} # environment variables
         self.pwd = None # current working directory, virtual path (e.g., /home/user)
         self.aliases = {} # Aliases for the current user/session
+        self.history = [] # Command history for the current session
 
         self.stage = self.STAGE_NORMAL
         self.pre = None
@@ -203,3 +204,4 @@ class Capture:
             file = open(file_path, 'a')
             cls.logs[file_path] = file
             return file
+

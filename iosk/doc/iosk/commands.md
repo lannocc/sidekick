@@ -56,7 +56,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Notes: `help` displays the general IOSK help message. `help <command>` displays the help message for the specified command (equivalent to `<command> --help`).
 *   **history**: Show recent command history for this session.
     *   Usage: `$ history [N]`
-    *   Notes: `N` is the number of most recent commands to show (default 20). Only lines entered as commands (`$ ...`) are shown.
+    *   Notes: `N` is the number of most recent commands to show. If omitted, the entire session history is displayed. Only lines entered as commands (`$ ...`) are shown.
 *   **ll**: Lists directory contents using the long listing format (alias for `ls -l`).
     *   Usage: `$ ll [path ...]`
     *   Notes: Provides one entry per line.
@@ -111,6 +111,9 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ wc <filename>`
 *   **welcome**: Displays a welcome message.
     *   Usage: `$ welcome`
+*   **which**: Locate a command executable in the PATH.
+    *   Usage: `$ which <command>`
+    *   Notes: Searches the directories specified in the `PATH` environment variable for the given command name. Prioritizes Python (`.py`) module files over script files without an extension if both exist, matching the kernel's command resolution logic.
 *   **whoami**: Display the current username.
     *   Usage: `$ whoami`
 

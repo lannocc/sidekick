@@ -31,6 +31,7 @@ Here's a breakdown of the class and its methods:
 *   `env`: (dict) A dictionary storing environment variables specific to this context. Child contexts can inherit and override these.
 *   `pwd`: (str or None) The current working directory of this context in the virtual filesystem (e.g., `/home/user`).
 *   `aliases`: (dict) A dictionary storing command aliases defined for this user/session (e.g., `{'ll': 'ls -l'}`).
+*   `history`: (list) A list storing the command history for the current session.
 *   `stage`: (int) The current processing stage (e.g., `STAGE_NORMAL`, `STAGE_PRE`, `STAGE_BANK`, `STAGE_POST`). Controls where output is directed.
 *   `pre`: (StringIO or None) A `StringIO` object used to buffer output during the `STAGE_PRE` stage.
 *   `post`: (StringIO or None) A `StringIO` object used to buffer output during the `STAGE_POST` stage.
@@ -42,7 +43,7 @@ Here's a breakdown of the class and its methods:
     *   Constructor. Initializes the `Context` with the `iosk_unix` instance, device path, and optional log file.
     *   Assigns a unique `cid`.
     *   Creates and opens the `chatter` log file.
-    *   Initializes other attributes like `user`, `su`, `base`, `bot`, `session`, `banks`, `env`, `pwd`, `aliases`, and `stage`.
+    *   Initializes other attributes like `user`, `su`, `base`, `bot`, `session`, `banks`, `env`, `pwd`, `aliases`, `history`, and `stage`.
 
 *   `fork(self)`:
     *   Creates a new `Context` instance that inherits some properties from the current context. This is useful for handling separate threads or processes within the same user session.

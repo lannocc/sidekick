@@ -2,11 +2,11 @@
 # @%@~LICENSE~@%@
 
 from .io import Context, Capture, print_flush as print
+from .parser import CommandLineParser
 
 from binaryornot.check import is_binary
 
 import shlex
-import re
 import asyncio
 import aioconsole
 from datetime import datetime
@@ -38,6 +38,8 @@ class IOSK:
         self.system = None # Context
         self.users = { } # handle:Context
         self.chat = None
+
+        self.parser = CommandLineParser(self)
 
     ###
     ### SYSTEM LIFECYCLE
@@ -210,7 +212,10 @@ class IOSK:
                     elif line.startswith('$ '):
                         # The interactive shell passes the command line string directly
                         # to self.call, just like a skrip file or other internal calls.
-                        await self.call(io, line[2:]) # Pass the string after '$ '
+                        command_line = line[2:]
+                        if command_line: # Don't add empty commands to history
+                            io.history.append(command_line)
+                        await self.call(io, command_line) # Pass the string after '$ '
 
                     elif line:
                         if self.chat: await self.chat.send(io.user, line)
@@ -237,36 +242,26 @@ class IOSK:
 
     async def call(self, io:Context, args:str):
         """Interpret arguments for something to invoke (exec)."""
-        # Alias resolution: check if the command is an alias.
+        # Step 1: Alias resolution (on the raw string)
         first_space_idx = args.find(' ')
         cmd_candidate = args[:first_space_idx] if first_space_idx != -1 else args
         cmd_rest_of_line = args[first_space_idx+1:] if first_space_idx != -1 else ''
 
+        alias_resolved_args = args # Keep original in case no alias found
         if cmd_candidate in io.aliases:
             alias_value = io.aliases[cmd_candidate]
-            args = f"{alias_value} {cmd_rest_of_line}".strip()
+            alias_resolved_args = f"{alias_value} {cmd_rest_of_line}".strip()
 
-        # 1. Tokenization with shlex
-        try:
-            argv_raw = shlex.split(args)
-        except ValueError as e:
-            await io.error(f"!! parse error: {e}")
+        # Use the CommandLineParser for substitution, expansion, and tokenization
+        argv = await self.parser.parse_and_tokenize(io, alias_resolved_args)
+
+        if argv is None: # Parsing failed (e.g., unmatched quotes/parens)
             return False
 
-        if not argv_raw:
+        if not argv: # Empty command after parsing
             return True
 
-        # 2. Variable Expansion
-        argv = []
-        for token in argv_raw:
-            expanded_token = token
-            # Support $VAR and ${VAR}
-            # Replace $VAR
-            expanded_token = re.sub(r'\$(\w+)', lambda m: io.environ().get(m.group(1), ''), expanded_token)
-            # Replace ${VAR}
-            expanded_token = re.sub(r'\$\{(\w+)\}', lambda m: io.environ().get(m.group(1), ''), expanded_token)
-            argv.append(expanded_token)
-
+        # Step 5: Command Resolution and Execution
         cmd = argv[0]
         cmd_args = argv[1:]
 
@@ -277,7 +272,11 @@ class IOSK:
 
         # Case 1: Command is an absolute or explicit relative path (e.g., /usr/local/bin/mytool, ./script.sh)
         if cmd.startswith('/') or cmd.startswith('./') or cmd.startswith('../'):
-            potential_base_paths.append(cmd)
+            # Resolve relative paths relative to io.pwd if present
+            if cmd.startswith('./') or cmd.startswith('../'):
+                potential_base_paths.append(os.path.normpath(os.path.join(io.pwd if io.pwd else '/', cmd)))
+            else: # Absolute path
+                potential_base_paths.append(cmd)
         else:
             # Case 2: Command is a bare name, search PATH or default to /bin
             path_env = io.environ().get('PATH')
@@ -341,6 +340,7 @@ class IOSK:
             traceback.print_exc()
             return False
 
+    # The _perform_command_substitution and _expand_variables methods have been moved to parser.py
 
     async def exec(self, io:Context, path:str, argv:list=None):
         """When you know what you need and you've come prepared (arguments).
