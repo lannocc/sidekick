@@ -1,6 +1,6 @@
 #!/bin/skrip
 
-This was the state of the system directory tree when I first logged in:
+This was the state of the system directory tree when I first logged in. Absolute file tree from the root on down (prefix these with starting slash: /) is...
 
 $ tree /
 

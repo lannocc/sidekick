@@ -218,7 +218,7 @@ class Engagement:
                        + prompt \
                        + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
                        + '\n' + post \
-                       + f'\n[{self.io.user}] >> '
+                       + f'\n[{self.io.user} {self.io.pwd}] >> '
 
                 finally:
                     self.io.stage_normal()
