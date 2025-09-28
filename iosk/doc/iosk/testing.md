@@ -8,9 +8,6 @@ This document outlines commands that require further attention, either because t
 
 The following issues have been identified in the existing QA documentation:
 
-*   **`/bin/ask.py`**:
-    *   **Issue**: Causes the system to hang. Explicitly skipped for testing.
-    *   **Status**: Broken.
 *   **`/bin/touch.py`**:
     *   **Issue**: Differs from standard UNIX `touch` as it will not update the modification time of an existing file; instead, it errors if the file already exists.
     *   **Status**: Working as a file creation utility, but non-standard behavior for existing files.
@@ -22,7 +19,7 @@ The following issues have been identified in the existing QA documentation:
 The following commands require further testing, investigation, or fixing:
 
 1.  **`/bin/ask.py`**
-    *   **Reason**: Known broken (causes system hang) and skipped. Requires fixing before use.
+    *   **Reason**: Waiting to be implemented.
 2.  **`/bin/bank.py`**
     *   **Reason**: Explicitly skipped (due to lannocc's instructions). Requires enabling and testing once banking functionality is to be used.
 3.  **`/bin/bankrupt.py`**

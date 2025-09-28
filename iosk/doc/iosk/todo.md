@@ -5,7 +5,7 @@
 1.  **Implement the Daemon System**
     As detailed in `doc/iosk/proposal/daemons.md`, implementing an event-driven AI agent system is the highest priority for making IOSK a truly proactive and intelligent OS. This involves adding an event dispatcher to the kernel (`fire_event`), creating the daemon configuration file (`/etc/daemons.conf`), and developing the first daemon to handle the `POST_CODE_SAVE` event for automatic file organization. This feature is foundational to the project's long-term vision.
 
-2.  **Fix Critical Bugs and Inconsistencies**
+2.  **Fix Critical Bugs and Inconsistencies** [NEED TO RE-TEST THIS]
     The `doc/iosk/testing.md` document lists several outstanding issues that impact usability. A concerted effort should be made to fix the system hang caused by `ask`, the argument-handling exceptions in `help`, the inconsistent error messages from `mkdir`, and the non-standard behavior of `touch`. Resolving these will stabilize the core user experience.
 
 3.  **Implement Pipes and Redirection** [DONE]

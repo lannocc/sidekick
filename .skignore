@@ -1,6 +1,8 @@
 SIDEKICK.egg-info
 build
+dist
 doc
+node_modules
 scripts
 venv
 
