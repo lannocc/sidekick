@@ -1,103 +1,122 @@
-# Proposal: An Expanded Banking System for Role-Specific AI Agents
+# Proposal: An Expanded Set of Memory Banks for Agent Specialization
+
+**Status**: Proposed
 
 ### Introduction
 
-The current "bank" system in IOSK provides a powerful mechanism for loading core memory into AI agents at the start of their sessions. This serves as a foundational context, guiding their behavior and responses. However, to fully realize the vision of IOSK as a collaborative, multi-agent operating system, we must expand this system to support specialized roles and complex organizational structures.
+The current IOSK "bank" system provides a powerful mechanism for loading core memory into agents at login, shaping their personality, tone, and system knowledge. However, to scale our multi-agent operations effectively within our fintech environment, we need a more comprehensive and modular set of banks.
 
-Currently, the set of available banks is limited. This means all agents, regardless of their intended function, start with a similar, generic understanding of the system. To operate effectively within a goal-oriented team—such as the fintech environment our organization operates in—agents require specialized knowledge, directives, and operational playbooks tailored to their specific roles.
+This proposal outlines the creation of several new bank sets designed to provide agents with deep, context-specific knowledge about:
+1.  The IOSK system's advanced features and philosophy.
+2.  Our company's mission, technology stack, and security policies.
+3.  Specific project goals and requirements.
+4.  Standardized workflows and operational procedures.
 
-This proposal outlines a plan to create a structured and comprehensive set of new banks. These banks are categorized into **Core System Knowledge**, **Role-Based Directives**, and **Domain-Specific Information**. By combining these modular banks in various ways within user `.skrc` files, we can rapidly instantiate a wide variety of sophisticated, purpose-built AI agents, from high-level managers to focused DevOps and QA specialists.
+By creating these modular banks, we can define and deploy highly specialized agents (Developers, QA, DevOps, Supervisors) by simply combining the appropriate memory modules in their respective `/home/<user>/.skrc` files. This approach will enhance agent alignment, improve operational consistency, and provide a scalable framework for managing a hierarchy of collaborative AI agents.
 
-### Core Proposal: A Three-Tiered Banking Structure
+### Rationale
 
-We propose creating a new set of directories and files under `/bank/` to establish a clear, modular, and extensible knowledge base for our AI agents.
+A well-defined bank system is crucial for several reasons:
+*   **Rapid Onboarding**: New agents can be instantly provisioned with the necessary context to be effective, reducing ramp-up time.
+*   **Role Specialization**: We can create distinct, purpose-driven agents by assembling different combinations of banks, ensuring a QA agent thinks about testing while a DevOps agent focuses on deployment.
+*   **Hierarchical Management**: Supervisor agents can be "banked" with high-level goals and project overviews, allowing them to effectively manage and delegate tasks to subordinate agents who have more granular, role-specific knowledge.
+*   **Consistency and Compliance**: For a fintech company, ensuring all agents adhere to the same security policies, coding standards, and workflows is paramount. Banks provide a reliable way to enforce this consistency.
 
-#### 1. Core System Banks (`/bank/iosk_core/`)
+### Proposed New Bank Structure and Content
 
-This bank set will provide all agents with a fundamental, baseline understanding of the IOSK environment. This ensures a consistent operational capability across all roles.
+We propose creating new directories and files within the `/bank` directory to house this expanded knowledge base.
 
-*   **/bank/iosk_core/philosophy.sk**: A concise summary of the IOSK philosophy, emphasizing the conversational nature of the OS, the sandboxed environment, and the "everything is a file" principle.
-*   **/bank/iosk_core/commands_quickref.sk**: A quick-reference guide to the most essential IOSK commands and their common usage patterns (e.g., `ls -l`, `cat <file>`, `search <term> <path>`, `ask -f <file> "prompt"`, `diff A B > patch.diff`, `patch A patch.diff`). This is not a replacement for `help` but a primer for action.
-*   **/bank/iosk_core/filesystem.sk**: A description of the standard filesystem hierarchy (`/bin`, `/home`, `/etc`, `/var`, `/dev`, `/sbin`) and the purpose of each top-level directory.
-*   **/bank/iosk_core/scripting_basics.sk**: Simple, commented examples of `.skrip` files, demonstrating the use of comments (`#`), printing text, and executing commands (`$`).
-*   **/bank/iosk_core/interaction_rules.sk**: The essential rules for interacting with the system, drawn from `/etc/chat/preamble`. Reinforces that `$` is for commands, `#` for private thoughts, and that only one command should be issued at a time to await its result.
+#### 1. Bank Set: `bank/iosk/` (System Knowledge)
+This set expands on the existing IOSK banks to provide deeper knowledge about the system's "why" and "how."
 
-#### 2. Role-Based Banks
+*   `/bank/iosk/philosophy`:
+    *   **Content**: A distillation of `doc/iosk/philosophy.md`. Emphasizes that IOSK is a conversational OS, that agents are users, and that interaction should be through the provided shell commands and chat.
+    *   **Purpose**: Gives the agent a foundational understanding of its environment.
+*   `/bank/iosk/commands`:
+    *   **Content**: An expert summary of key commands and idioms. For example: "The `ask` command is my primary tool for one-shot problem solving. Using `-p` to package a directory is highly efficient for code analysis. Using `-e` to extract code saves manual steps. The auto-patching of `diff` blocks is a powerful workflow for applying changes."
+    *   **Purpose**: Moves beyond simple command knowledge (`help`) to strategic understanding of how to use tools effectively.
+*   `/bank/iosk/security`:
+    *   **Content**: "I operate in a sandboxed environment. My file access is limited to my permissions. The system will feature group-based security under `/home/groups/` to isolate project data. I must not attempt to circumvent these controls."
+    *   **Purpose**: Instills an understanding of the security model, which is critical for all agents.
 
-This collection of banks provides the specific directives, procedures, and knowledge required for an agent to perform a specialized job function within our organization.
+#### 2. Bank Set: `bank/company/` (Corporate Context)
+This new set provides agents with knowledge about our organization.
 
-*   **/bank/role_manager/**: For agents tasked with oversight and coordination.
-    *   `directives.sk`: "Your role is to manage devops and qa agents. You will assign tasks based on project roadmaps, monitor for blockers, and provide daily status reports. You are authorized to use `su` to inspect agent workspaces to verify work."
-    *   `reporting_template.sk`: "Structure daily reports using this markdown template: `### Daily Summary\n**Accomplished:**\n- \n**Blockers:**\n- \n**Plan for Tomorrow:**\n-`"
-    *   `task_assignment.sk`: "When assigning tasks, be explicit. Reference full file paths and define the expected output. Example: `@devops-agent, use `search` to find all ERROR entries in `/var/log/trade-engine.log` from the last 24 hours and summarize them.`"
-    *   `team_roster.sk`: "Your team: `devops-agent-1` (logs & monitoring), `qa-agent-1` (automated testing), `dev-agent-1` (risk-model module)."
+*   `/bank/company/mission`:
+    *   **Content**: "We are a premier fintech firm dedicated to building secure, high-performance algorithmic trading platforms. Our priorities are reliability, security, and innovation."
+    *   **Purpose**: Aligns all agent actions with the company's high-level goals.
+*   `/bank/company/stack`:
+    *   **Content**: "Our core technology stack consists of Python (FastAPI) for backend services, Svelte for front-end interfaces, and PostgreSQL for data persistence. We deploy on AWS using a Kubernetes (EKS) infrastructure managed via Terraform."
+    *   **Purpose**: Provides essential technical context for development, QA, and DevOps tasks.
+*   `/bank/company/security_policy`:
+    *   **Content**: "CRITICAL: All code changes must pass static analysis and peer review before merging. No production secrets or personally identifiable information (PII) are ever to be placed in logs or version control. All file access must be on a need-to-know basis."
+    *   **Purpose**: Enforces non-negotiable security and compliance standards.
 
-*   **/bank/role_devops/**: For agents responsible for system stability, deployment, and infrastructure.
-    *   `deployment_playbook.sk`: "Standard deployment: 1. `cp` new build from `/home/groups/builds/latest` to `/var/staging/`. 2. Runsmoke tests from `/home/groups/qa/smoke-tests/`. 3. If tests pass, `cp` to `/var/www/prod/`. 4. `tail -f /var/log/prod.log` for 5 minutes."
-    *   `monitoring_protocol.sk`: "Your primary duty is to monitor system logs for anomalies. Key files: `/var/log/system`, `/var/log/audit.log`. Use `search 'ERROR|CRITICAL'` periodically. Escalate critical findings to `@manager-agent`."
-    *   `common_tools.sk`: "Utilize `system`, `describe`, `wc`, and `search` for diagnostics. `status` provides a quick health check."
+#### 3. Bank Set: `bank/project/` (Project-Specific Goals)
+This set allows us to scope an agent's focus to a particular initiative.
 
-*   **/bank/role_qa/**: For agents dedicated to quality assurance and testing.
-    *   `testing_methodology.sk`: "1. Get latest test plan from `/home/groups/qa/plans/`. 2. Execute corresponding skrips from `/home/groups/qa/tests/`. 3. Use `diff` to compare actual output with expected output files. 4. If a mismatch occurs, log a bug."
-    *   `bug_report_template.sk`: A markdown template for `ask -f bug.md "File this bug report."`: `**Bug Title:**\n\n**Steps to Reproduce:**\n1. \n\n**Expected Result:**\n\n**Actual Result:**\n`"
-    *   `test_creation.sk`: "When creating new tests, ensure they are idempotent. Each test skrip must `echo 'PASS'` or `echo 'FAIL'` as its final output line."
+*   `/bank/project/titan/overview`:
+    *   **Content**: "Project Titan is the initiative to build our next-generation, low-latency trading engine. Key features include advanced risk modeling and real-time market data analysis."
+    *   **Purpose**: Defines the "what" and "why" of a specific project.
+*   `/bank/project/titan/goals_q3`:
+    *   **Content**: "The primary goals for Q3 are: 1. Complete the initial implementation of the risk assessment module. 2. Achieve 95% unit test coverage on all new code. 3. Deploy the module to the staging environment for performance testing."
+    *   **Purpose**: Provides clear, measurable objectives for agents working on the project.
 
-*   **/bank/role_developer/**: For agents focused on writing and maintaining code.
-    *   `coding_standards.sk`: "All Python code must be PEP8 compliant. All skrips must have a `#!/bin/skrip` shebang. All functions must have docstrings."
-    *   `workflow.sk`: "Work in a feature branch directory in your home (`~/workspace/<feature_name>`). When complete, `cp` your work to `/home/groups/dev-staging/` and notify `@qa-agent-1`."
-    *   `toolchain.sk`: "Use `diff` to review your changes before committing. Use `patch` to apply updates from others. Use `ask -p . "Review this code for issues"` for self-correction."
+#### 4. Bank Set: `bank/workflow/` (Standard Operating Procedures)
+This set defines *how* we work together, ensuring operational consistency.
 
-#### 3. Fintech Domain Banks (`/bank/fintech/`)
+*   `/bank/workflow/code_review`:
+    *   **Content**: "All feature development must occur in a `feature/` branch. When complete, create a pull request against the `develop` branch. Tag the project supervisor and at least one senior developer for review. All comments must be addressed before the supervisor can approve the merge."
+    *   **Purpose**: Standardizes the development and review process.
+*   `/bank/workflow/testing_cycle`:
+    *   **Content**: "The QA team is responsible for creating and executing test plans for all new features. Automated integration tests are run against the staging environment nightly. No feature can be promoted to production without a sign-off from QA."
+    *   **Purpose**: Defines the quality assurance process.
+*   `/bank/workflow/incident_response`:
+    *   **Content**: "If a production alert is triggered, the on-call DevOps agent must immediately create an incident room (`chroom incident-<id>`), attach the project supervisor and relevant developers, and begin diagnostics by checking system logs (`/var/log/system`) and application logs."
+    *   **Purpose**: Establishes a clear protocol for handling critical issues.
 
-This bank provides all agents with essential context about our business domain, ensuring their actions are compliant and informed.
+### Use Case Examples: Composing Agents via `.skrc`
 
-*   **/bank/fintech/glossary.sk**: Key terminology definitions. "KYC: Know Your Customer. AML: Anti-Money Laundering. PII: Personally Identifiable Information. HFT: High-Frequency Trading."
-*   **/bank/fintech/compliance_rules.sk**: Critical regulatory and security rules. "RULE 1: All access to files containing PII must be logged. RULE 2: Never `echo` or `cat` unmasked PII to the shared console. RULE 3: All financial transaction code must be reviewed by `@qa-agent-1`."
-*   **/bank/fintech/architecture.sk**: High-level overview of our systems. "Primary systems: `trade-engine` (handles HFT), `risk-model` (calculates exposure), `reporting-db` (stores trade history)."
+The power of this modular system is realized in how we compose different agents by loading specific banks in their hidden `.skrc` file.
 
-### Example Persona Construction
-
-A user's persona and capabilities are defined by the combination of `bank` commands in their `~/.skrc` file.
-
-**Example `~/.skrc` for a user named `manager-alpha`:**
-```skrip
+**Example 1: A Junior Developer Agent (`jdev`) on Project Titan**
+The `/home/jdev/.skrc` file would contain:
+```sh
 #!/bin/skrip
-# Core Knowledge
-bank iosk_core philosophy
-bank iosk_core commands_quickref
-
-# Domain Knowledge
-bank fintech glossary
-bank fintech compliance_rules
-
-# Role Directives
-bank role_manager directives
-bank role_manager reporting_template
-bank role_manager team_roster
+$ bank iosk workflow
+$ bank company stack
+$ bank project/titan overview
+$ bank role sveltepyguy
+$ bank workflow code_review
 ```
+This creates an agent that knows its role, its project, the tech stack, and the process for submitting code, but lacks high-level strategic knowledge.
 
-**Example `~/.skrc` for a user named `devops-beta`:**
-```skrip
+**Example 2: A QA Agent (`qatester`) for Project Titan**
+The `/home/qatester/.skrc` file would contain:
+```sh
 #!/bin/skrip
-# Core Knowledge
-bank iosk_core filesystem
-bank iosk_core scripting_basics
-bank iosk_core commands_quickref
-
-# Domain Knowledge
-bank fintech architecture
-
-# Role Directives
-bank role_devops deployment_playbook
-bank role_devops monitoring_protocol
+$ bank iosk limitations
+$ bank company stack
+$ bank project/titan overview
+$ bank role qa
+$ bank workflow testing_cycle
 ```
+This agent is focused on finding problems, understanding the system's edge cases, and following the formal testing procedure.
 
-### Benefits of This Proposal
-
-*   **Specialization:** Allows us to create highly specialized agents that excel at their designated tasks.
-*   **Modularity and Scalability:** New roles and domain knowledge can be added easily by creating new bank files, without altering the core agent logic.
-*   **Consistency:** Ensures that all agents in a specific role operate from the same playbook, leading to more predictable and reliable behavior.
-*   **Rapid Onboarding:** A new AI agent can be made "job-ready" instantly by assigning it a `.skrc` file with the appropriate combination of banks.
-*   **Alignment:** Deeply embeds organizational structure, workflows, and compliance rules into the agents' core context, ensuring their actions are aligned with our company's goals.
+**Example 3: A Supervisor Agent (`manager`) for Project Titan**
+The `/home/manager/.skrc` file would contain:
+```sh
+#!/bin/skrip
+$ bank boss lannocc
+$ bank role supervisor
+$ bank company mission
+$ bank project/titan overview
+$ bank project/titan goals_q3
+$ bank workflow incident_response
 ```
+This agent understands the high-level business and project goals. It knows who its boss is and its primary role is to manage other agents to meet the Q3 objectives. When an incident occurs, it knows the protocol. This agent can effectively delegate a task like "implement the risk module" to `jdev` and "prepare a test plan" to `qatester`, as it understands their roles and the project's needs.
+
+### Conclusion
+
+By implementing this expanded set of memory banks, we can transform our collection of agents into a structured, hierarchical, and highly effective digital workforce. This system provides the scalability and control necessary to tackle complex fintech projects, ensuring that all agents, from developers to supervisors, are aligned, informed, and operating consistently within the IOSK environment.
 
