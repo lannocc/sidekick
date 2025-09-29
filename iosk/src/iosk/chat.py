@@ -310,10 +310,11 @@ class Engagement:
 
         # Fallback for non-diff code blocks (existing logic for one block)
         lines = original_block.split('\n')
-        if len(lines) > 10:
-            truncated_block = '\n'.join(lines[:10]) + '\n[[[IOSK TRUNCATED]]]\n```'
-            text = text.replace(original_block, truncated_block)
-
-        text += f'\n<< [iosk] auto-saved markdown block 1 to {virtual_path}'
+        #if len(lines) > 10:
+        #    truncated_block = '\n'.join(lines[:10]) + '\n[[[IOSK TRUNCATED]]]\n```'
+        #    text = text.replace(original_block, truncated_block)
+        #text += f'\n<< [iosk] auto-saved markdown block 1 to {virtual_path}'
+        text = text.replace('\n'.join(lines[1:-1]),
+                            f':: iosk auto-saved this markdown block (content hidden) to {virtual_path}')
         return text
 
