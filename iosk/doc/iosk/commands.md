@@ -119,17 +119,11 @@ These commands are generally available to users within the IOSK environment. Mos
 
 ## /sbin Commands
 
-These commands are typically used for system administration tasks or internal system processes. Most `/sbin` commands also accept `--help` as an option to display their specific help message.
+These commands are typically used for system administration tasks Most `/sbin` commands also accept `--help` as an option to display their specific help message.
 
 *   **init**: System initialization script.
     *   Usage: (Called automatically by the system)
     *   Notes: Sets up the initial `PATH` and performs other system startup tasks. Not intended for direct user invocation.
 *   **shutdown**: Stop the IOSK system.
     *   Usage: `$ shutdown`
-*   **postamble**: System script.
-    *   Usage: (Called internally by AI engagement logic)
-    *   Notes: Injects specific instructions or status updates into AI prompts. Not intended for direct user invocation.
-*   **preamble**: System script.
-    *   Usage: (Called internally by AI engagement logic)
-    *   Notes: Injects core rules and context into AI prompts, defining the system's interactive behavior. Not intended for direct user invocation.
 

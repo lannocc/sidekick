@@ -1,5 +1,7 @@
 # Proposal: A Versatile `ask` Command for IOSK
 
+**Status**: Now implementing...
+
 ### Introduction
 
 The `ask` command is a cornerstone of the SideKick toolset, providing a simple, direct interface to an AI model. To fully integrate this capability into the IOSK environment, we propose a new `/bin/ask.py` command that merges the simplicity of the original `ask` with the powerful, context-aware features of IOSK, such as user-specific banking, preamble/postamble scripting, and direct device interaction.
@@ -49,7 +51,7 @@ To separate the prompting logic for interactive chat and one-shot `ask` commands
     ```
 *   Create a new file, `/etc/ask/postamble`, to reinforce the directive:
     ```skrip
-    #!/bin.skrip
+    #!/bin/skrip
     Remember: Do not engage in conversational chat.
     Fulfill the user's request as directly as possible.
     ```

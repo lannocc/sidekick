@@ -1,6 +1,6 @@
 # Proposal: A Rich Interactive Console Experience
 
-Status: 2025-09-26 Implemented as /dev/terminal.py instead of dev/console.py and now in testing.
+**Status**: 2025-09-26 Implemented as /dev/terminal.py instead of dev/console.py and now in testing.
 
 ### Introduction
 

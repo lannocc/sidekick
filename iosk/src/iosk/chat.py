@@ -96,8 +96,8 @@ class Engagement:
     SECS_NOISY_WAIT_REPLY = 13
     SECS_QUIET_IDLE_POLL = 22
 
-    PREAMBLE = '/sbin/preamble'
-    POSTAMBLE = '/sbin/postamble'
+    PREAMBLE = '/etc/chat/preamble'
+    POSTAMBLE = '/etc/chat/postamble'
 
     # not greedy:
     #CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```',
