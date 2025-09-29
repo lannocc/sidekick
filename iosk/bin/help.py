@@ -35,7 +35,7 @@ File and Directory Management:
     $ pwd           - print the name of the current working directory
     $ cd            - change the current working directory
     $ ls            - list files and directories (also: ll)
-    $ tree          - recursively list as a tree (efficient; some folders hidden)
+    $ tree          - recursively list as a tree (efficient; some folders hidden by .skignore)
     $ mkdir         - create empty directory
     $ rmdir         - remove empty directory
     $ touch         - create empty file

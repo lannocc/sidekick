@@ -2,6 +2,7 @@ from sk.util import get_directory_tree_as_text
 
 async def iocall(io, argv):
     """List directory contents recursively in a tree-like format.
+    Some files and folders are hidden (this command honors .skignore files).
 
     Usage: tree [options] [path ...]
            tree --help
