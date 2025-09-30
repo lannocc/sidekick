@@ -196,7 +196,7 @@ class IOSK:
         while not self.halt.is_set():
             start = datetime.now()
             try:
-                while (text := await io.input(f'[{io.user}] >> ')) is None:
+                while (text := await io.input(f'[{io.user} {io.pwd}] >> ')) is None:
                     # non-blocking inputs return None until data
                     delay = (datetime.now() - start).total_seconds()
                     if delay < 0.1:

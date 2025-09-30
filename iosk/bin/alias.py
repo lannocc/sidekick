@@ -23,7 +23,7 @@ async def iocall(io, argv):
             for name, value in io.aliases.items():
                 await io.print(f"{name}='{value}'")
         else:
-            await io.print("No aliases defined.")
+            await io.print(":: No aliases defined.")
     elif len(argv) == 1 and '=' in argv[0]:
         # Define an alias
         name, value = argv[0].split('=', 1)
@@ -31,10 +31,10 @@ async def iocall(io, argv):
             # Strip quotes from the value
             value = value.strip("'").strip('"')
             io.aliases[name] = value
-            await io.print(f"Alias '{name}' defined as '{value}'")
+            await io.print(f":: Alias '{name}' defined as '{value}'")
         else:
-            await io.print("Invalid alias definition. NAME cannot be empty. Use: alias NAME=VALUE")
+            await io.error("!! Invalid alias definition. NAME cannot be empty. Use: alias NAME=VALUE")
     else:
-        await io.print("Invalid usage. Use 'alias --help' for more information or 'alias NAME=VALUE' to define.")
+        await io.error("!! Invalid usage. Use 'alias --help' for more information or 'alias NAME=VALUE' to define.")
 
     return True

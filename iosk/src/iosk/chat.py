@@ -82,7 +82,7 @@ class AIMessenger:
         if not msg: return
         if not sys:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            msg = f'<< {now} [{from_user}] {msg}'
+            msg = f'\n[{from_user} {now}] << {msg}'
 
         for user, uio in self.os.users.items():
             if user is from_user: continue
