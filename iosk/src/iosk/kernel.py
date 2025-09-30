@@ -6,6 +6,7 @@ from .parser import CommandLineParser
 from .pipeline import CommandPipelineExecutor
 
 from binaryornot.check import is_binary
+import tiktoken
 
 import shlex
 import asyncio
@@ -200,6 +201,33 @@ class IOSK:
                 io.preamble_cache = ""
         finally:
             io.stage_normal()
+
+        # --- Token Calculation for Initial Static Context ---
+        try:
+            encoding = tiktoken.get_encoding('cl100k_base')
+
+            # Preamble part
+            static_content = io.preamble_cache or ""
+
+            # Banking part
+            banking = ''
+            if io.banks:
+                for bank_acct, data in io.banks.items():
+                    banking += '\n' + data + '\n'
+
+            if banking:
+                static_content += ('\n=== CORE RULES/MEMORY BEGIN ===\n'
+                                   'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS REMEMBER:\n'
+                                   f'{banking}'
+                                   '\n=== END   CORE RULES/MEMORY ===\n')
+
+            initial_static_tokens = len(encoding.encode(static_content))
+            io.caching_token_total = initial_static_tokens # Initialize the running total
+            io.initial_static_tokens = initial_static_tokens
+        except Exception as e:
+            # AIs might not be used, so don't fail login if tiktoken is missing
+            # or something goes wrong. Just log it.
+            await self.system.error(f"!! token initialization failed: {e}")
 
         if interactive:
             await self.interactive(io)

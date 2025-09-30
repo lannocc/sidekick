@@ -3,6 +3,8 @@
 
 from .io import print_flush as print
 
+import tiktoken
+
 import asyncio
 from datetime import datetime
 from os.path import exists, join
@@ -208,33 +210,52 @@ class Engagement:
                         + banking \
                         + '\n=== END   CORE RULES/MEMORY ===\n'
 
-                prompt = pre + banking \
+                prompt_text_for_trip = pre + banking \
                    + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
                    + prompt \
                    + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
                    + '\n' + post \
                    + f'\n[{self.io.user} {self.io.pwd}] >> '
 
-                #print('++++++++++++++++++++++++++++++++++++++ PROMPT BEGIN +++')
-                #print(prompt)
-                #print('++++++++++++++++++++++++++++++++++++++ PROMPT   END +++')
+                # --- Update Running Token Totals ---
+                try:
+                    encoding = tiktoken.get_encoding('cl100k_base')
+
+                    # Calculate tokens for the dynamic part of the prompt
+                    # The 'prompt' var here is just the chat history.
+                    dynamic_content = ('\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n'
+                                       f'{prompt}'
+                                       '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n\n'
+                                       f'{post}')
+                    dynamic_tokens = len(encoding.encode(dynamic_content))
+
+                    # Full prompt tokens for this trip
+                    full_prompt_tokens = self.io.initial_static_tokens + dynamic_tokens
+
+                    # Update running totals
+                    self.io.caching_token_total += dynamic_tokens
+                    self.io.full_token_total += full_prompt_tokens
+
+                except Exception as e:
+                    # Don't crash the engagement if token calculation fails
+                    await self.io.os.system.error(f"!! token calculation failed during trip: {e}")
 
                 self.waiting = True
                 try:
-                    reply = await self.trip(prompt)
+                    reply = await self.trip(prompt_text_for_trip)
 
                 except Exception as e: # overloaded?
                     await self.io.os.system.error(f'!! trip for {self.io.user}:'
                                                   f' {e}')
                     await asyncio.sleep(1.8)
                     try:
-                        reply = await self.trip(prompt)
+                        reply = await self.trip(prompt_text_for_trip)
 
                     except Exception as e: # still overloaded?
                         await self.io.os.system.error(
                                 f'!! trip (2) for {self.io.user}: {e}')
                         await asyncio.sleep(4.2)
-                        reply = await self.trip(prompt)
+                        reply = await self.trip(prompt_text_for_trip)
 
                 finally:
                     self.waiting = False

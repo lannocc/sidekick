@@ -46,6 +46,10 @@ class Context:
         self.aliases = {} # Aliases for the current user/session
         self.history = [] # Command history for the current session
 
+        self.caching_token_total = 0
+        self.full_token_total = 0
+        self.initial_static_tokens = 0
+
         self.stage = self.STAGE_NORMAL
         self.pre = None
         self.post = None
