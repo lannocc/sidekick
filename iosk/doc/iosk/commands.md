@@ -48,6 +48,9 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **get**: Get the contents of a file. (Alias for `cat`)
     *   Usage: `$ get <filename>`
     *   Notes: Behaves identically to `cat`.
+*   **grep**: Search for PATTERN in each FILE or standard input.
+    *   Usage: `$ grep [OPTIONS] PATTERN [FILE...]`
+    *   Options: `-i`, `--ignore-case` (ignore case distinctions); `-v`, `--invert-match` (select non-matching lines); `-n`, `--line-number` (prefix with line number); `-l`, `--files-with-matches` (print filenames only); `-c`, `--count` (print count of matching lines); `-r`, `-R`, `--recursive` (read all files under each directory, recursively).
 *   **head**: Display the first N lines of a file.
     *   Usage: `$ head [-n <number>] <filename>`
     *   Options: `-n <number>` (specifies the number of lines to display, defaults to 10).
@@ -98,6 +101,12 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **tail**: Display the last N lines of a file.
     *   Usage: `$ tail [-n <number>] <filename>`
     *   Options: `-n <number>` (specifies the number of lines to display, defaults to 10).
+*   **ticket**: View ticket details from the database.
+    *   Usage: `$ ticket <ticket-number>`
+    *   Notes: `<ticket-number>` is the ID of the ticket to view (e.g., 123 or T123).
+*   **tokens**: Calculate the total bytes and estimate tokens for the current session context.
+    *   Usage: `$ tokens`
+    *   Notes: This command assembles the full context that would be sent to an AI, including the preamble, banked memory, chat history, and postamble, then reports the size of that context.
 *   **touch**: Create an empty file.
     *   Usage: `$ touch <filename>`
     *   Notes: Differs from standard UNIX `touch` as it errors if the file already exists, instead of updating its timestamp.
@@ -119,17 +128,10 @@ These commands are generally available to users within the IOSK environment. Mos
 
 ## /sbin Commands
 
-These commands are typically used for system administration tasks or internal system processes. Most `/sbin` commands also accept `--help` as an option to display their specific help message.
+These commands are typically used for system administration tasks Most `/sbin` commands also accept `--help` as an option to display their specific help message.
 
 *   **init**: System initialization script.
     *   Usage: (Called automatically by the system)
     *   Notes: Sets up the initial `PATH` and performs other system startup tasks. Not intended for direct user invocation.
 *   **shutdown**: Stop the IOSK system.
     *   Usage: `$ shutdown`
-*   **postamble**: System script.
-    *   Usage: (Called internally by AI engagement logic)
-    *   Notes: Injects specific instructions or status updates into AI prompts. Not intended for direct user invocation.
-*   **preamble**: System script.
-    *   Usage: (Called internally by AI engagement logic)
-    *   Notes: Injects core rules and context into AI prompts, defining the system's interactive behavior. Not intended for direct user invocation.
-

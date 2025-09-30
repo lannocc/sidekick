@@ -1,6 +1,6 @@
 # Proposal: Implementing Pipes and I/O Redirection
 
-Status: 2025-09-26 Implemented and now in testing.
+**Status**: 2025-09-26 Implemented and now in testing.
 
 ### Introduction
 

@@ -1,6 +1,6 @@
 #!/bin/skrip
 
-This was the state of the system directory tree when I first logged in. Absolute file tree from the root on down (prefix these with starting slash: /) is...
+Use `tree` instead of `ls -R`. This was the state of the system directory tree when I first logged in. For brevity, some files and folders (such as /tmp and /home) are hidden. Absolute file tree from the root on down (prefix these with starting slash: /) is...
 
 $ tree /
 

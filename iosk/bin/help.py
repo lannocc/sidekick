@@ -35,7 +35,7 @@ File and Directory Management:
     $ pwd           - print the name of the current working directory
     $ cd            - change the current working directory
     $ ls            - list files and directories (also: ll)
-    $ tree          - recursively list as a tree (efficient; some folders hidden)
+    $ tree          - recursively list as a tree (efficient; some folders hidden by .skignore)
     $ mkdir         - create empty directory
     $ rmdir         - remove empty directory
     $ touch         - create empty file
@@ -46,12 +46,15 @@ File and Directory Management:
 
 Viewing and Analyzing Files:
     $ cat           - print file contents
-    $ get           - get the contents of a file (alias for cat)
-    $ head          - print first few lines of file
-    $ tail          - print last few lines of file
     $ describe      - describe a file or directory (type, size, counts)
     $ diff          - show differences between two text files
+    $ get           - get the contents of a file (alias for cat)
+    $ grep          - search for PATTERN in each FILE or standard input
+    $ head          - print first few lines of file
     $ search        - search for a term within text files
+    $ tail          - print last few lines of file
+    $ ticket        - view ticket details from the database
+    $ tokens        - calculate total bytes and estimate tokens for session context
     $ wc            - count lines, words, and characters in a file
 
 System Interaction:
@@ -112,4 +115,3 @@ async def iocall(io, argv):
     # If we reach here, it means invalid arguments were provided (e.g., `help cmd1 cmd2`)
     await io.error("!! help: too many arguments or unknown option. Use 'help --help' for usage.")
     return False
-
