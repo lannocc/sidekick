@@ -101,6 +101,9 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **ticket**: View ticket details from the database.
     *   Usage: `$ ticket <ticket-number>`
     *   Notes: `<ticket-number>` is the ID of the ticket to view (e.g., 123 or T123).
+*   **tokens**: Calculate the total bytes and estimate tokens for the current session context.
+    *   Usage: `$ tokens`
+    *   Notes: This command assembles the full context that would be sent to an AI, including the preamble, banked memory, chat history, and postamble, then reports the size of that context.
 *   **touch**: Create an empty file.
     *   Usage: `$ touch <filename>`
     *   Notes: Differs from standard UNIX `touch` as it errors if the file already exists, instead of updating its timestamp.

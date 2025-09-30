@@ -53,6 +53,7 @@ Viewing and Analyzing Files:
     $ search        - search for a term within text files
     $ tail          - print last few lines of file
     $ ticket        - view ticket details from the database
+    $ tokens        - calculate total bytes and estimate tokens for session context
     $ wc            - count lines, words, and characters in a file
 
 System Interaction:
