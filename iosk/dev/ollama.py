@@ -17,9 +17,9 @@ async def iosend(io, data):
     if not client:
         client = AsyncClient()
 
-async def iorecv(io):
+async def iorecv(io, prompt=None):
     if io.user not in io.os.chat.engagements: return None
-    data = io.os.chat.engagements[io.user].input()
+    data = await io.os.chat.engagements[io.user].input()
     return data
 
 async def trip(prompt): # round trip

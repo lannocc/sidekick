@@ -49,13 +49,15 @@ def main(args, called=''):
                     return
 
             elif op == '-p':
-                if args:
-                    pkg = args[0]
-                    args = args[1:]
-
-                if not pkg:
+                if not args:
                     print(f'!!! need a directory path to package')
                     return
+
+                if pkg:
+                    if isinstance(pkg, list): pkg += args[0]
+                    else: pkg = [ pkg, args[0] ]
+                else: pkg = args[0]
+                args = args[1:]
 
             elif op == '-e':
                 if len(args) < 2 or args[0].startswith('-') \
@@ -142,7 +144,11 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
             file, counts = package_directory(package)
             if not quiet:
                 print(f'PACKAGED DIRECTORY to: {file}')
-                print(counts)
+                if isinstance(counts, list):
+                    for i, c in enumerate(counts):
+                        print(c)
+                        print(package[i])
+                else: print(counts)
                 print()
 
     if (mdlang and not mdsave) or (mdsave and not mdlang):
@@ -208,7 +214,11 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
             file, counts = package_directory(package)
             if not quiet:
                 print(f'PACKAGED DIRECTORY to: {file}')
-                print(counts)
+                if isinstance(counts, list):
+                    for i, c in enumerate(counts):
+                        print(c)
+                        print(package[i])
+                else: print(counts)
                 print()
 
     if prompt:

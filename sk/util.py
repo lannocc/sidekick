@@ -204,25 +204,32 @@ def get_directory_contents_as_text(path):
     return text
 
 
-def package_directory(path, label='project'):
+def package_directory(path, label='project'): # path can be a str or list of str
     fd, name = tempfile.mkstemp(prefix='sidekick-package-', suffix='.txt')
+
+    paths = path if isinstance(path, list) else [ path ]
+    counts = [ ]
 
     with open(name, 'w', encoding='utf-8') as file:
         file.write(f'Our {label} is laid out as given in the following file '
                     'hierarchy:\n\n')
-        file.write(f'{path}{os.sep}\n')
 
-        tree = get_directory_tree_as_text(path, count=True)
-        sep = tree.index(BYTES_SEPARATOR)
-        counts = tree[sep+len(BYTES_SEPARATOR):]
-        tree = tree[:sep]
+        for p in paths:
+            file.write(f'{p}{os.sep}\n')
+            tree = get_directory_tree_as_text(p, count=True)
+            sep = tree.index(BYTES_SEPARATOR)
+            counts.append(tree[sep+len(BYTES_SEPARATOR):])
+            tree = tree[:sep]
+            file.write(tree)
 
-        file.write(tree)
         file.write('\n\n')
         file.write('The contents of each file are given in succession below...'
                    '\n\n')
-        file.write(get_directory_contents_as_text(path))
 
+        for p in paths:
+            file.write(get_directory_contents_as_text(p))
+
+    if not isinstance(path, list): counts = counts[0]
     return name, counts
 
 

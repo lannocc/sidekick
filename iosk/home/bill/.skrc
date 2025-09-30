@@ -6,5 +6,3 @@ $ bank role supervisor
 $ bank tone optimistic
 $ bank access user
 
-$ alias ll='ls -l'
-

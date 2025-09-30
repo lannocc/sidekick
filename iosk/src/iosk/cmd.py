@@ -35,6 +35,11 @@ def help(args):
 def run(args=sys.argv[1:]):
     import asyncio
 
+    terminal_mode = False
+    if '-t' in args:
+        terminal_mode = True
+        args.remove('-t')
+
     if args:
         if len(args) != 2:
             print('2 arguments required: <root> <handle>')
@@ -65,8 +70,9 @@ def run(args=sys.argv[1:]):
     async def async_run():
         print()
         try:
+            device = '/dev/terminal' if terminal_mode else None
             await unix.start()
-            await chat.start(handle=handle)
+            await chat.start(handle=handle, device=device)
             await asyncio.gather(unix.run(), chat.run())
 
         except asyncio.exceptions.CancelledError:
@@ -78,6 +84,11 @@ def run(args=sys.argv[1:]):
 
 def console(args=sys.argv[1:]):
     import asyncio
+
+    terminal_mode = False
+    if '-t' in args:
+        terminal_mode = True
+        args.remove('-t')
 
     if args:
         if len(args) != 1:
@@ -99,8 +110,9 @@ def console(args=sys.argv[1:]):
     async def async_run():
         print()
         try:
+            device = '/dev/terminal' if terminal_mode else None
             await unix.start()
-            await asyncio.gather(unix.run(), unix.login('root'))
+            await asyncio.gather(unix.run(), unix.login('root', device=device))
 
         except asyncio.exceptions.CancelledError:
             print('Cancelled') # ^CCancelled

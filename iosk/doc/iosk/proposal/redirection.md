@@ -1,5 +1,7 @@
 # Proposal: Implementing Pipes and I/O Redirection
 
+**Status**: 2025-09-26 Implemented and now in testing.
+
 ### Introduction
 
 With the foundation of an advanced shell parser in place (as proposed in `doc/iosk/proposal/parser.md`), the next logical evolution for the IOSK command-line interface is the implementation of standard UNIX-style pipes (`|`) and I/O redirection (`>`, `>>`).

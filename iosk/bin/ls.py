@@ -1,6 +1,6 @@
 import os
 from os.path import exists, isdir, join
-from sk.util import get_ignore_set
+#from sk.util import get_ignore_set
 
 
 async def iocall(io, argv):
@@ -16,8 +16,8 @@ async def iocall(io, argv):
 
     [path ...]: The paths to list. If no path is provided use current directory.
 
-    Note: This command honors .skignore files in listed directories.
     """
+    #REMOVED Note: This command honors .skignore files in listed directories.
     long = False
     allp = False
 
@@ -66,7 +66,8 @@ async def iocall(io, argv):
             await io.print(f'\n{path}:')
 
         bpath = io.os.box(path, io_context=io)
-        ignores = get_ignore_set(bpath)
+        #ignores = get_ignore_set(bpath)
+        ignores = set()
 
         def is_hidden_by_default(item):
             return item.startswith('.') or item.endswith('~') or item == '__pycache__'

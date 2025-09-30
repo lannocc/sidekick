@@ -44,11 +44,15 @@ class Context:
         self.env = {} # environment variables
         self.pwd = None # current working directory, virtual path (e.g., /home/user)
         self.aliases = {} # Aliases for the current user/session
+        self.history = [] # Command history for the current session
 
         self.stage = self.STAGE_NORMAL
         self.pre = None
         self.post = None
         self.banking = None
+
+        self.stdin = None
+        self.stdout = None
 
     def fork(self):
         child = Context(self.os, self.dev, self.log)
@@ -56,6 +60,17 @@ class Context:
 
         child.user = self.user
         child.bot = self.bot
+
+        # Inherit I/O streams from parent by default
+        child.stdin = self.stdin
+        child.stdout = self.stdout
+
+        # Inherit environmental properties from the parent context.
+        # This is crucial for commands in pipelines to know the CWD.
+        child.pwd = self.pwd
+        # Use a copy so child modifications don't affect the parent.
+        child.env = self.env.copy()
+        child.aliases = self.aliases.copy()
 
         return child
 
@@ -80,7 +95,7 @@ class Context:
         return full_env
 
     async def print(self, text, indicator='='):
-        if self.log and self.stage == self.STAGE_NORMAL:
+        if self.log and self.stage == self.STAGE_NORMAL and not self.stdout:
             self._log_(indicator)
             #self.log.write('<< ')
 
@@ -91,11 +106,12 @@ class Context:
         if self.base and self.bot:
             self.session.write(text + '\n')
 
-    async def input(self, prompt=None):
-        if prompt and not self.bot:
-            await self.os.send(self, self.dev, prompt)
 
-        data = await self.os.recv(self, self.dev)
+    async def input(self, prompt=None):
+        #if prompt and not self.bot:
+        #    await self.os.send(self, self.dev, prompt)
+
+        data = await self.os.recv(self, self.dev, prompt=prompt)
 
         if data:
             if self.log:
@@ -115,6 +131,12 @@ class Context:
 
     async def output(self, text):
         if text is None: return
+
+        if self.stdout:
+            # If stdout is a custom stream (file, StringIO), write to it.
+            # This bypasses the normal async output to the device.
+            self.stdout.write(text)
+            return
 
         if self.stage == self.STAGE_PRE:
             self.pre.write(text)
@@ -203,3 +225,4 @@ class Capture:
             file = open(file_path, 'a')
             cls.logs[file_path] = file
             return file
+

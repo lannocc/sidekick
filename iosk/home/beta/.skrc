@@ -14,5 +14,3 @@ $ bank iosk workflow
 
 $ bank dmx project
 
-$ alias ll='ls -l'
-

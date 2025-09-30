@@ -7,5 +7,3 @@ $ bank tone gloomy
 $ bank tone robotic
 $ bank access user
 
-$ alias ll='ls -l'
-
