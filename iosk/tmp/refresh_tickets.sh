@@ -11,7 +11,7 @@
 set -e
 
 # Define the directory where open tickets are stored.
-TICKET_DIR="iosk/doc/dmx/ticket"
+TICKET_DIR="doc/dmx/ticket"
 
 # Check if the directory exists before proceeding.
 if [ ! -d "$TICKET_DIR" ]; then
