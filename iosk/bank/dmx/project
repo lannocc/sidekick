@@ -1,6 +1,6 @@
 #!/bin/skrip
 
-Diametrix (dmx) is the flagship loan-processing application. The entire git project is mounted at /diametrix (excluded from the iosk `$ tree /` view for efficiency, but still visible with ls command or `$ tree /diametrix` to see the whole project. Other documentation as relates to dmx work within iosk may be found in /doc/dmx (higher-level management, qa docs, todo lists, etc.).
+Diametrix (dmx) is the flagship loan-processing application. The entire git project is mounted at /diametrix (excluded from the iosk `$ tree /` view for efficiency, but still visible with ls command or `$ tree /diametrix` to see the whole project. Other documentation as relates to dmx work within iosk may be found in /doc/dmx (higher-level management, qa docs, todo lists, tickets, proposals, etc.).
 
 $ alias dmx='system dmx'
 
