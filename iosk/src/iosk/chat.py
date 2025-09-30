@@ -177,51 +177,43 @@ class Engagement:
             #       (Context already has the data in its session buffer)
 
             if prompt:
+                # Retrieve cached preamble
+                pre = self.io.preamble_cache or ""
+
+                # solid banking
+                banking = ''
+                if self.io.banks:
+                    for bank_acct, data in self.io.banks.items():
+                        banking += '\n' + data + '\n'
+
+                # Execute postamble
+                post = ''
                 try:
-                    # so hacky...
-                    self.io.stage_pre()
-                    pre = self.io.os.box(self.PREAMBLE)
-                    if exists(pre):
-                        await self.io.os.exec(self.io, self.PREAMBLE)
-                    if self.io.pre:
-                        self.io.pre.seek(0)
-                        pre = self.io.pre.read()
-                    else: pre = ''
-
-                    # solid banking
-                    banking = ''
-                    if self.io.banks:
-                        for bank_acct, data in self.io.banks.items():
-                            #banking += '\n~~~' + bank_acct.upper() + '::\n'
-                            banking += '\n' + data + '\n'
-
-                    # so hacky...
                     self.io.stage_post()
-                    post = self.io.os.box(self.POSTAMBLE)
-                    if exists(post):
+                    post_path = self.io.os.box(self.POSTAMBLE)
+                    if exists(post_path):
                         await self.io.os.exec(self.io, self.POSTAMBLE)
                     if self.io.post:
                         self.io.post.seek(0)
                         post = self.io.post.read()
-                    else: post = ''
-
-                    if banking:
-                        banking = '' \
-                            + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
-                            + 'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS ' \
-                            + 'REMEMBER:\n' \
-                            + banking \
-                            + '\n=== END   CORE RULES/MEMORY ===\n'
-
-                    prompt = pre + banking \
-                       + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
-                       + prompt \
-                       + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
-                       + '\n' + post \
-                       + f'\n[{self.io.user} {self.io.pwd}] >> '
-
                 finally:
                     self.io.stage_normal()
+
+
+                if banking:
+                    banking = '' \
+                        + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
+                        + 'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS ' \
+                        + 'REMEMBER:\n' \
+                        + banking \
+                        + '\n=== END   CORE RULES/MEMORY ===\n'
+
+                prompt = pre + banking \
+                   + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
+                   + prompt \
+                   + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
+                   + '\n' + post \
+                   + f'\n[{self.io.user} {self.io.pwd}] >> '
 
                 #print('++++++++++++++++++++++++++++++++++++++ PROMPT BEGIN +++')
                 #print(prompt)

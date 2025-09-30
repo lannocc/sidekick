@@ -187,6 +187,20 @@ class IOSK:
             #print('@@@@@@@@@@@@@ HERE WE GO @@@@@@@@@@@@@')
             await self.exec(io, skrc)
 
+        # --- Preamble Caching ---
+        io.stage_pre()
+        try:
+            preamble_path = '/etc/chat/preamble'
+            if await self.exists(io, preamble_path):
+                await self.exec(io, preamble_path)
+            if io.pre:
+                io.pre.seek(0)
+                io.preamble_cache = io.pre.read()
+            else:
+                io.preamble_cache = ""
+        finally:
+            io.stage_normal()
+
         if interactive:
             await self.interactive(io)
 

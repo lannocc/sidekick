@@ -24,18 +24,7 @@ async def iocall(io, argv):
     temp_io = io.fork()
 
     # --- 1. Get Preamble Content ---
-    preamble_content = ""
-    preamble_path = '/etc/chat/preamble'
-    try:
-        temp_io.stage_pre()
-        if await temp_io.os.exists(temp_io, preamble_path):
-            await temp_io.os.exec(temp_io, preamble_path)
-
-        if temp_io.pre:
-            temp_io.pre.seek(0)
-            preamble_content = temp_io.pre.read()
-    finally:
-        temp_io.stage_normal()  # Ensure the stage is reset
+    preamble_content = io.preamble_cache or ""
 
     # --- 2. Get Banked Memory Content ---
     banking_content = ""
@@ -97,3 +86,4 @@ async def iocall(io, argv):
     await io.print(f'Est. Tokens: {token_count:,}')
 
     return True
+

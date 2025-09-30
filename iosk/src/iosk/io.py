@@ -50,6 +50,7 @@ class Context:
         self.pre = None
         self.post = None
         self.banking = None
+        self.preamble_cache = None
 
         self.stdin = None
         self.stdout = None
@@ -60,6 +61,7 @@ class Context:
 
         child.user = self.user
         child.bot = self.bot
+        child.preamble_cache = self.preamble_cache
 
         # Inherit I/O streams from parent by default
         child.stdin = self.stdin
