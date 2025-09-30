@@ -8,9 +8,12 @@ $ bank instinct gut
 
 $ bank iosk limitations
 $ bank iosk skrip
-$ bank iosk kernel
+#$ bank iosk kernel
+$ bank iosk commands
 $ bank iosk workflow
 #$ bank iosk tree
 
 $ bank dmx project
+$ bank dmx commands
+$ bank dmx tree
 

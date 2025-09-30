@@ -1,0 +1,12 @@
+#!/bin/skrip
+
+Use `tree` instead of `ls -R` most of the time.
+
+This was the state of the diametrix directory tree when I first logged in. For brevity, some files and folders (such as auto-generated folders) are hidden. Absolute file tree from the diametrix project on down (prefix these with starting slash diametrix: /diametrix) is...
+
+$ tree /diametrix
+
+So the above is where most code changes happen. But most documentation / process / workflow files are tracked here outside of diametrix project in /doc/dmx ...
+
+$ tree /doc/dmx
+

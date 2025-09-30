@@ -1,0 +1,6 @@
+#!/bin/skrip
+
+For using/testing diametrix, we should focus on the single `$ dmx` alias as our entry-point to all dmx commands. All the dmx python modules are accessible through this.
+
+See /doc/dmx/commands.md for a complete overview of all the (nested) dmx commands.
+
