@@ -98,6 +98,9 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **tail**: Display the last N lines of a file.
     *   Usage: `$ tail [-n <number>] <filename>`
     *   Options: `-n <number>` (specifies the number of lines to display, defaults to 10).
+*   **ticket**: View ticket details from the database.
+    *   Usage: `$ ticket <ticket-number>`
+    *   Notes: `<ticket-number>` is the ID of the ticket to view (e.g., 123 or T123).
 *   **touch**: Create an empty file.
     *   Usage: `$ touch <filename>`
     *   Notes: Differs from standard UNIX `touch` as it errors if the file already exists, instead of updating its timestamp.
@@ -126,4 +129,3 @@ These commands are typically used for system administration tasks Most `/sbin` c
     *   Notes: Sets up the initial `PATH` and performs other system startup tasks. Not intended for direct user invocation.
 *   **shutdown**: Stop the IOSK system.
     *   Usage: `$ shutdown`
-
