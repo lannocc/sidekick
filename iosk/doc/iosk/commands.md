@@ -48,6 +48,9 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **get**: Get the contents of a file. (Alias for `cat`)
     *   Usage: `$ get <filename>`
     *   Notes: Behaves identically to `cat`.
+*   **grep**: Search for PATTERN in each FILE or standard input.
+    *   Usage: `$ grep [OPTIONS] PATTERN [FILE...]`
+    *   Options: `-i`, `--ignore-case` (ignore case distinctions); `-v`, `--invert-match` (select non-matching lines); `-n`, `--line-number` (prefix with line number); `-l`, `--files-with-matches` (print filenames only); `-c`, `--count` (print count of matching lines); `-r`, `-R`, `--recursive` (read all files under each directory, recursively).
 *   **head**: Display the first N lines of a file.
     *   Usage: `$ head [-n <number>] <filename>`
     *   Options: `-n <number>` (specifies the number of lines to display, defaults to 10).

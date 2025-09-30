@@ -49,6 +49,7 @@ Viewing and Analyzing Files:
     $ describe      - describe a file or directory (type, size, counts)
     $ diff          - show differences between two text files
     $ get           - get the contents of a file (alias for cat)
+    $ grep          - search for PATTERN in each FILE or standard input
     $ head          - print first few lines of file
     $ search        - search for a term within text files
     $ tail          - print last few lines of file
