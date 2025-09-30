@@ -2,6 +2,17 @@ Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
 
+v0.3.3
+======
+
+Date: September 29, 2025
+
+    * Misc. tweaks and a proposal for more banks.
+    * Add `grep` and `xargs` commands.
+    * Add `ticket` and `tokens` commands.
+    * Add an `ask` command inside iosk.
+
+
 v0.3.2
 ======
 

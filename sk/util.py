@@ -191,6 +191,7 @@ def get_directory_contents_as_text(path):
 
             if not hint:
                 if is_binary(full_path): continue # not text
+                elif item.endswith('.pdf'): continue # also not text
                 else: hint = ''
 
             text += f'\n>>> BEGIN FILE {full_path}:\n'
