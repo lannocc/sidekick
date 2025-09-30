@@ -41,18 +41,26 @@ async def iocall(io, argv):
         return False
 
     # --- Connect to DB and fetch data ---
-    db = None
+    db_maniphest = None
+    db_project = None
     try:
-        db = mysql.connector.connect(
+        # --- Connect to maniphest DB ---
+        db_maniphest = mysql.connector.connect(
             host=host,
             user=user,
             password=password,
             database='phabricator_maniphest'
         )
-        cur = db.cursor()
+        cur = db_maniphest.cursor(buffered=True)
 
-        # Fetch main ticket info
-        sql_task = 'SELECT status, phid, description from maniphest_task WHERE id = %s'
+        # Fetch main ticket info including title
+        sql_task = (
+            'SELECT t.status, t.phid, t.description, tf.rawCorpus '
+            'FROM maniphest_task t '
+            'LEFT JOIN maniphest_task_ffield tf ON tf.documentID = t.id '
+            "AND tf.fieldKey = 'titl' "
+            'WHERE t.id = %s'
+        )
         cur.execute(sql_task, (task_id,))
         ticket = cur.fetchone()
 
@@ -60,7 +68,7 @@ async def iocall(io, argv):
             await io.error(f'!! ticket: Ticket T{task_id} not found')
             return False
 
-        ticket_status, ticket_phid, ticket_description = ticket
+        ticket_status, ticket_phid, ticket_description, ticket_title = ticket
 
         # Fetch comments
         sql_comments = (
@@ -72,11 +80,40 @@ async def iocall(io, argv):
         )
         cur.execute(sql_comments, (ticket_phid,))
         comments = cur.fetchall()
+        cur.close()
+
+        # --- Connect to project DB ---
+        db_project = mysql.connector.connect(
+            host=host,
+            user=user,
+            password=password,
+            database='phabricator_project'
+        )
+        cur = db_project.cursor(buffered=True)
+        
+        sql_board = (
+            'SELECT p.name, pc.name '
+            'FROM project_columnposition pcp '
+            'LEFT JOIN project_column pc ON pc.phid = pcp.columnPHID '
+            'LEFT JOIN project p ON p.phid = pc.projectPHID '
+            'WHERE pcp.objectPHID = %s'
+        )
+        cur.execute(sql_board, (ticket_phid,))
+        board = cur.fetchone()
+        cur.close()
 
         # --- Print formatted output ---
-        await io.print(f'# Ticket T{task_id}')
+        await io.print(f'# Ticket T{task_id}: {ticket_title}')
         await io.print('')
         await io.print(f'- Status: **{ticket_status}**')
+
+        if board:
+            await io.print(f'- Workboard: **{board[0]}**')
+            await io.print(f'- Column: **{board[1] or "(Backlog)"}**')
+        else:
+            await io.print('- Workboard: **(None)**')
+            await io.print('- Column: **(None)**')
+
         await io.print('')
         await io.print('## Description')
         await io.print('')
@@ -101,8 +138,9 @@ async def iocall(io, argv):
         await io.error(f"!! ticket: an unexpected error occurred: {e}")
         return False
     finally:
-        if db and db.is_connected():
-            db.close()
+        if db_maniphest and db_maniphest.is_connected():
+            db_maniphest.close()
+        if db_project and db_project.is_connected():
+            db_project.close()
 
     return True
-
