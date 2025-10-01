@@ -1,4 +1,5 @@
 #!/bin/skrip
 
 $ bank access admin
+$ bank dmx project
 

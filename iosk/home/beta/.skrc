@@ -2,6 +2,7 @@
 
 $ bank role qa
 $ bank boss lannocc
+$ bank boss ruckusist
 $ bank access admin
 $ bank timing 1min_turbo
 $ bank instinct gut

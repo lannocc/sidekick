@@ -196,9 +196,13 @@ def get_directory_contents_as_text(path):
 
             text += f'\n>>> BEGIN FILE {full_path}:\n'
             text += f'```{hint}\n'
-            with open(full_path, 'r') as file:
-                text += file.read()
-                #text += '\n'
+            try:
+                with open(full_path, 'r') as file:
+                    text += file.read()
+                    #text += '\n'
+            except:
+                print(f'ERROR READING FILE: {full_path}')
+                raise
             text += '```\n'
             text += '<<< END FILE\n\n'
 

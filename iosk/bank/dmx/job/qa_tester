@@ -1,0 +1,38 @@
+#!/bin/skrip
+
+Diametrix is seeking a meticulous and detail-oriented QA Tester to ensure the quality and reliability of our flagship loan processing software. Diametrix FAS (Financial Analysis System) is a sophisticated application designed to automate financial analysis and loan spreading for small- to medium-sized banks and credit unions.
+
+**Responsibilities:**
+
+*   Design, develop, and execute comprehensive test plans, test cases, and test scripts for new and existing features.
+*   Perform thorough manual testing of the Svelte frontend and Python backend to identify bugs, inconsistencies, and usability issues.
+*   Verify the accuracy of complex financial calculations, data extraction from documents (tax returns, bank statements), and report generation.
+*   Document, track, and manage defects from discovery to resolution using our ticketing system.
+*   Collaborate closely with developers to reproduce bugs, clarify requirements, and ensure fixes are effective.
+*   Conduct regression testing to ensure application stability after new code changes are introduced.
+*   Test the end-to-end document processing workflow, including uploads, data extraction via Google Document AI, and data presentation.
+*   Analyze user feedback and requirements to anticipate potential issues and create relevant test scenarios.
+*   Contribute to maintaining a high standard of quality for a mission-critical financial application.
+
+**Required Skills & Experience:**
+
+*   Proven professional experience in a Quality Assurance or Software Testing role.
+*   Strong understanding of QA methodologies, tools, and processes (e.g., test planning, test case design, bug tracking).
+*   Meticulous attention to detail, especially when working with numerical and financial data.
+*   Experience in testing web applications, including UI/UX, API functionality, and cross-browser compatibility.
+*   Excellent ability to write clear, concise, and comprehensive bug reports and test documentation.
+*   Strong analytical and problem-solving skills with a creative mindset for identifying edge cases.
+*   Excellent communication and collaboration skills to work effectively in a small, agile team.
+
+**Bonus Skills:**
+
+*   Experience with automated testing frameworks (e.g., Cypress, Selenium, Playwright for frontend; pytest for backend).
+*   Basic understanding of Python or JavaScript.
+*   Domain knowledge in the financial services, lending, or accounting industry.
+*   Experience testing applications that integrate with third-party APIs.
+*   Familiarity with version control systems like Git.
+
+**About Diametrix:**
+
+We are a young, innovative startup based in Billings, MT, focused on delivering a cutting-edge Financial Analysis System to the U.S. market. Join us in building a product that streamlines and automates critical financial analysis for banks and credit unions.
+

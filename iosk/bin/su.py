@@ -15,9 +15,9 @@ async def iocall(io, argv): # Changed 'args' to 'argv'
         await io.print(iocall.__doc__)
         return
 
-    if not io.su:
-        await io.error('!! must be super-user to su')
-        return
+    #if not io.su:
+    #    await io.error('!! must be super-user to su')
+    #    return
 
     # Changed argument parsing to use argv list directly
     if len(argv) < 2:

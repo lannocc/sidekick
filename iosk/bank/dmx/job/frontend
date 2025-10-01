@@ -1,0 +1,39 @@
+#!/bin/skrip
+
+Diametrix is seeking a talented and passionate Svelte Frontend Developer to build and enhance the user interface of our flagship loan processing software. Diametrix FAS (Financial Analysis System) is a sophisticated application designed to automate financial analysis and loan spreading for small- to medium-sized banks and credit unions, and you will be responsible for creating a highly responsive, intuitive, and data-rich user experience.
+
+**Responsibilities:**
+
+*   Design, develop, and maintain the user-facing application using Svelte and modern web technologies.
+*   Build reusable, high-performance Svelte components for displaying complex financial data in structured formats like tables and reports.
+*   Implement real-time data communication with the Python backend using WebSockets, ensuring a seamless and interactive user experience.
+*   Collaborate closely with backend developers to define API contracts and integrate frontend components with backend services.
+*   Translate UI/UX design wireframes and mockups into high-quality, functional code.
+*   Optimize the application for maximum speed, scalability, and cross-browser compatibility.
+*   Ensure the technical feasibility of UI/UX designs and provide constructive feedback.
+*   Write clean, well-documented, and testable code, adhering to best practices for frontend development.
+*   Contribute to the entire development lifecycle, from planning and design to deployment and maintenance.
+
+**Required Skills & Experience:**
+
+*   Proven professional experience as a Frontend Developer.
+*   Strong proficiency in JavaScript, HTML5, and CSS3.
+*   Demonstrable, hands-on experience with the Svelte framework.
+*   Experience building and consuming APIs, with specific experience using WebSockets for real-time communication.
+*   Familiarity with modern frontend build pipelines and tools (e.g., Vite, Rollup, npm).
+*   A keen eye for detail and a passion for creating intuitive, user-friendly interfaces from complex requirements.
+*   Experience working in an Agile development environment.
+*   Excellent problem-solving abilities and communication skills.
+*   Ability to work effectively in a small, collaborative team.
+
+**Bonus Skills:**
+
+*   Experience with UI/UX design principles and tools.
+*   Familiarity with data visualization libraries.
+*   Basic understanding of Python and backend concepts.
+*   Domain knowledge in the financial services, lending, or accounting industry.
+*   Experience with frontend testing frameworks (e.g., Cypress, Playwright).
+
+**About Diametrix:**
+
+We are a young, innovative startup based in Billings, MT, focused on delivering a cutting-edge Financial Analysis System to the U.S. market. Join us in building a product that streamlines and automates critical financial analysis for banks and credit unions.

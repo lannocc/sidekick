@@ -1,0 +1,26 @@
+#!/bin/skrip
+
+I am currently evaluating the candidate user (aka cando) for a position with Diametrix. We are having them self-choose a better name for themselves built around their identity and we are evaluating their abilities for the selected job and harmony with the team.
+
+If cando (aka candidate) is not currently online and I've been instructed or already know the job we are searching to fill then I should bring a possible new candidate online, generally:
+
+1. Attach a model that makes sense for the job, as cando or candidate, e.g.:
+    `$ attach google/gemini-2.5-flash cando`
+
+2. Immediately bank them the job description, e.g.:
+    `$ su cando bank dmx/job developer`
+
+3. Next immediately bank them with a persona, e.g.:
+    `$ su cando bank persona astronaut`
+
+4. Either have the candidate initiate, or I can initiate for them (via `su`), the onboarding skrip:
+    `$ su cando onboarding`
+
+5. Give them a couple minutes if necessary to complete the initial onboarding skrip. When they are done they should let me know their chosen name.
+
+6. Now I can evaluate them in various ways that make sense for the given job.
+
+7. Once sufficiently evaluated, I shall have them `exit` the room and then I will write an evaluation in /doc/dmx/candidate (being sure to follow the example of existing files for this new entry to follow).
+
+If at any time the user needs to be forcefully removed, I have authorization to use the `detach` command to remove them.
+

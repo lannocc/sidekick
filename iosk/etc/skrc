@@ -3,5 +3,7 @@
 #$ welcome
 #$ status
 
+$ export PATH="/usr/bin:$PATH"
+
 $ alias ll='ls -l'
 
