@@ -19,5 +19,6 @@ $ bank dmx project
 $ bank dmx commands
 $ bank dmx tree
 
+$ echo 'THE JOB I WAS HIRED FOR:' | bank
 $ bank dmx/job frontend
 
