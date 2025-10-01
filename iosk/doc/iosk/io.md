@@ -85,12 +85,12 @@ Here's a breakdown of the class and its methods:
 *   `stage_pre(self)`:
     *   Sets the stage to `STAGE_PRE` and creates the string buffer for output capture (`self.pre`).
 
-*   `stage_bank(self, bank, acct)`:
-    *   Sets the stage to `STAGE_BANK`, stores the bank and account names and initializes a `StringIO` buffer (`self.banking[2]`).
+*   `stage_bank(self, key)`:
+    *   Sets the stage to `STAGE_BANK`, stores the `key` (typically the resolved path of a skrip) and initializes a `StringIO` buffer to capture output.
 
 *   `stage_normal(self)`:
     *   Sets the stage back to `STAGE_NORMAL`.
-    *   If previously in `STAGE_BANK`, retrieves the buffered data from the `StringIO` object, stores the data in the `self.banks` dictionary (keyed by "bank acct"), and clears the `self.banking` tuple.
+    *   If previously in `STAGE_BANK`, it retrieves the buffered data from the `StringIO` object, stores the data in the `self.banks` dictionary (keyed by the path of the skrip that was executed), and clears the banking state.
 
 *   `stage_post(self)`:
     *   Sets the stage to `STAGE_POST` and creates the string buffer for output capture (`self.post`).
@@ -115,3 +115,4 @@ The `Capture` class handles managing log files. It provides a mechanism to open 
 **Overall Purpose:**
 
 The `Context` class provides a structured way to manage the state and behavior of interactions within a system, particularly for bot interactions. It isolates the environment for each user or thread, manages input and output, handles logging, manages environment variables and command aliases, and provides a simple form of memory (banks). The stage system allows for delayed processing of output. The `Capture` class assists with managing log files used by multiple Contexts.
+

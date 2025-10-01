@@ -19,7 +19,7 @@ General Utilities:
     $ exit          - leave the system chat (logout)
 
 Memory Management (Skrip Banks):
-    $ bank          - load some skrip accounts from /bank into core memory
+    $ bank          - load a skrip into core memory by executing it
     $ banks         - list memory accounts currently banked
     $ bankrupt      - clear core memory bank
 
@@ -115,3 +115,4 @@ async def iocall(io, argv):
     # If we reach here, it means invalid arguments were provided (e.g., `help cmd1 cmd2`)
     await io.error("!! help: too many arguments or unknown option. Use 'help --help' for usage.")
     return False
+
