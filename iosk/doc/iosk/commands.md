@@ -13,15 +13,16 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Broken (causes system to hang).
 *   **attach**: Attach a device as a user.
     *   Usage: `$ attach <device> [handle]`
-*   **bank**: Load a skrip account from `/bank` into core memory.
-    *   Usage: `$ bank <bank> <account>`
-    *   Status: Skipped (per project instructions).
+*   **bank**: Load a skrip into core memory banks.
+    *   Usage: `$ bank <path components...>` or `... | bank`
+    *   Notes: Loads the content of a file into memory. If the file has a shebang (e.g., `#!/bin/skrip`), it is executed and its output is captured. Otherwise, the raw file content is loaded directly. The path can be absolute (e.g., `/etc/skrc`), relative to the CWD (e.g., `./myskrip`), or relative to `/bank` (e.g., `role devops`). If input is piped, the content is loaded directly without execution.
+    *   Status: Working.
 *   **bankrupt**: Clear all loaded banks from core memory.
     *   Usage: `$ bankrupt`
-    *   Status: Skipped (per project instructions).
+    *   Status: Working.
 *   **banks**: List memory accounts currently banked.
     *   Usage: `$ banks`
-    *   Status: Skipped (related to banking commands).
+    *   Status: Working.
 *   **cat**: Display the contents of a file.
     *   Usage: `$ cat <filename>`
 *   **cd**: Change the current working directory.
@@ -92,7 +93,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ skrip <filename>` or `$ skrip -e <command>`
 *   **status**: Displays system status information (date, user, users).
     *   Usage: `$ status`
-*   **su**: Execute a command as another user.
+*   **su**: Execute a command as another user, with optional piped input.
     *   Usage: `$ su <user> <command> [args]`
     *   Notes: Requires super-user privileges.
 *   **system**: Execute a command in the underlying host system.
@@ -135,3 +136,4 @@ These commands are typically used for system administration tasks Most `/sbin` c
     *   Notes: Sets up the initial `PATH` and performs other system startup tasks. Not intended for direct user invocation.
 *   **shutdown**: Stop the IOSK system.
     *   Usage: `$ shutdown`
+

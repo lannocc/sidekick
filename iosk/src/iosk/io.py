@@ -149,7 +149,7 @@ class Context:
             return
 
         elif self.stage == self.STAGE_BANK:
-            self.banking[2].write(text)
+            self.banking[1].write(text)
             if self.bot: return
 
         elif self.stage == self.STAGE_POST:
@@ -181,19 +181,18 @@ class Context:
         self.pre = StringIO()
         self.stage = self.STAGE_PRE
 
-    def stage_bank(self, bank, acct):
-        self.banking = (bank, acct, StringIO())
+    def stage_bank(self, key):
+        self.banking = (key, StringIO())
         self.stage = self.STAGE_BANK
 
     def stage_normal(self):
         if self.banking:
-            bank = self.banking[0]
-            acct = self.banking[1]
-            data = self.banking[2]
-            data.seek(0)
-            data = data.read()
+            key = self.banking[0]
+            sio = self.banking[1]
+            sio.seek(0)
+            data = sio.read()
             self.banking = None
-            self.banks[f'{bank} {acct}'] = data
+            self.banks[key] = data
 
         self.stage = self.STAGE_NORMAL
 
