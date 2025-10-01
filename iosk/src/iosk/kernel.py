@@ -148,6 +148,7 @@ class IOSK:
         await self.system.print(f'IOSK login: {user}')
 
         io = self.system.fork()
+        io.banks = { } # A user's base context gets its own banks.
         io.log = Capture.log(self, join(self.USER_LOG, user), True)
         io.dev = device
         io.user = user
