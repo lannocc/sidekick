@@ -33,7 +33,17 @@ async def iocall(io, argv):
             # For piped content, we don't execute, just store.
             # Use a unique key to avoid collisions.
             bank_key = f"stdin-bank-{uuid.uuid4().hex[:8]}"
-            io.banks[bank_key] = content
+
+            # Use the staging mechanism to capture the raw piped content
+            io.stage_bank(bank_key)
+            try:
+                # "print" the content, which gets captured by the banking stage.
+                # Unlike file-based banking, we don't execute piped content, just capture it.
+                await io.print(content)
+            finally:
+                # This call finalizes the capture, moving the content into io.banks
+                io.stage_normal()
+
             await io.print(f":: content piped into memory bank '{bank_key}'")
         return True
 

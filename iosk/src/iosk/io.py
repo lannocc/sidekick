@@ -72,6 +72,9 @@ class Context:
         child.env = self.env.copy()
         child.aliases = self.aliases.copy()
 
+        # Share the parent's banks dictionary by reference.
+        child.banks = self.banks
+
         return child
 
     def environ(self):
