@@ -51,9 +51,9 @@ Also:
 - adjustable monitor swivel arms
 - ergonomic roller chair
 
-## SIP Phone
+## VoIP Phone
 
-A desk phone (corded handset) supporting SIP.
+A desk phone (corded handset) supporting VoIP/SIP.
 
 ## UPS
 
