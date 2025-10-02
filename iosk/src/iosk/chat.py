@@ -3,6 +3,8 @@
 
 from .io import print_flush as print
 
+import tiktoken
+
 import asyncio
 from datetime import datetime
 from os.path import exists, join
@@ -42,6 +44,49 @@ class AIMessenger:
             await self.leave(io)
             #self.me = None
 
+    async def _setup_chat_context(self, io):
+        """Executes preamble, caches it, and calculates initial token counts."""
+        # --- Preamble Caching ---
+        io.stage_pre()
+        try:
+            preamble_path = '/etc/chat/preamble'
+            if await self.os.exists(io, preamble_path):
+                await self.os.exec(io, preamble_path)
+            if io.pre:
+                io.pre.seek(0)
+                io.preamble_cache = io.pre.read()
+            else:
+                io.preamble_cache = ""
+        finally:
+            io.stage_normal()
+
+        # --- Token Calculation for Initial Static Context ---
+        try:
+            encoding = tiktoken.get_encoding('cl100k_base')
+
+            # Preamble part
+            static_content = io.preamble_cache or ""
+
+            # Banking part
+            banking = ''
+            if io.banks:
+                for bank_acct, data in io.banks.items():
+                    banking += '\n' + data + '\n'
+
+            if banking:
+                static_content += ('\n=== CORE RULES/MEMORY BEGIN ===\n'
+                                   'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS REMEMBER:\n'
+                                   f'{banking}'
+                                   '\n=== END   CORE RULES/MEMORY ===\n')
+
+            initial_static_tokens = len(encoding.encode(static_content))
+            io.caching_token_total = initial_static_tokens # Initialize the running total
+            io.initial_static_tokens = initial_static_tokens
+        except Exception as e:
+            # AIs might not be used, so don't fail login if tiktoken is missing
+            # or something goes wrong. Just log it.
+            await self.os.system.error(f"!! token initialization failed: {e}")
+
     async def join(self, name, dev=None): # no device means local (self)
         assert name
         connect = f':: {name} has entered the chat from {dev or "local"}'
@@ -58,6 +103,8 @@ class AIMessenger:
 
         if not io:
             return
+
+        await self._setup_chat_context(io)
 
         async def go(io):
             await self.os.interactive(io)
@@ -82,7 +129,7 @@ class AIMessenger:
         if not msg: return
         if not sys:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            msg = f'<< {now} [{from_user}] {msg}'
+            msg = f'\n[{from_user} {now}] << {msg}'
 
         for user, uio in self.os.users.items():
             if user is from_user: continue
@@ -177,72 +224,83 @@ class Engagement:
             #       (Context already has the data in its session buffer)
 
             if prompt:
+                # Retrieve cached preamble
+                pre = self.io.preamble_cache or ""
+
+                # solid banking
+                banking = ''
+                if self.io.banks:
+                    for bank_acct, data in self.io.banks.items():
+                        banking += '\n' + data + '\n'
+
+                # Execute postamble
+                post = ''
                 try:
-                    # so hacky...
-                    self.io.stage_pre()
-                    pre = self.io.os.box(self.PREAMBLE)
-                    if exists(pre):
-                        await self.io.os.exec(self.io, self.PREAMBLE)
-                    if self.io.pre:
-                        self.io.pre.seek(0)
-                        pre = self.io.pre.read()
-                    else: pre = ''
-
-                    # solid banking
-                    banking = ''
-                    if self.io.banks:
-                        for bank_acct, data in self.io.banks.items():
-                            #banking += '\n~~~' + bank_acct.upper() + '::\n'
-                            banking += '\n' + data + '\n'
-
-                    # so hacky...
                     self.io.stage_post()
-                    post = self.io.os.box(self.POSTAMBLE)
-                    if exists(post):
+                    post_path = self.io.os.box(self.POSTAMBLE)
+                    if exists(post_path):
                         await self.io.os.exec(self.io, self.POSTAMBLE)
                     if self.io.post:
                         self.io.post.seek(0)
                         post = self.io.post.read()
-                    else: post = ''
-
-                    if banking:
-                        banking = '' \
-                            + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
-                            + 'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS ' \
-                            + 'REMEMBER:\n' \
-                            + banking \
-                            + '\n=== END   CORE RULES/MEMORY ===\n'
-
-                    prompt = pre + banking \
-                       + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
-                       + prompt \
-                       + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
-                       + '\n' + post \
-                       + f'\n[{self.io.user} {self.io.pwd}] >> '
-
                 finally:
                     self.io.stage_normal()
 
-                #print('++++++++++++++++++++++++++++++++++++++ PROMPT BEGIN +++')
-                #print(prompt)
-                #print('++++++++++++++++++++++++++++++++++++++ PROMPT   END +++')
+
+                if banking:
+                    banking = '' \
+                        + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
+                        + 'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS ' \
+                        + 'REMEMBER:\n' \
+                        + banking \
+                        + '\n=== END   CORE RULES/MEMORY ===\n'
+
+                prompt_text_for_trip = pre + banking \
+                   + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
+                   + prompt \
+                   + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
+                   + '\n' + post \
+                   + f'\n[{self.io.user} {self.io.pwd}] >> '
+
+                # --- Update Running Token Totals ---
+                try:
+                    encoding = tiktoken.get_encoding('cl100k_base')
+
+                    # Calculate tokens for the dynamic part of the prompt
+                    # The 'prompt' var here is just the chat history.
+                    dynamic_content = ('\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n'
+                                       f'{prompt}'
+                                       '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n\n'
+                                       f'{post}')
+                    dynamic_tokens = len(encoding.encode(dynamic_content))
+
+                    # Full prompt tokens for this trip
+                    full_prompt_tokens = self.io.initial_static_tokens + dynamic_tokens
+
+                    # Update running totals
+                    self.io.caching_token_total += dynamic_tokens
+                    self.io.full_token_total += full_prompt_tokens
+
+                except Exception as e:
+                    # Don't crash the engagement if token calculation fails
+                    await self.io.os.system.error(f"!! token calculation failed during trip: {e}")
 
                 self.waiting = True
                 try:
-                    reply = await self.trip(prompt)
+                    reply = await self.trip(prompt_text_for_trip)
 
                 except Exception as e: # overloaded?
                     await self.io.os.system.error(f'!! trip for {self.io.user}:'
                                                   f' {e}')
                     await asyncio.sleep(1.8)
                     try:
-                        reply = await self.trip(prompt)
+                        reply = await self.trip(prompt_text_for_trip)
 
                     except Exception as e: # still overloaded?
                         await self.io.os.system.error(
                                 f'!! trip (2) for {self.io.user}: {e}')
                         await asyncio.sleep(4.2)
-                        reply = await self.trip(prompt)
+                        reply = await self.trip(prompt_text_for_trip)
 
                 finally:
                     self.waiting = False
@@ -295,26 +353,28 @@ class Engagement:
         if lang == 'diff':
             target_file = self._extract_target_from_diff(code)
             if target_file:
-                # Replace the block first, so the AI's reply appears before the command output
-                replacement_message = f'\n<< [iosk] diff block detected. Attempting to auto-patch `{target_file}`... >>'
-                text = text.replace(original_block, replacement_message)
+                # Print a notification to the local user's context, like command output.
+                replacement_message = f':: diff block detected. Attempting to auto-patch `{target_file}`...'
+                await self.io.print(replacement_message)
 
                 # Construct and run the patch command. Its output will go directly to the user's console.
                 patch_command = f"patch {target_file} {virtual_path}"
                 await self.io.os.call(self.io, patch_command)
             else:
-                # Could not find a target file, fall back to just saving
-                replacement_message = f'\n<< [iosk] auto-saved diff block to {virtual_path} (could not determine target file to patch) >>'
-                text = text.replace(original_block, replacement_message)
-            return text
+                # Could not find a target file, fall back to just saving and notifying locally.
+                replacement_message = f':: auto-saved diff block to {virtual_path} (could not determine target file to patch)'
+                await self.io.print(replacement_message)
 
-        # Fallback for non-diff code blocks (existing logic for one block)
-        lines = original_block.split('\n')
-        #if len(lines) > 10:
-        #    truncated_block = '\n'.join(lines[:10]) + '\n[[[IOSK TRUNCATED]]]\n```'
-        #    text = text.replace(original_block, truncated_block)
-        #text += f'\n<< [iosk] auto-saved markdown block 1 to {virtual_path}'
-        text = text.replace('\n'.join(lines[1:-1]),
-                            f':: iosk auto-saved this markdown block (content hidden) to {virtual_path}')
-        return text
+            # Remove the original markdown block from the text that will be processed for chat broadcast.
+            return text.replace(original_block, '')
+
+        # Fallback for non-diff code blocks
+        # Print the "auto-saved" message directly to the local user's context.
+        #replacement_message = f':: iosk auto-saved this markdown block (content hidden) to {virtual_path}'
+        replacement_message = f':: iosk auto-saved this markdown block to {virtual_path}'
+        await self.io.print(original_block)
+        await self.io.print(replacement_message)
+
+        # Remove the original markdown block from the text that will be processed for chat broadcast.
+        return text.replace(original_block, '')
 

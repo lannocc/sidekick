@@ -9,6 +9,7 @@ The following commands are generally available:
 General Utilities:
     $ help          - get help on commands (this file)
     $ alias         - manage IOSK command aliases
+    $ clear         - clear the session history for bots or the screen for console users
     $ date          - display the current date and time
     $ echo          - display the given arguments
     $ export        - set or display environment variables
@@ -16,10 +17,11 @@ General Utilities:
     $ status        - display system status (date, whoami, users)
     $ which         - locate a command executable in the PATH
     $ welcome       - display a welcome message (auto-called on login)
+    $ xargs         - build and execute command lines from standard input
     $ exit          - leave the system chat (logout)
 
 Memory Management (Skrip Banks):
-    $ bank          - load some skrip accounts from /bank into core memory
+    $ bank          - load a skrip into core memory by executing it
     $ banks         - list memory accounts currently banked
     $ bankrupt      - clear core memory bank
 
@@ -52,6 +54,7 @@ Viewing and Analyzing Files:
     $ grep          - search for PATTERN in each FILE or standard input
     $ head          - print first few lines of file
     $ search        - search for a term within text files
+    $ send          - send file contents or piped data to the chat (to all users)
     $ tail          - print last few lines of file
     $ ticket        - view ticket details from the database
     $ tokens        - calculate total bytes and estimate tokens for session context

@@ -4,134 +4,191 @@ These commands are generally available to users within the IOSK environment. Mos
 
 *   **alias**: Manage IOSK command aliases.
     *   Usage: `$ alias` (list) or `$ alias NAME=VALUE` (define/update).
-    *   Notes: `NAME=VALUE` defines a new alias or updates an existing one. NAME is the alias, VALUE is the command it expands to.
-    *   Status: Working, but has known issues with variable expansion at definition time (not execution time) and nested quotes in alias definitions.
+    *   Notes: `NAME=VALUE` defines a new alias or updates an existing one. NAME is the alias, VALUE is the command it expands to. Variables within an alias definition (e.g., `$PATH`) are expanded *during the alias definition itself*, not during alias execution. The parser struggles with nested quotes in alias definitions.
+    *   Status: Working (with caveats - alias quoting and expansion issues exist but are not a high priority to resolve immediately given the parser proposal's status).
 *   **ask**: Ask an AI user a question, with optional file/directory context.
-    *   Usage: `$ ask [options] <user> <prompt>`
-    *   Options: `-d <device>` (specify device model), `-f <file>` (attach file content), `-p <directory>` (package directory content), `-e <lang> <file>` (extract code block and save).
-    *   Notes: Only one of -f or -p can be used at a time. The screenshot option (-s) is not available.
-    *   Status: Broken (causes system to hang).
+    *   Usage: `$ ask [options] <prompt>`
+    *   Notes: If `<prompt>` is not provided as an argument, it is read from standard input.
+    *   Options: `-q`, `--quiet` (quiet mode); `-f <file>` (attach file content, can be specified multiple times); `-p <directory>` (package directory content, can be specified multiple times); `-e <lang> <file>` (extract first markdown code block of `<lang>` and save); `-1` (use model gemini-2.0-flash-lite); `-2` (use model gemini-2.5-flash, default); `-3` (use model gemini-2.5-pro).
+    *   Status: Working.
 *   **attach**: Attach a device as a user.
     *   Usage: `$ attach <device> [handle]`
-*   **bank**: Load a skrip account from `/bank` into core memory.
-    *   Usage: `$ bank <bank> <account>`
-    *   Status: Skipped (per project instructions).
+    *   Status: Working.
+*   **bank**: Load a skrip into core memory banks.
+    *   Usage: `$ bank <path components...>` or `... | bank`
+    *   Notes: Loads the content of a file into memory. If the file has a shebang (e.g., `#!/bin/skrip`), it is executed and its output is captured. Otherwise, the raw file content is loaded directly. The path can be absolute (e.g., `/etc/skrc`), relative to the CWD (e.g., `./myskrip`), or relative to `/bank` (e.g., `role devops`). If input is piped, the content is loaded directly without execution.
+    *   Status: Working.
 *   **bankrupt**: Clear all loaded banks from core memory.
     *   Usage: `$ bankrupt`
-    *   Status: Skipped (per project instructions).
+    *   Status: Working.
 *   **banks**: List memory accounts currently banked.
     *   Usage: `$ banks`
-    *   Status: Skipped (related to banking commands).
+    *   Status: Working.
 *   **cat**: Display the contents of a file.
     *   Usage: `$ cat <filename>`
+    *   Status: Working.
 *   **cd**: Change the current working directory.
     *   Usage: `$ cd [directory]`
     *   Notes: If no directory is specified, it changes to the user's home directory (`/home/<user>`).
+    *   Status: Working.
+*   **clear**: Clear the session history for bots or the screen for console users.
+    *   Usage: `$ clear`
+    *   Notes: For bot users, clears the entire chat session history, leaving only the `clear` command itself. For interactive console users, clears the screen.
+    *   Status: Working.
 *   **cp**: Copy a file or directory.
     *   Usage: `$ cp <source> <destination>`
+    *   Status: Working (file to file copy, file to existing directory copy).
 *   **date**: Display the current date and time.
-    *   Usage: `$ date`
+    *   Usage: `$ date` or `$ date <format>`
+    *   Notes: The format string should start with a `+` (e.g., `"+%Y%m%d_%H%M%S"`), using Python's `datetime strftime` format codes.
+    *   Status: Working.
 *   **describe**: Describe a file or directory.
     *   Usage: `$ describe <path>`
     *   Notes: Provides a concise summary: type, size, line/word counts for text, simple type heuristics.
+    *   Status: Working.
 *   **detach**: Detach a device user.
     *   Usage: `$ detach <handle>`
+    *   Status: Working.
 *   **diff**: Show differences between two text files.
     *   Usage: `$ diff [-u N] <file1> <file2>`
     *   Options: `-u N` (unified context lines, default 3).
     *   Notes: Files must be text; binary files are refused.
+    *   Status: Working.
 *   **echo**: Echo the given arguments.
     *   Usage: `$ echo [arguments]`
+    *   Status: Working.
 *   **export**: Set or display environment variables.
     *   Usage: `$ export [NAME=VALUE] ...`
     *   Notes: With no arguments, prints a list of all environment variables. Otherwise, sets each `NAME` to `VALUE`.
+    *   Status: Working.
 *   **get**: Get the contents of a file. (Alias for `cat`)
     *   Usage: `$ get <filename>`
     *   Notes: Behaves identically to `cat`.
-*   **grep**: Search for PATTERN in each FILE or standard input.
+    *   Status: Working.
+*   **grep**: Search for a regular expression PATTERN in each FILE or standard input.
     *   Usage: `$ grep [OPTIONS] PATTERN [FILE...]`
     *   Options: `-i`, `--ignore-case` (ignore case distinctions); `-v`, `--invert-match` (select non-matching lines); `-n`, `--line-number` (prefix with line number); `-l`, `--files-with-matches` (print filenames only); `-c`, `--count` (print count of matching lines); `-r`, `-R`, `--recursive` (read all files under each directory, recursively).
-*   **head**: Display the first N lines of a file.
-    *   Usage: `$ head [-n <number>] <filename>`
-    *   Options: `-n <number>` (specifies the number of lines to display, defaults to 10).
+    *   Status: Working.
+*   **head**: Display the first N lines of a file or stdin.
+    *   Usage: `$ head [-n <number>] [filename]`
+    *   Options: `-n <number>` (specifies the number of lines to display, defaults to 10). If filename is omitted, reads from stdin.
+    *   Status: Working.
 *   **help**: Display general help or command-specific help.
     *   Usage: `$ help` or `$ help <command>` or `$ help [-h|--help]`
     *   Notes: `help` displays the general IOSK help message. `help <command>` displays the help message for the specified command (equivalent to `<command> --help`).
+    *   Status: Fully functional.
 *   **history**: Show recent command history for this session.
     *   Usage: `$ history [N]`
     *   Notes: `N` is the number of most recent commands to show. If omitted, the entire session history is displayed. Only lines entered as commands (`$ ...`) are shown.
+    *   Status: Working as expected.
 *   **ll**: Lists directory contents using the long listing format (alias for `ls -l`).
     *   Usage: `$ ll [path ...]`
     *   Notes: Provides one entry per line.
+    *   Status: Working (as an alias).
 *   **ls**: List directory contents.
     *   Usage: `$ ls [options] [path ...]`
     *   Options: `-l` (long listing format), `-a` (list all entries, including those starting with '.').
     *   Notes: This command honors `.skignore` files in listed directories.
+    *   Status: Working.
 *   **mkdir**: Create a directory.
-    *   Usage: `$ mkdir <directory>`
+    *   Usage: `$ mkdir <directory>...` or `$ mkdir -p <directory>...`
     *   Options: `-p` (allows parent directories to be created).
-    *   Notes: Will error if the directory already exists or a path component is not a directory.
+    *   Notes: Multiple directories can be specified. Will error if the directory already exists or a path component is not a directory.
+    *   Status: Working.
 *   **mv**: Move or rename a file or directory.
     *   Usage: `$ mv <source> <destination>`
+    *   Notes: If `DESTINATION` is an existing directory, `SOURCE` is moved into it. If `DESTINATION` is a filename, `SOURCE` is renamed to `DESTINATION`. Errors if `SOURCE` does not exist or if `DESTINATION` is a non-existent directory.
+    *   Status: Working.
 *   **patch**: Apply a diff to a file.
     *   Usage: `$ patch <targetfile> <patchfile>`
     *   Notes: This initial version can apply simple line-based patches.
+    *   Status: Working.
 *   **pwd**: Print the name of the current working directory.
     *   Usage: `$ pwd`
-*   **rm**: Remove a file.
-    *   Usage: `$ rm <filename>`
-    *   Notes: This command does not support removing directories. Use `rmdir` for empty directories.
-*   **rmdir**: Remove a directory.
-    *   Usage: `$ rmdir <directory>`
-    *   Notes: This command only removes empty directories.
-*   **search**: Search for a term within text files.
+    *   Status: Working.
+*   **rm**: Remove files.
+    *   Usage: `$ rm <filename>...`
+    *   Notes: This command does not support removing directories. Use `rmdir` for empty directories. Multiple files can be specified.
+    *   Status: Working for files, but explicitly fails for directories (which is expected for a basic `rm` command).
+*   **rmdir**: Remove one or more directories.
+    *   Usage: `$ rmdir <directory>...`
+    *   Notes: This command only removes empty directories. Multiple directories can be specified.
+    *   Status: Working.
+*   **search**: Search for a term within text files or stdin.
     *   Usage: `$ search [-i] [-n] [-l] [-c] <term> [path ...]`
     *   Options: `-i` (case-insensitive), `-n` (show line numbers), `-l` (list filenames with matches), `-c` (print count of matches per file).
-    *   Notes: No quoting is supported; `<term>` cannot contain spaces. If no paths are provided, defaults to `/home/<user>` if it exists; otherwise `/`.
+    *   Notes: If no paths are provided, reads from standard input. If stdin is empty, defaults to `/home/<user>` if it exists; otherwise `/`.
+    *   Status: Working.
+*   **send**: Send file contents or piped data as a message to the chat (to all users).
+    *   Usage: `$ send <file>...` or `... | send`
+    *   Notes: Reads content from one or more files, or from standard input, and broadcasts it as a single raw text message. The sender receives a confirmation.
+    *   Status: Working.
 *   **skrip**: Execute a skrip file or command string.
     *   Usage: `$ skrip <filename>` or `$ skrip -e <command>`
+    *   Status: Working.
 *   **status**: Displays system status information (date, user, users).
     *   Usage: `$ status`
-*   **su**: Execute a command as another user.
-    *   Usage: `$ su <user> <command> [args]`
-    *   Notes: Requires super-user privileges.
+    *   Status: Working.
+*   **su**: Execute a command as another user, with optional piped input.
+    *   Usage: `$ su <user> <command> [args...]` or `... | su <user> <command> [args...]`
+    *   Notes: Requires super-user privileges. When standard input is piped to `su`, it is passed as standard input to the executed command.
+    *   Status: Working (functionality for super-users is assumed based on the explicit error for non-super-users).
 *   **system**: Execute a command in the underlying host system.
     *   Usage: `$ system <command> [args...]`
     *   Notes: Executes directly on the host OS. Path-like arguments are sandboxed to host filesystem equivalents. Use with caution.
-*   **tail**: Display the last N lines of a file.
-    *   Usage: `$ tail [-n <number>] <filename>`
-    *   Options: `-n <number>` (specifies the number of lines to display, defaults to 10).
+    *   Status: Working.
+*   **tail**: Display the last N lines of a file or stdin.
+    *   Usage: `$ tail [-n <number>] [filename]`
+    *   Options: `-n <number>` (specifies the number of lines to display, defaults to 10). If filename is omitted, reads from stdin.
+    *   Status: Working.
 *   **ticket**: View ticket details from the database.
     *   Usage: `$ ticket <ticket-number>`
     *   Notes: `<ticket-number>` is the ID of the ticket to view (e.g., 123 or T123).
+    *   Status: Working.
 *   **tokens**: Calculate the total bytes and estimate tokens for the current session context.
     *   Usage: `$ tokens`
-    *   Notes: This command assembles the full context that would be sent to an AI, including the preamble, banked memory, chat history, and postamble, then reports the size of that context.
+    *   Notes: This command assembles the full context that would be sent to an AI, including the preamble, banked memory, chat history, and postamble, then reports the size of that context. It also displays session-long running totals.
+    *   Status: Working.
 *   **touch**: Create an empty file.
     *   Usage: `$ touch <filename>`
     *   Notes: Differs from standard UNIX `touch` as it errors if the file already exists, instead of updating its timestamp.
+    *   Status: Working as a file creation utility, but non-standard behavior for existing files.
 *   **tree**: List directory contents recursively in a tree-like format.
     *   Usage: `$ tree [options] [path ...]`
     *   Options: `-c` (count bytes and estimate tokens for the content).
-    *   Notes: If no path is provided, uses the current directory.
+    *   Notes: Some files and folders are hidden (this command honors `.skignore` files). If no path is provided, uses the current directory.
+    *   Status: Working.
 *   **users**: List connected users.
     *   Usage: `$ users`
-*   **wc**: Counts the number of lines, words, and characters in a file.
-    *   Usage: `$ wc <filename>`
+    *   Status: Working.
+*   **wc**: Counts the number of lines, words, and characters in a file or stdin.
+    *   Usage: `$ wc [file]`
+    *   Notes: If no file is specified, reads from standard input.
+    *   Status: Working.
 *   **welcome**: Displays a welcome message.
     *   Usage: `$ welcome`
+    *   Status: Working.
 *   **which**: Locate a command executable in the PATH.
     *   Usage: `$ which <command>`
     *   Notes: Searches the directories specified in the `PATH` environment variable for the given command name. Prioritizes Python (`.py`) module files over script files without an extension if both exist, matching the kernel's command resolution logic.
+    *   Status: Working.
 *   **whoami**: Display the current username.
     *   Usage: `$ whoami`
+    *   Status: Working.
+*   **xargs**: Build and execute command lines from standard input.
+    *   Usage: `... | xargs [options] [command [initial-arguments]]`
+    *   Notes: Reads items from standard input, delimited by spaces or newlines. If no command is given, `echo` is used by default. Options `-I` and `-n` are mutually exclusive. Option `-p` (prompt for execution) is problematic in non-interactive environments, and `stderr` output from `-t` or non-existent commands is not directly visible.
+    *   Status: Working (with noted behaviors for `-p` and `stderr` visibility).
 
 ## /sbin Commands
 
-These commands are typically used for system administration tasks Most `/sbin` commands also accept `--help` as an option to display their specific help message.
+These commands are typically used for system administration tasks. Most `/sbin` commands also accept `--help` as an option to display their specific help message.
 
 *   **init**: System initialization script.
     *   Usage: (Called automatically by the system)
     *   Notes: Sets up the initial `PATH` and performs other system startup tasks. Not intended for direct user invocation.
+    *   Status: Assumed Working. Needs NO further testing.
 *   **shutdown**: Stop the IOSK system.
     *   Usage: `$ shutdown`
+    *   Notes: Initiates the shutdown sequence for the IOSK system. This command signals the underlying operating system to halt the system.
+    *   Status: Assumed working. No further testing required as execution interrupts the running system.

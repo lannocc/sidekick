@@ -6,6 +6,7 @@ from .parser import CommandLineParser
 from .pipeline import CommandPipelineExecutor
 
 from binaryornot.check import is_binary
+import tiktoken
 
 import shlex
 import asyncio
@@ -147,6 +148,7 @@ class IOSK:
         await self.system.print(f'IOSK login: {user}')
 
         io = self.system.fork()
+        io.banks = { } # A user's base context gets its own banks.
         io.log = Capture.log(self, join(self.USER_LOG, user), True)
         io.dev = device
         io.user = user
@@ -196,7 +198,7 @@ class IOSK:
         while not self.halt.is_set():
             start = datetime.now()
             try:
-                while (text := await io.input(f'[{io.user}] >> ')) is None:
+                while (text := await io.input(f'[{io.user} {io.pwd}] >> ')) is None:
                     # non-blocking inputs return None until data
                     delay = (datetime.now() - start).total_seconds()
                     if delay < 0.1:

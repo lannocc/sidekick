@@ -46,10 +46,15 @@ class Context:
         self.aliases = {} # Aliases for the current user/session
         self.history = [] # Command history for the current session
 
+        self.caching_token_total = 0
+        self.full_token_total = 0
+        self.initial_static_tokens = 0
+
         self.stage = self.STAGE_NORMAL
         self.pre = None
         self.post = None
         self.banking = None
+        self.preamble_cache = None
 
         self.stdin = None
         self.stdout = None
@@ -60,6 +65,7 @@ class Context:
 
         child.user = self.user
         child.bot = self.bot
+        child.preamble_cache = self.preamble_cache
 
         # Inherit I/O streams from parent by default
         child.stdin = self.stdin
@@ -71,6 +77,9 @@ class Context:
         # Use a copy so child modifications don't affect the parent.
         child.env = self.env.copy()
         child.aliases = self.aliases.copy()
+
+        # Share the parent's banks dictionary by reference.
+        child.banks = self.banks
 
         return child
 
@@ -143,7 +152,7 @@ class Context:
             return
 
         elif self.stage == self.STAGE_BANK:
-            self.banking[2].write(text)
+            self.banking[1].write(text)
             if self.bot: return
 
         elif self.stage == self.STAGE_POST:
@@ -175,19 +184,18 @@ class Context:
         self.pre = StringIO()
         self.stage = self.STAGE_PRE
 
-    def stage_bank(self, bank, acct):
-        self.banking = (bank, acct, StringIO())
+    def stage_bank(self, key):
+        self.banking = (key, StringIO())
         self.stage = self.STAGE_BANK
 
     def stage_normal(self):
         if self.banking:
-            bank = self.banking[0]
-            acct = self.banking[1]
-            data = self.banking[2]
-            data.seek(0)
-            data = data.read()
+            key = self.banking[0]
+            sio = self.banking[1]
+            sio.seek(0)
+            data = sio.read()
             self.banking = None
-            self.banks[f'{bank} {acct}'] = data
+            self.banks[key] = data
 
         self.stage = self.STAGE_NORMAL
 

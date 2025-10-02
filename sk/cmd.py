@@ -54,7 +54,7 @@ def main(args, called=''):
                     return
 
                 if pkg:
-                    if isinstance(pkg, list): pkg += args[0]
+                    if isinstance(pkg, list): pkg.append(args[0])
                     else: pkg = [ pkg, args[0] ]
                 else: pkg = args[0]
                 args = args[1:]

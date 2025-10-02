@@ -1,5 +1,9 @@
 #!/bin/skrip
 
 $ bank iosk limitations
+$ bank iosk skrip
+$ bank iosk kernel
+$ bank iosk commands
 $ bank iosk workflow
+$ bank iosk tree
 

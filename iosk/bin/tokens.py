@@ -1,20 +1,26 @@
 import tiktoken
 from os.path import exists
 
-DOCSTRING = """Calculate the total bytes and estimate tokens for the current session context.
+DOCSTRING = """Calculate token usage for the current session context.
 
 Usage: tokens
        tokens --help
 
 This command assembles the full context that would be sent to an AI, including
-the preamble, banked memory, chat history, and postamble, then reports the
-size of that context.
+the preamble, banked memory, chat history, and postamble, and reports its size.
+It also displays two running totals for the entire session:
+- Session Total (caching): Simulates a caching model where the static preamble
+  and banked memory are counted once, and each subsequent AI trip adds only the
+  dynamic chat history and postamble.
+- Session Total (cumulative): A full cumulative total, where each AI trip adds
+  the token count of the entire context (static + dynamic).
 """
 
 async def iocall(io, argv):
     """
-    Calculates and prints the total bytes and estimated token count for the
-    current user's full session context (preamble, banks, history, postamble).
+    Calculates and prints the total bytes and estimated token count for the current
+    user's full session context (preamble, banks, history, postamble), as well
+    as session-long running totals.
     """
     if '--help' in argv:
         await io.print(DOCSTRING)
@@ -24,18 +30,7 @@ async def iocall(io, argv):
     temp_io = io.fork()
 
     # --- 1. Get Preamble Content ---
-    preamble_content = ""
-    preamble_path = '/etc/chat/preamble'
-    try:
-        temp_io.stage_pre()
-        if await temp_io.os.exists(temp_io, preamble_path):
-            await temp_io.os.exec(temp_io, preamble_path)
-
-        if temp_io.pre:
-            temp_io.pre.seek(0)
-            preamble_content = temp_io.pre.read()
-    finally:
-        temp_io.stage_normal()  # Ensure the stage is reset
+    preamble_content = io.preamble_cache or ""
 
     # --- 2. Get Banked Memory Content ---
     banking_content = ""
@@ -93,7 +88,10 @@ async def iocall(io, argv):
         return False
 
     # --- 7. Print the Results ---
-    await io.print(f'Total Bytes: {byte_count:,}')
-    await io.print(f'Est. Tokens: {token_count:,}')
+    await io.print(f' Bytes this trip: {byte_count:,}')
+    await io.print(f'Tokens this trip: {token_count:,}')
+    await io.print(f'Tokens session total (caching on): {io.caching_token_total:,}')
+    await io.print(f'Tokens session total (cumulative): {io.full_token_total:,}')
 
     return True
+
