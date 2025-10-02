@@ -3,6 +3,8 @@
 
 from .io import print_flush as print
 
+import tiktoken
+
 import asyncio
 from datetime import datetime
 from os.path import exists, join
@@ -82,7 +84,7 @@ class AIMessenger:
         if not msg: return
         if not sys:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            msg = f'<< {now} [{from_user}] {msg}'
+            msg = f'\n[{from_user} {now}] << {msg}'
 
         for user, uio in self.os.users.items():
             if user is from_user: continue
@@ -177,72 +179,83 @@ class Engagement:
             #       (Context already has the data in its session buffer)
 
             if prompt:
+                # Retrieve cached preamble
+                pre = self.io.preamble_cache or ""
+
+                # solid banking
+                banking = ''
+                if self.io.banks:
+                    for bank_acct, data in self.io.banks.items():
+                        banking += '\n' + data + '\n'
+
+                # Execute postamble
+                post = ''
                 try:
-                    # so hacky...
-                    self.io.stage_pre()
-                    pre = self.io.os.box(self.PREAMBLE)
-                    if exists(pre):
-                        await self.io.os.exec(self.io, self.PREAMBLE)
-                    if self.io.pre:
-                        self.io.pre.seek(0)
-                        pre = self.io.pre.read()
-                    else: pre = ''
-
-                    # solid banking
-                    banking = ''
-                    if self.io.banks:
-                        for bank_acct, data in self.io.banks.items():
-                            #banking += '\n~~~' + bank_acct.upper() + '::\n'
-                            banking += '\n' + data + '\n'
-
-                    # so hacky...
                     self.io.stage_post()
-                    post = self.io.os.box(self.POSTAMBLE)
-                    if exists(post):
+                    post_path = self.io.os.box(self.POSTAMBLE)
+                    if exists(post_path):
                         await self.io.os.exec(self.io, self.POSTAMBLE)
                     if self.io.post:
                         self.io.post.seek(0)
                         post = self.io.post.read()
-                    else: post = ''
-
-                    if banking:
-                        banking = '' \
-                            + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
-                            + 'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS ' \
-                            + 'REMEMBER:\n' \
-                            + banking \
-                            + '\n=== END   CORE RULES/MEMORY ===\n'
-
-                    prompt = pre + banking \
-                       + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
-                       + prompt \
-                       + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
-                       + '\n' + post \
-                       + f'\n[{self.io.user} {self.io.pwd}] >> '
-
                 finally:
                     self.io.stage_normal()
 
-                #print('++++++++++++++++++++++++++++++++++++++ PROMPT BEGIN +++')
-                #print(prompt)
-                #print('++++++++++++++++++++++++++++++++++++++ PROMPT   END +++')
+
+                if banking:
+                    banking = '' \
+                        + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
+                        + 'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS ' \
+                        + 'REMEMBER:\n' \
+                        + banking \
+                        + '\n=== END   CORE RULES/MEMORY ===\n'
+
+                prompt_text_for_trip = pre + banking \
+                   + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
+                   + prompt \
+                   + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
+                   + '\n' + post \
+                   + f'\n[{self.io.user} {self.io.pwd}] >> '
+
+                # --- Update Running Token Totals ---
+                try:
+                    encoding = tiktoken.get_encoding('cl100k_base')
+
+                    # Calculate tokens for the dynamic part of the prompt
+                    # The 'prompt' var here is just the chat history.
+                    dynamic_content = ('\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n'
+                                       f'{prompt}'
+                                       '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n\n'
+                                       f'{post}')
+                    dynamic_tokens = len(encoding.encode(dynamic_content))
+
+                    # Full prompt tokens for this trip
+                    full_prompt_tokens = self.io.initial_static_tokens + dynamic_tokens
+
+                    # Update running totals
+                    self.io.caching_token_total += dynamic_tokens
+                    self.io.full_token_total += full_prompt_tokens
+
+                except Exception as e:
+                    # Don't crash the engagement if token calculation fails
+                    await self.io.os.system.error(f"!! token calculation failed during trip: {e}")
 
                 self.waiting = True
                 try:
-                    reply = await self.trip(prompt)
+                    reply = await self.trip(prompt_text_for_trip)
 
                 except Exception as e: # overloaded?
                     await self.io.os.system.error(f'!! trip for {self.io.user}:'
                                                   f' {e}')
                     await asyncio.sleep(1.8)
                     try:
-                        reply = await self.trip(prompt)
+                        reply = await self.trip(prompt_text_for_trip)
 
                     except Exception as e: # still overloaded?
                         await self.io.os.system.error(
                                 f'!! trip (2) for {self.io.user}: {e}')
                         await asyncio.sleep(4.2)
-                        reply = await self.trip(prompt)
+                        reply = await self.trip(prompt_text_for_trip)
 
                 finally:
                     self.waiting = False

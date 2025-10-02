@@ -73,9 +73,11 @@ async def iocall(io, argv):
         # Decode output and print to IOSK's streams.
         # Strip to avoid extra newlines if the host command itself adds them.
         if stdout_data:
-            await io.print(f"\n--- Host STDOUT ---\n{stdout_data.decode().strip()}")
+            #await io.print(f"\n--- Host STDOUT ---\n{stdout_data.decode().strip()}")
+            await io.print(stdout_data.decode())
         if stderr_data:
-            await io.error(f"\n--- Host STDERR ---\n{stderr_data.decode().strip()}")
+            #await io.error(f"\n--- Host STDERR ---\n{stderr_data.decode().strip()}")
+            await io.error(stderr_data.decode())
 
         # Wait for the process to finish and get the exit code.
         return_code = await process.wait()

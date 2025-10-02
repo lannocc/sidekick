@@ -18,6 +18,8 @@ async def iocall(io, argv):
         - If relative (e.g., ./myskrip), it's resolved from the current directory.
         - Otherwise (e.g., role devops), it's treated as a path under /bank
           (becoming /bank/role/devops).
+        If a given path is not found and it does not already end with .md,
+        the command will also try to find the file by appending a .md extension.
 
     If no path is given and input is piped from stdin, the piped content
     is loaded directly into memory without being executed as a skrip.
@@ -63,6 +65,12 @@ async def iocall(io, argv):
     else:
         resolved_path = os.path.normpath(os.path.join('/bank', path_arg))
 
+    # Try adding .md if the original path is not found and doesn't already end with .md
+    if not await io.os.exists(io, resolved_path) and not resolved_path.endswith('.md'):
+        path_with_md = resolved_path + '.md'
+        if await io.os.exists(io, path_with_md):
+            resolved_path = path_with_md
+
     # Get the file content first. io.os.get handles errors like not found.
     content = await io.os.get(io, resolved_path)
     if content is None:
@@ -89,4 +97,3 @@ async def iocall(io, argv):
         await io.print(f":: memory bank loaded from '{resolved_path}' (raw content)")
 
     return True
-

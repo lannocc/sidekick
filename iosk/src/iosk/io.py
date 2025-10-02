@@ -46,10 +46,15 @@ class Context:
         self.aliases = {} # Aliases for the current user/session
         self.history = [] # Command history for the current session
 
+        self.caching_token_total = 0
+        self.full_token_total = 0
+        self.initial_static_tokens = 0
+
         self.stage = self.STAGE_NORMAL
         self.pre = None
         self.post = None
         self.banking = None
+        self.preamble_cache = None
 
         self.stdin = None
         self.stdout = None
@@ -60,6 +65,7 @@ class Context:
 
         child.user = self.user
         child.bot = self.bot
+        child.preamble_cache = self.preamble_cache
 
         # Inherit I/O streams from parent by default
         child.stdin = self.stdin

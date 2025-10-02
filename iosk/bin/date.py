@@ -13,6 +13,6 @@ async def iocall(io, argv):
         await io.print(iocall.__doc__)
         return
 
-    await io.print(datetime.now().strftime('%A, %b %d, %Y at %I:%M %p'))
+    await io.print(datetime.now().strftime('%A, %b %d, %Y at %I:%M:%S %p'))
     return True
 

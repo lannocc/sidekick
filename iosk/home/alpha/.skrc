@@ -1,14 +1,16 @@
 #!/bin/skrip
 
-$ bank role devops
+#$ bank role devops
 $ bank boss lannocc
+$ bank boss ruckusist
 $ bank access admin
-$ bank timing 5min_turbo
+$ bank timing 1min_turbo
 $ bank instinct gut
 
 $ bank iosk limitations
 $ bank iosk skrip
 $ bank iosk kernel
+$ bank iosk commands
 $ bank iosk workflow
 $ bank iosk tree
 
