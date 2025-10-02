@@ -2,6 +2,20 @@ Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
 
+v0.3.4
+======
+
+Date: October 2, 2025
+
+    * Add `send` command for sending file contents in the chat.
+    * Better handling of markdown blocks.
+    * Updated `date` command accepts a format string.
+    * Fix to command-line parsing -p option in `ask`.
+    * Cumulative token counts in `tokens` output.
+    * Updated `ticket` command to include more details.
+    * Misc. tweaks and cleanup.
+
+
 v0.3.3
 ======
 
