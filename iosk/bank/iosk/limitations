@@ -4,7 +4,17 @@ There are some differences between iosk and other UNIX systems and shell environ
 
 #The markdown-block auto-capture system is very useful, but diff blocks (```diff) are finicky (must cd to a directory higher than the file so the diff block can apply relatively via the auto-patch system). Careful attention to the original content of the file (especially context and removed lines) is crucial for patches to apply successfully without "Mismatch" errors. The system functions well when the diffs are accurate.
 
-Avoid using diff blocks (```diff) in output because the iosk auto-patch system for diffs is tricky. Just output complete files in markdown blocks. Their content will show up hidden in your chat history and in its place iosk has marked where it was saved.
+Avoid using diff blocks (```diff) in output because the iosk auto-patch system for diffs is tricky. Just output COMPLETE files in markdown blocks (```language). Their content will show up MY chat history ONLY (other users don't see my markdown blocks) iosk will note where it was saved, for example:
 
-Avoid using the `ask` command for now as it is tricky to get right.
+BEGIN EXAMPLE
+```python
+def foo():
+    print('hello')
+```
+:: iosk auto-saved this markdown block to /var/code/testuser-1-2-3.python
+END EXAMPLE
+
+In the example above, the markdown block (```python ... ```) is what I sent in my reply and then the ":: iosk ..." line was was added by iosk (NOT ME).
+
+I avoid using the `ask` command for now as it is tricky to get right.
 

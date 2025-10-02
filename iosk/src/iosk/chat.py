@@ -353,26 +353,28 @@ class Engagement:
         if lang == 'diff':
             target_file = self._extract_target_from_diff(code)
             if target_file:
-                # Replace the block first, so the AI's reply appears before the command output
-                replacement_message = f'\n<< [iosk] diff block detected. Attempting to auto-patch `{target_file}`... >>'
-                text = text.replace(original_block, replacement_message)
+                # Print a notification to the local user's context, like command output.
+                replacement_message = f':: diff block detected. Attempting to auto-patch `{target_file}`...'
+                await self.io.print(replacement_message)
 
                 # Construct and run the patch command. Its output will go directly to the user's console.
                 patch_command = f"patch {target_file} {virtual_path}"
                 await self.io.os.call(self.io, patch_command)
             else:
-                # Could not find a target file, fall back to just saving
-                replacement_message = f'\n<< [iosk] auto-saved diff block to {virtual_path} (could not determine target file to patch) >>'
-                text = text.replace(original_block, replacement_message)
-            return text
+                # Could not find a target file, fall back to just saving and notifying locally.
+                replacement_message = f':: auto-saved diff block to {virtual_path} (could not determine target file to patch)'
+                await self.io.print(replacement_message)
 
-        # Fallback for non-diff code blocks (existing logic for one block)
-        lines = original_block.split('\n')
-        #if len(lines) > 10:
-        #    truncated_block = '\n'.join(lines[:10]) + '\n[[[IOSK TRUNCATED]]]\n```'
-        #    text = text.replace(original_block, truncated_block)
-        #text += f'\n<< [iosk] auto-saved markdown block 1 to {virtual_path}'
-        text = text.replace('\n'.join(lines[1:-1]),
-                            f':: iosk auto-saved this markdown block (content hidden) to {virtual_path}')
-        return text
+            # Remove the original markdown block from the text that will be processed for chat broadcast.
+            return text.replace(original_block, '')
+
+        # Fallback for non-diff code blocks
+        # Print the "auto-saved" message directly to the local user's context.
+        #replacement_message = f':: iosk auto-saved this markdown block (content hidden) to {virtual_path}'
+        replacement_message = f':: iosk auto-saved this markdown block to {virtual_path}'
+        await self.io.print(original_block)
+        await self.io.print(replacement_message)
+
+        # Remove the original markdown block from the text that will be processed for chat broadcast.
+        return text.replace(original_block, '')
 

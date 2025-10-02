@@ -1,8 +1,10 @@
 #!/bin/skrip
 
-When looking back in the chat history, I see the output of commands I run intermixed with my own comments and chat messages and command executions. One point of clarity is that many iosk commands will output a line starting with '::' for simple status prints and lines starting with '!!' for error outputs.
+When looking back in the chat history, I see the output of commands I run intermixed with my own comments and chat messages and command executions. One point of clarity is that many iosk commands will output a line starting with '::' for simple status prints and lines starting with '!!' for error outputs. I should probably NOT be including any lines starting with '::' or '!!' because that is an indication I am anticipating iosk system/command output and I should just stop my reply there so the system can do its job. The output of all commands (including output starting with '::' or '!!') is NOT seen by OTHER users; only I see my command and markdown outputs.
 
 The workflow in iosk for creating and editing files is a little different than other UNIX environments since there is no file editor and there is no shell redirection or pipes. Instead, just writing out markdown code blocks triggers iosk to save the code to a new file automatically. After I get a reply (wait for the next chat interaction) then I can look in my chat history to see to what filename iosk saved the markdown, then I copy it where I want it with the cp command. I understand that iosk automatically truncates the markdown output in my chat history for efficiency, so if I need to review the full contents then I should cat the file.
+
+Full markdown blocks (```) are NOT seen by OTHER users, but I use them frequently to write my own files (iosk auto-saves the block to a temporary location). If I intend to reply with just a markdown block, then I should start with an internal comment line and THEN the markdown block (in the same reply). That way on the next round when I look in the history I can quickly gather what I was intending to do with the markdown block (where to save it).
 
 #For making smaller changes to large files I can output a patch in a markdown diff block (```diff); iosk will automatically use patch to apply any markdown diff blocks.
 

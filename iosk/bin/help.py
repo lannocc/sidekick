@@ -9,6 +9,7 @@ The following commands are generally available:
 General Utilities:
     $ help          - get help on commands (this file)
     $ alias         - manage IOSK command aliases
+    $ clear         - clear the session history for bots or the screen for console users
     $ date          - display the current date and time
     $ echo          - display the given arguments
     $ export        - set or display environment variables
@@ -16,6 +17,7 @@ General Utilities:
     $ status        - display system status (date, whoami, users)
     $ which         - locate a command executable in the PATH
     $ welcome       - display a welcome message (auto-called on login)
+    $ xargs         - build and execute command lines from standard input
     $ exit          - leave the system chat (logout)
 
 Memory Management (Skrip Banks):
@@ -52,6 +54,7 @@ Viewing and Analyzing Files:
     $ grep          - search for PATTERN in each FILE or standard input
     $ head          - print first few lines of file
     $ search        - search for a term within text files
+    $ send          - send file contents or piped data to the chat (to all users)
     $ tail          - print last few lines of file
     $ ticket        - view ticket details from the database
     $ tokens        - calculate total bytes and estimate tokens for session context
@@ -115,4 +118,3 @@ async def iocall(io, argv):
     # If we reach here, it means invalid arguments were provided (e.g., `help cmd1 cmd2`)
     await io.error("!! help: too many arguments or unknown option. Use 'help --help' for usage.")
     return False
-
