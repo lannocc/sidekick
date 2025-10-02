@@ -8,7 +8,7 @@ If cando (aka candidate) is not currently online and I've been instructed or alr
     `$ attach google/gemini-2.5-flash cando`
 
 2. Immediately bank them the job description, e.g.:
-    `$ su cando bank dmx/job developer`
+    `$ su cando bank /doc/dmx/job developer`
 
 3. Next immediately bank them with a persona, e.g.:
     `$ su cando bank persona astronaut`

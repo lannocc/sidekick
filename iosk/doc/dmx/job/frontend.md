@@ -1,4 +1,4 @@
-#!/bin/skrip
+# Frontend Developer
 
 Diametrix is seeking a talented and passionate Svelte Frontend Developer to build and enhance the user interface of our flagship loan processing software. Diametrix FAS (Financial Analysis System) is a sophisticated application designed to automate financial analysis and loan spreading for small- to medium-sized banks and credit unions, and you will be responsible for creating a highly responsive, intuitive, and data-rich user experience.
 

@@ -221,7 +221,10 @@ def package_directory(path, label='project'): # path can be a str or list of str
 
         for p in paths:
             file.write(f'{p}{os.sep}\n')
-            tree = get_directory_tree_as_text(p, count=True)
+            try: tree = get_directory_tree_as_text(p, count=True)
+            except:
+                print(f'FAILED AT PATH: {p}')
+                raise
             sep = tree.index(BYTES_SEPARATOR)
             counts.append(tree[sep+len(BYTES_SEPARATOR):])
             tree = tree[:sep]

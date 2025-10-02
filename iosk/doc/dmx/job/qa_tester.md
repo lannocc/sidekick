@@ -1,4 +1,4 @@
-#!/bin/skrip
+# QA Tester
 
 Diametrix is seeking a meticulous and detail-oriented QA Tester to ensure the quality and reliability of our flagship loan processing software. Diametrix FAS (Financial Analysis System) is a sophisticated application designed to automate financial analysis and loan spreading for small- to medium-sized banks and credit unions.
 
