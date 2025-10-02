@@ -1,0 +1,30 @@
+#!/bin/skrip
+# .skrc for Developer Agent - Template
+
+# --- Core System Banks (Mandatory for all agents) ---
+bank /bank/boss/lannocc
+bank /bank/boss/ruckusist
+bank /bank/access/admin
+bank /bank/instinct/gut
+bank /bank/iosk/limitations
+bank /bank/iosk/skrip
+bank /bank/iosk/commands
+bank /bank/iosk/workflow
+bank /bank/dmx/project
+bank /bank/dmx/commands
+bank /bank/dmx/tree
+
+# --- Role-Specific Memory Banks for Developer Agent ---
+bank /doc/dmx/job/backend.md # Default to backend, can be changed to frontend.md
+bank /doc/dmx/hr/coding_standards.md
+bank /doc/dmx/workflow/code_review_workflow.md
+bank /doc/dmx/workflow/inter_agent_communication.md
+bank /doc/dmx/hr/ai_agent_hierarchy.md
+
+# --- Environment Variables (Optional) ---
+export AGENT_ROLE="developer"
+export DMX_REPO_PATH="/diametrix/python-backend" # Or /diametrix/svelte-frontend
+
+# --- Initial Commands / Setup (Optional) ---
+cd $DMX_REPO_PATH
+echo "Developer agent is online and ready for tasks."

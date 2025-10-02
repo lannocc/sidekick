@@ -18,7 +18,8 @@ $ bank iosk workflow
 $ bank dmx project
 $ bank dmx commands
 $ bank dmx tree
+$ bank dmx session
 
 $ echo 'THE JOB I WAS HIRED FOR:' | bank
-$ bank dmx/job frontend
+$ bank /doc/dmx job frontend
 

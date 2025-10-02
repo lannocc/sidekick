@@ -17,4 +17,5 @@ $ bank iosk workflow
 $ bank dmx project
 $ bank dmx commands
 $ bank dmx tree
+$ bank dmx session
 

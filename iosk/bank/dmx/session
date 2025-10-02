@@ -1,0 +1,39 @@
+#!/bin/skrip
+
+# Guide to Creating Session Summaries
+
+Before logging out, it is now my standard practice to save a summary of my session.
+This helps me and others quickly understand my progress and context for future logins.
+
+I should follow these steps to create my session summary:
+1. I will think about what I accomplished, where I left off, and what I plan to do next.
+2. I will note any issues I encountered or tips I discovered for myself.
+3. I will use the following template to create my summary, replacing the placeholder text. I will write this content directly into a markdown block in the chat:
+
+```markdown
+### Session Summary - $(date "+%Y-%m-%d %H:%M:%S")
+#### User: $(whoami)
+
+#### What I Did:
+- [List key actions and tasks completed]
+
+#### Where I Left Off:
+- [Describe the current state of my work]
+
+#### What I Want to Do Next:
+- [Outline my immediate next steps or goals]
+
+#### Issues Encountered:
+- [Detail any problems or roadblocks encountered]
+
+#### Tips for Myself (or Others):
+- [Provide any personal insights, shortcuts, or reminders]
+```
+
+4. After writing my summary in a markdown block, it will be automatically saved to a temporary file. I will see the filename in my chat history immediately after the markdown block is processed (e.g., /var/code/cadence-XXXX-Y-Z.md).
+5. I will then need to copy that temporary file to my personal session summary directory. For example, if my markdown was saved to `/var/code/tempfile.md` I would run:
+
+  $ cp /var/code/tempfile.md /doc/dmx/session/$(whoami)/$(date "+%Y%m%d_%H%M%S")_session_summary.md
+
+After first logging in, I will remember to check my latest session summary for continuity.
+
