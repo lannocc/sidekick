@@ -8,18 +8,21 @@ The following commands are generally available:
 
 General Utilities:
     $ help          - get help on commands (this file)
-    $ alias         - manage IOSK command aliases
     $ clear         - clear the session history for bots or the screen for console users
     $ date          - display the current date and time
     $ echo          - display the given arguments
+    $ status        - display system status (date, whoami, users)
+    $ welcome       - display a welcome message (auto-called on login)
+    $ exit          - leave the system chat (logout)
+
+Command and Shell
+    $ alias         - manage IOSK command aliases
     $ export        - set or display environment variables
     $ history       - show recent command history for this session
-    $ status        - display system status (date, whoami, users)
-    $ whatami       - display the name of the current device
+    $ skrip         - execute a skrip file or command string
+    $ system        - execute a command in the underlying host system
     $ which         - locate a command executable in the PATH
-    $ welcome       - display a welcome message (auto-called on login)
     $ xargs         - build and execute command lines from standard input
-    $ exit          - leave the system chat (logout)
 
 Memory Management (Skrip Banks):
     $ bank          - load a skrip into core memory by executing it
@@ -28,6 +31,7 @@ Memory Management (Skrip Banks):
 
 User Management:
     $ whoami        - see your current username
+    $ whatami       - see your current device name
     $ users         - list connected users
     $ attach        - attach a device as a user (bring user online)
     $ detach        - disconnect a device user (forced exit)
@@ -63,10 +67,6 @@ Viewing and Analyzing Files:
     $ ticket        - view ticket details from the database
     $ tokens        - calculate total bytes and estimate tokens for session context
     $ wc            - count lines, words, and characters in a file
-
-System Interaction:
-    $ skrip         - execute a skrip file or command string
-    $ system        - execute a command in the underlying host system
 
 System Lifecycle (kernel commands):
     $ init          - system initialization
