@@ -15,6 +15,7 @@ General Utilities:
     $ export        - set or display environment variables
     $ history       - show recent command history for this session
     $ status        - display system status (date, whoami, users)
+    $ whatami       - display the name of the current device
     $ which         - locate a command executable in the PATH
     $ welcome       - display a welcome message (auto-called on login)
     $ xargs         - build and execute command lines from standard input
@@ -30,6 +31,7 @@ User Management:
     $ users         - list connected users
     $ attach        - attach a device as a user (bring user online)
     $ detach        - disconnect a device user (forced exit)
+    $ reattach      - reattach a user (or self) to a different device
     $ ask           - ask an AI device (user) a question, with optional files
     $ su            - execute a command as another user (superuser only)
 

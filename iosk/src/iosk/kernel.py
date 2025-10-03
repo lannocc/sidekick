@@ -295,11 +295,46 @@ class IOSK:
     ###
 
     async def exists(self, io:Context, path:str):
-        """Test if path exists."""
-        name = path.replace('/', '.') # Used only for pymod name, not path resolution
-        file = self.box(path, io_context=io)
-        py = self.pymod(f'proc.exists.{name}', file)
-        return py or exists(file)
+        """Test if path exists, considering both physical files and Python modules."""
+        # 1. Check for physical file/directory existence on the sandboxed filesystem.
+        file_on_host = self.box(path, io_context=io)
+        if exists(file_on_host):
+            return True
+
+        # 2. Check if a corresponding Python module file exists in the sandbox.
+        # This handles cases like `exists('/bin/ls')` being true if `root/bin/ls.py` exists.
+        py_file_on_host = self.box(f'{path}.py', io_context=io)
+        if exists(py_file_on_host) and isfile(py_file_on_host):
+            return True
+
+        # 3. Check for a "built-in" Python module that is part of the iosk source
+        # but not present as a file in the sandboxed filesystem (e.g., /dev/google).
+
+        # First, resolve the path to an absolute virtual path to be safe.
+        if io and io.pwd and not path.startswith('/'):
+            virtual_path = os.path.normpath(os.path.join(io.pwd, path))
+        else:
+            virtual_path = os.path.normpath(path)
+
+        # Convert virtual path to module path suffix, e.g., '/dev/google' -> 'dev.google'
+        mod_suffix = virtual_path.lstrip('/')
+        if not mod_suffix:
+            return False # Path was just '/'
+
+        # The convention is to find modules relative to the 'iosk' package.
+        # Example: /dev/google -> dev.google -> iosk.dev.google
+        full_mod_name = f'iosk.{mod_suffix.replace("/", ".")}'
+
+        try:
+            # Use find_spec to check for module existence without importing it.
+            spec = importlib.util.find_spec(full_mod_name)
+            if spec is not None:
+                return True
+        except (ModuleNotFoundError, ValueError):
+            # An invalid module path could raise an error.
+            pass
+
+        return False
 
     async def create(self, io:Context, path:str):
         """Create new (empty) file."""

@@ -7,7 +7,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Notes: `NAME=VALUE` defines a new alias or updates an existing one. NAME is the alias, VALUE is the command it expands to. Variables within an alias definition (e.g., `$PATH`) are expanded *during the alias definition itself*, not during alias execution. The parser struggles with nested quotes in alias definitions.
     *   Status: Working (with caveats - alias quoting and expansion issues exist but are not a high priority to resolve immediately given the parser proposal's status).
 *   **ask**: Ask an AI user a question, with optional file/directory context.
-    *   Usage: `$ ask [options] <prompt>`
+    *   Usage: `$ ask [options] <prompt>` or `... | ask [options]`
     *   Notes: If `<prompt>` is not provided as an argument, it is read from standard input.
     *   Options: `-q`, `--quiet` (quiet mode); `-f <file>` (attach file content, can be specified multiple times); `-p <directory>` (package directory content, can be specified multiple times); `-e <lang> <file>` (extract first markdown code block of `<lang>` and save); `-1` (use model gemini-2.0-flash-lite); `-2` (use model gemini-2.5-flash, default); `-3` (use model gemini-2.5-pro).
     *   Status: Working.
@@ -106,6 +106,10 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **pwd**: Print the name of the current working directory.
     *   Usage: `$ pwd`
     *   Status: Working.
+*   **reattach**: Reattach a user to a different device.
+    *   Usage: `$ reattach <device> [user]`
+    *   Notes: `<device>` is the name of the device (e.g., 'dummy', 'google', 'openai/gpt-4o'), corresponding to a path under `/dev/`. `[user]` is the username to reattach; if omitted, defaults to the current user.
+    *   Status: Working.
 *   **rm**: Remove files.
     *   Usage: `$ rm <filename>...`
     *   Notes: This command does not support removing directories. Use `rmdir` for empty directories. Multiple files can be specified.
@@ -168,6 +172,10 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **welcome**: Displays a welcome message.
     *   Usage: `$ welcome`
     *   Status: Working.
+*   **whatami**: Display the name of the current device.
+    *   Usage: `$ whatami`
+    *   Notes: Does not accept arguments. Strips the `/dev/` prefix from the device path for a cleaner display.
+    *   Status: Working.
 *   **which**: Locate a command executable in the PATH.
     *   Usage: `$ which <command>`
     *   Notes: Searches the directories specified in the `PATH` environment variable for the given command name. Prioritizes Python (`.py`) module files over script files without an extension if both exist, matching the kernel's command resolution logic.
@@ -177,8 +185,9 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **xargs**: Build and execute command lines from standard input.
     *   Usage: `... | xargs [options] [command [initial-arguments]]`
-    *   Notes: Reads items from standard input, delimited by spaces or newlines. If no command is given, `echo` is used by default. Options `-I` and `-n` are mutually exclusive. Option `-p` (prompt for execution) is problematic in non-interactive environments, and `stderr` output from `-t` or non-existent commands is not directly visible.
-    *   Status: Working (with noted behaviors for `-p` and `stderr` visibility).
+    *   Options: `-n <max-args>` (use at most `max-args` arguments per command line); `-I <replace-str>` (replace occurrences of `replace-str` in initial arguments); `--help` (display help).
+    *   Notes: Reads items from standard input, delimited by spaces or newlines. If no command is given, `echo` is used by default. Options `-I` and `-n` are mutually exclusive. Other standard `xargs` options (like `-0`, `-L`, `-t`, `-r`, `-p`) are supported internally by `shlex` but some output behaviors (`stderr` visibility, interactive prompts with `-p`) may be limited in a non-interactive chat environment.
+    *   Status: Working (with noted behaviors for non-interactive output).
 
 ## /sbin Commands
 
