@@ -133,6 +133,7 @@ class AIMessenger:
 
         for user, uio in self.os.users.items():
             if user is from_user: continue
+            if uio.paused: continue
             await uio.print(msg)
 
 
@@ -190,6 +191,10 @@ class Engagement:
         last_trip = datetime.now()
 
         while self.enabled:
+            if self.io and self.io.paused:
+                await asyncio.sleep(1.0) # Check every second if still paused
+                continue
+
             await asyncio.sleep(0.42)
 
             if self.waiting:

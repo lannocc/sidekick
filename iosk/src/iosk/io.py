@@ -39,6 +39,7 @@ class Context:
         self.su = False # superuser privileges?
         self.base = False # True if this is the root Context
         self.bot = False # True if this is a bot user
+        self.paused = False # True if the bot's engagement is paused
         self.session = StringIO() # the chat history
         self.banks = { } # core memory
         self.env = {} # environment variables
@@ -65,6 +66,7 @@ class Context:
 
         child.user = self.user
         child.bot = self.bot
+        child.paused = self.paused
         child.preamble_cache = self.preamble_cache
 
         # Inherit I/O streams from parent by default

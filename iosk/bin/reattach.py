@@ -112,6 +112,7 @@ async def iocall(io, argv):
 
             if not new_device_mod:
                 await io.error(f"!! reattach: failed to load device module for '{device_name_for_mod}'.")
+                await io.os.system.print(f":: {io.user} FAILED to reattach user '{user_io_to_change.user}' (module load failed)")
                 user_io_to_change.dev = old_device # Revert
                 if was_bot and current_engagement: chat_instance.engagements[user_io_to_change.user] = current_engagement
                 overall_success = False
@@ -122,6 +123,7 @@ async def iocall(io, argv):
 
             if not trip_func:
                 await io.error(f"!! reattach: device module '{device_name_for_mod}' is missing a 'trip' function.")
+                await io.os.system.print(f":: {io.user} FAILED to reattach user '{user_io_to_change.user}' (no trip function)")
                 user_io_to_change.dev = old_device # Revert
                 if was_bot and current_engagement: chat_instance.engagements[user_io_to_change.user] = current_engagement
                 overall_success = False
@@ -135,6 +137,7 @@ async def iocall(io, argv):
                         online_func(user_io_to_change)
                 except Exception as e:
                     await io.error(f"!! reattach: error calling online() for device '{device_name_for_mod}': {e}")
+                    await io.os.system.print(f":: {io.user} FAILED to reattach user '{user_io_to_change.user}' (online() error)")
                     user_io_to_change.dev = old_device # Revert
                     if was_bot and current_engagement: chat_instance.engagements[user_io_to_change.user] = current_engagement
                     overall_success = False
@@ -153,6 +156,7 @@ async def iocall(io, argv):
             await chat_instance.send(io.user, f":: Administrator reattached '{user_io_to_change.user}' to '{new_path}'", sys=True)
 
         await io.print(f":: Successfully reattached '{user_io_to_change.user}' to '{new_path}'.")
+        await io.os.system.print(f":: {io.user} reattached user '{user_io_to_change.user}' from '{old_device}' to '{new_path}'")
 
     # --- Final Reporting ---
     if len(jobs) > 1:

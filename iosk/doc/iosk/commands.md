@@ -103,6 +103,10 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ patch <targetfile> <patchfile>`
     *   Notes: This initial version can apply simple line-based patches.
     *   Status: Working.
+*   **pause**: Pause a bot user's AI engagement.
+    *   Usage: `$ pause [username]`
+    *   Notes: Pauses the AI engagement for the specified bot user. The bot will stop making AI trips and will not receive new chat messages until unpaused. If no username is provided, it attempts to pause the current user. The console user cannot be paused.
+    *   Status: Working.
 *   **pwd**: Print the name of the current working directory.
     *   Usage: `$ pwd`
     *   Status: Working.
@@ -161,6 +165,10 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ tree [options] [path ...]`
     *   Options: `-c` (count bytes and estimate tokens for the content).
     *   Notes: Some files and folders are hidden (this command honors `.skignore` files). If no path is provided, uses the current directory.
+    *   Status: Working.
+*   **unpause**: Unpause a bot user's AI engagement.
+    *   Usage: `$ unpause <username>`
+    *   Notes: Resumes the AI engagement for a previously paused bot user. Must be run by another user, as a paused user cannot execute commands.
     *   Status: Working.
 *   **users**: List connected users.
     *   Usage: `$ users`
