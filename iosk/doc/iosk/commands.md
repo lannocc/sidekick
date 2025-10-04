@@ -88,7 +88,6 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **ls**: List directory contents.
     *   Usage: `$ ls [options] [path ...]`
     *   Options: `-l` (long listing format), `-a` (list all entries, including those starting with '.').
-    *   Notes: This command honors `.skignore` files in listed directories.
     *   Status: Working.
 *   **mkdir**: Create a directory.
     *   Usage: `$ mkdir <directory>...` or `$ mkdir -p <directory>...`
@@ -112,7 +111,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **reattach**: Reattach a user to a different device.
     *   Usage: `$ reattach <device> [user]`
-    *   Notes: `<device>` is the name of the device (e.g., 'dummy', 'google', 'openai/gpt-4o'), corresponding to a path under `/dev/`. `[user]` is the username to reattach; if omitted, defaults to the current user.
+    *   Notes: `<device>` is the name of the device (e.g., 'dummy', 'google', 'openai/gpt-4o'), corresponding to a path under `/dev/`. `[user]` is the username to reattach; if omitted, defaults to the current user. Console device targets (`/dev/console`, `/dev/terminal`) allow swapping if already occupied.
     *   Status: Working.
 *   **rm**: Remove files.
     *   Usage: `$ rm <filename>...`
@@ -128,8 +127,8 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Notes: If no paths are provided, reads from standard input. If stdin is empty, defaults to `/home/<user>` if it exists; otherwise `/`.
     *   Status: Working.
 *   **send**: Send file contents or piped data as a message to the chat (to all users).
-    *   Usage: `$ send <file>...` or `... | send`
-    *   Notes: Reads content from one or more files, or from standard input, and broadcasts it as a single raw text message. The sender receives a confirmation.
+    *   Usage: `$ send [-u <user>]... <file>...` or `... | send [-u <user>]...`
+    *   Notes: Reads content from one or more files, or from standard input, and broadcasts it as a single raw text message. The sender receives a confirmation. The `-u` option sends a direct message to specific user(s).
     *   Status: Working.
 *   **skrip**: Execute a skrip file or command string.
     *   Usage: `$ skrip <filename>` or `$ skrip -e <command>`
@@ -159,8 +158,8 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **touch**: Create an empty file.
     *   Usage: `$ touch <filename>`
-    *   Notes: Differs from standard UNIX `touch` as it errors if the file already exists, instead of updating its timestamp.
-    *   Status: Working as a file creation utility, but non-standard behavior for existing files.
+    *   Notes: If the file already exists, the command succeeds silently (idempotent) and does not update the file's timestamp.
+    *   Status: Working as a file creation utility, with idempotent behavior for existing files.
 *   **tree**: List directory contents recursively in a tree-like format.
     *   Usage: `$ tree [options] [path ...]`
     *   Options: `-c` (count bytes and estimate tokens for the content).
@@ -194,8 +193,8 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **xargs**: Build and execute command lines from standard input.
     *   Usage: `... | xargs [options] [command [initial-arguments]]`
     *   Options: `-n <max-args>` (use at most `max-args` arguments per command line); `-I <replace-str>` (replace occurrences of `replace-str` in initial arguments); `--help` (display help).
-    *   Notes: Reads items from standard input, delimited by spaces or newlines. If no command is given, `echo` is used by default. Options `-I` and `-n` are mutually exclusive. Other standard `xargs` options (like `-0`, `-L`, `-t`, `-r`, `-p`) are supported internally by `shlex` but some output behaviors (`stderr` visibility, interactive prompts with `-p`) may be limited in a non-interactive chat environment.
-    *   Status: Working (with noted behaviors for non-interactive output).
+    *   Notes: Reads items from standard input, delimited by spaces or newlines. If no command is given, `echo` is used by default. Options `-I` and `-n` are mutually exclusive.
+    *   Status: Working (with noted behaviors for `-p` and `stderr` visibility).
 
 ## /sbin Commands
 

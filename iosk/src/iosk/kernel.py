@@ -30,6 +30,7 @@ class IOSK:
     SYSTEM_LOG = '/var/log/system'
     USER_LOG = '/var/log/user'
     SKRC = '/etc/skrc'
+    SKEL_SKRC = '/etc/skel/skrc' # Added for the new requirement
 
     def __init__(self, root):
         self.root = root # path
@@ -167,6 +168,14 @@ class IOSK:
             try:
                 os.makedirs(home_dir_host)
                 await io.print(f":: created home directory: {home_dir_virtual}")
+
+                # Copy /etc/skel/skrc to ~/.skrc if it exists
+                skel_skrc_path = self.SKEL_SKRC
+                user_skrc_path = join(home_dir_virtual, '.skrc')
+                if await self.exists(io, skel_skrc_path):
+                    await io.print(f":: copying {skel_skrc_path} to {user_skrc_path}")
+                    await self.copy(io, skel_skrc_path, user_skrc_path)
+
             except Exception as e:
                 await self.system.error(f"!! failed to create home directory {home_dir_virtual}: {e}")
                 # For now, allow login to proceed but log the error.
@@ -180,14 +189,15 @@ class IOSK:
             if self.chat: await self.chat.send(user, connect, sys=True)
             else: await io.print(connect)
 
-        skrc = self.box(self.SKRC)
-        if exists(skrc):
-            await self.exec(io, self.SKRC)
+        # Execute system-wide skrc
+        skrc_global_path = self.SKRC
+        if exists(self.box(skrc_global_path)):
+            await self.exec(io, skrc_global_path)
 
-        skrc = join('/home', user, '.skrc')
-        if exists(self.box(skrc)):
-            #print('@@@@@@@@@@@@@ HERE WE GO @@@@@@@@@@@@@')
-            await self.exec(io, skrc)
+        # Execute user-specific .skrc
+        skrc_user_path = join('/home', user, '.skrc')
+        if exists(self.box(skrc_user_path)):
+            await self.exec(io, skrc_user_path)
 
         if interactive:
             await self.interactive(io)
@@ -352,8 +362,17 @@ class IOSK:
             await io.error(f'!! copy from path not found: {from_path}')
             return False
 
-        to_file = self.box(to_path, io_context=io)
-        shutil.copy(from_file, to_file)
+        # Ensure the destination directory exists for the target file
+        to_file_host = self.box(to_path, io_context=io)
+        to_dir_host = os.path.dirname(to_file_host)
+        if not exists(to_dir_host):
+            try:
+                os.makedirs(to_dir_host)
+            except OSError as e:
+                await io.error(f"!! failed to create destination directory for copy '{to_path}': {e}")
+                return False
+
+        shutil.copy(from_file, to_file_host)
         return True
 
     async def move(self, io:Context, from_path:str, to_path:str):
@@ -363,8 +382,17 @@ class IOSK:
             await io.error(f'!! move from path not found: {from_path}')
             return False
 
-        to_file = self.box(to_path, io_context=io)
-        shutil.move(from_file, to_file) # shutil.move handles both file and dir
+        # Ensure the destination directory exists for the target file
+        to_file_host = self.box(to_path, io_context=io)
+        to_dir_host = os.path.dirname(to_file_host)
+        if not exists(to_dir_host):
+            try:
+                os.makedirs(to_dir_host)
+            except OSError as e:
+                await io.error(f"!! failed to create destination directory for move '{to_path}': {e}")
+                return False
+
+        shutil.move(from_file, to_file_host) # shutil.move handles both file and dir
         return True
 
     async def remove(self, io:Context, path:str):
@@ -372,6 +400,10 @@ class IOSK:
         file = self.box(path, io_context=io)
         if not exists(file):
             await io.error(f'!! remove path not found: {path}')
+            return False
+
+        if isdir(file): # Prevent removing a directory with os.remove
+            await io.error(f'!! path is a directory, use rmdir: {path}')
             return False
 
         os.remove(file)
@@ -382,11 +414,15 @@ class IOSK:
         folder = self.box(path, io_context=io)
         if exists(folder):
             await io.error(f'!! path already exists: {path}')
-            return False
+            return False # Changed to False as it already exists, not an error but not 'created new'
 
-        if parents: os.makedirs(folder)
-        else: os.mkdir(folder)
-        return True
+        try:
+            if parents: os.makedirs(folder)
+            else: os.mkdir(folder)
+            return True
+        except OSError as e:
+            await io.error(f"!! failed to create directory '{path}': {e}")
+            return False
 
     async def remove_dir(self, io:Context, path:str):
         """Remove directory."""
@@ -394,9 +430,16 @@ class IOSK:
         if not exists(folder):
             await io.error(f'!! remove dir path not found: {path}')
             return False
+        if not isdir(folder):
+            await io.error(f'!! path is not a directory: {path}')
+            return False
 
-        os.rmdir(folder)
-        return True
+        try:
+            os.rmdir(folder)
+            return True
+        except OSError as e:
+            await io.error(f"!! failed to remove directory '{path}': {e}")
+            return False
 
     ###
     ### FILE I/O

@@ -1,3 +1,4 @@
+# ./src/iosk/dev/openai.py
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
@@ -12,7 +13,10 @@ client = None
 
 async def iosend(io, data):
     prompt = data
-    io.os.chat.engagements[io.user].append(prompt, trip)
+    engagement = io.os.chat.engagements.get(io.user)
+    if not engagement:
+        return None
+    engagement.append(prompt, trip)
     await online(io)
 
 
@@ -20,13 +24,18 @@ async def iosender(io, data, model):
     prompt = data
     async def mtrip(prompt):
         return await trip(prompt=prompt, model=model)
-    io.os.chat.engagements[io.user].append(prompt, mtrip)
+    engagement = io.os.chat.engagements.get(io.user)
+    if not engagement:
+        return None
+    engagement.append(prompt, mtrip)
     await online(io)
 
 
 async def iorecv(io, prompt=None):
-    if io.user not in io.os.chat.engagements: return None
-    data = await io.os.chat.engagements[io.user].input()
+    engagement = io.os.chat.engagements.get(io.user)
+    if not engagement:
+        return None
+    data = await engagement.input()
     return data
 
 

@@ -29,7 +29,7 @@ Memory Management (Skrip Banks):
     $ banks         - list memory accounts currently banked
     $ bankrupt      - clear core memory bank
 
-User Management:
+User/Device Management:
     $ whoami        - see your current username
     $ whatami       - see your current device name
     $ users         - list connected users
@@ -122,3 +122,4 @@ async def iocall(io, argv):
     # If we reach here, it means invalid arguments were provided (e.g., `help cmd1 cmd2`)
     await io.error("!! help: too many arguments or unknown option. Use 'help --help' for usage.")
     return False
+
