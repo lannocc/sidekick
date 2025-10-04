@@ -19,7 +19,7 @@ async def iocall(io, argv):
         return True
 
     # Default format
-    format_string = '%A, %b %d, %Y at %I:%M:%S %p'
+    format_string = '%A, %b %d, %Y at %I:%M:%S %p %Z'
 
     if argv:
         if len(argv) == 1:

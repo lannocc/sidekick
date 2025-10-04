@@ -187,6 +187,10 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ which <command>`
     *   Notes: Searches the directories specified in the `PATH` environment variable for the given command name. Prioritizes Python (`.py`) module files over script files without an extension if both exist, matching the kernel's command resolution logic.
     *   Status: Working.
+*   **who**: Display who is logged on.
+    *   Usage: `$ who`
+    *   Notes: Displays a list of all logged-in users, their device, and login time in aligned columns.
+    *   Status: Working.
 *   **whoami**: Display the current username.
     *   Usage: `$ whoami`
     *   Status: Working.
@@ -208,3 +212,4 @@ These commands are typically used for system administration tasks. Most `/sbin` 
     *   Usage: `$ shutdown`
     *   Notes: Initiates the shutdown sequence for the IOSK system. This command signals the underlying operating system to halt the system.
     *   Status: Assumed working. No further testing required as execution interrupts the running system.
+
