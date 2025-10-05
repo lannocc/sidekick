@@ -2,6 +2,19 @@ Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
 
+v0.3.5
+======
+
+Date: October 4, 2025
+
+    * Send direct messages with `@user` or `send -u user`
+    * Can now `pause` and `unpause` the agents.
+    * Add `reattach` for changing devices and `whatami` to find out.
+    * Add the `who` and `ver` commands.
+    * Shell parser now recognizes end-of-line comments.
+    * A proposal for adjustable agent timing.
+
+
 v0.3.4
 ======
 
