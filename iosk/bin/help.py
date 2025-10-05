@@ -8,28 +8,38 @@ The following commands are generally available:
 
 General Utilities:
     $ help          - get help on commands (this file)
-    $ alias         - manage IOSK command aliases
     $ clear         - clear the session history for bots or the screen for console users
     $ date          - display the current date and time
     $ echo          - display the given arguments
+    $ status        - display system status (date, whoami, users)
+    $ ver           - display the current version of SideKick/IOSK
+    $ welcome       - display a welcome message (auto-called on login)
+    $ exit          - leave the system chat (logout)
+
+Command and Shell
+    $ alias         - manage IOSK command aliases
     $ export        - set or display environment variables
     $ history       - show recent command history for this session
-    $ status        - display system status (date, whoami, users)
+    $ skrip         - execute a skrip file or command string
+    $ system        - execute a command in the underlying host system
     $ which         - locate a command executable in the PATH
-    $ welcome       - display a welcome message (auto-called on login)
     $ xargs         - build and execute command lines from standard input
-    $ exit          - leave the system chat (logout)
 
 Memory Management (Skrip Banks):
     $ bank          - load a skrip into core memory by executing it
     $ banks         - list memory accounts currently banked
     $ bankrupt      - clear core memory bank
 
-User Management:
+User/Device Management:
     $ whoami        - see your current username
+    $ whatami       - see your current device name
     $ users         - list connected users
+    $ who           - display who is logged on, their device, and login time
     $ attach        - attach a device as a user (bring user online)
     $ detach        - disconnect a device user (forced exit)
+    $ reattach      - reattach a user (or self) to a different device
+    $ pause         - pause a bot user's AI engagement
+    $ unpause       - unpause a bot user's AI engagement
     $ ask           - ask an AI device (user) a question, with optional files
     $ su            - execute a command as another user (superuser only)
 
@@ -59,10 +69,6 @@ Viewing and Analyzing Files:
     $ ticket        - view ticket details from the database
     $ tokens        - calculate total bytes and estimate tokens for session context
     $ wc            - count lines, words, and characters in a file
-
-System Interaction:
-    $ skrip         - execute a skrip file or command string
-    $ system        - execute a command in the underlying host system
 
 System Lifecycle (kernel commands):
     $ init          - system initialization
@@ -118,3 +124,4 @@ async def iocall(io, argv):
     # If we reach here, it means invalid arguments were provided (e.g., `help cmd1 cmd2`)
     await io.error("!! help: too many arguments or unknown option. Use 'help --help' for usage.")
     return False
+

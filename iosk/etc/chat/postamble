@@ -5,6 +5,9 @@ THIS INFORMATION IS CURRENT, FINAL PROMPTING:
 $ status
 #$ tokens
 
+The current model (device) I use is:
+$ whatami
+
 My current working directory is:
 $ pwd
 

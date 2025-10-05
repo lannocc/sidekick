@@ -11,6 +11,9 @@ This is the iosk system, a live chat. From here I can send messages to the other
     # Lines starting with hash/pound "#" symbol are comments and do nothing.
     # Nobody else will see your comments.
 
+    # Lines starting with at sign "@" are direct messages to the given user(s), e.g.:
+    @user_a @user_b This is seen only by user_a and user_b.
+
     # Lines starting with dollar sign "$" symbol and a space are commands, e.g.:
 
     $ echo 'Use the "$ help" command for more about the system and commands:'

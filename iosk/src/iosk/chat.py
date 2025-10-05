@@ -127,12 +127,56 @@ class AIMessenger:
 
     async def send(self, from_user, msg, sys=False):
         if not msg: return
+
+        # --- Direct Message Handling ---
+        if not sys and msg.startswith('@'):
+            parts = msg.split(' ')
+            recipients = []
+            msg_start_index = 0
+            for i, part in enumerate(parts):
+                if part.startswith('@') and len(part) > 1:
+                    recipients.append(part[1:])
+                    msg_start_index = i + 1
+                else:
+                    # The first non-@ word marks the end of the recipient list
+                    break
+
+            actual_msg = ' '.join(parts[msg_start_index:]).strip()
+
+            # Proceed only if we have recipients and a message to send
+            if recipients and actual_msg:
+                now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+                # Send formatted message to each recipient
+                for user in recipients:
+                    if user == from_user: continue # Sender gets a confirmation below
+                    if user in self.os.users:
+                        uio = self.os.users[user]
+                        if not uio.paused:
+                            dm_msg_for_recipient = f'\n[{from_user} -> me {now}] << {actual_msg}'
+                            # Ring the terminal bell if the recipient is the console user
+                            if uio.dev == self.os.CONSOLE_DEV:
+                                dm_msg_for_recipient = '\a' + dm_msg_for_recipient
+                            await uio.print(dm_msg_for_recipient)
+
+                # Send a confirmation copy to the sender
+                sender_io = self.os.users.get(from_user)
+                if sender_io:
+                    recipient_str = ', '.join(recipients)
+                    dm_msg_for_sender = f'\n[me -> {recipient_str} {now}] << {actual_msg}'
+                    await sender_io.print(dm_msg_for_sender)
+
+                return # End of direct message handling
+
+        # --- Broadcast/System Message Handling ---
         if not sys:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             msg = f'\n[{from_user} {now}] << {msg}'
 
         for user, uio in self.os.users.items():
-            if user is from_user: continue
+            # System messages go to everyone. User messages go to everyone else.
+            if not sys and user == from_user: continue
+            if uio.paused: continue
             await uio.print(msg)
 
 
@@ -190,6 +234,10 @@ class Engagement:
         last_trip = datetime.now()
 
         while self.enabled:
+            if self.io and self.io.paused:
+                await asyncio.sleep(1.0) # Check every second if still paused
+                continue
+
             await asyncio.sleep(0.42)
 
             if self.waiting:

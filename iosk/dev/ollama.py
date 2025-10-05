@@ -1,3 +1,4 @@
+# ./dev/ollama.py
 from ollama import AsyncClient
 
 #MODEL='deepseek-r1'
@@ -12,14 +13,19 @@ async def iosend(io, data):
     #print(f'OLLAMA: {data}')
     prompt = data
 
-    io.os.chat.engagements[io.user].append(prompt, trip)
+    engagement = io.os.chat.engagements.get(io.user)
+    if not engagement:
+        return None
+    engagement.append(prompt, trip)
 
     if not client:
         client = AsyncClient()
 
 async def iorecv(io, prompt=None):
-    if io.user not in io.os.chat.engagements: return None
-    data = await io.os.chat.engagements[io.user].input()
+    engagement = io.os.chat.engagements.get(io.user)
+    if not engagement:
+        return None
+    data = await engagement.input()
     return data
 
 async def trip(prompt): # round trip

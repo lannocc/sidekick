@@ -1,16 +1,21 @@
 async def iocall(io, argv):
-    """Send file contents or piped data as a message to the chat (to all users).
+    """Send file contents or piped data as a message to the chat.
 
-    Usage: send <file>...
-           ... | send
+    Usage: send [-u <user>]... <file>...
+           ... | send [-u <user>]...
            send --help
 
     Reads the contents of one or more files, or reads from standard input,
-    and broadcasts the result as a single raw text message to other users
-    in the current chat session.
+    and sends the result as a raw text message.
 
-    The sender receives a confirmation and a copy of the sent content in
-    their own session history.
+    By default, the message is broadcast to other users in the current chat.
+    If the -u option is used, the message is sent as a direct message to
+    the specified user(s) instead.
+
+    Options:
+      -u <user>   Send a direct message to a specific user. This option can
+                  be used multiple times to specify multiple recipients.
+      --help      Displays this help message.
     """
     if '--help' in argv:
         await io.print(iocall.__doc__)
@@ -20,12 +25,31 @@ async def iocall(io, argv):
         await io.error("!! send: not connected to a chat session.")
         return False
 
+    recipients = []
+    file_args = []
+
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == '-u':
+            i += 1
+            if i >= len(argv):
+                await io.error("!! send: -u option requires a username.")
+                return False
+            recipients.append(argv[i])
+        elif arg.startswith('-'):
+            await io.error(f"!! send: unknown option: {arg}")
+            return False
+        else:
+            file_args.append(arg)
+        i += 1
+
     content = ""
 
     # Case 1: File arguments
-    if argv:
+    if file_args:
         all_content = []
-        for filename in argv:
+        for filename in file_args:
             file_content = await io.os.get(io, filename)
             if file_content is None:
                 # io.os.get already printed an error, so just abort.
@@ -46,13 +70,20 @@ async def iocall(io, argv):
         # Do not send empty or whitespace-only messages
         return True
 
-    # Send the content to the chat
-    await io.os.chat.send(io.user, content)
+    # Construct the final message
+    final_message = content
+    if recipients:
+        dm_prefix = ' '.join([f'@{user}' for user in recipients])
+        final_message = f'{dm_prefix} {content}'
 
-    # Print a confirmation to the sender, as they don't receive their own broadcast
-    await io.print(":: content sent to chat.")
+    # Send the content to the chat.
+    # The chat.send method handles routing for both broadcast and direct messages.
+    await io.os.chat.send(io.user, final_message)
 
-    # For the sender's own history, show them what was sent.
-    #await io.print(f"--- You sent ---\n{content}\n----------------")
+    # For broadcast messages, print a local confirmation.
+    # For direct messages, the chat.send method prints its own confirmation to the sender.
+    if not recipients:
+        await io.print(":: content sent to chat.")
 
     return True
+
