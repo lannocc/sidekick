@@ -33,7 +33,7 @@ User/Device Management:
     $ whoami        - see your current username
     $ whatami       - see your current device name
     $ users         - list connected users
-    $ who           - display who is logged on
+    $ who           - display who is logged on, their device, and login time
     $ attach        - attach a device as a user (bring user online)
     $ detach        - disconnect a device user (forced exit)
     $ reattach      - reattach a user (or self) to a different device
