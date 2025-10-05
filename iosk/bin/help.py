@@ -12,6 +12,7 @@ General Utilities:
     $ date          - display the current date and time
     $ echo          - display the given arguments
     $ status        - display system status (date, whoami, users)
+    $ ver           - display the current version of SideKick/IOSK
     $ welcome       - display a welcome message (auto-called on login)
     $ exit          - leave the system chat (logout)
 

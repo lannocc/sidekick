@@ -172,6 +172,10 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **users**: List connected users.
     *   Usage: `$ users`
     *   Status: Working.
+*   **ver**: Display the current version of SideKick.
+    *   Usage: `$ ver` or `$ ver --help`
+    *   Notes: Does not accept arguments. `--help` displays its own help message.
+    *   Status: Working.
 *   **wc**: Counts the number of lines, words, and characters in a file or stdin.
     *   Usage: `$ wc [file]`
     *   Notes: If no file is specified, reads from standard input.
