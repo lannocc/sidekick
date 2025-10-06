@@ -21,6 +21,17 @@ import traceback
 from io import StringIO
 
 
+# Added for the process management proposal
+class Process:
+    """A lightweight wrapper to represent a single, ongoing command execution."""
+    def __init__(self, pid, user, command, start_time, task):
+        self.pid = pid
+        self.user = user
+        self.command_str = ' '.join(command) # Store the command as a string
+        self.start_time = start_time
+        self.task = task
+
+
 class IOSK:
     BOOT = 0 # current boot number
 
@@ -45,6 +56,10 @@ class IOSK:
 
         self.parser = CommandLineParser(self)
         self.pipeline_executor = CommandPipelineExecutor(self) # Instantiate the executor
+
+        # Added for process management proposal
+        self.process_table = {}
+        self.next_pid = 1
 
     ###
     ### SYSTEM LIFECYCLE
@@ -560,4 +575,3 @@ class IOSK:
             except ModuleNotFoundError: pass
 
         return py
-
