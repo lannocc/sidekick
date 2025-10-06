@@ -132,6 +132,10 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ reattach <device> [user]`
     *   Notes: `<device>` is the name of the device (e.g., 'dummy', 'google', 'openai/gpt-4o'), corresponding to a path under `/dev/`. `[user]` is the username to reattach; if omitted, defaults to the current user. Console device targets (`/dev/console`, `/dev/terminal`) allow swapping if already occupied.
     *   Status: Working.
+*   **reset**: Reset a user's session to a clean state.
+    *   Usage: `$ reset [username]`
+    *   Notes: Clears session history, command history, loaded banks, environment variables, aliases, and resets the current working directory to the user's home. Then, it re-runs the system-wide `/etc/skrc` and the user's `~/.skrc` file, simulating a fresh login. If no username is provided, it resets the current user's session. Only superusers can reset the session of another user.
+    *   Status: Working.
 *   **rm**: Remove files.
     *   Usage: `$ rm <filename>...`
     *   Notes: This command does not support removing directories. Use `rmdir` for empty directories. Multiple files can be specified.

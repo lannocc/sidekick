@@ -46,6 +46,7 @@ User/Device Management:
     $ reattach      - reattach a user (or self) to a different device
     $ pause         - pause a bot user's AI engagement
     $ unpause       - unpause a bot user's AI engagement
+    $ reset         - reset a user's session to a clean state
     $ ask           - ask an AI device (user) a question, with optional files
     $ su            - execute a command as another user (superuser only)
 
