@@ -1,3 +1,4 @@
+# src/iosk/chat.py
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
@@ -153,6 +154,24 @@ class AIMessenger:
                     if user == from_user: continue # Sender gets a confirmation below
                     if user in self.os.users:
                         uio = self.os.users[user]
+
+                        # --- NEW LOGIC: Interrupt sleep ---
+                        pids_to_cancel = []
+                        # Create a copy of items to avoid runtime errors during iteration
+                        for pid, process in list(self.os.process_table.items()):
+                            if process.user == user and process.command_str.startswith('sleep'):
+                                pids_to_cancel.append(pid)
+
+                        if pids_to_cancel:
+                            for pid in pids_to_cancel:
+                                process = self.os.process_table.get(pid)
+                                if process:
+                                    process.task.cancel()
+                                    # The CancelledError handler in pipeline.py will print a 'cancelled' message.
+                                    # We add a more specific message here.
+                                    await uio.print(":: Your sleep was interrupted by a direct message.")
+                        # --- END NEW LOGIC ---
+
                         if not uio.paused:
                             dm_msg_for_recipient = f'\n[{from_user} -> me {now}] << {actual_msg}'
                             # Ring the terminal bell if the recipient is the console user
