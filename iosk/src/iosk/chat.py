@@ -376,6 +376,18 @@ class Engagement:
                             f"Original error: {e}"
                         )
 
+                        # --- Dynamic Delay Logic ---
+                        error_str = str(e)
+                        retry_delay = 5  # Default delay in case parsing fails
+                        match = re.search(r'Please retry in (\d+)s', error_str, re.IGNORECASE)
+                        if match:
+                            # Add a small buffer to the suggested delay
+                            retry_delay = int(match.group(1)) + 2
+                        
+                        await self.io.print(f":: API rate limit hit. Pausing for {retry_delay} seconds before continuing...")
+                        await asyncio.sleep(retry_delay)
+                        # --- End Dynamic Delay Logic ---
+
                         self.io.session.seek(0)
                         content = self.io.session.read()
                         lines = content.splitlines(keepends=True)
@@ -395,6 +407,8 @@ class Engagement:
                     except Exception as e: # overloaded?
                         await self.io.os.system.error(f'!! trip for {self.io.user}:'
                                                       f' {e}')
+                        print('##### EXCEPTION DEBUGGING!!! ######')
+                        traceback.print_exc() # trying to figure out 429 RESOURCE_EXHAUSTED
                         await asyncio.sleep(1.8)
                         try:
                             # Pass client on retry
@@ -482,3 +496,4 @@ class Engagement:
 
         # Remove the original markdown block from the text that will be processed for chat broadcast.
         return text.replace(original_block, '')
+
