@@ -10,6 +10,7 @@ from datetime import datetime
 from os.path import exists, join
 import re
 import tempfile
+from google.api_core.exceptions import ResourceExhausted
 
 
 class AIMessenger:
@@ -334,8 +335,32 @@ class Engagement:
                     await self.io.os.system.error(f"!! token calculation failed during trip: {e}")
 
                 self.waiting = True
+                reply = None
                 try:
                     reply = await self.trip(prompt_text_for_trip)
+
+                except ResourceExhausted as e:
+                    await self.io.os.system.error(
+                        f"!! User '{self.io.user}' hit Google 429 ResourceExhausted error. "
+                        f"Current token counts (caching/cumulative): {self.io.caching_token_total:,}/{self.io.full_token_total:,}. "
+                        f"Original error: {e}"
+                    )
+
+                    self.io.session.seek(0)
+                    content = self.io.session.read()
+                    lines = content.splitlines(keepends=True)
+
+                    if len(lines) > 1:
+                        midpoint = len(lines) // 2
+                        new_content = "".join(lines[midpoint:])
+
+                        self.io.session.seek(0)
+                        self.io.session.truncate(0)
+                        self.io.session.write(new_content)
+
+                        await self.io.print(":: Your context window is full. Session history has been truncated by 50% to continue.")
+                    else:
+                        await self.io.print(":: Your context window is full, but the session is too short to truncate. Please use `clear` or `reset`.")
 
                 except Exception as e: # overloaded?
                     await self.io.os.system.error(f'!! trip for {self.io.user}:'
