@@ -1,5 +1,7 @@
 # Proposal: A Process Management System for IOSK
 
+**Status**: Proposed.
+
 ### Introduction
 
 The current IOSK environment executes commands synchronously within a user's session. While effective for simple, short-lived tasks, this model lacks mechanisms for monitoring or managing command execution. AI agents, in particular, may initiate long-running or computationally intensive commands (e.g., a recursive search from the root directory) that can become stuck or consume indefinite time, rendering the agent unresponsive. Without a way to view and control these operations, system administrators lack the tools to ensure stability and manage agent behavior.
@@ -52,7 +54,7 @@ This proposal introduces a simple, UNIX-inspired process management system for I
     # Conceptual change in CommandPipelineExecutor
     async def _execute_single_command(self, io: 'Context', argv: List[str]) -> bool:
         if not argv: return True
-
+    
         # --- Process Creation ---
         pid = self.os.next_pid
         self.os.next_pid += 1
@@ -61,7 +63,7 @@ This proposal introduces a simple, UNIX-inspired process management system for I
         # The command logic itself is now wrapped in a coroutine.
         command_coro = self._run_command_logic(io, argv)
         task = asyncio.create_task(command_coro)
-
+    
         process = Process(pid, io.user, argv, datetime.now(), task)
         self.os.process_table[pid] = process
         
@@ -75,7 +77,7 @@ This proposal introduces a simple, UNIX-inspired process management system for I
             # --- Process Cleanup ---
             if pid in self.os.process_table:
                 del self.os.process_table[pid]
-
+    
     async def _run_command_logic(self, io: 'Context', argv: List[str]) -> bool:
         # The original logic from _execute_single_command goes here...
         # ... resolve command path, check if python module, etc. ...

@@ -1,6 +1,6 @@
 # Proposal: Per-Device Client Instance Management
 
-**Status**: Proposed
+**Status**: Implemented
 
 ### Introduction
 
@@ -41,18 +41,18 @@ The `IOSK` class will be augmented to manage device clients.
         """
         if dev_virtual_path in self.device_clients:
             return self.device_clients[dev_virtual_path]
-
+    
         # Client not cached, so create it.
         # This requires a standardized way to get a client from a device module.
         dev_name = dev_virtual_path.replace('/dev/', '', 1)
         mod_name_for_pymod = dev_name.replace('/', '.')
         host_py_path = self.box(f"{dev_virtual_path}.py", io_context=io)
         dev_mod = self.pymod(f'dev.{mod_name_for_pymod}', host_py_path)
-
+    
         if not dev_mod or not hasattr(dev_mod, 'get_client'):
             await io.error(f"!! device module for '{dev_virtual_path}' is invalid or missing get_client() function.")
             return None
-
+    
         # Call the new standardized factory function in the device module.
         try:
             client = await dev_mod.get_client(io)

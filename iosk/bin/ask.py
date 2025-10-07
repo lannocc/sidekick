@@ -1,6 +1,6 @@
 import os
 from sk.util import package_directory, get_md_code_block
-from sk.iosk.dev.google import online as google_online, trip as google_trip
+from sk.iosk.dev.google import trip as google_trip
 
 DOCSTRING = """Ask an AI a question, with optional file/directory context.
 
@@ -155,10 +155,22 @@ async def iocall(io, argv):
 
     # --- AI Interaction ---
     try:
-        await google_online(io)
+        # Step 1: Determine the virtual device path for the selected model.
+        # The model name directly corresponds to the filename under /dev/google/.
+        device_path = f"/dev/google/{model}"
+
+        # Step 2: Get the client from the kernel. This replaces the old `google_online` call.
+        client = await io.os.get_device_client(io, device_path)
+        if not client:
+            # Error was already printed by get_device_client.
+            return False
+
         if not quiet_mode:
-            await io.print(f":: asking {model}...")
-        response = await google_trip(prompt=full_prompt, model=model)
+            await io.print(f":: asking {model} via {device_path}...")
+
+        # Step 3: Call the trip function from the google module, passing the client as the first argument.
+        response = await google_trip(client, prompt=full_prompt, model=model)
+
     except Exception as e:
         await io.error(f"!! ask: AI interaction failed: {e}")
         return False

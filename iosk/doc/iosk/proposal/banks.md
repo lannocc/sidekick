@@ -1,6 +1,6 @@
 # Proposal: An Expanded Set of Memory Banks for Agent Specialization
 
-**Status**: Proposed
+**Status**: Implemented in spirit... many changes were made.
 
 ### Introduction
 

@@ -61,6 +61,9 @@ class IOSK:
         self.process_table = {}
         self.next_pid = 1
 
+        # Added for per-user clients proposal
+        self.device_clients = {}
+
     ###
     ### SYSTEM LIFECYCLE
     ###
@@ -519,6 +522,35 @@ class IOSK:
                 return None
         else:
             await io.error(f'!! no handler for device: {dev}')
+            return None
+
+    async def get_device_client(self, io:Context, dev_virtual_path:str) -> object:
+        """
+        Gets a cached client instance for a device, or creates a new one.
+        The client instance is cached using its virtual path as the key.
+        """
+        if dev_virtual_path in self.device_clients:
+            return self.device_clients[dev_virtual_path]
+
+        # Client not cached, so create it.
+        # This requires a standardized way to get a client from a device module.
+        dev_name = dev_virtual_path.replace('/dev/', '', 1)
+        mod_name_for_pymod = dev_name.replace('/', '.')
+        host_py_path = self.box(f"{dev_virtual_path}.py", io_context=io)
+        dev_mod = self.pymod(f'dev.{mod_name_for_pymod}', host_py_path)
+
+        if not dev_mod or not hasattr(dev_mod, 'get_client'):
+            await io.error(f"!! device module for '{dev_virtual_path}' is invalid or missing get_client() function.")
+            return None
+
+        # Call the new standardized factory function in the device module.
+        try:
+            client = await dev_mod.get_client(io)
+            if client:
+                self.device_clients[dev_virtual_path] = client # Cache the new client
+            return client
+        except Exception as e:
+            await io.error(f"!! failed to initialize client for '{dev_virtual_path}': {e}")
             return None
 
     ###

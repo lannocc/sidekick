@@ -355,47 +355,60 @@ class Engagement:
 
                 self.waiting = True
                 reply = None
-                try:
-                    reply = await self.trip(prompt_text_for_trip)
 
-                except ResourceExhausted as e:
-                    await self.io.os.system.error(
-                        f"!! User '{self.io.user}' hit Google 429 ResourceExhausted error. "
-                        f"Current token counts (caching/cumulative): {self.io.caching_token_total:,}/{self.io.full_token_total:,}. "
-                        f"Original error: {e}"
-                    )
+                # Get the client instance from the kernel for the user's current device.
+                client = await self.io.os.get_device_client(self.io, self.io.dev)
 
-                    self.io.session.seek(0)
-                    content = self.io.session.read()
-                    lines = content.splitlines(keepends=True)
+                if not client:
+                    # Client creation failed. get_device_client already printed an error.
+                    # We'll just wait a bit to avoid a fast failure loop.
+                    await asyncio.sleep(5.0)
+                    self.waiting = False
+                else:
+                    try:
+                        # Call self.trip, passing the client as the first argument.
+                        reply = await self.trip(client, prompt_text_for_trip)
 
-                    if len(lines) > 1:
-                        midpoint = len(lines) // 2
-                        new_content = "".join(lines[midpoint:])
+                    except ResourceExhausted as e:
+                        await self.io.os.system.error(
+                            f"!! User '{self.io.user}' hit Google 429 ResourceExhausted error. "
+                            f"Current token counts (caching/cumulative): {self.io.caching_token_total:,}/{self.io.full_token_total:,}. "
+                            f"Original error: {e}"
+                        )
 
                         self.io.session.seek(0)
-                        self.io.session.truncate(0)
-                        self.io.session.write(new_content)
+                        content = self.io.session.read()
+                        lines = content.splitlines(keepends=True)
 
-                        await self.io.print(":: Your context window is full. Session history has been truncated by 50% to continue.")
-                    else:
-                        await self.io.print(":: Your context window is full, but the session is too short to truncate. Please use `clear` or `reset`.")
+                        if len(lines) > 1:
+                            midpoint = len(lines) // 2
+                            new_content = "".join(lines[midpoint:])
 
-                except Exception as e: # overloaded?
-                    await self.io.os.system.error(f'!! trip for {self.io.user}:'
-                                                  f' {e}')
-                    await asyncio.sleep(1.8)
-                    try:
-                        reply = await self.trip(prompt_text_for_trip)
+                            self.io.session.seek(0)
+                            self.io.session.truncate(0)
+                            self.io.session.write(new_content)
 
-                    except Exception as e: # still overloaded?
-                        await self.io.os.system.error(
-                                f'!! trip (2) for {self.io.user}: {e}')
-                        await asyncio.sleep(4.2)
-                        reply = await self.trip(prompt_text_for_trip)
+                            await self.io.print(":: Your context window is full. Session history has been truncated by 50% to continue.")
+                        else:
+                            await self.io.print(":: Your context window is full, but the session is too short to truncate. Please use `clear` or `reset`.")
 
-                finally:
-                    self.waiting = False
+                    except Exception as e: # overloaded?
+                        await self.io.os.system.error(f'!! trip for {self.io.user}:'
+                                                      f' {e}')
+                        await asyncio.sleep(1.8)
+                        try:
+                            # Pass client on retry
+                            reply = await self.trip(client, prompt_text_for_trip)
+
+                        except Exception as e: # still overloaded?
+                            await self.io.os.system.error(
+                                    f'!! trip (2) for {self.io.user}: {e}')
+                            await asyncio.sleep(4.2)
+                            # Pass client on final retry
+                            reply = await self.trip(client, prompt_text_for_trip)
+
+                    finally:
+                        self.waiting = False
 
                 #print('-------------------------------------- REPLY  BEGIN ---')
                 #print(reply)
@@ -469,4 +482,3 @@ class Engagement:
 
         # Remove the original markdown block from the text that will be processed for chat broadcast.
         return text.replace(original_block, '')
-
