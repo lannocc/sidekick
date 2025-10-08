@@ -65,7 +65,7 @@ class IOSK:
         self.device_clients = {}
 
         # Added for trace proposal
-        self.trace_states = {'_global_': False, 'trip': False}
+        self.trace_states = {'trip': False}
         self.device_trip_counters = {}
 
     ###
@@ -570,42 +570,65 @@ class IOSK:
     ###
 
     async def is_trace_active(self, trace_name: str) -> bool:
-        """Checks if a specific trace is active globally or individually."""
-        if self.trace_states.get('_global_'):
-            return True
+        """Checks if a specific trace is active."""
         return self.trace_states.get(trace_name, False)
 
     async def log_trip_trace(self, io: Context, prompt: str, reply: str):
-        """Logs the prompt and reply for an AI trip if the 'trip' trace is active."""
+        """Logs the prompt, reply, and token counts for an AI trip if the 'trip' trace is active."""
         if not await self.is_trace_active('trip'):
             return
 
-        # Get and increment the trip ID for the specific device path
+        # --- Filename Construction ---
         device_path = io.dev
         tid = self.device_trip_counters.get(device_path, 0) + 1
         self.device_trip_counters[device_path] = tid
-
-        # Sanitize device name for filename
         device_name = device_path.replace('/dev/', '').replace('/', '-')
+        base_filename = f'{device_name}-{io.user}-{self.BOOT}-{io.cid}-{tid}'
 
-        # Construct the base filename
-        base_filename = (
-            f'{device_name}-{io.user}-{self.BOOT}-{io.cid}-{tid}'
-        )
-
-        # Construct full host paths for log files
         trip_log_dir_host = self.box('/var/log/trip')
         prompt_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.prompt')
         reply_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.reply')
+        tokens_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.tokens')
 
-        # Write the prompt and reply to their respective files
+        # --- Token and Byte Calculation ---
+        tokens_content = ""
+        try:
+            prompt_bytes = len(prompt.encode('utf-8'))
+            reply_str = reply or ""
+            reply_bytes = len(reply_str.encode('utf-8'))
+            prompt_tokens = -1
+            reply_tokens = -1
+
+            try:
+                encoding = tiktoken.get_encoding('cl100k_base')
+                prompt_tokens = len(encoding.encode(prompt))
+                reply_tokens = len(encoding.encode(reply_str))
+            except Exception:
+                # If tiktoken fails, we still have byte counts.
+                # Token counts will be marked as unavailable.
+                pass
+
+            tokens_content = (
+                f"PROMPT\n"
+                f"Bytes: {prompt_bytes}\n"
+                f"Tokens: {prompt_tokens if prompt_tokens != -1 else '(unavailable)'}\n\n"
+                f"REPLY\n"
+                f"Bytes: {reply_bytes}\n"
+                f"Tokens: {reply_tokens if reply_tokens != -1 else '(unavailable)'}\n"
+            )
+
+        except Exception as e:
+            tokens_content = f"Error during token calculation: {e}"
+
+        # --- Writing all trace files ---
         try:
             with open(prompt_file_host, 'w', encoding='utf-8') as f:
                 f.write(prompt)
             with open(reply_file_host, 'w', encoding='utf-8') as f:
-                f.write(reply or "") # Ensure reply is a string
+                f.write(reply or "")
+            with open(tokens_file_host, 'w', encoding='utf-8') as f:
+                f.write(tokens_content)
         except Exception as e:
-            # Log an error to the system context if tracing fails, but don't crash the original operation.
             await self.system.error(f"!! failed to write trip trace for {base_filename}: {e}")
 
     ###
@@ -662,3 +685,4 @@ class IOSK:
             except ModuleNotFoundError: pass
 
         return py
+

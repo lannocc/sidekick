@@ -10,7 +10,7 @@ async def iocall(io, argv):
       Displays a list of all available trace points and their current state (ON/OFF).
 
     trace on|off:
-      Enables or disables all trace points globally.
+      Enables or disables all available trace points.
 
     trace <name> on|off:
       Enables or disables a single, specific trace point by its name.
@@ -26,27 +26,29 @@ async def iocall(io, argv):
 
     # Case 1: Display status (no arguments)
     if not argv:
-        global_state = "ON" if trace_states.get('_global_', False) else "OFF"
-        await io.print(f"Global trace: {global_state}")
+        if not trace_states:
+            await io.print(":: No trace points available.")
+            return True
         
-        # Sort keys for consistent output, excluding the global toggle
-        trace_points = sorted([key for key in trace_states if key != '_global_'])
+        trace_points = sorted(trace_states.keys())
         
         for name in trace_points:
             state = "ON" if trace_states.get(name, False) else "OFF"
-            await io.print(f"  {name}: {state}")
+            await io.print(f"{name}: {state}")
         return True
 
     # Case 2: Global on/off (one argument)
     if len(argv) == 1:
         state_str = argv[0].lower()
         if state_str == 'on':
-            trace_states['_global_'] = True
-            await io.print(":: Global trace set to ON")
+            for key in trace_states:
+                trace_states[key] = True
+            await io.print(":: All traces set to ON")
             return True
         elif state_str == 'off':
-            trace_states['_global_'] = False
-            await io.print(":: Global trace set to OFF")
+            for key in trace_states:
+                trace_states[key] = False
+            await io.print(":: All traces set to OFF")
             return True
         else:
             await io.error(f"!! trace: invalid argument '{argv[0]}'. Use 'on', 'off', or see 'trace --help'.")
@@ -58,7 +60,7 @@ async def iocall(io, argv):
         state_str = argv[1].lower()
 
         # Validate trace name
-        if name not in trace_states or name == '_global_':
+        if name not in trace_states:
             await io.error(f"!! trace: unknown trace point '{name}'")
             return False
 
@@ -78,3 +80,4 @@ async def iocall(io, argv):
     # Case 4: Too many arguments
     await io.error("!! trace: too many arguments. Use 'trace --help' for usage.")
     return False
+
