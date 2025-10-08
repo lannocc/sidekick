@@ -187,7 +187,8 @@ class CommandPipelineExecutor:
                         resolved_internal_path = p_base
                         is_python_module = True
                         break # Found a Python module, prioritize it and stop searching
-                except Exception:
+                except Exception as e:
+                    await io.os.system.error(f'!! python load error for {cmd}: {e}')
                     pass # Not a loadable Python module or other error, continue search
 
             # Check for generic script/executable file (without .py extension)
