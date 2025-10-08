@@ -171,6 +171,14 @@ async def iocall(io, argv):
         # Step 3: Call the trip function from the google module, passing the client as the first argument.
         response = await google_trip(client, prompt=full_prompt, model=model)
 
+        # Log the trip for tracing, if enabled.
+        # We must use a forked context and set its .dev attribute to the device
+        # being asked, otherwise the trace log will incorrectly name the user's
+        # own device (e.g., /dev/terminal) as the source of the trip.
+        trace_io = io.fork()
+        trace_io.dev = device_path
+        await io.os.log_trip_trace(trace_io, full_prompt, response or "")
+
     except Exception as e:
         await io.error(f"!! ask: AI interaction failed: {e}")
         return False

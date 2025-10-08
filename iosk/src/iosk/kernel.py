@@ -64,6 +64,10 @@ class IOSK:
         # Added for per-user clients proposal
         self.device_clients = {}
 
+        # Added for trace proposal
+        self.trace_states = {'_global_': False, 'trip': False}
+        self.device_trip_counters = {}
+
     ###
     ### SYSTEM LIFECYCLE
     ###
@@ -96,6 +100,14 @@ class IOSK:
                 os.makedirs(code)
             elif not isdir(code):
                 fail = f'not a dir: {code}'
+
+        # Added for trace proposal
+        if not fail:
+            trip_log_dir = self.box('/var/log/trip')
+            if not exists(trip_log_dir):
+                os.makedirs(trip_log_dir)
+            elif not isdir(trip_log_dir):
+                fail = f'not a dir: {trip_log_dir}'
 
         if not fail:
             with open(boot, 'w') as boot: # assumes /var/cache exists
@@ -552,6 +564,49 @@ class IOSK:
         except Exception as e:
             await io.error(f"!! failed to initialize client for '{dev_virtual_path}': {e}")
             return None
+
+    ###
+    ### TRACE
+    ###
+
+    async def is_trace_active(self, trace_name: str) -> bool:
+        """Checks if a specific trace is active globally or individually."""
+        if self.trace_states.get('_global_'):
+            return True
+        return self.trace_states.get(trace_name, False)
+
+    async def log_trip_trace(self, io: Context, prompt: str, reply: str):
+        """Logs the prompt and reply for an AI trip if the 'trip' trace is active."""
+        if not await self.is_trace_active('trip'):
+            return
+
+        # Get and increment the trip ID for the specific device path
+        device_path = io.dev
+        tid = self.device_trip_counters.get(device_path, 0) + 1
+        self.device_trip_counters[device_path] = tid
+
+        # Sanitize device name for filename
+        device_name = device_path.replace('/dev/', '').replace('/', '-')
+
+        # Construct the base filename
+        base_filename = (
+            f'{device_name}-{io.user}-{self.BOOT}-{io.cid}-{tid}'
+        )
+
+        # Construct full host paths for log files
+        trip_log_dir_host = self.box('/var/log/trip')
+        prompt_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.prompt')
+        reply_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.reply')
+
+        # Write the prompt and reply to their respective files
+        try:
+            with open(prompt_file_host, 'w', encoding='utf-8') as f:
+                f.write(prompt)
+            with open(reply_file_host, 'w', encoding='utf-8') as f:
+                f.write(reply or "") # Ensure reply is a string
+        except Exception as e:
+            # Log an error to the system context if tracing fails, but don't crash the original operation.
+            await self.system.error(f"!! failed to write trip trace for {base_filename}: {e}")
 
     ###
     ### UTILITY

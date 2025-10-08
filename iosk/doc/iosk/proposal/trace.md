@@ -1,6 +1,6 @@
 # Proposal: A System-Wide Tracing Facility
 
-**Status**: Proposed
+**Status**: Implemented
 
 ### Introduction
 

@@ -425,6 +425,8 @@ class Engagement:
                     finally:
                         self.waiting = False
 
+                    await self.io.os.log_trip_trace(self.io, prompt_text_for_trip, reply or "")
+
                 #print('-------------------------------------- REPLY  BEGIN ---')
                 #print(reply)
                 #print('-------------------------------------- REPLY    END ---')
