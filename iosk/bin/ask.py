@@ -1,6 +1,10 @@
 import os
+import tiktoken
+from google.genai.errors import ClientError
+import re
+import asyncio
 from sk.util import package_directory, get_md_code_block
-from sk.iosk.dev.google import online as google_online, trip as google_trip
+from sk.iosk.dev.google import trip as google_trip
 
 DOCSTRING = """Ask an AI a question, with optional file/directory context.
 
@@ -154,12 +158,75 @@ async def iocall(io, argv):
     )
 
     # --- AI Interaction ---
+    response = None # Initialize response to None
     try:
-        await google_online(io)
+        # Step 1: Determine the virtual device path for the selected model.
+        device_path = f"/dev/google/{model}"
+
+        # Step 2: Pre-calculate prompt tokens for proactive throttling.
+        try:
+            encoding = tiktoken.get_encoding('cl100k_base')
+            prompt_tokens = len(encoding.encode(full_prompt))
+        except Exception:
+            prompt_tokens = len(full_prompt) // 4 # Fallback estimate
+
+        # Step 3: Await device readiness (handles cooldowns and proactive throttling).
+        await io.os.await_device_readiness(io.user, device_path, prompt_tokens)
+
+        # Step 4: Get the client from the kernel.
+        client = await io.os.get_device_client(io, device_path)
+        if not client:
+            return False # Error already printed by get_device_client.
+
         if not quiet_mode:
-            await io.print(f":: asking {model}...")
-        response = await google_trip(prompt=full_prompt, model=model)
+            await io.print(f":: asking {model} via {device_path}...")
+
+        # Step 5: Execute the trip with a retry loop.
+        for attempt in range(3):
+            try:
+                # Call the trip function from the google module.
+                response = await google_trip(client, prompt=full_prompt, model=model)
+                # Success! Break the retry loop.
+                break
+            except ClientError as e:
+                if "429" in str(e):
+                    if not quiet_mode:
+                        await io.print(":: API rate limit hit. Analyzing cooldown...")
+
+                    # Parse delay from error message, with a fallback
+                    match = re.search(r"'retryDelay': '(\d+)s'", str(e))
+                    delay = int(match.group(1)) + 2 if match else 15
+
+                    if not quiet_mode:
+                        await io.print(f":: Enforcing device cooldown for {delay} seconds.")
+
+                    # Trigger kernel to manage cooldown (runs in background)
+                    asyncio.create_task(io.os.enforce_cooldown(device_path, delay))
+
+                    # Wait for the cooldown to complete before retrying.
+                    await io.os.await_device_readiness(io.user, device_path, 0)
+
+                    # Continue to the next attempt in the retry loop.
+                    continue
+                else:
+                    # Some other unrecoverable ClientError, fail fast.
+                    await io.error(f"!! ask: unhandled Google ClientError: {e}")
+                    response = None
+                    break # exit retry loop
+            except Exception as e:
+                await io.error(f"!! ask: AI trip failed (attempt {attempt+1}): {e}")
+                response = None
+                if attempt < 2: # if not the last attempt
+                    await asyncio.sleep((attempt + 1) * 1.5) # simple backoff
+                # Let the loop continue to the next attempt.
+
+        # Log the trip for tracing, if enabled.
+        trace_io = io.fork()
+        trace_io.dev = device_path
+        await io.os.log_trip_trace(trace_io, full_prompt, response or "")
+
     except Exception as e:
+        # This is a catch-all for errors outside the retry loop.
         await io.error(f"!! ask: AI interaction failed: {e}")
         return False
 

@@ -9,10 +9,11 @@ import traceback
 from io import StringIO
 from binaryornot.check import is_binary # Used for file checks
 from typing import TYPE_CHECKING, List, Tuple, Optional
+from datetime import datetime
 
 # Prevent circular imports during runtime for type hints
 if TYPE_CHECKING:
-    from .kernel import IOSK
+    from .kernel import IOSK, Process
     from .io import Context
     from .parser import CommandLineParser
 
@@ -116,10 +117,39 @@ class CommandPipelineExecutor:
         return success
 
     async def _execute_single_command(self, io: 'Context', argv: List[str]) -> bool:
-        """Resolves and executes a single command with its arguments."""
+        """
+        Wraps a single command execution to manage its lifecycle as a process,
+        tracking it in the system's process table.
+        """
         if not argv:
             return True # An empty command in a pipeline is a no-op, considered success
 
+        # --- Process Creation ---
+        pid = self.os.next_pid
+        self.os.next_pid += 1
+
+        # The command logic is wrapped in a coroutine, which is then run as a task.
+        command_coro = self._run_command_logic(io, argv)
+        task = asyncio.create_task(command_coro)
+
+        # Use a local import of the Process class to avoid circular dependency issues.
+        from .kernel import Process
+        process = Process(pid, io.user, argv, datetime.now(), task)
+        self.os.process_table[pid] = process
+        
+        try:
+            # Await the task that is now being tracked.
+            return await task
+        except asyncio.CancelledError:
+            await io.error(f"!! Process {pid} ({process.command_str}) cancelled.")
+            return False
+        finally:
+            # --- Process Cleanup ---
+            if pid in self.os.process_table:
+                del self.os.process_table[pid]
+
+    async def _run_command_logic(self, io: 'Context', argv: List[str]) -> bool:
+        """Resolves and executes the logic for a single command."""
         cmd = argv[0]
         cmd_args = argv[1:]
 
@@ -157,7 +187,8 @@ class CommandPipelineExecutor:
                         resolved_internal_path = p_base
                         is_python_module = True
                         break # Found a Python module, prioritize it and stop searching
-                except Exception:
+                except Exception as e:
+                    await io.os.system.error(f'!! python load error for {cmd}: {e}')
                     pass # Not a loadable Python module or other error, continue search
 
             # Check for generic script/executable file (without .py extension)
@@ -190,4 +221,3 @@ class CommandPipelineExecutor:
             await io.error(f'!! exception calling {cmd}: {e}')
             traceback.print_exc()
             return False
-

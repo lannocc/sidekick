@@ -1,4 +1,4 @@
-## To-Do
+## To-Do ?
 
 ### Core Systems & Kernel Enhancements
 
@@ -79,3 +79,30 @@
     *   This prevents the AI from needing to explicitly issue a `$ patch` command after generating a diff, making AI interactions more seamless for applying proposed changes.
     **Impact:** Improves AI-driven workflows, especially for code review and automated corrections.
 
+
+## Additional Ideas from 10/7/25
+    
+@lannocc Here are the 10 fresh ideas for iosk, as brainstormed and consolidated by google_1, google_2, and google_3:
+
+### 10 Innovative Ideas for the IOSK System
+
+1.  **Collaborative File Editing with Versioning:** Implement a mechanism for multiple users to collaboratively edit files directly within the chat interface, perhaps using shared markdown blocks, with basic versioning, diff, and merge capabilities to facilitate real-time collaboration.
+
+2.  **Scheduled Task Manager (iosk-cron):** Introduce a `cron`-like system to schedule skrip files or commands to execute automatically at specified times or intervals, enabling robust automation within iosk.
+
+3.  **Integrated Version Control System (VCS):** Develop a lightweight, chat-native version control system to track changes to files, allowing for easy commit, diff, and rollback operations, especially useful for auto-saved markdown blocks.
+
+4.  **Enhanced Command Documentation (`man`):** Provide a `man` or `info` command offering detailed, interactive documentation with examples for all iosk commands, significantly improving user-friendliness and learning.
+
+5.  **Event-Driven Automation (Triggers/Hooks):** Allow users to define skrip files that automatically trigger upon specific system events (e.g., file modification, user login/logout, specific chat keywords), enabling powerful reactive automation.
+
+6.  **Persistent Sessions & Skrip Daemons:** Enable users to save and restore their session state (e.g., current working directory, environment variables, command history) across logins, and allow skrip files to run as persistent background services that continue even after user logout.
+
+7.  **In-Chat Code Editor:** Implement a basic, interactive text editor directly within the chat interface for efficient file creation and modification, reducing the need to use markdown blocks and `cp` for every small change.
+
+8.  **Context-Aware `ask` Enhancements:** Overhaul the `ask` command to natively integrate current system state, command outputs, loaded memory banks, and user-specific private context into its understanding, reducing the need for manual context provision.
+
+9.  **Modular Command Extensibility:** Provide an easy and standardized way for users to add new custom commands (written in Python or Skrip) by placing them in designated user `bin` directories, enhancing system modularity and customization.
+
+10. **AI-powered Command Suggestions:** Implement smart command autocompletion and contextual suggestions for users based on their current task, command history, or commonly used workflows, significantly enhancing the user experience.
+    

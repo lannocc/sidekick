@@ -16,12 +16,14 @@ General Utilities:
     $ welcome       - display a welcome message (auto-called on login)
     $ exit          - leave the system chat (logout)
 
-Command and Shell
+Command and Shell:
     $ alias         - manage IOSK command aliases
     $ export        - set or display environment variables
     $ history       - show recent command history for this session
     $ skrip         - execute a skrip file or command string
+    $ sleep         - pause execution for a specified amount of time
     $ system        - execute a command in the underlying host system
+    $ trace         - manage the IOSK system-wide tracing facility
     $ which         - locate a command executable in the PATH
     $ xargs         - build and execute command lines from standard input
 
@@ -29,6 +31,11 @@ Memory Management (Skrip Banks):
     $ bank          - load a skrip into core memory by executing it
     $ banks         - list memory accounts currently banked
     $ bankrupt      - clear core memory bank
+
+Process Management:
+    $ ps            - list currently running processes
+    $ kill          - terminate a running process
+    $ top           - provide a single, non-interactive snapshot of system activity
 
 User/Device Management:
     $ whoami        - see your current username
@@ -40,6 +47,7 @@ User/Device Management:
     $ reattach      - reattach a user (or self) to a different device
     $ pause         - pause a bot user's AI engagement
     $ unpause       - unpause a bot user's AI engagement
+    $ reset         - reset a user's session to a clean state
     $ ask           - ask an AI device (user) a question, with optional files
     $ su            - execute a command as another user (superuser only)
 
@@ -55,6 +63,7 @@ File and Directory Management:
     $ cp            - copy file or directory
     $ mv            - move/rename file or directory
     $ patch         - apply a diff to a file
+    $ replace       - replaces occurrences of a string in a file with another string
 
 Viewing and Analyzing Files:
     $ cat           - print file contents
@@ -124,4 +133,3 @@ async def iocall(io, argv):
     # If we reach here, it means invalid arguments were provided (e.g., `help cmd1 cmd2`)
     await io.error("!! help: too many arguments or unknown option. Use 'help --help' for usage.")
     return False
-

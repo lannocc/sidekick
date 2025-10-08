@@ -1,7 +1,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from .. import ai
+from ..ai import google as ai
 from ..action import ActionsBase
 from ..util import play_scratch, play_thinking
 

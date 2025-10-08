@@ -1,6 +1,6 @@
 # Proposal: A Versatile `ask` Command for IOSK
 
-**Status**: Now implementing...
+**Status**: Implemented
 
 ### Introduction
 

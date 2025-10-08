@@ -9,6 +9,7 @@ async def iocall(io, argv):
 
     Options:
       -c        Count bytes and estimate tokens for the content.
+      -d        List directories only.
       -h --help Display this help message.
 
     [path ...]: The paths to list. If no path is provided use current directory.
@@ -16,12 +17,15 @@ async def iocall(io, argv):
     args_list = argv
 
     count = False
+    dirs_only = False
     paths = []
 
     for arg in args_list:
         if arg.startswith('-'):
             if arg == '-c':
                 count = True
+            elif arg == '-d':
+                dirs_only = True
             elif arg in ('-h', '--help'):
                 await io.print(iocall.__doc__)
                 return
@@ -44,7 +48,11 @@ async def iocall(io, argv):
             continue
 
         try:
-            tree_text = get_directory_tree_as_text(io.os.box(path, io_context=io), count=count)
+            tree_text = get_directory_tree_as_text(
+                io.os.box(path, io_context=io),
+                count=count,
+                dirs_only=dirs_only
+            )
             await io.print(tree_text)
         except Exception as e:
             await io.error(f'!! tree: failed to traverse path for {path}\n')

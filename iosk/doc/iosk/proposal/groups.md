@@ -1,3 +1,7 @@
+# Groups
+
+**Status**: Proposed.
+
 ### Introduction
 
 The current IOSK environment treats all logged-in users as participants in a single, system-wide chat session. While this is effective for a small, open system, it lacks the necessary mechanisms for private collaboration, access control, and project-based organization. As IOSK evolves into a more capable multi-user environment, we need a robust model for security and context separation.

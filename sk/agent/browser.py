@@ -1,7 +1,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from .. import ai
+from ..ai import google as ai
 from ..action import ActionsBase, FileResult
 from ..util import print_flush, delay, open_browser, take_screenshot#, \
                    #extract_and_save_region

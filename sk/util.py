@@ -111,42 +111,61 @@ def is_ignorable_path(item, ignores=[ ]):
                 or item in ignores
 
 
-def get_directory_tree_as_text(path, indent='', markdown=False, count=False):
+def get_directory_tree_as_text(path, indent='', markdown=False, count=False, dirs_only=False):
     import tiktoken
 
     text = ''
-    items = os.listdir(path)
+    try:
+        items = os.listdir(path)
+    except OSError:
+        return ''
+        
     ignores = get_ignore_set(path)
-
-    for i, item in enumerate(sorted(items)):
+    
+    # Pre-filter the list of items to be displayed to correctly draw the tree branches
+    visible_items = []
+    for item in sorted(items):
         if is_ignorable_path(item, ignores):
             continue
+        
+        full_path = os.path.join(path, item)
+        if dirs_only and not os.path.isdir(full_path):
+            continue
+            
+        visible_items.append(item)
 
+    for i, item in enumerate(visible_items):
         full_path = os.path.join(path, item)
 
-        if i < len(items) - 1: # not last item
+        # Use the index relative to the visible list to determine the prefix
+        if i < len(visible_items) - 1:
             prefix = '* ' if markdown else '├── '
             new_indent = indent + ('    ' if markdown else '│   ')
-
-        else: # last item in list
+        else: # This is the last visible item
             prefix = '* ' if markdown else '└── '
             new_indent = indent + '    '
 
         suffix = ''
         if os.path.isdir(full_path):
             suffix = os.sep
-
         elif markdown:
             item = f'[{item}]({full_path})'
 
         text += indent + prefix + item + suffix + '\n'
 
         if os.path.isdir(full_path):
+            # The recursive call should not perform the count itself.
             text += get_directory_tree_as_text(full_path, new_indent,
-                                               markdown=markdown)
+                                               markdown=markdown,
+                                               count=False, 
+                                               dirs_only=dirs_only)
 
     if count:
-        data = text + get_directory_contents_as_text(path)
+        # The 'data' for counting includes the tree structure text itself...
+        data = text 
+        if not dirs_only:
+             # ...and the contents of all files within the directory (recursively).
+             data += get_directory_contents_as_text(path)
         data_bytes = data.encode('utf-8')
 
         text +=  BYTES_SEPARATOR
@@ -323,4 +342,3 @@ def play_scratch():
 
 def play_thinking():
     play('assets/three_tones.wav')
-

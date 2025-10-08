@@ -1,15 +1,19 @@
+# src/iosk/chat.py
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
 from .io import print_flush as print
 
 import tiktoken
+#from google.api_core.exceptions import ResourceExhausted
+from google.genai.errors import ClientError
 
 import asyncio
 from datetime import datetime
 from os.path import exists, join
 import re
 import tempfile
+import traceback
 
 
 class AIMessenger:
@@ -152,6 +156,24 @@ class AIMessenger:
                     if user == from_user: continue # Sender gets a confirmation below
                     if user in self.os.users:
                         uio = self.os.users[user]
+
+                        # --- NEW LOGIC: Interrupt sleep ---
+                        pids_to_cancel = []
+                        # Create a copy of items to avoid runtime errors during iteration
+                        for pid, process in list(self.os.process_table.items()):
+                            if process.user == user and process.command_str.startswith('sleep'):
+                                pids_to_cancel.append(pid)
+
+                        if pids_to_cancel:
+                            for pid in pids_to_cancel:
+                                process = self.os.process_table.get(pid)
+                                if process:
+                                    process.task.cancel()
+                                    # The CancelledError handler in pipeline.py will print a 'cancelled' message.
+                                    # We add a more specific message here.
+                                    await uio.print(":: Your sleep was interrupted by a direct message.")
+                        # --- END NEW LOGIC ---
+
                         if not uio.paused:
                             dm_msg_for_recipient = f'\n[{from_user} -> me {now}] << {actual_msg}'
                             # Ring the terminal bell if the recipient is the console user
@@ -334,24 +356,66 @@ class Engagement:
                     await self.io.os.system.error(f"!! token calculation failed during trip: {e}")
 
                 self.waiting = True
+                reply = None
+
+                # --- Token Rate Limiting: Proactive Check ---
                 try:
-                    reply = await self.trip(prompt_text_for_trip)
+                    encoding = tiktoken.get_encoding('cl100k_base')
+                    prompt_tokens = len(encoding.encode(prompt_text_for_trip))
+                except Exception:
+                    prompt_tokens = len(prompt_text_for_trip) // 4 # Fallback estimate
 
-                except Exception as e: # overloaded?
-                    await self.io.os.system.error(f'!! trip for {self.io.user}:'
-                                                  f' {e}')
-                    await asyncio.sleep(1.8)
-                    try:
-                        reply = await self.trip(prompt_text_for_trip)
+                # Await readiness (waits for cooldowns and throttles if TPM is high)
+                await self.io.os.await_device_readiness(self.io.user, self.io.dev, prompt_tokens)
+                
+                client = await self.io.os.get_device_client(self.io, self.io.dev)
 
-                    except Exception as e: # still overloaded?
-                        await self.io.os.system.error(
-                                f'!! trip (2) for {self.io.user}: {e}')
-                        await asyncio.sleep(4.2)
-                        reply = await self.trip(prompt_text_for_trip)
-
-                finally:
+                if not client:
+                    await asyncio.sleep(5.0)
                     self.waiting = False
+                else:
+                    for attempt in range(3): # Retry loop
+                        try:
+                            reply = await self.trip(client, prompt_text_for_trip)
+                            # Success, break the retry loop
+                            break
+                        except ClientError as e:
+                            if "429" in str(e):
+                                # This is a rate limit error, handle it reactively
+                                await self.io.os.system.error(f':: API rate limit hit for {self.io.user} on {self.io.dev}: {e}')
+                                await self.io.print(":: API rate limit hit. Analyzing cooldown...")
+                                
+                                # Parse delay from error message, with a fallback
+                                match = re.search(r"'retryDelay': '(\d+)s'", str(e))
+                                delay = int(match.group(1)) + 2 if match else 15
+                                
+                                await self.io.os.system.print(f":: Enforcing device cooldown for {delay} seconds.")
+                                await self.io.print(f":: Enforcing device cooldown for {delay} seconds.")
+                                
+                                # Trigger kernel to manage cooldown (runs in background)
+                                asyncio.create_task(self.io.os.enforce_cooldown(self.io.dev, delay))
+
+                                # Wait for the cooldown to complete before retrying.
+                                await self.io.os.await_device_readiness(self.io.user, self.io.dev, 0)
+                                
+                                # Continue to the next attempt in the retry loop
+                                continue
+                            else:
+                                # Some other unrecoverable ClientError, fail fast
+                                await self.io.os.system.error(f'!! Unhandled Google ClientError for {self.io.user}: {e}')
+                                reply = None # ensure reply is None
+                                break # exit retry loop
+                        except Exception as e:
+                            await self.io.os.system.error(f'!! trip (attempt {attempt+1}) for {self.io.user}: {e}')
+                            traceback.print_exc()
+                            reply = None # ensure reply is None
+                            if attempt < 2: # if not the last attempt
+                                await asyncio.sleep((attempt + 1) * 1.5) # simple backoff
+                            # Let the loop continue to the next attempt
+                    
+                    # After the loop finishes (either by success, failure, or exhaustion of retries)
+                    self.waiting = False
+                    await self.io.os.log_trip_trace(self.io, prompt_text_for_trip, reply or "")
 
                 #print('-------------------------------------- REPLY  BEGIN ---')
                 #print(reply)
