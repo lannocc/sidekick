@@ -140,7 +140,16 @@ class CommandPipelineExecutor:
         try:
             # Await the task that is now being tracked.
             return await task
+        except KeyboardInterrupt:
+            # User hit Ctrl+C. Cancel the task and swallow the interrupt.
+            if not task.done():
+                task.cancel()
+            await io.print("\n^C")
+            # The task's own finally/except CancelledError will handle its cleanup.
+            # We return False to signal the command did not complete successfully.
+            return False
         except asyncio.CancelledError:
+            # This handles programmatic cancellation (e.g., from the 'kill' command).
             await io.error(f"!! Process {pid} ({process.command_str}) cancelled.")
             return False
         finally:
@@ -221,3 +230,4 @@ class CommandPipelineExecutor:
             await io.error(f'!! exception calling {cmd}: {e}')
             traceback.print_exc()
             return False
+
