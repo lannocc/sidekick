@@ -23,6 +23,7 @@ Command and Shell:
     $ skrip         - execute a skrip file or command string
     $ sleep         - pause execution for a specified amount of time
     $ system        - execute a command in the underlying host system
+    $ trace         - manage the IOSK system-wide tracing facility
     $ which         - locate a command executable in the PATH
     $ xargs         - build and execute command lines from standard input
 
@@ -62,6 +63,7 @@ File and Directory Management:
     $ cp            - copy file or directory
     $ mv            - move/rename file or directory
     $ patch         - apply a diff to a file
+    $ replace       - replaces occurrences of a string in a file with another string
 
 Viewing and Analyzing Files:
     $ cat           - print file contents

@@ -6,9 +6,9 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ alias` (list) or `$ alias NAME=VALUE` (define/update).
     *   Notes: `NAME=VALUE` defines a new alias or updates an existing one. NAME is the alias, VALUE is the command it expands to. Variables within an alias definition (e.g., `$PATH`) are expanded *during the alias definition itself*, not during alias execution. The parser struggles with nested quotes in alias definitions.
     *   Status: Working (with caveats - alias quoting and expansion issues exist but are not a high priority to resolve immediately given the parser proposal's status).
-*   **ask**: Ask an AI user a question, with optional file/directory context.
+*   **ask**: Ask an AI a question, with optional file/directory context.
     *   Usage: `$ ask [options] <prompt>` or `... | ask [options]`
-    *   Options: `-q`, `--quiet` (quiet mode); `-f <file>` (attach file content, can be specified multiple times); `-p <directory>` (package directory content, can be specified multiple times); `-e <lang> <file>` (extract first markdown code block of `<lang>` and save); `-1` (use model gemini-2.0-flash-lite); `-2` (use model gemini-2.5-flash, default); `-3` (use model gemini-2.5-pro).
+    *   Options: `-h, --help` (Displays this help message.); `-q, --quiet` (Quiet mode. Only print the final AI response.); `-f <file>` (Attach the contents of the specified file to the prompt. Can be specified multiple times.); `-p <directory>` (Package and attach the contents of the specified directory. Can be specified multiple times.); `-e <lang> <file>` (Extract the first markdown code block of `<lang>` from the response and save it to `<file>.`); `-1` (Use model: gemini-2.0-flash-lite.); `-2` (Use model: gemini-2.5-flash (default).); `-3` (Use model: gemini-2.5-pro.).
     *   Notes: If `<prompt>` is not provided as an argument, it is read from standard input.
     *   Status: Working.
 *   **attach**: Attach a device as a user.
@@ -37,13 +37,13 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **clear**: Clear the session history for bots or the screen for console users.
     *   Usage: `$ clear`
-    *   Notes: For bot users, clears the entire chat session history, leaving only the `clear` command itself. For interactive console users, clears the screen using ANSI escape sequences.
+    *   Notes: For bot users, this command clears the entire chat session history, leaving only the `clear` command itself as the first and only entry. For interactive console/terminal users, this command clears the screen using ANSI escape sequences.
     *   Status: Working.
 *   **cp**: Copy a file or directory.
     *   Usage: `$ cp <source> <destination>`
     *   Notes: Handles file to file copy and file to existing directory copy. Errors if source does not exist.
-    *   Status: Working (file to file copy, file to existing directory copy).
-*   **date**: Display the current date and time.
+    *   Status: Working.
+*   **date**: Display the current date and time, with optional formatting.
     *   Usage: `$ date` or `$ date <format>`
     *   Notes: The format string should start with a `+` (e.g., `"+%Y%m%d_%H%M%S"`), using Python's `datetime strftime` format codes.
     *   Status: Working.
@@ -58,7 +58,7 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **diff**: Show differences between two text files.
     *   Usage: `$ diff [-u N] <file1> <file2>`
     *   Options: `-u N` (unified context lines, default 3).
-    *   Notes: Files must be text; binary files are refused. Output is in standard unified diff format.
+    *   Notes: Files must be text; binary files are refused by the system.
     *   Status: Working.
 *   **echo**: Echo the given arguments.
     *   Usage: `$ echo [arguments]`
@@ -74,8 +74,8 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **grep**: Search for a regular expression PATTERN in each FILE or standard input.
     *   Usage: `$ grep [OPTIONS] PATTERN [FILE...]`
-    *   Options: `-i`, `--ignore-case` (ignore case distinctions); `-v`, `--invert-match` (select non-matching lines); `-n`, `--line-number` (prefix with line number); `-l`, `--files-with-matches` (print filenames only); `-c`, `--count` (print count of matching lines); `-r`, `-R`, `--recursive` (read all files under each directory, recursively).
-    *   Notes: If no files are given, reads from standard input. Supports full regular expression syntax.
+    *   Options: `-i, --ignore-case` (ignore case distinctions); `-v, --invert-match` (select non-matching lines); `-n, --line-number` (prefix with line number); `-l, --files-with-matches` (print filenames only); `-c, --count` (print count of matching lines); `-r, -R, --recursive` (read all files under each directory, recursively).
+    *   Notes: If no files are given, reads from standard input.
     *   Status: Working.
 *   **head**: Display the first N lines of a file or stdin.
     *   Usage: `$ head [-n <number>] [filename]`
@@ -93,10 +93,10 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **kill**: Terminate a running process.
     *   Usage: `$ kill <pid>`
     *   Notes: `<pid>` is the Process ID of the process to terminate. Use `ps` to find PIDs.
-    *   Status: Working (newly implemented as per proposal).
+    *   Status: Working.
 *   **ll**: Lists directory contents using the long listing format (alias for `ls -l`).
     *   Usage: `$ ll [path ...]`
-    *   Notes: Provides one entry per line with detailed information.
+    *   Notes: Provides one entry per line with detailed information. This command is an alias for `ls -l`.
     *   Status: Working (as an alias).
 *   **ls**: List directory contents.
     *   Usage: `$ ls [options] [path ...]`
@@ -123,7 +123,7 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **ps**: List currently running processes.
     *   Usage: `$ ps`
     *   Notes: Displays information about active processes, including their PID, user, running time, and the command string.
-    *   Status: Working (newly implemented as per proposal).
+    *   Status: Working.
 *   **pwd**: Print the name of the current working directory.
     *   Usage: `$ pwd`
     *   Notes: Does not accept arguments.
@@ -131,6 +131,10 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **reattach**: Reattach a user to a different device.
     *   Usage: `$ reattach <device> [user]`
     *   Notes: `<device>` is the name of the device (e.g., 'dummy', 'google', 'openai/gpt-4o'), corresponding to a path under `/dev/`. `[user]` is the username to reattach; if omitted, defaults to the current user. Console device targets (`/dev/console`, `/dev/terminal`) allow swapping if already occupied.
+    *   Status: Working.
+*   **replace**: Replaces occurrences of a string in a file with another string.
+    *   Usage: `replace <filename> <old_string> <new_string>`
+    *   Notes: `<filename>` is the path to the file to modify. `<old_string>` is the string to search for. `<new_string>` is the string to replace with.
     *   Status: Working.
 *   **reset**: Reset a user's session to a clean state.
     *   Usage: `$ reset [username]`
@@ -149,26 +153,26 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Options: `-i` (case-insensitive), `-n` (show line numbers), `-l` (list filenames with matches), `-c` (print count of matches per file).
     *   Notes: If no paths are provided, reads from standard input. If stdin is empty, defaults to `/home/<user>` if it exists; otherwise `/`.
     *   Status: Working.
-*   **send**: Send file contents or piped data as a message to the chat (to all users).
+*   **send**: Send file contents or piped data as a message to the chat.
     *   Usage: `$ send [-u <user>]... <file>...` or `... | send [-u <user>]...`
-    *   Options: `-u <user>` (send a direct message to a specific user, can be used multiple times).
-    *   Notes: Reads content from one or more files, or from standard input, and broadcasts it as a single raw text message. The sender receives a confirmation.
+    *   Options: `-u <user>` (Send a direct message to a specific user. This option can be used multiple times to specify multiple recipients.).
+    *   Notes: Reads the contents of one or more files, or reads from standard input, and sends the result as a raw text message. By default, the message is broadcast to other users in the current chat.
     *   Status: Working.
-*   **skrip**: Execute a skrip file or command string.
-    *   Usage: `$ skrip <filename>` or `$ skrip -e <command>`
-    *   Notes: Processes normal text lines as output, ignores comment lines (starting with '#'), and runs command lines (starting with '$ ').
+*   **skrip**: Execute a skrip file or command.
+    *   Usage: `$ skrip <filename>` or `$ skrip -e <command>` or `$ skrip -s <filename>`
+    *   Notes: `<filename>` (default mode): Lines starting with '$ ' are commands; other lines are printed. `-e <command>`: Execute the given command string in default mode. `-s <filename>`: Execute the given file in "pure shell mode". All non-comment lines are treated as commands and do not need a '$ ' prefix.
     *   Status: Working.
 *   **sleep**: Pause execution for a specified amount of time.
     *   Usage: `$ sleep <duration>...`
-    *   Notes: Pauses for an amount of time specified by the sum of the values. Each argument is a number followed by an optional unit (s, m, h, d). Default unit is seconds.
-    *   Status: Working (newly documented).
+    *   Notes: Pauses for an amount of time specified by the sum of the values of the command line arguments. Each argument is a number followed by an optional unit (s, m, h, d). Default unit is seconds. A direct message sent to a sleeping user will interrupt the sleep.
+    *   Status: Working.
 *   **status**: Displays system status information (date, user, users).
     *   Usage: `$ status`
     *   Notes: A skrip that calls `date`, `whoami`, and `users`.
     *   Status: Working.
 *   **su**: Execute a command as another user, with optional piped input.
     *   Usage: `$ su <user> <command> [args...]` or `... | su <user> <command> [args...]`
-    *   Notes: Requires super-user privileges. When standard input is piped to `su`, it is passed as standard input to the executed command.
+    *   Notes: When standard input is piped to `su`, it is passed as standard input to the executed command.
     *   Status: Working (functionality for super-users is assumed based on the explicit error for non-super-users).
 *   **system**: Execute a command in the underlying host system.
     *   Usage: `$ system <command> [args...]`
@@ -190,14 +194,18 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **top**: Provide a single, non-interactive snapshot of system activity.
     *   Usage: `$ top`
     *   Notes: Displays a summary of system status and a list of running processes, sorted by runtime in descending order. This is a one-shot command and does not update in real-time.
-    *   Status: Working (newly implemented as per proposal).
+    *   Status: Working.
 *   **touch**: Create an empty file.
     *   Usage: `$ touch <filename>`
     *   Notes: Creates a new, empty file. If the file already exists, the command errors, unlike standard UNIX `touch` which updates the timestamp.
     *   Status: Working as a file creation utility, with non-standard behavior for existing files.
+*   **trace**: Manage the IOSK system-wide tracing facility.
+    *   Usage: `$ trace`, `$ trace on|off`, `$ trace <name> on|off`
+    *   Notes: `trace` lists all trace points and their state. `trace on|off` enables/disables all traces. `trace <name> on|off` enables/disables a specific trace point.
+    *   Status: Working.
 *   **tree**: List directory contents recursively in a tree-like format.
     *   Usage: `$ tree [options] [path ...]`
-    *   Options: `-c` (count bytes and estimate tokens for the content).
+    *   Options: `-c` (count bytes and estimate tokens for the content); `-d` (list directories only).
     *   Notes: Some files and folders are hidden (this command honors `.skignore` files). If no path is provided, uses the current directory.
     *   Status: Working.
 *   **unpause**: Unpause a bot user's AI engagement.
@@ -230,7 +238,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **who**: Display who is logged on.
     *   Usage: `$ who`
-    *   Notes: Displays a list of all logged-in users, their device, and login time in aligned columns.
+    *   Notes: Displays a list of all logged-in users, their device, and login time.
     *   Status: Working.
 *   **whoami**: Display the current username.
     *   Usage: `$ whoami`
