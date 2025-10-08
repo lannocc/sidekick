@@ -5,13 +5,14 @@
 from .io import print_flush as print
 
 import tiktoken
+from google.api_core.exceptions import ResourceExhausted
 
 import asyncio
 from datetime import datetime
 from os.path import exists, join
 import re
 import tempfile
-from google.api_core.exceptions import ResourceExhausted
+import traceback
 
 
 class AIMessenger:
