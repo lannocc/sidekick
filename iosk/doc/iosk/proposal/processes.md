@@ -1,6 +1,6 @@
 # Proposal: A Process Management System for IOSK
 
-**Status**: Proposed.
+**Status**: Implemented.
 
 ### Introduction
 
