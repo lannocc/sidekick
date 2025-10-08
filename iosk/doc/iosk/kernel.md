@@ -1,6 +1,6 @@
 ## IOSK Class Summary
 
-The `IOSK` class (found in kernel.py) represents the core operating system kernel, managing the system's lifecycle, user sessions, command execution, file system operations, and device interactions. It acts as the central coordinator for all activities within the system.
+The `IOSK` class (found in `src/iosk/kernel.py`) represents the core operating system kernel, managing the system's lifecycle, user sessions, command execution, process management, API rate limiting, tracing, file system operations, and device interactions. It acts as the central coordinator for all activities within the system.
 
 **Class Attributes:**
 
@@ -11,169 +11,103 @@ The `IOSK` class (found in kernel.py) represents the core operating system kerne
 *   `SYSTEM_LOG`: (str) The path to the system log file (`/var/log/system`).
 *   `USER_LOG`: (str) The path to the directory storing user-specific log files (`/var/log/user`).
 *   `SKRC`: (str) The path to the system-wide startup script for user sessions (`/etc/skrc`).
+*   `SKEL_SKRC`: (str) The path to the skeleton startup script that is copied to a new user's home directory (`/etc/skel/skrc`).
 
 **Instance Attributes:**
 
-*   `root`: (str) The root directory path of the IOSK file system.
-*   `started`: (datetime) The datetime object indicating when the IOSK instance started (or `None` if not yet started).
+*   `root`: (str) The root directory path of the IOSK file system on the host.
+*   `started`: (datetime) The datetime object indicating when the IOSK instance started.
 *   `ready`: (asyncio.Event) An asyncio Event that is set when the IOSK instance is ready to accept user logins and commands.
 *   `halt`: (asyncio.Event) An asyncio Event that is set when a shutdown signal is received, triggering the shutdown sequence.
-*   `system`: (Context) The system-level `Context` instance representing the system environment. This is used for system-level logging, error reporting, and command execution.
-*   `users`: (dict) A dictionary storing currently logged-in users. The keys are user handles (usernames), and the values are `Context` instances associated with each user.
-*   `chat`: (obj) A chat interface (instance of AIMessenger of chat.py), used for communicating between users and bots. Can be `None` if not available.
-*   `parser`: (CommandLineParser) An instance of `CommandLineParser` responsible for handling command line tokenization and variable expansion.
+*   `system`: (Context) The system-level `Context` instance representing the system environment.
+*   `users`: (dict) A dictionary storing currently logged-in users, mapping usernames to their `Context` instances.
+*   `chat`: (AIMessenger) The chat interface, used for communicating between users and bots.
+*   `parser`: (CommandLineParser) An instance of `CommandLineParser` responsible for handling command line tokenization, variable expansion, and command substitution.
+*   `pipeline_executor`: (CommandPipelineExecutor) An instance of `CommandPipelineExecutor` responsible for orchestrating the entire command execution flow, including alias resolution, parsing, handling pipes and I/O redirection, and process management.
+*   `process_table`: (dict) An in-memory dictionary mapping Process IDs (PIDs) to `Process` objects for all currently running commands.
+*   `next_pid`: (int) A counter for assigning the next unique Process ID.
+*   `device_clients`: (dict) A cache for initialized AI client instances, keyed by their virtual device path (e.g., `/dev/google/gemini-2.5-pro`).
+*   `trace_states`: (dict) A dictionary holding the on/off state for all named trace points (e.g., `'trip': True`).
+*   `device_trip_counters`: (dict) A dictionary storing per-device trip counters for unique trace log naming.
+*   `device_tpm_trackers`: (dict) A dictionary for tracking token usage per minute for each AI device to manage API rate limits.
+*   `device_cooldowns`: (dict) A dictionary of `asyncio.Event`s used to manage API rate limit cooldowns for each device.
 
 **Methods:**
 
 *   `__init__(self, root)`:
-    *   Constructor. Initializes the `IOSK` instance with the given `root` directory.
-    *   Sets `started` to `None`, creates asyncio Events for `ready` and `halt`, and initializes the `system` and `users` attributes.
-    *   Initializes `self.parser` with a reference to itself, to enable robust command-line parsing.
+    *   Constructor. Initializes the `IOSK` instance with the `root` directory.
+    *   Initializes all instance attributes, including creating asyncio Events, setting up the system `Context`, and instantiating the `CommandLineParser` and `CommandPipelineExecutor`.
 
-*   `async start(self)`:
-    *   Starts the IOSK system. This involves the following steps:
-        *   Prints "IOSK is starting...".
-        *   Validates that `self.root` is a directory.
-        *   Reads the boot count from `self.BOOT_COUNT` and increments it.
-        *   Creates directories for chatter (`/var/cache/chatter/<boot_number>`) and code (`/var/code`) if they don't exist, and ensures they are directories.
-        *   Writes the updated boot count to `self.BOOT_COUNT`.
-        *   Creates the `self.system` Context and redirects output to the system log.
-        *   Executes the system initialization script (`self.INIT_SCRIPT`).
-        *   Prints "IOSK has started."
-    *   Sets the `ready` event if everything starts successfully. If an error occurs, it prints an error message and halts the startup process.
+*   `start(self)`:
+    *   Starts the IOSK system. This involves:
+        *   Incrementing the boot count.
+        *   Creating necessary directories like `/var/cache/chatter`, `/var/code`, and `/var/log/trip` if they don't exist.
+        *   Creating the `system` Context and redirecting its output to the system log.
+        *   Executing the system initialization script (`/sbin/init`).
+    *   Sets the `ready` event upon successful startup.
 
-*   `async run(self)`:
-    *   Runs the IOSK system. This function performs these actions:
-        *   Waits for the `ready` event to be set (i.e., waits for the system to be initialized).
-        *   Prints "IOSK is ready."
-        *   Waits for the `halt` event to be set, indicating a shutdown signal.
-        *   Prints "IOSK shutdown signal received...".
-        *   Logs out all currently logged-in users.
-        *   Prints "IOSK system halted.".
-        *   Sets `self.system` to `None`.
+*   `run(self)`:
+    *   Main system loop. It waits for the `ready` event, then waits for the `halt` event (shutdown signal).
+    *   Upon shutdown, it logs out all users and cleans up the system state.
 
-*   `async login(self, user, device=None, interactive: bool = True, connect=None, io_callback=None)`:
-    *   Logs in a user and creates a `Context` for the user.
-    *   Waits for the `ready` event.
-    *   Validates that the user is not already logged in and that the username is not reserved.
-    *   Creates a forked `Context` from the `self.system` Context.
-    *   Sets up user-specific logging, the device, and the username within the `Context`.
-    *   Automatically creates the user's home directory (`/home/<user>`) on the host filesystem if it does not exist, and logs this action.
-    *   Sets the user's current working directory (`io.pwd`) to `/home/<user>`.
-    *   Executes the system-wide `skrc` script (`/etc/skrc`).
-    *   Executes the user-specific `skrc` script (`/home/<user>/.skrc`) if it exists.
-    *   If `interactive` is `True`, starts an interactive shell for the user.
+### Token Rate Limiting
+
+*   `_get_current_tpm(self, device_path)`:
+    *   Calculates the current tokens-per-minute (TPM) for a given device by summing token counts from the last 60 seconds and pruning old entries from the tracker.
+*   `async enforce_cooldown(self, device_path, delay_seconds)`:
+    *   Triggers a mandatory, system-wide cooldown for a specific device, typically after a `429` rate limit error. It blocks new requests to that device for the specified duration.
+*   `async await_device_readiness(self, user, device_path, tokens_in_prompt)`:
+    *   Central entry point for all AI trips. It first waits if the device is in a reactive cooldown period. Then, it proactively checks if the new request will exceed the TPM quota and sleeps briefly if necessary to prevent hitting the rate limit.
+
+### User Lifecycle
+
+*   `async login(self, user, device=None, ...)`:
+    *   Logs in a user and creates a `Context` for their session.
+    *   **Home Directory Auto-Creation**: Automatically creates the user's home directory (`/home/<user>`) on the host filesystem if it does not exist.
+    *   **Skeleton Configuration**: If a home directory is newly created, it copies a default startup script from `/etc/skel/skrc` to the user's `~/.skrc`.
+    *   **Startup Scripts**: Executes the system-wide `/etc/skrc` script, followed by the user-specific `~/.skrc` script if it exists, to configure the user's environment.
     *   Returns the created `Context`.
 
 *   `async interactive(self, io)`:
-    *   Provides an interactive shell for the given `Context`.
-    *   Continuously prompts the user for input, executes commands, and handles chat messages.
-    *   Supports exiting the shell with `$ exit`.
-    *   Passes the raw command line string (after the `$ ` prefix) directly to `self.call` for advanced parsing and execution.
-    *   Adds non-empty commands to `io.history`.
-    *   Sends other lines to the chat (if a chat interface is available) or prints them to the console.
-    *   Handles `EOFError` for clean exit.
+    *   Provides an interactive shell for the given `Context`. It reads user input, identifies command lines (prefixed with `$ `), and passes the raw command string to `self.call` for execution. Other lines are sent to the chat.
 
-*   `async logout(self, io: Context, disconnect=None)`:
-    *   Logs out a user and removes their `Context`.
-    *   Validates that the user is currently logged in.
-    *   Prints a logout message to the system log.
-    *   Sends a disconnect message to the chat (if available) or prints it to the console.
-    *   Removes the user's `Context` from the `self.users` dictionary.
+*   `async logout(self, io: Context, ...)`:
+    *   Logs out a user and removes their `Context` from the system.
+
+### Command Execution
 
 *   `async call(self, io: Context, args: str)`:
-    *   **Completely overhauled** to provide robust command parsing. It takes a raw command string (`args`) and performs the following pipeline:
-        1.  **Alias Resolution**: Checks if the first word of the command (`cmd_candidate`) matches an alias in `io.aliases`. If so, it expands the alias value into the `args` string *before* further parsing.
-        2.  **Advanced Parsing and Tokenization**: The (potentially alias-expanded) command string is passed to `self.parser.parse_and_tokenize()`. This method (located in `src/iosk/parser.py`) is responsible for:
-            *   **Command Substitution**: Handles `...` and `$(...)` syntax.
-            *   **Variable Expansion**: Expands environment variables using `$VAR` and `${VAR}` syntax, substituting them with values from `io.environ()`.
-            *   **Tokenization**: Uses `shlex.split()` to robustly tokenize the fully expanded string into a list of arguments (`argv`), correctly handling spaces and quotes.
-        3.  **Command Lookup**: Determines the executable path by:
-            *   Checking if `cmd` (the first token in `argv`) is an absolute path or explicit relative path (e.g., `/bin/ls`, `./script`).
-            *   If `cmd` is a bare name (e.g., `ls`), it searches directories listed in the `PATH` environment variable (`io.environ().get('PATH')`). If `PATH` is not set, it defaults to searching in `/bin`.
-            *   For each potential path, it first attempts to load it as a Python module (`.py` file with an `iocall` function) by creating a module spec without full import.
-            *   If not a Python module, it attempts to find it as a regular executable file (e.g., a `.skrip` script).
-        4.  **Execution**:
-            *   If resolved as a Python module, it imports the module (using `self.pymod`) and calls its `iocall(io, cmd_args)` method, passing `cmd_args` as a `list` of strings (excluding the command name itself).
-            *   If resolved as a script, it calls `self.exec(io, resolved_internal_path, cmd_args)`.
-    *   Handles exceptions during command execution, logging them with `io.error` and `traceback.print_exc()`. Returns `True` on success, `False` on failure.
+    *   The primary entry point for all command executions. It delegates the entire execution pipeline to the `CommandPipelineExecutor`.
+    *   The pipeline handles alias resolution, robust parsing (including command substitution and variable expansion), I/O redirection (`>`, `>>`), pipes (`|`), and process management.
 
 *   `async exec(self, io: Context, path: str, argv: list = None)`:
-    *   Executes a script at the given `path`. This method expects `path` to be an absolute virtual path within the sandboxed filesystem (e.g., `/bin/myscript`). It does not search the `PATH` environment variable for the executable itself.
-    *   Accepts `argv` as a `list` of strings (defaulting to empty).
-    *   Reads the shebang line. If it specifies an interpreter (e.g., `#!/bin/skrip`), it constructs a new command string using `shlex.join()` to invoke the interpreter (e.g., `skrip /path/to/script.skrip arg1 arg2`) and recursively calls `self.call()` to execute it.
-    *   Logs an error if there's no shebang or a bad shebang. Returns `True` on success, `False` on failure.
+    *   Executes a script at a given absolute virtual `path`. This method is called by the pipeline executor after a command has been resolved to a script file.
+    *   It reads the shebang line (e.g., `#!/bin/skrip`). If an interpreter is specified, it constructs a new command (e.g., `skrip /path/to/script arg1`) and recursively calls `self.call` to execute it, ensuring the interpreter runs through the same robust pipeline.
+
+### File & Device Operations
 
 *   `async exists(self, io: Context, path: str)`:
-    *   Tests whether a file exists.
-    *   Uses `self.box(path, io_context=io)` to resolve the path on the host filesystem.
-    *   Optionally checks for a special `proc.exists.<name>` Python module for custom existence logic, but primarily checks `os.path.exists()`.
-
-*   `async create(self, io: Context, path: str)`:
-    *   Creates a new (empty) file.
-    *   Uses `self.box(path, io_context=io)` for path resolution.
-    *   If the file already exists, it is considered a success (idempotent) and returns `True`.
-    *   Creates the file on the host filesystem. Returns `True` on success.
-
-*   `async copy(self, io: Context, from_path: str, to_path: str)`:
-    *   Copies a file from `from_path` to `to_path`.
-    *   Uses `self.box()` with `io_context=io` for both paths.
-    *   Errors if `from_path` does not exist. Uses `shutil.copy()`. Returns `True` on success, `False` on failure.
-
-*   `async move(self, io: Context, from_path: str, to_path: str)`:
-    *   Moves a file or directory from `from_path` to `to_path`.
-    *   Uses `self.box()` with `io_context=io` for both paths.
-    *   Errors if `from_path` does not exist. Uses `shutil.move()` (which handles both files and directories). Returns `True` on success, `False` on failure.
-
-*   `async remove(self, io: Context, path: str)`:
-    *   Removes a file at `path`.
-    *   Uses `self.box(path, io_context=io)` for path resolution.
-    *   Errors if `path` does not exist. Returns `True` on success, `False` on failure.
-
-*   `async create_dir(self, io: Context, path: str, parents=False)`:
-    *   Creates a new directory at `path`.
-    *   Uses `self.box(path, io_context=io)` for path resolution.
-    *   If `parents` is `True`, creates parent directories as needed.
-    *   Errors if `path` already exists. Returns `True` on success, `False` on failure.
-
-*   `async remove_dir(self, io: Context, path: str)`:
-    *   Removes an empty directory at `path`.
-    *   Uses `self.box(path, io_context=io)` for path resolution.
-    *   Errors if `path` does not exist. Returns `True` on success, `False` on failure (e.g., directory not empty).
-
+    *   Tests whether a path exists. Enhanced to check for physical files/directories, corresponding Python module files (`.py`), and built-in Python modules that don't have a physical file in the sandbox (e.g., `/dev/google`).
+*   `async create`, `copy`, `move`, `remove`, `create_dir`, `remove_dir`:
+    *   Standard file system operations. The `copy`, `move`, and `create_dir` methods are enhanced to automatically create parent directories as needed, improving robustness.
 *   `async get(self, io: Context, path: str)`:
-    *   Gets the text contents of a file.
-    *   Uses `self.box(path, io_context=io)` for path resolution.
-    *   Errors and returns `None` if the path is not found, not a file, or if it's detected as a binary file.
-    *   Reads the file with UTF-8 encoding.
+    *   Gets the text contents of a file, refusing to read binary files.
+*   `async send(self, io: Context, dev: str, data)` / `async recv(self, io: Context, dev: str)`:
+    *   Sends data to or receives data from a virtual device by invoking the `iosend` or `iorecv` function within the corresponding device's Python module.
+*   `async get_device_client(self, io: Context, dev_virtual_path: str)`:
+    *   Gets a cached AI client instance for a device (e.g., for Google Gemini or OpenAI). If no cached instance exists, it calls the `get_client` factory function in the device's module to create a new one, then caches and returns it. This centralizes client management.
 
-*   `async send(self, io: Context, dev: str, data)`:
-    *   Sends data to a device (e.g., `/dev/console`).
-    *   Resolves the device path to a Python module (`dev.<device_name>`).
-    *   Calls the `iosend(io, data)` function within that module.
-    *   Logs errors, including `traceback.print_exc()`. Returns `True` on success, `False` on failure.
+### Tracing
 
-*   `async recv(self, io: Context, dev: str)`:
-    *   Receives data from a device.
-    *   Resolves the device path to a Python module (`dev.<device_name>`).
-    *   Calls the `iorecv(io)` function within that module.
-    *   Logs errors, including `traceback.print_exc()`. Returns the received data (or `None` on error or no data).
+*   `async is_trace_active(self, trace_name: str)`:
+    *   Checks if a specific trace point (e.g., `trip`) is currently enabled.
+*   `async log_trip_trace(self, io: Context, prompt: str, reply: str)`:
+    *   Logs the details of an AI interaction. It always calculates token counts for TPM tracking. If the `trip` trace is active, it writes the full prompt, the raw reply, and a token/byte count summary to uniquely named files in `/var/log/trip/`.
 
-*   `box(self, virtual_path_input: str, io_context=None) -> str`:
-    *   Sandboxes a given `virtual_path_input` to its equivalent absolute path on the host filesystem.
-    *   **Enhanced Functionality**:
-        1.  If `io_context` is provided and `virtual_path_input` is a relative path, it first resolves the path relative to `io_context.pwd` (the current working directory of the user context).
-        2.  Normalizes the resulting virtual path (e.g., resolves `.` and `..`, collapses multiple slashes).
-        3.  Ensures the normalized path is absolute within the virtual filesystem (prepends `/` if necessary).
-        4.  Combines this normalized virtual path (relative to the virtual root) with `self.root` (the actual host root of the IOSK filesystem) to get the final host path.
-        5.  Returns the absolute host filesystem path.
+### Utility
 
+*   `box(self, virtual_path_input: str, io_context=None)`:
+    *   Sandboxes a given virtual path to its equivalent absolute path on the host filesystem. It now correctly resolves relative paths (like `./script` or `file.txt`) against the user's current working directory (`io_context.pwd`).
 *   `pymod(self, modname, path)`:
-    *   Imports a Python module from the given `path` with the specified `modname`.
-    *   It internally prefixes `modname` with `sk.iosk.`
-    *   Handles adding the `.py` extension if missing.
-    *   Uses `importlib.util.spec_from_file_location` and `spec.loader.exec_module` for robust module loading.
-    *   Stores the module in `sys.modules` for subsequent access.
-    *   Includes a fallback to `importlib.import_module` and handles potential `ModuleNotFoundError`. Returns the loaded module object or `None` on failure.
+    *   Imports a Python module from a given path within the sandbox, using a specified module name. This is the core mechanism for loading commands and device drivers.
 
-In essence, the `IOSK` class provides a virtualized operating system environment, enabling the execution of scripts and Python commands, management of user sessions, and interaction with virtual devices, all within a sandboxed environment. The command parsing and file system interaction mechanisms have been significantly enhanced for robustness and `PATH` awareness, now leveraging a dedicated `CommandLineParser`.
