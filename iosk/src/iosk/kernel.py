@@ -337,32 +337,40 @@ class IOSK:
         while not self.halt.is_set():
             start = datetime.now()
             try:
-                while (text := await io.input(f'[{io.user} {io.pwd}] >> ')) is None:
-                    # non-blocking inputs return None until data
-                    delay = (datetime.now() - start).total_seconds()
-                    if delay < 0.1:
-                        await asyncio.sleep(0.1 - delay)
-                    start = datetime.now()
+                # This outer try handles Ctrl+C when idle at the prompt
+                try:
+                    while (text := await io.input(f'[{io.user} {io.pwd}] >> ')) is None:
+                        # non-blocking inputs return None until data
+                        delay = (datetime.now() - start).total_seconds()
+                        if delay < 0.1:
+                            await asyncio.sleep(0.1 - delay)
+                        start = datetime.now()
 
-                for line in text.split('\n'):
-                    line = line.rstrip()
-                    if line == '$ exit': return
+                    for line in text.split('\n'):
+                        line = line.rstrip()
+                        if line == '$ exit': return
 
-                    if line.startswith('#'):
-                        pass
+                        if line.startswith('#'):
+                            pass
 
-                    elif line.startswith('$ '):
-                        command_line = line[2:]
-                        if command_line: # Don't add empty commands to history
-                            io.history.append(command_line)
-                        await self.call(io, command_line) # Pass the string after '$ '
+                        elif line.startswith('$ '):
+                            command_line = line[2:]
+                            if command_line: # Don't add empty commands to history
+                                io.history.append(command_line)
+                            await self.call(io, command_line) # Pass the string after '$ '
 
-                    elif line:
-                        if self.chat: await self.chat.send(io.user, line)
-                        else: await io.print(line)
+                        elif line:
+                            if self.chat: await self.chat.send(io.user, line)
+                            else: await io.print(line)
 
-            except EOFError:
-                return
+                except EOFError: # This handles Ctrl+D to log out
+                    return
+
+            except KeyboardInterrupt: # This handles Ctrl+C at the prompt
+                # When Ctrl+C is pressed while idle, aioconsole raises KeyboardInterrupt.
+                # We catch it, print a newline with ^C, and continue the loop to show a new prompt.
+                await io.print("\n^C")
+                continue
 
     async def logout(self, io:Context, disconnect=None):
         if io.user not in self.users:
