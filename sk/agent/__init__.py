@@ -1,7 +1,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from .. import ai
+from ..ai import google as ai
 from . import control
 from . import file
 from . import browser

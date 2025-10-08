@@ -8,6 +8,10 @@ print = print_flush
 
 
 def main(args, called=''):
+    use_openai = '--openai' in args
+    if use_openai:
+        args.remove('--openai')
+
     quiet = '-q' in args or (args and args[0] == 'md')
     chatter = '-c' in args
     if not quiet: print('SIDEKICK: ', end='')
@@ -20,7 +24,11 @@ def main(args, called=''):
     pkg = None
     lang = None
     save = None
-    model = config.GEMINI_MODEL_QUICK_2
+
+    if use_openai:
+        model = config.OPENAI_MODEL_QUICK_2
+    else:
+        model = config.GEMINI_MODEL_QUICK_2
 
     # options
     while args and args[0].startswith('-'):
@@ -70,13 +78,13 @@ def main(args, called=''):
                 args = args[2:]
 
             elif op == '-1':
-                model = config.GEMINI_MODEL_QUICK_1
+                model = config.OPENAI_MODEL_QUICK_1 if use_openai else config.GEMINI_MODEL_QUICK_1
 
             elif op == '-2':
-                model = config.GEMINI_MODEL_QUICK_2
+                model = config.OPENAI_MODEL_QUICK_2 if use_openai else config.GEMINI_MODEL_QUICK_2
 
             elif op == '-3':
-                model = config.GEMINI_MODEL_SMART
+                model = config.OPENAI_MODEL_SMART if use_openai else config.GEMINI_MODEL_SMART
 
         else:
             print(f'!!! unknown option: {op}')
@@ -96,7 +104,7 @@ def main(args, called=''):
                          chatter=chatter, model=model)
         else: ask_question(prompt, shot=shot, file=file, package=pkg,
                            mdlang=lang, mdsave=save, quiet=quiet,
-                           chatter=chatter, model=model)
+                           chatter=chatter, model=model, use_openai=use_openai)
 
         return
 
@@ -123,8 +131,8 @@ def main(args, called=''):
 
 def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
                  mdsave=None, quiet=False, chatter=False,
-                 model=config.GEMINI_MODEL_QUICK_2):
-    from . import ai
+                 model=config.GEMINI_MODEL_QUICK_2, use_openai=False):
+    from .ai import google, openai
     from .util import get_md_code_block
 
     if not quiet:
@@ -165,12 +173,14 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
     if not prompt:
         return
 
+    ai_provider = openai if use_openai else google
+
     if file:
-        answer = ai.prompt_with_file_for_text(prompt, file, chatter=chatter,
+        answer = ai_provider.prompt_with_file_for_text(prompt, file, chatter=chatter,
                                               model=model)
 
     else:
-        answer = ai.prompt_for_text(prompt, chatter=chatter, model=model)
+        answer = ai_provider.prompt_for_text(prompt, chatter=chatter, model=model)
 
     if mdlang:
         md = get_md_code_block(mdlang or None, answer)
@@ -192,7 +202,7 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
 
 
 def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
-            chatter=False):
+            chatter=False, model=None):
     from . import agent
     from .action import Context
     from .util import play_error, play_success
@@ -431,12 +441,14 @@ OPTIONS = {
         'package directory text contents and upload with -p <directory>'),
     '-e': (None,
         '(ask only) extract markdown code and save with -e <language> <file>'),
+    '--openai': (None,
+        '(ask only) use OpenAI models instead of Google Gemini'),
     '-1': (None,
-        '(ask only) use QUICK_1 model (gemini-2.0-flash)'),
+        '(ask only) use QUICK_1 model (gemini-2.0-flash / gpt-4o-mini)'),
     '-2': (None,
-        '(ask only) use QUICK_2 model (gemini-2.5-flash) [DEFAULT]'),
+        '(ask only) use QUICK_2 model (gemini-2.5-flash / gpt-5-mini) [DEFAULT]'),
     '-3': (None,
-        '(ask only) use SMART model (gemini-2.5-pro)'),
+        '(ask only) use SMART model (gemini-2.5-pro / gpt-5)'),
 }
 
 
@@ -460,4 +472,3 @@ COMMANDS = {
     'iosk': (iosk,
         'iosk commands'),
 }
-

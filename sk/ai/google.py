@@ -1,8 +1,8 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from . import config
-from .util import play_retry
+from .. import config
+from ..util import play_retry
 
 from google import genai
 from google.genai.types import HttpOptions, GenerateContentConfig
