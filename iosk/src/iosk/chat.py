@@ -5,7 +5,8 @@
 from .io import print_flush as print
 
 import tiktoken
-from google.api_core.exceptions import ResourceExhausted
+#from google.api_core.exceptions import ResourceExhausted
+from google.genai.errors import ClientError
 
 import asyncio
 from datetime import datetime
@@ -370,7 +371,8 @@ class Engagement:
                         # Call self.trip, passing the client as the first argument.
                         reply = await self.trip(client, prompt_text_for_trip)
 
-                    except ResourceExhausted as e:
+                    #except ResourceExhausted as e:
+                    except ClientError as e: # 429 RESOURCE_EXHAUSTED?
                         await self.io.os.system.error(
                             f"!! User '{self.io.user}' hit Google 429 ResourceExhausted error. "
                             f"Current token counts (caching/cumulative): {self.io.caching_token_total:,}/{self.io.full_token_total:,}. "
@@ -384,7 +386,7 @@ class Engagement:
                         if match:
                             # Add a small buffer to the suggested delay
                             retry_delay = int(match.group(1)) + 2
-                        
+
                         await self.io.print(f":: API rate limit hit. Pausing for {retry_delay} seconds before continuing...")
                         await asyncio.sleep(retry_delay)
                         # --- End Dynamic Delay Logic ---
