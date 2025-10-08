@@ -2,6 +2,20 @@ Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
 
+v0.3.6
+======
+
+Date: October 7, 2025
+
+    * Automated token-rate limiting (1 million tokens per model per minute).
+    * Process management and new `ps`, `top`, and `kill` commands.
+    * Add `trace` command for prompt debugging.
+    * Add a `sleep` command, interruptible by direct message or `kill`.
+    * Add a `reset` command to start over.
+    * Added --openai option to the regular sidekick `ask` command.
+    * More proposals and documentation updates.
+
+
 v0.3.5
 ======
 
