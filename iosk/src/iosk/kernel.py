@@ -11,7 +11,7 @@ import tiktoken
 import shlex
 import asyncio
 import aioconsole
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from os.path import join, isdir, isfile, exists
 import importlib, importlib.util
@@ -67,6 +67,10 @@ class IOSK:
         # Added for trace proposal
         self.trace_states = {'trip': False}
         self.device_trip_counters = {}
+
+        # Added for token_rate proposal
+        self.device_tpm_trackers = {}
+        self.device_cooldowns = {}
 
     ###
     ### SYSTEM LIFECYCLE
@@ -149,6 +153,100 @@ class IOSK:
 
         await io.print(f'IOSK system halted.')
         self.system = None
+
+    ###
+    ### TOKEN RATE
+    ###
+
+    def _get_current_tpm(self, device_path: str) -> int:
+        """
+        Calculates the current tokens-per-minute for a device and prunes old entries.
+        Returns the sum of tokens used in the last 60 seconds.
+        """
+        if device_path not in self.device_tpm_trackers:
+            return 0
+
+        now = datetime.now()
+        one_minute_ago = now - timedelta(seconds=60)
+        
+        # Filter out old entries and calculate the sum of recent tokens
+        recent_entries = [
+            (ts, count) for ts, count in self.device_tpm_trackers[device_path]
+            if ts > one_minute_ago
+        ]
+        
+        # Update the tracker with the pruned list
+        self.device_tpm_trackers[device_path] = recent_entries
+        
+        # Return the sum of tokens from the recent entries
+        return sum(count for _, count in recent_entries)
+
+    async def enforce_cooldown(self, device_path: str, delay_seconds: float):
+        """
+        Enforces a system-wide cooldown for a specific device.
+        """
+        if device_path not in self.device_cooldowns:
+            # If the event doesn't exist, create it. It defaults to 'set' (ready).
+            self.device_cooldowns[device_path] = asyncio.Event()
+            self.device_cooldowns[device_path].set()
+
+        event = self.device_cooldowns[device_path]
+        
+        # Clear the event to signal that the device is now unavailable
+        event.clear()
+        
+        # Wait for the specified delay
+        await asyncio.sleep(delay_seconds)
+        
+        # Set the event to signal that the device is ready again
+        event.set()
+
+    async def await_device_readiness(self, user: str, device_path: str, tokens_in_prompt: int):
+        """
+        Waits for a device to be ready, handling both reactive cooldowns
+        and proactive throttling based on TPM.
+        """
+        # --- Reactive Cooldown Wait ---
+        if device_path not in self.device_cooldowns:
+            self.device_cooldowns[device_path] = asyncio.Event()
+            self.device_cooldowns[device_path].set()
+
+        event = self.device_cooldowns[device_path]
+        await event.wait() # This will block if the device is in cooldown
+
+        # --- Proactive Throttling ---
+        # Define a threshold, e.g., 95% of 1M TPM
+        TPM_QUOTA = 1_000_000
+        TPM_THRESHOLD = 950_000
+
+        while True: # Loop to re-check after sleeping
+            current_tpm = self._get_current_tpm(device_path)
+            
+            if current_tpm + tokens_in_prompt <= TPM_THRESHOLD:
+                # We are under the threshold, safe to proceed
+                break
+
+            # We are over the threshold, need to wait.
+            # Find the oldest entry in the tracker to determine how long to sleep.
+            tracker = self.device_tpm_trackers.get(device_path, [])
+            if not tracker:
+                # Should not happen if current_tpm > 0, but as a safeguard.
+                break
+                
+            oldest_timestamp, _ = tracker[0]
+            now = datetime.now()
+            
+            # Calculate how long until the oldest entry expires from the 60s window
+            time_since_oldest = (now - oldest_timestamp).total_seconds()
+            sleep_duration = 60.1 - time_since_oldest # Sleep a bit extra to be safe
+            
+            if sleep_duration <= 0:
+                # This can happen if pruning is slightly out of sync.
+                # Just re-run the loop to get a fresh TPM count.
+                continue
+
+            await self.system.print(f':: pro-active TPM sleep for {user} on {device_path}: {sleep_duration}s')
+            await asyncio.sleep(sleep_duration)
 
     ###
     ### USER LIFECYCLE
@@ -574,40 +672,59 @@ class IOSK:
         return self.trace_states.get(trace_name, False)
 
     async def log_trip_trace(self, io: Context, prompt: str, reply: str):
-        """Logs the prompt, reply, and token counts for an AI trip if the 'trip' trace is active."""
+        """
+        Logs token usage for TPM tracking. If 'trip' trace is active, also writes
+        the prompt, reply, and token counts to log files.
+        """
+        # --- 1. Token Calculation (always needed for TPM) ---
+        prompt_tokens = -1
+        reply_tokens = -1
+        reply_str = reply or ""
+        try:
+            encoding = tiktoken.get_encoding('cl100k_base')
+            prompt_tokens = len(encoding.encode(prompt))
+            reply_tokens = len(encoding.encode(reply_str))
+        except Exception as e:
+            # Silently fail on tiktoken error, tokens will be -1
+            # A more robust system might log this, but for now we prioritize not crashing.
+            pass
+
+        # --- 2. TPM Tracking (always needed) ---
+        try:
+            total_tokens = (prompt_tokens if prompt_tokens != -1 else 0) + \
+                           (reply_tokens if reply_tokens != -1 else 0)
+
+            if total_tokens > 0:
+                device_path = io.dev
+                if device_path not in self.device_tpm_trackers:
+                    self.device_tpm_trackers[device_path] = []
+                
+                self.device_tpm_trackers[device_path].append((datetime.now(), total_tokens))
+                # Pruning of old entries is handled by _get_current_tpm before the next trip.
+        except Exception as e:
+            await self.system.error(f"!! Failed during TPM tracking for {io.dev}: {e}")
+
+        # --- 3. Check for Active Trace ---
         if not await self.is_trace_active('trip'):
             return
 
-        # --- Filename Construction ---
-        device_path = io.dev
-        tid = self.device_trip_counters.get(device_path, 0) + 1
-        self.device_trip_counters[device_path] = tid
-        device_name = device_path.replace('/dev/', '').replace('/', '-')
-        base_filename = f'{device_name}-{io.user}-{self.BOOT}-{io.cid}-{tid}'
-
-        trip_log_dir_host = self.box('/var/log/trip')
-        prompt_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.prompt')
-        reply_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.reply')
-        tokens_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.tokens')
-
-        # --- Token and Byte Calculation ---
-        tokens_content = ""
+        # --- 4. Write Trace Files ---
         try:
+            # Filename Construction
+            device_path = io.dev
+            tid = self.device_trip_counters.get(device_path, 0) + 1
+            self.device_trip_counters[device_path] = tid
+            device_name = device_path.replace('/dev/', '').replace('/', '-')
+            base_filename = f'{device_name}-{io.user}-{self.BOOT}-{io.cid}-{tid}'
+
+            trip_log_dir_host = self.box('/var/log/trip')
+            prompt_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.prompt')
+            reply_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.reply')
+            tokens_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.tokens')
+
+            # Token content string construction
             prompt_bytes = len(prompt.encode('utf-8'))
-            reply_str = reply or ""
             reply_bytes = len(reply_str.encode('utf-8'))
-            prompt_tokens = -1
-            reply_tokens = -1
-
-            try:
-                encoding = tiktoken.get_encoding('cl100k_base')
-                prompt_tokens = len(encoding.encode(prompt))
-                reply_tokens = len(encoding.encode(reply_str))
-            except Exception:
-                # If tiktoken fails, we still have byte counts.
-                # Token counts will be marked as unavailable.
-                pass
-
             tokens_content = (
                 f"PROMPT\n"
                 f"Bytes: {prompt_bytes}\n"
@@ -617,19 +734,15 @@ class IOSK:
                 f"Tokens: {reply_tokens if reply_tokens != -1 else '(unavailable)'}\n"
             )
 
-        except Exception as e:
-            tokens_content = f"Error during token calculation: {e}"
-
-        # --- Writing all trace files ---
-        try:
+            # Writing all trace files
             with open(prompt_file_host, 'w', encoding='utf-8') as f:
                 f.write(prompt)
             with open(reply_file_host, 'w', encoding='utf-8') as f:
-                f.write(reply or "")
+                f.write(reply_str)
             with open(tokens_file_host, 'w', encoding='utf-8') as f:
                 f.write(tokens_content)
         except Exception as e:
-            await self.system.error(f"!! failed to write trip trace for {base_filename}: {e}")
+            await self.system.error(f"!! Failed to write trip trace for {base_filename}: {e}")
 
     ###
     ### UTILITY

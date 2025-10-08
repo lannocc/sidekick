@@ -358,75 +358,63 @@ class Engagement:
                 self.waiting = True
                 reply = None
 
-                # Get the client instance from the kernel for the user's current device.
+                # --- Token Rate Limiting: Proactive Check ---
+                try:
+                    encoding = tiktoken.get_encoding('cl100k_base')
+                    prompt_tokens = len(encoding.encode(prompt_text_for_trip))
+                except Exception:
+                    prompt_tokens = len(prompt_text_for_trip) // 4 # Fallback estimate
+
+                # Await readiness (waits for cooldowns and throttles if TPM is high)
+                await self.io.os.await_device_readiness(self.io.user, self.io.dev, prompt_tokens)
+                
                 client = await self.io.os.get_device_client(self.io, self.io.dev)
 
                 if not client:
-                    # Client creation failed. get_device_client already printed an error.
-                    # We'll just wait a bit to avoid a fast failure loop.
                     await asyncio.sleep(5.0)
                     self.waiting = False
                 else:
-                    try:
-                        # Call self.trip, passing the client as the first argument.
-                        reply = await self.trip(client, prompt_text_for_trip)
-
-                    #except ResourceExhausted as e:
-                    except ClientError as e: # 429 RESOURCE_EXHAUSTED?
-                        await self.io.os.system.error(
-                            f"!! User '{self.io.user}' hit Google 429 ResourceExhausted error. "
-                            f"Current token counts (caching/cumulative): {self.io.caching_token_total:,}/{self.io.full_token_total:,}. "
-                            f"Original error: {e}"
-                        )
-
-                        # --- Dynamic Delay Logic ---
-                        error_str = str(e)
-                        retry_delay = 5  # Default delay in case parsing fails
-                        match = re.search(r'Please retry in (\d+)s', error_str, re.IGNORECASE)
-                        if match:
-                            # Add a small buffer to the suggested delay
-                            retry_delay = int(match.group(1)) + 2
-
-                        await self.io.print(f":: API rate limit hit. Pausing for {retry_delay} seconds before continuing...")
-                        await asyncio.sleep(retry_delay)
-                        # --- End Dynamic Delay Logic ---
-
-                        self.io.session.seek(0)
-                        content = self.io.session.read()
-                        lines = content.splitlines(keepends=True)
-
-                        if len(lines) > 1:
-                            midpoint = len(lines) // 2
-                            new_content = "".join(lines[midpoint:])
-
-                            self.io.session.seek(0)
-                            self.io.session.truncate(0)
-                            self.io.session.write(new_content)
-
-                            await self.io.print(":: Your context window is full. Session history has been truncated by 50% to continue.")
-                        else:
-                            await self.io.print(":: Your context window is full, but the session is too short to truncate. Please use `clear` or `reset`.")
-
-                    except Exception as e: # overloaded?
-                        await self.io.os.system.error(f'!! trip for {self.io.user}:'
-                                                      f' {e}')
-                        print('##### EXCEPTION DEBUGGING!!! ######')
-                        traceback.print_exc() # trying to figure out 429 RESOURCE_EXHAUSTED
-                        await asyncio.sleep(1.8)
+                    for attempt in range(3): # Retry loop
                         try:
-                            # Pass client on retry
                             reply = await self.trip(client, prompt_text_for_trip)
+                            # Success, break the retry loop
+                            break
+                        except ClientError as e:
+                            if "429" in str(e):
+                                # This is a rate limit error, handle it reactively
+                                await self.io.os.system.error(f':: API rate limit hit for {self.io.user} on {self.io.dev}: {e}')
+                                await self.io.print(":: API rate limit hit. Analyzing cooldown...")
+                                
+                                # Parse delay from error message, with a fallback
+                                match = re.search(r"'retryDelay': '(\d+)s'", str(e))
+                                delay = int(match.group(1)) + 2 if match else 15
+                                
+                                await self.io.os.system.print(f":: Enforcing device cooldown for {delay} seconds.")
+                                await self.io.print(f":: Enforcing device cooldown for {delay} seconds.")
+                                
+                                # Trigger kernel to manage cooldown (runs in background)
+                                asyncio.create_task(self.io.os.enforce_cooldown(self.io.dev, delay))
 
-                        except Exception as e: # still overloaded?
-                            await self.io.os.system.error(
-                                    f'!! trip (2) for {self.io.user}: {e}')
-                            await asyncio.sleep(4.2)
-                            # Pass client on final retry
-                            reply = await self.trip(client, prompt_text_for_trip)
-
-                    finally:
-                        self.waiting = False
-
+                                # Wait for the cooldown to complete before retrying.
+                                await self.io.os.await_device_readiness(self.io.user, self.io.dev, 0)
+                                
+                                # Continue to the next attempt in the retry loop
+                                continue
+                            else:
+                                # Some other unrecoverable ClientError, fail fast
+                                await self.io.os.system.error(f'!! Unhandled Google ClientError for {self.io.user}: {e}')
+                                reply = None # ensure reply is None
+                                break # exit retry loop
+                        except Exception as e:
+                            await self.io.os.system.error(f'!! trip (attempt {attempt+1}) for {self.io.user}: {e}')
+                            traceback.print_exc()
+                            reply = None # ensure reply is None
+                            if attempt < 2: # if not the last attempt
+                                await asyncio.sleep((attempt + 1) * 1.5) # simple backoff
+                            # Let the loop continue to the next attempt
+                    
+                    # After the loop finishes (either by success, failure, or exhaustion of retries)
+                    self.waiting = False
                     await self.io.os.log_trip_trace(self.io, prompt_text_for_trip, reply or "")
 
                 #print('-------------------------------------- REPLY  BEGIN ---')

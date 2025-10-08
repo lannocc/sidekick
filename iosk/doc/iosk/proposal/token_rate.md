@@ -1,6 +1,6 @@
 # Proposal: Implementing Token Rate Limiting and Cooldowns
 
-**Status**: Proposed
+**Status**: Implemented
 
 ### Introduction
 
