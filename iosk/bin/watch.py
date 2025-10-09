@@ -21,6 +21,7 @@ This command is only available to users on a console device
 Options:
   -n <seconds>   Specify the update interval. The command is executed every
                  <seconds> seconds. The default is 2.0 seconds.
+                 Can be used as -n<seconds> or -n <seconds>.
   -c             Enable color. By default, ANSI color escape codes from the
                  command's output are stripped. This option preserves them.
   -h, --help     Display this help message.
@@ -41,7 +42,7 @@ async def _wait_for_keypress(loop):
             os.read(fd, 1024)
         except Exception:
             pass # Ignore read errors
-        
+
         if not future.done():
             future.set_result(True)
 
@@ -70,18 +71,24 @@ async def iocall(io, argv):
                 return True
             elif arg == '-c':
                 color_enabled = True
-            elif arg == '-n':
-                i += 1
-                if i >= len(argv):
-                    await io.error("!! watch: -n option requires a number of seconds")
-                    return False
+            elif arg.startswith('-n'): # Modified to handle -n<seconds> or -n <seconds>
+                num_str = None
+                if len(arg) > 2: # e.g., "-n10", "-n5.5"
+                    num_str = arg[2:]
+                else: # arg is exactly "-n", so the number must be the next argument
+                    i += 1
+                    if i >= len(argv):
+                        await io.error("!! watch: -n option requires a number of seconds")
+                        return False
+                    num_str = argv[i]
+
                 try:
-                    interval = float(argv[i])
+                    interval = float(num_str)
                     if interval <= 0:
                         await io.error("!! watch: interval must be a positive number")
                         return False
                 except ValueError:
-                    await io.error(f"!! watch: invalid interval '{argv[i]}'")
+                    await io.error(f"!! watch: invalid interval '{num_str}'")
                     return False
             else:
                 await io.error(f"!! watch: unknown option '{arg}'")
@@ -109,7 +116,7 @@ async def iocall(io, argv):
     clear_screen_code = "\033[H\033[2J"  # Move cursor home, then clear screen
     hide_cursor_code = "\033[?25l"
     show_cursor_code = "\033[?25h"
-    
+
     loop = asyncio.get_running_loop()
 
     try:
@@ -118,19 +125,19 @@ async def iocall(io, argv):
             # a. Clear the screen and print the header
             await io.output(clear_screen_code)
             now_str = datetime.now().strftime('%a %b %d %H:%M:%S %Y')
-            
+
             # Use a different exit message depending on the console type
             exit_msg = "(Press Ctrl-C to exit)"
             header = f"Every {interval:.1f}s: {command_str} {exit_msg}    {now_str}\n\n"
-            
+
             await io.output(header)
 
             # b. Execute the command and capture its output
             watch_io = io.fork()
             watch_io.stdout = StringIO()
-            
+
             await io.os.call(watch_io, command_str)
-            
+
             output = watch_io.stdout.getvalue()
 
             # c. Strip ANSI color codes if -c is not specified
@@ -154,6 +161,6 @@ async def iocall(io, argv):
         # (e.g., via keypress) or is cancelled.
         await io.print("\n:: watch terminated.")
         await io.output(show_cursor_code)
-    
+
     return True # Indicate graceful exit
 
