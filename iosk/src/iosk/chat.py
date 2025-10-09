@@ -241,6 +241,10 @@ class AIMessenger:
         self.room_topic = await self.os.get(io, topic_file)
         motd = await self.os.get(io, motd_file)
 
+        # Announce room opening to system logs and mesh
+        open_msg = f":: room '{room_name}' opened on '{self.os.hostname}' by '{io.user}'"
+        await self.os.system.print(open_msg)
+
         await io.print(f":: room '{room_name}' opened.")
         if motd:
             await io.print(motd)
@@ -253,6 +257,8 @@ class AIMessenger:
             'owner': self.room_owner,
             'topic': self.room_topic
         })
+        # Broadcast system message to all hosts
+        await self.os.port.broadcast_to_peers({'type': 'system_broadcast', 'message': open_msg})
         return True
 
     async def close_room(self, io) -> bool:
@@ -268,6 +274,10 @@ class AIMessenger:
         await self.send(self.os.hostname, closing_msg, sys=True)
 
         closed_room_name = self.active_room
+
+        # Announce room closing to system logs and mesh
+        close_msg = f":: room '{closed_room_name}' closed on '{self.os.hostname}' by '{io.user}'"
+        await self.os.system.print(close_msg)
 
         # Update the kernel's network_rooms state for local users
         users_in_closed_room = list(self.local_room_participants) # copy before clearing
@@ -286,6 +296,8 @@ class AIMessenger:
         await self.os.port.broadcast_to_peers({
             'type': 'room_update', 'action': 'close', 'name': closed_room_name, 'host': self.os.hostname
         })
+        # Broadcast system message to all hosts
+        await self.os.port.broadcast_to_peers({'type': 'system_broadcast', 'message': close_msg})
         return True
 
     async def add_to_room(self, target_io) -> bool:

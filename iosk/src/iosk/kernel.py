@@ -302,7 +302,8 @@ class IOSK:
             await self.system.error(f'!! invalid login name: {user}')
             return
 
-        await self.system.print(f'IOSK login: {user}')
+        login_msg = f":: user '{user}' logged in on '{self.hostname}'"
+        await self.system.print(login_msg)
 
         io = self.system.fork()
         io.login_time = datetime.now()
@@ -381,6 +382,11 @@ class IOSK:
                 'user': user,
                 'host': self.hostname
             })
+            # Announce user login to the entire mesh system log
+            await self.port.broadcast_to_peers({
+                'type': 'system_broadcast',
+                'message': login_msg
+            })
 
         if self.chat and self.chat.active_room:
             await self.chat.add_to_room(io)
@@ -458,7 +464,8 @@ class IOSK:
             await self.system.error(f'!! not logged in: {io.user}')
             return False
 
-        await self.system.print(f'IOSK logout: {io.user}')
+        logout_msg = f":: user '{io.user}' logged off from '{self.hostname}'"
+        await self.system.print(logout_msg)
 
         user_to_logout = io.user
         del self.users[user_to_logout]
@@ -480,6 +487,11 @@ class IOSK:
                 'user': user_to_logout,
                 'host': self.hostname
             })
+            # Announce user logout to the entire mesh system log
+            await self.port.broadcast_to_peers({
+                'type': 'system_broadcast',
+                'message': logout_msg
+            })
 
         return True
 
@@ -491,6 +503,9 @@ class IOSK:
         if username in self.users:
             await self.system.error(f"!! login failed: user '{username}' already logged in.")
             return None
+
+        login_msg = f":: user '{username}' logged in on '{self.hostname}' (client)"
+        await self.system.print(login_msg)
 
         device_path = f"network:{id(websocket)}"
 
@@ -552,6 +567,10 @@ class IOSK:
                 'action': 'login',
                 'user': username,
                 'host': self.hostname
+            })
+            await self.port.broadcast_to_peers({
+                'type': 'system_broadcast',
+                'message': login_msg
             })
 
         if self.chat and self.chat.active_room:

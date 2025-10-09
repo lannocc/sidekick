@@ -195,6 +195,11 @@ class PortManager:
                 }
                 log.info(f"Handshake successful with peer: {conn_meta}")
 
+                # Announce connection to local system and mesh
+                connect_msg = f":: host '{self.kernel.hostname}' connected to '{peer_hostname}'"
+                await self.kernel.system.print(connect_msg)
+                await self.broadcast_to_peers({'type': 'system_broadcast', 'message': connect_msg})
+
                 # --- MESHING PROPAGATION ---
                 # The address is from the URI we used to connect.
                 addr_part = host_uri.split('//')[1]
@@ -219,10 +224,17 @@ class PortManager:
                 if websocket and websocket in self.active_connections:
                     conn_data = self.active_connections.pop(websocket)
                     if conn_data.type == 'peer' and conn_data.hostname in self.peers:
+                        disconnected_host = conn_data.hostname # Capture
                         del self.peers[conn_data.hostname]
                         if conn_data.hostname in self.routing_table:
                             del self.routing_table[conn_data.hostname]
                         log.info(f"Peer '{conn_data.hostname}' disconnected.")
+
+                        # Announce disconnection to local system and remaining peers
+                        disconnect_msg = f":: host '{disconnected_host}' disconnected from mesh"
+                        await self.kernel.system.print(disconnect_msg)
+                        await self.broadcast_to_peers({'type': 'system_broadcast', 'message': disconnect_msg})
+
                 elif websocket: # and not websocket.closed:
                     # Ensure the socket is closed if it was opened but never fully registered
                     await websocket.close()
@@ -287,6 +299,7 @@ class PortManager:
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
 
+
     async def _connection_handler(self, websocket: WebSocketServerProtocol): #, path: str):
         """Handles the entire lifecycle of a single network connection."""
         connection_metadata = None
@@ -303,6 +316,11 @@ class PortManager:
                     addr = websocket.remote_address
                     new_peer_addr = f"{addr[0]}:{addr[1]}"
                     await self._broadcast_peer_connect(new_peer_host, new_peer_addr)
+
+                    # Announce connection to local system and mesh
+                    connect_msg = f":: host '{new_peer_host}' connected to mesh"
+                    await self.kernel.system.print(connect_msg)
+                    await self.broadcast_to_peers({'type': 'system_broadcast', 'message': connect_msg})
                 # --- END MESHING PROPAGATION ---
 
                 await self._message_loop(websocket, connection_metadata)
@@ -317,10 +335,17 @@ class PortManager:
             if websocket in self.active_connections:
                 conn_data = self.active_connections.pop(websocket)
                 if conn_data.type == 'peer' and conn_data.hostname in self.peers:
+                    disconnected_host = conn_data.hostname  # Capture hostname
                     del self.peers[conn_data.hostname]
                     if conn_data.hostname in self.routing_table:
                         del self.routing_table[conn_data.hostname]
                     log.info(f"Peer '{conn_data.hostname}' disconnected.")
+
+                    # Announce disconnection to local system and remaining peers
+                    disconnect_msg = f":: host '{disconnected_host}' disconnected from mesh"
+                    await self.kernel.system.print(disconnect_msg)
+                    await self.broadcast_to_peers({'type': 'system_broadcast', 'message': disconnect_msg})
+
                 elif conn_data.type == 'client' and conn_data.username:
                     await self.kernel.logout_network_user(conn_data.username)
                     log.info(f"Client '{conn_data.username}' disconnected.")
@@ -411,10 +436,60 @@ class PortManager:
         else:
             raise ValueError(f"Invalid handshake: unknown id '{conn_id}'")
 
+
     async def _message_loop(self, websocket: WebSocketServerProtocol, conn_meta: Connection):
         """Continuously receives and dispatches messages from a connection."""
         async for message_str in websocket:
             await self._dispatch_message(websocket, conn_meta, message_str)
+
+    async def _dispatch_message(self, websocket: WebSocketServerProtocol, conn_meta: Connection, message_str: str):
+        """Parses and routes a single incoming message based on its type."""
+        try:
+            message = json.loads(message_str)
+            msg_type = message.get("type")
+
+            if msg_type == "forward_request":
+                final_destination = message.get('final_destination')
+                payload = message.get('payload')
+                if not final_destination or payload is None:
+                    log.warning(f"Malformed forward_request received: {message}")
+                    return
+                # Do not process locally. Unwrap and route it onward.
+                await self.route_message(final_destination, payload)
+
+            # --- MESHING PROPAGATION ---
+            elif msg_type == "peer_update":
+                await self._handle_peer_update(message)
+            # --- END MESHING PROPAGATION ---
+
+            # State updates are now processed by the PortManager itself.
+            elif msg_type in ("user_update", "room_update", "state_sync"):
+                await self._process_network_state_update(message)
+
+            elif msg_type == "system_broadcast":
+                msg_content = message.get("message")
+                if msg_content:
+                    await self.kernel.system.print(msg_content)
+
+            elif msg_type == "remote_exec_request":
+                # This is a complex handler that streams output back
+                await self._handle_remote_exec(websocket, message)
+
+            elif msg_type in ("direct_message", "room_message"):
+                await self.kernel.chat.handle_network_message(message)
+
+            elif msg_type == "client_input":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    await self.kernel.handle_client_input(conn_meta.username, message.get("data", ""))
+                else:
+                    log.warning("Received client_input from non-client connection.")
+            else:
+                log.warning(f"Received unknown message type: {msg_type}")
+
+        except json.JSONDecodeError:
+            log.error("Failed to decode JSON message.")
+        except Exception:
+            log.error(f"Error dispatching message: {traceback.format_exc()}")
 
     async def _dispatch_message(self, websocket: WebSocketServerProtocol, conn_meta: Connection, message_str: str):
         """Parses and routes a single incoming message based on its type."""
