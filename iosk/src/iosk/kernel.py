@@ -369,6 +369,10 @@ class IOSK:
         if await self.exists(io, skrc_user_path): # Use self.exists as it handles virtual paths properly
             await self.exec(io, skrc_user_path)
 
+        # MODIFIED: Update local network_users and then broadcast
+        user_addr = f"{user}.{self.hostname}"
+        self.network_users[user_addr] = {} # Store user metadata if needed later
+
         # Announce user login to network peers
         if self.port:
             await self.port.broadcast_to_peers({
@@ -463,6 +467,11 @@ class IOSK:
             if self.chat: await self.chat.send(user_to_logout, disconnect, sys=True)
             else: await io.print(disconnect)
 
+        # MODIFIED: Update local network_users and then broadcast
+        user_addr = f"{user_to_logout}.{self.hostname}"
+        if user_addr in self.network_users:
+            del self.network_users[user_addr]
+
         # Announce user logout to network peers
         if self.port:
             await self.port.broadcast_to_peers({
@@ -533,6 +542,10 @@ class IOSK:
         if await self.exists(io, skrc_user_path): # Use self.exists for consistency
             await self.exec(io, skrc_user_path)
 
+        # MODIFIED: Update local network_users and then broadcast
+        user_addr = f"{username}.{self.hostname}"
+        self.network_users[user_addr] = {}
+
         if self.port:
             await self.port.broadcast_to_peers({
                 'type': 'user_update',
@@ -560,6 +573,37 @@ class IOSK:
             io = self.users[username]
             if hasattr(io, 'network_input_queue') and isinstance(io.network_input_queue, asyncio.Queue):
                 await io.network_input_queue.put(data)
+
+    # ADDED: New method to handle incoming state updates from the network
+    async def update_network_state(self, message: dict):
+        """Processes state update messages from peers."""
+        msg_type = message.get("type")
+
+        if msg_type == "user_update":
+            action = message.get("action")
+            user = message.get("user")
+            host = message.get("host")
+
+            if not all([action, user, host]):
+                return # Malformed message
+
+            user_addr = f"{user}.{host}"
+            if action == "login":
+                self.network_users[user_addr] = {} # Add user
+            elif action == "logout":
+                if user_addr in self.network_users:
+                    del self.network_users[user_addr] # Remove user
+
+        elif msg_type == "state_sync":
+            # This handles the initial sync of users from a new peer
+            users = message.get("users", [])
+            host = message.get("host")
+            if not all([users, host]):
+                return
+
+            for user in users:
+                user_addr = f"{user}.{host}"
+                self.network_users[user_addr] = {}
 
     ###
     ### COMMAND

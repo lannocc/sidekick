@@ -91,11 +91,12 @@ class PortManager:
             try:
                 websocket = await websockets.connect(host_uri)
                 
-                # 1. Send our handshake message (CLIENT sends first)
+                # MODIFIED: Send our handshake with current user list
                 handshake_payload = {
                     "type": "handshake",
                     "id": "peer",
-                    "hostname": self.kernel.hostname
+                    "hostname": self.kernel.hostname,
+                    "users": list(self.kernel.users.keys()) # ADDED: Send our user list
                 }
                 await websocket.send(json.dumps(handshake_payload))
 
@@ -114,6 +115,14 @@ class PortManager:
                     await self.kernel.system.error("!! peer handshake failed: ACK missing hostname")
                     await websocket.close()
                     return
+
+                # ADDED: Process the user list from the peer
+                peer_users = ack_message.get("users", [])
+                await self.kernel.update_network_state({
+                    "type": "state_sync",
+                    "host": peer_hostname,
+                    "users": peer_users
+                })
                 
                 # 3. Handshake successful, set up connection metadata and state
                 conn_meta = Connection(websocket=websocket, type='peer', hostname=peer_hostname)
@@ -210,9 +219,24 @@ class PortManager:
             hostname = message.get("hostname")
             if not hostname:
                 raise ValueError("Invalid peer handshake: missing hostname")
+            
+            # ADDED: Process incoming user list and sync state
+            peer_users = message.get("users", [])
+            await self.kernel.update_network_state({
+                "type": "state_sync",
+                "host": hostname,
+                "users": peer_users
+            })
+
             self.peers[hostname] = websocket
-            # TODO: State exchange
-            await websocket.send(json.dumps({"type": "handshake_ack", "status": "ok", "hostname": self.kernel.hostname}))
+            
+            # MODIFIED: Send back our user list in the ack
+            await websocket.send(json.dumps({
+                "type": "handshake_ack", 
+                "status": "ok", 
+                "hostname": self.kernel.hostname,
+                "users": list(self.kernel.users.keys()) # ADDED
+            }))
             return Connection(websocket=websocket, type='peer', hostname=hostname)
         
         elif conn_id == "client":
@@ -242,9 +266,9 @@ class PortManager:
             message = json.loads(message_str)
             msg_type = message.get("type")
 
-            if msg_type in ("user_update", "room_update"):
-                # TODO: Implement self.kernel.update_network_state
-                log.info(f"Received network state update: {message}")
+            # MODIFIED: Handle state updates by calling the new kernel method
+            if msg_type in ("user_update", "room_update", "state_sync"):
+                await self.kernel.update_network_state(message)
 
             elif msg_type == "remote_exec_request":
                 # This is a complex handler that streams output back
