@@ -1,167 +1,107 @@
+# src/iosk/cmd.py
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from ..util import print_flush as print
+from . import UNIX
+from .io import print_flush as print
 
 import sys
-
-
-def main(args):
-    print('IOSK: ', end='')
-
-    cmd = args[0] if args else 'help'
-    args = args[1:]
-
-    if cmd in SET:
-        cmd = SET[cmd]
-        print(cmd[1])
-        cmd[0](args)
-
-    else:
-        print(f'unknown command: {cmd}')
-        print('Try `sk iosk help` for a list of commands.')
-
-
-def help(args):
-    print()
-    print('USAGE:')
-    print('   sk iosk <command>')
-    print()
-    print('The following commands are available:')
-    for name, cmd in SET.items():
-        print(f'   {name} - {cmd[1]}')
-
+import asyncio
+from asyncio.exceptions import CancelledError
+import logging
 
 def run(args=sys.argv[1:]):
-    import asyncio
+    """
+    Primary entry point for launching an IOSK system.
+    This is now exclusively for launching the local root console.
+    """
+    # 1. Argument Parsing
+    if len(args) != 1 or args[0].startswith('-'):
+        print("Usage: iosk <root_directory>")
+        sys.exit(1)
+    
+    # Set the logging level for the google-genai library to WARNING to suppress INFO messages
+    #logging.getLogger('google_genai').setLevel(logging.WARNING)
+    #logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.disable(logging.INFO) # all INFO and less are disabled
+    
+    root_directory = args[0]
 
-    terminal_mode = False
-    if '-t' in args:
-        terminal_mode = True
-        args.remove('-t')
+    # 2. System Initialization
+    print(f'Preparing iosk UNIX at root: {root_directory}')
+    kernel = UNIX(root=root_directory)
+    print('System loaded.')
 
-    if args:
-        if len(args) != 2:
-            print('2 arguments required: <root> <handle>')
-            return
-
-        root = args[0]
-        handle = args[1]
-
-    else:
-        print('  >> Filesystem Root: ', end='')
-        root = input()
-        if not root: return
-
-        print('  >> Chat Handle (super): ', end='')
-        handle = input()
-        if not handle: return
-
-    print('Preparing iosk UNIX... ', end='')
-    from . import UNIX
-    unix = UNIX(root=root)
-    print('system loaded.')
-
-    print('Preparing iosk AIM...', end='')
-    from . import AIM
-    chat = AIM(iosk=unix)
-    print('chat loaded.')
-
+    # 3. Asynchronous Main Loop
     async def async_run():
-        print()
+        
+        # Coroutine for the root user's session lifecycle
+        async def _run_console_session(kernel_instance):
+            # Login the root user on the default console device.
+            io = await kernel_instance.login('root', device='/dev/console')
+            if io:
+                # Begin the interactive command loop, which blocks until logout.
+                await kernel_instance.interactive(io)
+
+        await kernel.start()
+        
+        # Create concurrent tasks for the kernel lifecycle and the root console session
+        unix_task = asyncio.create_task(kernel.run())
+        console_task = asyncio.create_task(_run_console_session(kernel))
+
+        # --- Phase 1: Active Console Session ---
+        # Wait for the root user to log out (e.g., via 'exit' or Ctrl+D).
+        # Ctrl+C is handled within the interactive loop and won't bubble up here.
+        await console_task
+        
+        # --- Phase 2: Headless Operation ---
+        print('\n:: Root console disconnected. System running in headless mode.')
+        print(':: Press Ctrl+D for graceful shutdown, or Ctrl+C for immediate exit.')
+        
         try:
-            device = '/dev/terminal' if terminal_mode else None
-            await unix.start()
-            await chat.start(handle=handle, device=device)
-            await asyncio.gather(unix.run(), chat.run())
+            # The kernel is still running. We wait here for a host signal
+            # or for an internal shutdown command to complete the unix_task.
+            await unix_task
+        except (KeyboardInterrupt, EOFError) as e:
+            # This block now ONLY executes after the user has logged out.
+            if isinstance(e, EOFError):
+                # Ctrl+D: Graceful Shutdown
+                print('\n:: Graceful shutdown initiated by host signal.')
+                if not kernel.halt.is_set():
+                    kernel.halt.set()
+                # Wait for kernel to finish its shutdown sequence
+                if not unix_task.done():
+                    try:
+                        await unix_task
+                    except CancelledError:
+                        pass # This is expected if it was cancelled.
+            elif isinstance(e, KeyboardInterrupt):
+                # Ctrl+C: Immediate Shutdown
+                print('\n:: Immediate shutdown initiated by host signal.')
+                if not unix_task.done():
+                    unix_task.cancel()
+                try:
+                    await unix_task # Allow cleanup from cancellation
+                except CancelledError:
+                    pass
+        finally:
+            # Final cleanup check
+            if not unix_task.done():
+                unix_task.cancel()
+                try:
+                    await unix_task
+                except CancelledError:
+                    pass
 
-        except asyncio.exceptions.CancelledError:
-            print('Cancelled') # ^CCancelled
+    # Run the main async loop and handle top-level interruptions (e.g., during startup)
+    try:
+        asyncio.run(async_run())
+    except (KeyboardInterrupt, EOFError):
+        #print('\n:: Shutdown initiated by user during startup.')
+        if kernel and not kernel.halt.is_set():
+            kernel.halt.set()
 
-    print('GO!!')
-    asyncio.run(async_run())
+    print("IOSK is done.")
 
-
-def console(args=sys.argv[1:]):
-    import asyncio
-
-    terminal_mode = False
-    if '-t' in args:
-        terminal_mode = True
-        args.remove('-t')
-
-    if args:
-        if len(args) != 1:
-            print('1 argument required: <root>')
-            return
-
-        root = args[0]
-
-    else:
-        print('  >> Filesystem Root: ', end='')
-        root = input()
-        #if not root: return
-
-    print('Preparing iosk UNIX... ', end='')
-    from . import UNIX
-    unix = UNIX(root=root)
-    print('system loaded.')
-
-    async def async_run():
-        print()
-        try:
-            device = '/dev/terminal' if terminal_mode else None
-            await unix.start()
-            await asyncio.gather(unix.run(), unix.login('root', device=device))
-
-        except asyncio.exceptions.CancelledError:
-            print('Cancelled') # ^CCancelled
-
-    print('GO!!')
-    asyncio.run(async_run())
-
-
-def system(args=sys.argv[1:]):
-    import asyncio
-
-    if args:
-        if len(args) != 1:
-            print('1 argument required: <root>')
-            return
-
-        root = args[0]
-
-    else:
-        print('  >> Filesystem Root: ', end='')
-        root = input()
-        #if not root: return
-
-    print('Preparing iosk UNIX... ', end='')
-    from . import UNIX
-    unix = UNIX(root=root)
-    print('system loaded.')
-
-    async def async_run():
-        print()
-        try:
-            await unix.start()
-            await unix.run()
-
-        except asyncio.exceptions.CancelledError:
-            print('Cancelled') # ^CCancelled
-
-    print('GO!!')
-    asyncio.run(async_run())
-
-
-SET = {
-    'help': (help,
-        'help for iosk commands'),
-    'run': (run,
-        'launch iosk system locally and connect to the chat as superuser'),
-    'shell': (console,
-        'launch iosk system with interactive command shell console; no chat'),
-    'system': (system,
-        'launch iosk system only; no chat, no shell'),
-}
-
+# This simplified structure removes the old SET dictionary and command dispatching.
+# The `run` function is now the sole purpose of this module, as per the netroom proposal.

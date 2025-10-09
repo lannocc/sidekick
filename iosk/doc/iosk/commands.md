@@ -39,6 +39,10 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ clear`
     *   Notes: For bot users, this command clears the entire chat session history, leaving only the `clear` command itself as the first and only entry. For interactive console/terminal users, this command clears the screen using ANSI escape sequences.
     *   Status: Working.
+*   **clroom**: Close the active chat room.
+    *   Usage: `$ clroom`
+    *   Notes: Closes the single active chat room on the local system. This command can typically only be run by the room's owner or a superuser.
+    *   Status: Working.
 *   **cp**: Copy a file or directory.
     *   Usage: `$ cp <source> <destination>`
     *   Notes: Handles file to file copy and file to existing directory copy. Errors if source does not exist.
@@ -90,6 +94,10 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ history [N]`
     *   Notes: `N` is the number of most recent commands to show. If omitted, the entire session history is displayed. Only lines entered as commands (`$ ...`) are shown.
     *   Status: Working as expected.
+*   **hostname**: Display or set the system's hostname.
+    *   Usage: `$ hostname` or `$ hostname <new-hostname>`
+    *   Notes: `hostname` prints the current hostname. `hostname <new-hostname>` sets the system's hostname to the new value, updating both `/etc/hostname` and the runtime configuration.
+    *   Status: Working.
 *   **kill**: Terminate a running process.
     *   Usage: `$ kill <pid>`
     *   Notes: `<pid>` is the Process ID of the process to terminate. Use `ps` to find PIDs.
@@ -98,10 +106,18 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ ll [path ...]`
     *   Notes: Provides one entry per line with detailed information. This command is an alias for `ls -l`.
     *   Status: Working (as an alias).
+*   **login**: Log in as a different user.
+    *   Usage: `$ login <username>`
+    *   Notes: Logs out the current session and starts a new session for the specified user on the same device. Useful for switching users without restarting the system.
+    *   Status: Working.
 *   **ls**: List directory contents.
     *   Usage: `$ ls [options] [path ...]`
     *   Options: `-l` (long listing format), `-a` (list all entries, including those starting with '.').
     *   Notes: Honors `.skignore` files and hides system dotfiles by default unless `-a` is used.
+    *   Status: Working.
+*   **mesh**: Connect to other IOSK systems or view the current network mesh.
+    *   Usage: `$ mesh` or `$ mesh <host[:port]>`
+    *   Notes: `mesh` lists all connected peer systems. `mesh <host[:port]>` establishes an outbound connection to another IOSK system's listener service (defaults to port 4209).
     *   Status: Working.
 *   **mkdir**: Create a directory.
     *   Usage: `$ mkdir <directory>...` or `$ mkdir -p <directory>...`
@@ -112,13 +128,21 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ mv <source> <destination>`
     *   Notes: If `DESTINATION` is an existing directory, `SOURCE` is moved into it. If `DESTINATION` is a filename, `SOURCE` is renamed to `DESTINATION`. Errors if `SOURCE` does not exist or if `DESTINATION` is a non-existent directory.
     *   Status: Working.
+*   **on**: Execute a command on a remote, connected host.
+    *   Usage: `$ on <host> <command...>`
+    *   Notes: `<host>` is the hostname of a connected peer system. `<command...>` is the command and its arguments to execute remotely. Output is streamed back and displayed locally.
+    *   Status: Working.
 *   **patch**: Apply a diff to a file.
     *   Usage: `$ patch <targetfile> <patchfile>`
     *   Notes: This initial version can apply simple line-based diffs (unified diff format) to a target file.
     *   Status: Working.
 *   **pause**: Pause a bot user's AI engagement.
     *   Usage: `$ pause [username]`
-    *   Notes: Pauses the AI engagement for the specified bot user. The bot will stop making AI trips and will not receive new chat messages until unpaused. If no username is provided, it attempts to pause the current user. The console user cannot be paused.
+    *   Notes: Pauses the AI engagement for the specified bot user. If no username, pauses current user. Console user cannot be paused.
+    *   Status: Working.
+*   **port**: Controls the network listener service.
+    *   Usage: `$ port`, `$ port on [port_num]`, `$ port off`
+    *   Notes: `port` displays status. `port on` starts the listener (default 4209). `port off` stops it.
     *   Status: Working.
 *   **ps**: List currently running processes.
     *   Usage: `$ ps`
@@ -130,7 +154,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **reattach**: Reattach a user to a different device.
     *   Usage: `$ reattach <device> [user]`
-    *   Notes: `<device>` is the name of the device (e.g., 'dummy', 'google', 'openai/gpt-4o'), corresponding to a path under `/dev/`. `[user]` is the username to reattach; if omitted, defaults to the current user. Console device targets (`/dev/console`, `/dev/terminal`) allow swapping if already occupied.
+    *   Notes: `<device>` is the device name (e.g., 'dummy', 'google', 'openai/gpt-4o'). `[user]` is the username (defaults to current). Console device targets (`/dev/console`) allow swapping if already occupied.
     *   Status: Working.
 *   **replace**: Replaces occurrences of a string in a file with another string.
     *   Usage: `replace <filename> <old_string> <new_string>`
@@ -147,6 +171,14 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **rmdir**: Remove one or more directories.
     *   Usage: `$ rmdir <directory>...`
     *   Notes: This command only removes empty directories. Multiple directories can be specified.
+    *   Status: Working.
+*   **room**: Opens a new local chat room.
+    *   Usage: `$ room [room_name]`
+    *   Notes: Opens a new chat room on the local system. Defaults to 'iosk'. Only one room can be active at a time.
+    *   Status: Working.
+*   **rooms**: List all rooms created on the local system.
+    *   Usage: `$ rooms [-v | --verbose]`
+    *   Notes: Lists all rooms created on the local system. Active room is indicated with an asterisk (*). `-v` provides verbose output with ROOM and TOPIC.
     *   Status: Working.
 *   **search**: Search for a term within text files or stdin.
     *   Usage: `$ search [-i] [-n] [-l] [-c] <term> [path ...]`
@@ -195,6 +227,10 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ top`
     *   Notes: Displays a summary of system status and a list of running processes, sorted by runtime in descending order. This is a one-shot command and does not update in real-time.
     *   Status: Working.
+*   **topic**: View or set the topic for the current chat room.
+    *   Usage: `$ topic` or `$ topic <new topic>`
+    *   Notes: `topic` displays the current room's topic. `<new topic>` sets the room's topic. Only room owner or superuser can set topic.
+    *   Status: Working.
 *   **touch**: Create an empty file.
     *   Usage: `$ touch <filename>`
     *   Notes: Creates a new, empty file. If the file already exists, the command errors, unlike standard UNIX `touch` which updates the timestamp.
@@ -208,6 +244,10 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Options: `-c` (count bytes and estimate tokens for the content); `-d` (list directories only).
     *   Notes: Some files and folders are hidden (this command honors `.skignore` files). If no path is provided, uses the current directory.
     *   Status: Working.
+*   **unmesh**: Disconnect from one or more peer IOSK systems.
+    *   Usage: `$ unmesh [host...]`
+    *   Notes: `unmesh` (no arguments) disconnects from all peers. `unmesh <host...>` disconnects from specified peers.
+    *   Status: Working.
 *   **unpause**: Unpause a bot user's AI engagement.
     *   Usage: `$ unpause <username>`
     *   Notes: Resumes the AI engagement for a previously paused bot user. Must be run by another user, as a paused user cannot execute commands.
@@ -216,9 +256,14 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ users`
     *   Notes: Prints the usernames of all currently connected users and a count.
     *   Status: Working.
-*   **ver**: Display the current version of SideKick.
+*   **ver**: Display the current version of SideKick/IOSK.
     *   Usage: `$ ver`
     *   Notes: Does not accept arguments. `--help` displays its own help message.
+    *   Status: Working.
+*   **watch**: Execute a command repeatedly, displaying its output (console only).
+    *   Usage: `$ watch [options] <command>`
+    *   Options: `-n <seconds>` (update interval, default 2.0s), `-c` (enable color).
+    *   Notes: This command is only available to users on a console device. To exit, press Ctrl-C or use `kill`.
     *   Status: Working.
 *   **wc**: Counts the number of lines, words, and characters in a file or stdin.
     *   Usage: `$ wc [file]`
@@ -231,6 +276,14 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **whatami**: Display the name of the current device.
     *   Usage: `$ whatami`
     *   Notes: Does not accept arguments. Strips the `/dev/` prefix from the device path for a cleaner display.
+    *   Status: Working.
+*   **where**: Display a list of all known users across the network mesh.
+    *   Usage: `$ where [-v | --verbose]`
+    *   Notes: Displays a compact list of users in the format 'user.host/room'. The user running the command is indicated with a leading asterisk (*). `-v` provides a verbose, multi-column format.
+    *   Status: Working.
+*   **whereami**: Display the configured hostname and active room of the local IOSK system.
+    *   Usage: `$ whereami`
+    *   Notes: Displays the unique hostname of the local IOSK system. If a chat room is active, its name is appended, e.g., 'hostname/room_name'.
     *   Status: Working.
 *   **which**: Locate a command executable in the PATH.
     *   Usage: `$ which <command>`

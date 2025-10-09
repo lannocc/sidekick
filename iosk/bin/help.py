@@ -7,14 +7,15 @@ Any time you run a command ("$ ") or write a comment ("# "), you are the only on
 The following commands are generally available:
 
 General Utilities:
-    $ help          - get help on commands (this file)
     $ clear         - clear the session history for bots or the screen for console users
     $ date          - display the current date and time
     $ echo          - display the given arguments
+    $ exit          - leave the system chat (logout)
+    $ help          - get help on commands (this file)
+    $ hostname      - display or set the system's hostname
     $ status        - display system status (date, whoami, users)
     $ ver           - display the current version of SideKick/IOSK
     $ welcome       - display a welcome message (auto-called on login)
-    $ exit          - leave the system chat (logout)
 
 Command and Shell:
     $ alias         - manage IOSK command aliases
@@ -24,6 +25,7 @@ Command and Shell:
     $ sleep         - pause execution for a specified amount of time
     $ system        - execute a command in the underlying host system
     $ trace         - manage the IOSK system-wide tracing facility
+    $ watch         - execute a command repeatedly, displaying its output (console only)
     $ which         - locate a command executable in the PATH
     $ xargs         - build and execute command lines from standard input
 
@@ -33,37 +35,38 @@ Memory Management (Skrip Banks):
     $ bankrupt      - clear core memory bank
 
 Process Management:
-    $ ps            - list currently running processes
     $ kill          - terminate a running process
+    $ ps            - list currently running processes
     $ top           - provide a single, non-interactive snapshot of system activity
 
 User/Device Management:
-    $ whoami        - see your current username
-    $ whatami       - see your current device name
-    $ users         - list connected users
-    $ who           - display who is logged on, their device, and login time
+    $ ask           - ask an AI device (user) a question, with optional files
     $ attach        - attach a device as a user (bring user online)
     $ detach        - disconnect a device user (forced exit)
-    $ reattach      - reattach a user (or self) to a different device
+    $ login         - log in as a different user (logout current, new session for target)
     $ pause         - pause a bot user's AI engagement
-    $ unpause       - unpause a bot user's AI engagement
+    $ reattach      - reattach a user (or self) to a different device
     $ reset         - reset a user's session to a clean state
-    $ ask           - ask an AI device (user) a question, with optional files
     $ su            - execute a command as another user (superuser only)
+    $ unpause       - unpause a bot user's AI engagement
+    $ users         - list connected users
+    $ whatami       - see your current device name
+    $ who           - display who is logged on, their device, and login time
+    $ whoami        - see your current username
 
 File and Directory Management:
-    $ pwd           - print the name of the current working directory
     $ cd            - change the current working directory
-    $ ls            - list files and directories (also: ll)
-    $ tree          - recursively list as a tree (efficient; some folders hidden by .skignore)
-    $ mkdir         - create empty directory
-    $ rmdir         - remove empty directory
-    $ touch         - create empty file
-    $ rm            - remove file
     $ cp            - copy file or directory
+    $ ls            - list files and directories (also: ll)
+    $ mkdir         - create empty directory
     $ mv            - move/rename file or directory
     $ patch         - apply a diff to a file
+    $ pwd           - print the name of the current working directory
     $ replace       - replaces occurrences of a string in a file with another string
+    $ rm            - remove file
+    $ rmdir         - remove empty directory
+    $ touch         - create empty file
+    $ tree          - recursively list as a tree (efficient; some folders hidden by .skignore)
 
 Viewing and Analyzing Files:
     $ cat           - print file contents
@@ -78,6 +81,18 @@ Viewing and Analyzing Files:
     $ ticket        - view ticket details from the database
     $ tokens        - calculate total bytes and estimate tokens for session context
     $ wc            - count lines, words, and characters in a file
+
+Networking & Chat Room Management:
+    $ clroom        - close the active chat room
+    $ mesh          - connect to other IOSK systems or view the current network mesh
+    $ on            - execute a command on a remote, connected host
+    $ port          - controls the network listener service
+    $ room          - opens a new local chat room
+    $ rooms         - list all rooms created on the local system
+    $ topic         - view or set the topic for the current chat room
+    $ unmesh        - disconnect from one or more peer IOSK systems
+    $ where         - display a list of all known users across the network mesh
+    $ whereami      - display the configured hostname and active room of the local IOSK system
 
 System Lifecycle (kernel commands):
     $ init          - system initialization
@@ -115,9 +130,9 @@ async def iocall(io, argv):
     if len(argv) == 1:
         command_name = argv[0]
 
-        # Special handling for 'exit'
-        if command_name == 'exit':
-            await io.print("Usage: exit\n\nExits the current IOSK session.")
+        # Special handling for built-in commands
+        if command_name in ('exit', 'logout'):
+            await io.print(f"Usage: {command_name}\n\nExits the current IOSK session.")
             return True
 
         # io.os.call is expected to handle execution, including error messages

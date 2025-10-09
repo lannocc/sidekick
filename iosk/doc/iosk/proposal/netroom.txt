@@ -1,0 +1,49 @@
+Write proposal/netroom.md (```markdown).
+
+We're looking for a proposal that satisfies the requirements for the next generation of iosk: networks and rooms. A running iosk system may or may not have a chat running, that is the "room". Thus, it's one active room at a time per system.
+
+Each instance of an iosk "system" shall consist of these main features:
+- **kernel** (running)
+- **console** (root)
+- **port** (optional--websockets handler)
+- **room** (optional--chat)
+
+Starting iosk on the command line will no longer take the username/handle option. It simply takes the directory, e.g. `iosk iosk`. It always starts a console for "root" user (special home directory /root). In the iosk root console, the prompt will end with " >> " if in chat room otherwise " $ " (commands only).
+
+IOSK systems are networked together through the "port" service (websockets), in a simple mesh-like fashion. The Port provides communication services for:
+- system <-> system
+- system <-> terminal (rich)
+- system <-> web client
+
+The default port when not specified is 4209. In iosk, the '@' is reserved for direct messaging to users, so it is not part of our user-host scheme. Instead, dot is used e.g. "lannocc.novamente" means user lannocc on host novamente. Username handles themselves cannot have dots in them.
+
+We want to connect iosk systems together into a "mesh" of sorts. The chat '@' (direct send) usernames can now have a dot which is to send to that user at that host. Same for `send -u`. A `whereami` shows yours current device. A `where` shows all users across the mesh and what hosts they are on. Same username can appear on different hosts logged in at the same time, this is fine. Obviously all the connected systems will need to stay synchronized on who is on what/where.
+
+The `mesh` command would connect one iosk to another, or show the current state of connected systems.
+
+We'll want a `room` command to launch the chat service on a system (only one active at a time), giving it a room name.
+
+We'll want a `on` command which is like our `su` command but that is how we'll run a command on another system.
+
+Here's a hypothetical example, starting in bash, launching iosk in the 'iosk' directory, starting a local chat room, connecting to gemini2 (already running) on the default port, starting a chat room there, bringing an AI user online there, and then sending a direct message to the remote user:
+
+```
+iosk iosk
+[root /root] $ room dispatch
+:: room 'dispatch' opened
+[root /root] >> $ mesh gemini2
+:: connected to gemini2:4209
+[root /root] >> $ on gemini2 room IT3
+:: on gemini2: room 'IT3' opened
+[root /root] >> $ on gemini2 attach google gamma
+:: on gemini2: root attached user 'gamma' to device '/dev/google'
+[root /root] >> @gamma.gemini2 Hello gamma!
+```
+
+We can remove the main sidekick `sk iosk` command and options, so there is only one main entry point with the `iosk` command.
+
+Whatever was started as dev/terminal.py can probably be tossed (it was just an early idea not fully working) because we are going to have a new rich terminal we'll start building that accesses through the Port (websockets) system. We'll have a main entrypoint with the `skh` command (get it? SideKick Host) which is like our simple (but rich terminal) version of `ssh`... it's how you will log in to a running iosk as a regular user from bash. For example `skh lannocc` (login to localhost:4209 as lannocc) or `skh lannocc.novamente:9292` (login to novamente:9292 as lannocc).
+
+We do not need to worry about security considerations at this point. We run this in a protected local environment. No passwords or encryption necessary right now.
+
+Anyways please work this into a cohesive proposal. We don't have to fully spec the details of the websocket api yet or the rich terminal features, they can be fully fleshed out in future proposals. Please also consider anything missing from this proposal or any further ideas in extra sections at the bottom.

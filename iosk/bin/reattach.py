@@ -16,7 +16,7 @@ async def iocall(io, argv):
     [user]: The username to reattach. If omitted, defaults to the current user.
     --help: Displays this help message.
 
-    Special behavior for console devices ('/dev/console', '/dev/terminal'):
+    Special behavior for console devices ('/dev/console'):
     If a user is reattached to a console device that is already occupied,
     the two users will swap devices. The original console user will be
     attached to the device the other user was previously on.
@@ -45,7 +45,7 @@ async def iocall(io, argv):
 
     # --- Job Creation: Normal reattach or a device swap ---
     jobs = []
-    console_devices = ('/dev/console', '/dev/terminal')
+    console_devices == ('/dev/console') #, '/dev/terminal')
     is_console_target = new_device_virtual_path in console_devices
 
     if is_console_target:

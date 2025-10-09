@@ -1,9 +1,12 @@
+# src/iosk/kernel.py
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
 from .io import Context, Capture, print_flush as print
 from .parser import CommandLineParser
 from .pipeline import CommandPipelineExecutor
+from .chat import AIMessenger
+from .port import PortManager
 
 from binaryornot.check import is_binary
 import tiktoken
@@ -52,7 +55,15 @@ class IOSK:
 
         self.system = None # Context
         self.users = { } # handle:Context
-        self.chat = None
+
+        # Netroom subsystems
+        self.port: PortManager = None
+        self.chat: AIMessenger = None
+
+        # Netroom state
+        self.hostname: str = 'localhost'
+        self.network_users: dict = {}
+        self.network_rooms: dict = {}
 
         self.parser = CommandLineParser(self)
         self.pipeline_executor = CommandPipelineExecutor(self) # Instantiate the executor
@@ -123,6 +134,20 @@ class IOSK:
 
             await io.print(f'IOSK boot number {self.BOOT}...')
 
+        if not fail:
+            # Read hostname
+            hostname_path = self.box('/etc/hostname')
+            if exists(hostname_path):
+                with open(hostname_path, 'r') as f:
+                    self.hostname = f.read().strip() or 'localhost'
+            else:
+                self.hostname = os.path.basename(os.path.abspath(self.root)) or 'localhost'
+
+            # Instantiate subsystems
+            self.port = PortManager(self)
+            self.chat = AIMessenger(self)
+            await io.print(f'System hostname: {self.hostname}')
+
         if fail:
             if io: await io.error(f'!! {fail}')
             else: print(f'!! {fail}')
@@ -147,6 +172,9 @@ class IOSK:
         #-------------------------------------------------#
         await io.print(f'IOSK shutdown signal received...')
 
+        if self.port:
+            await self.port.stop()
+
         for user, uio in self.users.copy().items():
             disconnect = f':: {user} has been disconnected (shutdown)'
             await self.logout(uio, disconnect=disconnect)
@@ -168,16 +196,16 @@ class IOSK:
 
         now = datetime.now()
         one_minute_ago = now - timedelta(seconds=60)
-        
+
         # Filter out old entries and calculate the sum of recent tokens
         recent_entries = [
             (ts, count) for ts, count in self.device_tpm_trackers[device_path]
             if ts > one_minute_ago
         ]
-        
+
         # Update the tracker with the pruned list
         self.device_tpm_trackers[device_path] = recent_entries
-        
+
         # Return the sum of tokens from the recent entries
         return sum(count for _, count in recent_entries)
 
@@ -191,13 +219,13 @@ class IOSK:
             self.device_cooldowns[device_path].set()
 
         event = self.device_cooldowns[device_path]
-        
+
         # Clear the event to signal that the device is now unavailable
         event.clear()
-        
+
         # Wait for the specified delay
         await asyncio.sleep(delay_seconds)
-        
+
         # Set the event to signal that the device is ready again
         event.set()
 
@@ -221,7 +249,7 @@ class IOSK:
 
         while True: # Loop to re-check after sleeping
             current_tpm = self._get_current_tpm(device_path)
-            
+
             if current_tpm + tokens_in_prompt <= TPM_THRESHOLD:
                 # We are under the threshold, safe to proceed
                 break
@@ -232,14 +260,14 @@ class IOSK:
             if not tracker:
                 # Should not happen if current_tpm > 0, but as a safeguard.
                 break
-                
+
             oldest_timestamp, _ = tracker[0]
             now = datetime.now()
-            
+
             # Calculate how long until the oldest entry expires from the 60s window
             time_since_oldest = (now - oldest_timestamp).total_seconds()
             sleep_duration = 60.1 - time_since_oldest # Sleep a bit extra to be safe
-            
+
             if sleep_duration <= 0:
                 # This can happen if pruning is slightly out of sync.
                 # Just re-run the loop to get a fresh TPM count.
@@ -274,7 +302,8 @@ class IOSK:
             await self.system.error(f'!! invalid login name: {user}')
             return
 
-        await self.system.print(f'IOSK login: {user}')
+        login_msg = f":: user '{user}' logged in on '{self.hostname}'"
+        await self.system.print(login_msg)
 
         io = self.system.fork()
         io.login_time = datetime.now()
@@ -282,34 +311,45 @@ class IOSK:
         io.log = Capture.log(self, join(self.USER_LOG, user), True)
         io.dev = device
         io.user = user
-        io.su = device in (self.CONSOLE_DEV, '/dev/terminal') # if you have console, you're super
+        io.su = device == self.CONSOLE_DEV # if you have console, you're super
         io.base = True
-        io.bot = device not in (self.CONSOLE_DEV, '/dev/terminal')
+        io.bot = device != self.CONSOLE_DEV
         self.users[user] = io
 
         # --- CWD and Home Directory Initialization ---
-        home_dir_virtual = f'/home/{user}'
-        # Box the home directory path to get its actual location on the host filesystem.
-        # Pass io_context=io for consistency, though an absolute path ignores io.pwd in box().
-        home_dir_host = self.box(home_dir_virtual, io_context=io)
+        if user == 'root':
+            home_dir_virtual = '/root'
+            home_dir_host = self.box(home_dir_virtual, io_context=io)
 
-        if not os.path.exists(home_dir_host):
-            try:
-                os.makedirs(home_dir_host)
-                await io.print(f":: created home directory: {home_dir_virtual}")
+            if not os.path.exists(home_dir_host):
+                # If /root does not exist on the host, set PWD to /
+                io.pwd = '/'
+                await io.print(f":: /root home directory not found. Setting PWD to /")
+            else:
+                # If /root exists on the host, set PWD to /root
+                io.pwd = home_dir_virtual
+                await io.print(f":: root home directory is {home_dir_virtual}")
+            # Skip automatic creation and .skrc copying for root
+        else:
+            home_dir_virtual = f'/home/{user}'
+            home_dir_host = self.box(home_dir_virtual, io_context=io)
 
-                # Copy /etc/skel/skrc to ~/.skrc if it exists
-                skel_skrc_path = self.SKEL_SKRC
-                user_skrc_path = join(home_dir_virtual, '.skrc')
-                if await self.exists(io, skel_skrc_path):
-                    await io.print(f":: copying {skel_skrc_path} to {user_skrc_path}")
-                    await self.copy(io, skel_skrc_path, user_skrc_path)
+            if not os.path.exists(home_dir_host):
+                try:
+                    os.makedirs(home_dir_host)
+                    await io.print(f":: created home directory: {home_dir_virtual}")
 
-            except Exception as e:
-                await self.system.error(f"!! failed to create home directory {home_dir_virtual}: {e}")
-                # For now, allow login to proceed but log the error.
+                    # Copy /etc/skel/skrc to ~/.skrc if it exists
+                    skel_skrc_path = self.SKEL_SKRC
+                    user_skrc_path = join(home_dir_virtual, '.skrc')
+                    if await self.exists(io, skel_skrc_path):
+                        await io.print(f":: copying {skel_skrc_path} to {user_skrc_path}")
+                        await self.copy(io, skel_skrc_path, user_skrc_path)
 
-        io.pwd = home_dir_virtual # Set the current working directory for the user
+                except Exception as e:
+                    await self.system.error(f"!! failed to create home directory {home_dir_virtual}: {e}")
+                    # For now, allow login to proceed but log the error.
+            io.pwd = home_dir_virtual # Set the current working directory for the user
 
         if io_callback:
             await io_callback(io)
@@ -324,9 +364,32 @@ class IOSK:
             await self.exec(io, skrc_global_path)
 
         # Execute user-specific .skrc
-        skrc_user_path = join('/home', user, '.skrc')
-        if exists(self.box(skrc_user_path)):
+        # The user's PWD is set to their home directory (e.g., /root, /home/user)
+        # So we can construct the .skrc path relative to PWD.
+        skrc_user_path = join(io.pwd, '.skrc')
+        if await self.exists(io, skrc_user_path): # Use self.exists as it handles virtual paths properly
             await self.exec(io, skrc_user_path)
+
+        # MODIFIED: Update local network_users and then broadcast
+        user_addr = f"{user}.{self.hostname}"
+        self.network_users[user_addr] = {} # Store user metadata if needed later
+
+        # Announce user login to network peers
+        if self.port:
+            await self.port.broadcast_to_peers({
+                'type': 'user_update',
+                'action': 'login',
+                'user': user,
+                'host': self.hostname
+            })
+            # Announce user login to the entire mesh system log
+            await self.port.broadcast_to_peers({
+                'type': 'system_broadcast',
+                'message': login_msg
+            })
+
+        if self.chat and self.chat.active_room:
+            await self.chat.add_to_room(io)
 
         if interactive:
             await self.interactive(io)
@@ -337,44 +400,200 @@ class IOSK:
         while not self.halt.is_set():
             start = datetime.now()
             try:
-                while (text := await io.input(f'[{io.user} {io.pwd}] >> ')) is None:
-                    # non-blocking inputs return None until data
-                    delay = (datetime.now() - start).total_seconds()
-                    if delay < 0.1:
-                        await asyncio.sleep(0.1 - delay)
-                    start = datetime.now()
+                # This outer try handles Ctrl+C when idle at the prompt
+                try:
+                    # Determine prompt character based on room status
+                    if self.chat and self.chat.active_room:
+                        prompt_char = '>>'
+                    else:
+                        prompt_char = '$'
 
-                for line in text.split('\n'):
-                    line = line.rstrip()
-                    if line == '$ exit': return
+                    # Construct the prompt
+                    prompt_str = f'[{io.user} {io.pwd}] {prompt_char} '
 
-                    if line.startswith('#'):
-                        pass
+                    while (text := await io.input(prompt=prompt_str)) is None:
+                        # non-blocking inputs return None until data
+                        delay = (datetime.now() - start).total_seconds()
+                        if delay < 0.1:
+                            await asyncio.sleep(0.1 - delay)
+                        start = datetime.now()
 
-                    elif line.startswith('$ '):
-                        command_line = line[2:]
-                        if command_line: # Don't add empty commands to history
-                            io.history.append(command_line)
-                        await self.call(io, command_line) # Pass the string after '$ '
+                    is_room_active = self.chat and self.chat.active_room
 
-                    elif line:
-                        if self.chat: await self.chat.send(io.user, line)
-                        else: await io.print(line)
+                    for line in text.split('\n'):
+                        line = line.rstrip()
+                        if not line or line.startswith('#'):
+                            continue
 
-            except EOFError:
-                return
+                        is_command = False
+                        command_line = ''
+
+                        if line.startswith('$ '):
+                            is_command = True
+                            command_line = line[2:]
+                        elif not is_room_active:
+                            # Not in a room, so treat as a command.
+                            is_command = True
+                            command_line = line
+
+                        if is_command:
+                            # Check for built-in exit commands before executing
+                            # This handles 'exit' and 'logout' without a '$' at the shell prompt.
+                            first_word = command_line.strip().split(' ', 1)[0]
+                            if first_word in ('exit', 'logout'):
+                                return # Exit the interactive loop
+
+                            if command_line:
+                                io.history.append(command_line)
+                            await self.call(io, command_line)
+                        else:  # Is a chat message because we are in a room and not a command
+                            if self.chat:
+                                await self.chat.send(io.user, line)
+                            else:
+                                await io.print(line)
+
+                except EOFError: # This handles Ctrl+D to log out
+                    return
+
+            except KeyboardInterrupt: # This handles Ctrl+C at the prompt
+                # When Ctrl+C is pressed while idle, aioconsole raises KeyboardInterrupt.
+                # We catch it, print a newline with ^C, and continue the loop to show a new prompt.
+                await io.print("\n^C")
+                continue
 
     async def logout(self, io:Context, disconnect=None):
         if io.user not in self.users:
             await self.system.error(f'!! not logged in: {io.user}')
             return False
 
-        await self.system.print(f'IOSK logout: {io.user}')
+        logout_msg = f":: user '{io.user}' logged off from '{self.hostname}'"
+        await self.system.print(logout_msg)
+
+        user_to_logout = io.user
+        del self.users[user_to_logout]
+
         if disconnect:
-            if self.chat: await self.chat.send(io.user, disconnect, sys=True)
+            if self.chat: await self.chat.send(user_to_logout, disconnect, sys=True)
             else: await io.print(disconnect)
-        del self.users[io.user]
+
+        # MODIFIED: Update local network_users and then broadcast
+        user_addr = f"{user_to_logout}.{self.hostname}"
+        if user_addr in self.network_users:
+            del self.network_users[user_addr]
+
+        # Announce user logout to network peers
+        if self.port:
+            await self.port.broadcast_to_peers({
+                'type': 'user_update',
+                'action': 'logout',
+                'user': user_to_logout,
+                'host': self.hostname
+            })
+            # Announce user logout to the entire mesh system log
+            await self.port.broadcast_to_peers({
+                'type': 'system_broadcast',
+                'message': logout_msg
+            })
+
         return True
+
+    async def login_network_user(self, username, websocket):
+        """Called by PortManager to log in a user from a network client."""
+        await self.ready.wait()
+        if self.halt.is_set(): return None
+
+        if username in self.users:
+            await self.system.error(f"!! login failed: user '{username}' already logged in.")
+            return None
+
+        login_msg = f":: user '{username}' logged in on '{self.hostname}' (client)"
+        await self.system.print(login_msg)
+
+        device_path = f"network:{id(websocket)}"
+
+        io = self.system.fork()
+        io.login_time = datetime.now()
+        io.banks = {}
+        io.log = Capture.log(self, join(self.USER_LOG, username), True)
+        io.dev = device_path
+        io.user = username
+        io.su = False
+        io.base = True
+        io.bot = False
+        io.network_input_queue = asyncio.Queue()
+        self.users[username] = io
+
+        if username == 'root':
+            home_dir_virtual = '/root'
+            home_dir_host = self.box(home_dir_virtual, io_context=io)
+
+            if not os.path.exists(home_dir_host):
+                io.pwd = '/'
+                await self.system.print(f":: Network root login: /root home directory not found. Setting PWD to /")
+            else:
+                io.pwd = home_dir_virtual
+                await self.system.print(f":: Network root login: root home directory is {home_dir_virtual}")
+        else:
+            home_dir_virtual = f'/home/{username}'
+            home_dir_host = self.box(home_dir_virtual, io_context=io)
+            if not os.path.exists(home_dir_host):
+                try:
+                    os.makedirs(home_dir_host)
+                    # For network users, output these messages to the system log, not their non-existent local console.
+                    await self.system.print(f":: created home directory for network user {username}: {home_dir_virtual}")
+                    skel_skrc_path = self.SKEL_SKRC
+                    user_skrc_path = join(home_dir_virtual, '.skrc')
+                    if await self.exists(io, skel_skrc_path):
+                        await self.system.print(f":: copying {skel_skrc_path} to {user_skrc_path} for network user {username}")
+                        await self.copy(io, skel_skrc_path, user_skrc_path)
+                except Exception as e:
+                    await self.system.error(f"!! failed to create home directory {home_dir_virtual} for network user {username}: {e}")
+            io.pwd = home_dir_virtual
+
+        skrc_global_path = self.SKRC
+        if exists(self.box(skrc_global_path)):
+            await self.exec(io, skrc_global_path)
+
+        # Use the user's PWD to find their .skrc file
+        skrc_user_path = join(io.pwd, '.skrc')
+        if await self.exists(io, skrc_user_path): # Use self.exists for consistency
+            await self.exec(io, skrc_user_path)
+
+        # MODIFIED: Update local network_users and then broadcast
+        user_addr = f"{username}.{self.hostname}"
+        self.network_users[user_addr] = {}
+
+        if self.port:
+            await self.port.broadcast_to_peers({
+                'type': 'user_update',
+                'action': 'login',
+                'user': username,
+                'host': self.hostname
+            })
+            await self.port.broadcast_to_peers({
+                'type': 'system_broadcast',
+                'message': login_msg
+            })
+
+        if self.chat and self.chat.active_room:
+            await self.chat.add_to_room(io)
+
+        asyncio.create_task(self.interactive(io))
+
+        return io
+
+    async def logout_network_user(self, username):
+        """Called by PortManager when a client disconnects."""
+        if username in self.users:
+            io = self.users[username]
+            await self.logout(io, disconnect=f':: {username} has disconnected (network)')
+
+    async def handle_client_input(self, username, data):
+        """Called by PortManager to feed input to a network user's session."""
+        if username in self.users:
+            io = self.users[username]
+            if hasattr(io, 'network_input_queue') and isinstance(io.network_input_queue, asyncio.Queue):
+                await io.network_input_queue.put(data)
 
     ###
     ### COMMAND
@@ -406,19 +625,37 @@ class IOSK:
 
             if shebang.startswith('/bin/'): # HACK
                 interpreter = shebang[5:] # e.g., 'skrip'
-
-                # The script path itself is an implicit argument to the interpreter
-                # followed by the arguments passed to the script.
                 script_and_args_for_interpreter = [path] + argv
 
-                # The interpreter's name is the command, and the script to run
-                # (plus any of its own arguments) are the arguments for the interpreter.
-                interpreter_full_command = [interpreter] + script_and_args_for_interpreter
+                # --- BEGIN FIX ---
+                # The original code called `self.call`, creating a potential infinite recursion
+                # if a script specified itself as its interpreter. The fix is to directly
+                # resolve the interpreter as a Python module and execute its `iocall` method,
+                # bypassing the main `call` pathway. This breaks the recursive loop.
 
-                # Call the interpreter using the main `self.call` method.
-                # self.call will parse this new command string and invoke skrip.py correctly,
-                # which will then execute the contents of the target script file.
-                return await self.call(io, shlex.join(interpreter_full_command))
+                # We resolve the interpreter path and check if it's a valid Python module.
+                # This logic is a simplified version of what's in `pipeline.py`.
+                interpreter_path = join('/bin', interpreter)
+                sandboxed_py_path = self.box(f'{interpreter_path}.py', io_context=io)
+
+                if exists(sandboxed_py_path) and isfile(sandboxed_py_path):
+                    try:
+                        modname_for_pymod = interpreter_path.strip("/").replace("/", ".")
+                        py_mod = self.pymod(modname_for_pymod, sandboxed_py_path)
+                        if py_mod and hasattr(py_mod, 'iocall'):
+                            # Execute the interpreter's iocall method directly.
+                            return await py_mod.iocall(io, script_and_args_for_interpreter)
+                        else:
+                            await io.error(f"!! interpreter '{interpreter}' is not a valid module with iocall.")
+                            return False
+                    except Exception as e:
+                        await io.error(f"!! exception calling interpreter '{interpreter}': {e}")
+                        traceback.print_exc()
+                        return False
+                else:
+                    await io.error(f"!! interpreter not found or not a Python module: {interpreter_path}.py")
+                    return False
+                # --- END FIX ---
 
             else:
                 await io.error(f'!! bad shebang: {path}')
@@ -594,6 +831,11 @@ class IOSK:
 
     async def send(self, io:Context, dev:str, data):
         """Send data to device."""
+        if dev.startswith('network:'):
+            if self.port:
+                await self.port.send_to_client(io.user, data)
+            return
+
         if not dev.startswith('/dev/'):
             await io.error(f'!! not a device: {dev}')
             return False
@@ -615,6 +857,16 @@ class IOSK:
 
     async def recv(self, io:Context, dev:str, prompt=None):
         """Receive data from device."""
+        if dev.startswith('network:'):
+            if prompt and self.port:
+                await self.port.send_to_client(io.user, prompt)
+
+            if hasattr(io, 'network_input_queue'):
+                return await io.network_input_queue.get()
+            else:
+                await io.error("!! network user has no input queue.")
+                raise EOFError
+
         if not dev.startswith('/dev/'):
             await io.error(f'!! not a device: {dev}')
             return None
@@ -698,7 +950,7 @@ class IOSK:
                 device_path = io.dev
                 if device_path not in self.device_tpm_trackers:
                     self.device_tpm_trackers[device_path] = []
-                
+
                 self.device_tpm_trackers[device_path].append((datetime.now(), total_tokens))
                 # Pruning of old entries is handled by _get_current_tpm before the next trip.
         except Exception as e:

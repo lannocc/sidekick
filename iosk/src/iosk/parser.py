@@ -23,6 +23,54 @@ class CommandLineParser:
         """
         self.os = iosk_kernel # Reference to the IOSK kernel instance
 
+    def _add_spaces_around_operators(self, text: str) -> str:
+        """
+        Adds spaces around unquoted, unescaped `|`, `>`, and `>>` operators.
+        This is a pre-processing step for shlex.split to ensure these operators
+        are treated as separate tokens.
+        """
+        result = []
+        in_single_quotes = False
+        in_double_quotes = False
+        is_escaped = False  # Tracks if the character *after* a backslash should be treated literally
+
+        i = 0
+        while i < len(text):
+            char = text[i]
+
+            if is_escaped:
+                result.append(char)
+                is_escaped = False
+                i += 1
+                continue
+
+            if char == '\\' and not in_single_quotes:
+                is_escaped = True
+                result.append(char)
+                i += 1
+                continue
+
+            if char == "'" and not in_double_quotes:
+                in_single_quotes = not in_single_quotes
+
+            if char == '"' and not in_single_quotes:
+                in_double_quotes = not in_double_quotes
+
+            if not in_single_quotes and not in_double_quotes:
+                if text[i:i+2] == '>>':
+                    result.append(' >> ')
+                    i += 2
+                    continue
+                if char in ('>', '|'):
+                    result.append(f' {char} ')
+                    i += 1
+                    continue
+
+            result.append(char)
+            i += 1
+
+        return "".join(result)
+
     async def _perform_command_substitution(self, io: 'Context', text: str) -> str:
         """
         Performs command substitution (`...` and $(...)) on a string.
@@ -255,7 +303,8 @@ class CommandLineParser:
         1. Command Substitution
         2. Variable Expansion
         3. Comment Stripping
-        4. Tokenization using shlex.
+        4. Add spaces around operators to prepare for shlex
+        5. Tokenization using shlex.
         Returns a list of arguments (argv) or None if parsing fails.
         """
         # Step 1: Command Substitution (e.g., `cmd` or $(cmd))
@@ -267,12 +316,15 @@ class CommandLineParser:
         # Step 3: Comment Stripping
         comment_stripped_line = self._strip_comments(expanded_command_line)
 
-        # Step 4: Tokenization using shlex.split
+        # Step 4: Add spaces around operators to help shlex tokenize correctly.
+        spaced_line = self._add_spaces_around_operators(comment_stripped_line)
+
+        # Step 5: Tokenization using shlex.split
         # shlex.split handles quotes and escapes in the final string,
         # now that comments are pre-stripped.
         try:
             # comments=False (default) is crucial here to ensure `\` escapes are processed by shlex
-            argv = shlex.split(comment_stripped_line, comments=False)
+            argv = shlex.split(spaced_line, comments=False)
             return argv
         except ValueError as e:
             await io.error(f"!! parse error: {e}")

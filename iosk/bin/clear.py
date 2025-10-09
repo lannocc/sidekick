@@ -10,7 +10,7 @@ async def iocall(io, argv):
     leaving only the 'clear' command itself as the first and only entry.
     This effectively provides a clean slate for the bot's context.
 
-    For interactive console/terminal users, this command clears the screen.
+    For interactive console users, this command clears the screen.
     """
     if '--help' in argv:
         await io.print(iocall.__doc__)
