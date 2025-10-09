@@ -1,12 +1,13 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
+from . import UNIX
+from .io import print_flush as print
+
 import sys
 import asyncio
 from asyncio.exceptions import CancelledError
-
-from . import UNIX
-from .io import print_flush as print
+import logging
 
 def run(args=sys.argv[1:]):
     """
@@ -17,6 +18,10 @@ def run(args=sys.argv[1:]):
     if len(args) != 1 or args[0].startswith('-'):
         print("Usage: iosk <root_directory>")
         sys.exit(1)
+    
+    # Set the logging level for the google-genai library to WARNING to suppress INFO messages
+    logging.getLogger('google_genai').setLevel(logging.WARNING)
+    logging.getLogger('httpx').setLevel(logging.WARNING)
     
     root_directory = args[0]
 

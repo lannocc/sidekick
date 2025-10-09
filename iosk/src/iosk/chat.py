@@ -140,7 +140,7 @@ class AIMessenger:
             else:
                 # We have a valid DM
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                from_addr = f"{from_user}@{self.os.hostname}"
+                remote_from_addr = f"{from_user}.{self.os.hostname}"
                 
                 remote_recipients = {} # host -> [user1, user2]
                 local_recipients = []
@@ -158,7 +158,7 @@ class AIMessenger:
                 for host, users in remote_recipients.items():
                     payload = {
                         "type": "direct_message",
-                        "from_addr": from_addr,
+                        "from_addr": remote_from_addr,
                         "to_users": users,
                         "content": actual_msg
                     }
@@ -170,7 +170,8 @@ class AIMessenger:
                     if user in self.os.users:
                         uio = self.os.users[user]
                         if not uio.paused:
-                            dm_msg = f'\n[{from_addr} -> me {now}] << {actual_msg}'
+                            # For local recipients, the sender is local, so don't show host.
+                            dm_msg = f'\n[{from_user} -> me {now}] << {actual_msg}'
                             await uio.print(dm_msg)
 
                 # Send confirmation to sender
@@ -185,19 +186,19 @@ class AIMessenger:
         # --- Room Broadcast Handling ---
         if self.active_room:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            from_addr = f"{from_user}@{self.os.hostname}"
+            remote_from_addr = f"{from_user}.{self.os.hostname}"
             
             # Broadcast to local participants
-            local_msg = f'\n[{from_addr} {now}] << {msg}'
+            # For local participants, the sender is also local, so don't show host.
+            local_msg = f'\n[{from_user} {now}] << {msg}'
             for user in self.local_room_participants:
-                if user == from_user: continue
                 if user in self.os.users:
                     await self.os.users[user].print(local_msg)
             
             # Broadcast to network peers
             payload = {
                 "type": "room_message",
-                "from_addr": from_addr,
+                "from_addr": remote_from_addr,
                 "room_name": self.active_room,
                 "content": msg
             }
@@ -217,7 +218,7 @@ class AIMessenger:
 
         self.active_room = room_name
         self.room_owner = io.user
-        self.local_room_participants = {io.user}
+        self.local_room_participants = set(self.os.users.keys())
 
         room_dir = join('/var/room', room_name)
         owner_file = join(room_dir, 'owner')
@@ -306,10 +307,17 @@ class AIMessenger:
         
         if msg_type == "room_message":
             if self.active_room and message.get("room_name") == self.active_room:
-                from_addr = message.get("from_addr", "unknown@unknown")
+                from_addr = message.get("from_addr", "unknown.unknown")
                 content = message.get("content", "")
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                local_msg = f'\n[{from_addr} {now}] << {content}'
+
+                display_addr = from_addr
+                if '.' in from_addr:
+                    r_user, r_host = from_addr.split('.', 1)
+                    if r_host == self.os.hostname:
+                        display_addr = r_user
+                
+                local_msg = f'\n[{display_addr} {now}] << {content}'
                 
                 for user in self.local_room_participants:
                     if user in self.os.users:
@@ -317,16 +325,21 @@ class AIMessenger:
         
         elif msg_type == "direct_message":
             to_users = message.get("to_users", [])
-            from_addr = message.get("from_addr", "unknown@unknown")
+            from_addr = message.get("from_addr", "unknown.unknown")
             content = message.get("content", "")
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
+            display_addr = from_addr
+            if '.' in from_addr:
+                r_user, r_host = from_addr.split('.', 1)
+                if r_host == self.os.hostname:
+                    display_addr = r_user
+
             for user in to_users:
-                if user in self.local_room_participants:
-                    if user in self.os.users:
-                        uio = self.os.users[user]
-                        dm_msg = f'\n[{from_addr} -> me {now}] << {content}'
-                        await uio.print(dm_msg)
+                if user in self.os.users:
+                    uio = self.os.users[user]
+                    dm_msg = f'\n[{display_addr} -> me {now}] << {content}'
+                    await uio.print(dm_msg)
 
 class Engagement:
     CODE = 0 # per-run code instance counter
@@ -451,12 +464,19 @@ class Engagement:
                         + banking \
                         + '\n=== END   CORE RULES/MEMORY ===\n'
 
+                # Determine the correct prompt character for the AI's context
+                # This mirrors the logic in kernel.interactive
+                if self.io.os.chat and self.io.os.chat.active_room:
+                    prompt_char = '>>'
+                else:
+                    prompt_char = '$'
+
                 prompt_text_for_trip = pre + banking \
                    + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
                    + prompt \
                    + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
                    + '\n' + post \
-                   + f'\n[{self.io.user} {self.io.pwd}] >> '
+                   + f'\n[{self.io.user} {self.io.pwd}] {prompt_char} '
 
                 # --- Update Running Token Totals ---
                 try:

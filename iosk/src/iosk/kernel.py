@@ -363,8 +363,10 @@ class IOSK:
             await self.exec(io, skrc_global_path)
 
         # Execute user-specific .skrc
-        skrc_user_path = join('/home', user, '.skrc')
-        if exists(self.box(skrc_user_path)):
+        # The user's PWD is set to their home directory (e.g., /root, /home/user)
+        # So we can construct the .skrc path relative to PWD.
+        skrc_user_path = join(io.pwd, '.skrc')
+        if await self.exists(io, skrc_user_path): # Use self.exists as it handles virtual paths properly
             await self.exec(io, skrc_user_path)
 
         # Announce user login to network peers
@@ -375,6 +377,9 @@ class IOSK:
                 'user': user,
                 'host': self.hostname
             })
+
+        if self.chat and self.chat.active_room:
+            await self.chat.add_to_room(io)
 
         if interactive:
             await self.interactive(io)
@@ -522,9 +527,10 @@ class IOSK:
         skrc_global_path = self.SKRC
         if exists(self.box(skrc_global_path)):
             await self.exec(io, skrc_global_path)
-        
-        skrc_user_path = join('/home', username, '.skrc')
-        if exists(self.box(skrc_user_path)):
+
+        # Use the user's PWD to find their .skrc file
+        skrc_user_path = join(io.pwd, '.skrc')
+        if await self.exists(io, skrc_user_path): # Use self.exists for consistency
             await self.exec(io, skrc_user_path)
 
         if self.port:
@@ -534,6 +540,9 @@ class IOSK:
                 'user': username,
                 'host': self.hostname
             })
+        
+        if self.chat and self.chat.active_room:
+            await self.chat.add_to_room(io)
         
         asyncio.create_task(self.interactive(io))
         
