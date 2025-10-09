@@ -220,6 +220,11 @@ class AIMessenger:
         self.room_owner = io.user
         self.local_room_participants = set(self.os.users.keys())
 
+        # Update the kernel's network_rooms state for local users
+        for user in self.local_room_participants:
+            user_addr = f"{user}.{self.os.hostname}"
+            self.os.network_rooms[user_addr] = room_name
+
         room_dir = join('/var/room', room_name)
         owner_file = join(room_dir, 'owner')
         topic_file = join(room_dir, 'topic')
@@ -262,6 +267,14 @@ class AIMessenger:
         await self.send(self.os.hostname, closing_msg, sys=True)
 
         closed_room_name = self.active_room
+
+        # Update the kernel's network_rooms state for local users
+        users_in_closed_room = list(self.local_room_participants) # copy before clearing
+        for user in users_in_closed_room:
+            user_addr = f"{user}.{self.os.hostname}"
+            if user_addr in self.os.network_rooms:
+                del self.os.network_rooms[user_addr]
+
         self.active_room = None
         self.room_topic = None
         self.room_owner = None
@@ -281,6 +294,10 @@ class AIMessenger:
         
         self.local_room_participants.add(target_io.user)
 
+        # Update network_rooms for the new user
+        user_addr = f"{target_io.user}.{self.os.hostname}"
+        self.os.network_rooms[user_addr] = self.active_room
+
         motd_file = join('/var/room', self.active_room, 'motd')
         motd = await self.os.get(target_io, motd_file)
         if motd:
@@ -296,11 +313,16 @@ class AIMessenger:
     async def remove_from_room(self, user_name: str):
         if user_name in self.local_room_participants:
             self.local_room_participants.remove(user_name)
+
+            # Update network_rooms for the departing user
+            user_addr = f"{user_name}.{self.os.hostname}"
+            if user_addr in self.os.network_rooms:
+                del self.os.network_rooms[user_addr]
+
             # Announce departure
             departure_msg = f":: {user_name} has left the room."
             for user in self.local_room_participants:
-                if user in self.os.users:
-                    await self.os.users[user].print(departure_msg)
+                await self.os.users[user].print(departure_msg)
 
     async def handle_network_message(self, message: dict):
         msg_type = message.get("type")

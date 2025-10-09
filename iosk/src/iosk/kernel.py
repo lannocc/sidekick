@@ -574,7 +574,6 @@ class IOSK:
             if hasattr(io, 'network_input_queue') and isinstance(io.network_input_queue, asyncio.Queue):
                 await io.network_input_queue.put(data)
 
-    # ADDED: New method to handle incoming state updates from the network
     async def update_network_state(self, message: dict):
         """Processes state update messages from peers."""
         msg_type = message.get("type")
@@ -593,17 +592,35 @@ class IOSK:
             elif action == "logout":
                 if user_addr in self.network_users:
                     del self.network_users[user_addr] # Remove user
+                # Also remove from rooms dict if they were in one
+                if user_addr in self.network_rooms:
+                    del self.network_rooms[user_addr]
+
+        elif msg_type == "room_update":
+            action = message.get("action")
+            host = message.get("host")
+            room_name = message.get("name")
+
+            if not all([action, host, room_name]):
+                return # Malformed message
+
+            # Find all users associated with the host that sent the update
+            users_on_host = [
+                user_addr for user_addr in self.network_users
+                if user_addr.endswith(f'.{host}')
+            ]
+
+            if action == "open":
+                for user_addr in users_on_host:
+                    self.network_rooms[user_addr] = room_name
+            elif action == "close":
+                for user_addr in users_on_host:
+                    if user_addr in self.network_rooms:
+                        del self.network_rooms[user_addr]
 
         elif msg_type == "state_sync":
             # This handles the initial sync of users from a new peer
             users = message.get("users", [])
-            host = message.get("host")
-            if not all([users, host]):
-                return
-
-            for user in users:
-                user_addr = f"{user}.{host}"
-                self.network_users[user_addr] = {}
 
     ###
     ### COMMAND
