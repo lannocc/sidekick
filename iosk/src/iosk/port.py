@@ -247,6 +247,7 @@ class PortManager:
                 await websocket.close(1008, reason)
                 return None
 
+
             # ADDED: Process incoming user list and sync state
             peer_users = message.get("users", [])
             await self.kernel.update_network_state({
@@ -255,18 +256,21 @@ class PortManager:
                 "users": peer_users
             })
 
+            # Capture the list of peers BEFORE adding the new one to prevent a race condition.
+            peers_before_add = list(self.peers.keys())
+
             self.peers[hostname] = websocket
-            
+
             # MODIFIED: Send back our user list in the ack
             await websocket.send(json.dumps({
-                "type": "handshake_ack", 
-                "status": "ok", 
+                "type": "handshake_ack",
+                "status": "ok",
                 "hostname": self.kernel.hostname,
                 "users": list(self.kernel.users.keys()), # ADDED
-                "peers": list(self.peers.keys())
+                "peers": peers_before_add
             }))
             return Connection(websocket=websocket, type='peer', hostname=hostname)
-        
+
         elif conn_id == "client":
             username = message.get("user")
             if not username:
