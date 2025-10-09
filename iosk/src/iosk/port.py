@@ -91,12 +91,19 @@ class PortManager:
             try:
                 websocket = await websockets.connect(host_uri)
                 
-                # MODIFIED: Send our handshake with current user list
+                # Get current room info to include in handshake
+                room_info = {}
+                if self.kernel.chat and self.kernel.chat.active_room:
+                    room_info['name'] = self.kernel.chat.active_room
+                    room_info['topic'] = self.kernel.chat.room_topic
+
+                # MODIFIED: Send our handshake with current user and room list
                 handshake_payload = {
                     "type": "handshake",
                     "id": "peer",
                     "hostname": self.kernel.hostname,
-                    "users": list(self.kernel.users.keys()) # ADDED: Send our user list
+                    "users": list(self.kernel.users.keys()),
+                    "room": room_info
                 }
                 await websocket.send(json.dumps(handshake_payload))
 
@@ -129,12 +136,14 @@ class PortManager:
                     await websocket.close()
                     return
                 
-                # ADDED: Process the user list from the peer
+                # ADDED: Process the user and room list from the peer
                 peer_users = ack_message.get("users", [])
+                peer_room_info = ack_message.get("room", {})
                 await self.kernel.update_network_state({
                     "type": "state_sync",
                     "host": peer_hostname,
-                    "users": peer_users
+                    "users": peer_users,
+                    "room": peer_room_info
                 })
                 
                 # 3. Handshake successful, set up connection metadata and state
@@ -248,25 +257,34 @@ class PortManager:
                 return None
 
 
-            # ADDED: Process incoming user list and sync state
+            # ADDED: Process incoming user and room list and sync state
             peer_users = message.get("users", [])
+            peer_room_info = message.get("room", {})
             await self.kernel.update_network_state({
                 "type": "state_sync",
                 "host": hostname,
-                "users": peer_users
+                "users": peer_users,
+                "room": peer_room_info
             })
 
             # Capture the list of peers BEFORE adding the new one to prevent a race condition.
             peers_before_add = list(self.peers.keys())
 
             self.peers[hostname] = websocket
+            
+            # Get local room info for the ack
+            local_room_info = {}
+            if self.kernel.chat and self.kernel.chat.active_room:
+                local_room_info['name'] = self.kernel.chat.active_room
+                local_room_info['topic'] = self.kernel.chat.room_topic
 
-            # MODIFIED: Send back our user list in the ack
+            # MODIFIED: Send back our user and room list in the ack
             await websocket.send(json.dumps({
                 "type": "handshake_ack",
                 "status": "ok",
                 "hostname": self.kernel.hostname,
-                "users": list(self.kernel.users.keys()), # ADDED
+                "users": list(self.kernel.users.keys()),
+                "room": local_room_info,
                 "peers": peers_before_add
             }))
             return Connection(websocket=websocket, type='peer', hostname=hostname)

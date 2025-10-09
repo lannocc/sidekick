@@ -619,8 +619,26 @@ class IOSK:
                         del self.network_rooms[user_addr]
 
         elif msg_type == "state_sync":
-            # This handles the initial sync of users from a new peer
+            # This handles the initial sync of users and room state from a new peer
+            host = message.get("host")
             users = message.get("users", [])
+            room_info = message.get("room", {})
+            
+            if not host: # users list can be empty, but host is required
+                return # Malformed sync message
+
+            # Sync users
+            for user in users:
+                user_addr = f"{user}.{host}"
+                if user_addr not in self.network_users:
+                    self.network_users[user_addr] = {} # Add the user
+            
+            # Sync room state for those users
+            room_name = room_info.get('name')
+            if room_name:
+                users_on_host = [u for u_addr, u in self.network_users.items() if u_addr.endswith(f'.{host}')]
+                for user_addr in users_on_host:
+                    self.network_rooms[user_addr] = room_name
 
     ###
     ### COMMAND
