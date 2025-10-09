@@ -2,6 +2,20 @@ Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
 
+v0.4.0
+======
+
+Date: October 9, 2025
+
+    * Mesh networking support with rooms (aka netroom).
+    * New room commands: `room`, `rooms`, `clroom`, `topic`.
+    * New general commands: `hostname`, `login`, `logout`.
+    * New network commands: `port`, `mesh`, `unmesh`, `on`, `where`, `whereami`.
+    * Add a `watch` command.
+    * Improved shell parser doesn't need spaces around pipe, redirection, etc.
+    * Modified startup now always logs in as root.
+
+
 v0.3.6
 ======
 
