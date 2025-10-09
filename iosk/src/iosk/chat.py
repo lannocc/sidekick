@@ -20,33 +20,13 @@ class AIMessenger:
     def __init__(self, iosk):
         iosk.chat = self
         self.os = iosk
-        self.me = None
-        self.device = None
-
         self.engagements = { }
 
-    async def start(self, handle=None, device=None):
-        print()
-        print('Welcome to the IOSK AI Messenger.')
-
-        if not handle: handle = 'root'
-        print(f'You are the super-user: {handle}')
-        self.me = handle
-        self.device = device
-        return handle
-
-    async def run(self):
-        await self.os.ready.wait()
-        if self.os.halt.is_set(): return
-
-        io = await self.join(self.me, dev=self.device)
-
-        try:
-            await self.os.interactive(io)
-
-        finally:
-            await self.leave(io)
-            #self.me = None
+        # Netroom state attributes
+        self.active_room = None
+        self.room_topic = None
+        self.room_owner = None
+        self.local_room_participants = set()
 
     async def _setup_chat_context(self, io):
         """Executes preamble, caches it, and calculates initial token counts."""
@@ -122,6 +102,8 @@ class AIMessenger:
         return io
 
     async def leave(self, io):
+        await self.remove_from_room(io.user)
+
         if io.user in self.engagements:
             self.engagements[io.user].enabled = False
             del self.engagements[io.user]
@@ -132,8 +114,15 @@ class AIMessenger:
     async def send(self, from_user, msg, sys=False):
         if not msg: return
 
+        # --- System Message Handling (Broadcast to all local users) ---
+        if sys:
+            for user, uio in self.os.users.items():
+                if uio.paused: continue
+                await uio.print(msg)
+            return
+
         # --- Direct Message Handling ---
-        if not sys and msg.startswith('@'):
+        if msg.startswith('@'):
             parts = msg.split(' ')
             recipients = []
             msg_start_index = 0
@@ -142,65 +131,202 @@ class AIMessenger:
                     recipients.append(part[1:])
                     msg_start_index = i + 1
                 else:
-                    # The first non-@ word marks the end of the recipient list
-                    break
+                    break # End of recipient list
 
             actual_msg = ' '.join(parts[msg_start_index:]).strip()
-
-            # Proceed only if we have recipients and a message to send
-            if recipients and actual_msg:
+            if not (recipients and actual_msg):
+                 # Not a valid DM, treat as a regular message
+                 pass
+            else:
+                # We have a valid DM
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                from_addr = f"{from_user}@{self.os.hostname}"
+                
+                remote_recipients = {} # host -> [user1, user2]
+                local_recipients = []
 
-                # Send formatted message to each recipient
-                for user in recipients:
-                    if user == from_user: continue # Sender gets a confirmation below
+                for r_addr in recipients:
+                    if '.' in r_addr:
+                        r_user, r_host = r_addr.split('.', 1)
+                        if r_host not in remote_recipients:
+                            remote_recipients[r_host] = []
+                        remote_recipients[r_host].append(r_user)
+                    else:
+                        local_recipients.append(r_addr)
+                
+                # Send to remote users via PortManager
+                for host, users in remote_recipients.items():
+                    payload = {
+                        "type": "direct_message",
+                        "from_addr": from_addr,
+                        "to_users": users,
+                        "content": actual_msg
+                    }
+                    await self.os.port.route_message(host, payload)
+
+                # Send to local users
+                for user in local_recipients:
+                    if user == from_user: continue
                     if user in self.os.users:
                         uio = self.os.users[user]
-
-                        # --- NEW LOGIC: Interrupt sleep ---
-                        pids_to_cancel = []
-                        # Create a copy of items to avoid runtime errors during iteration
-                        for pid, process in list(self.os.process_table.items()):
-                            if process.user == user and process.command_str.startswith('sleep'):
-                                pids_to_cancel.append(pid)
-
-                        if pids_to_cancel:
-                            for pid in pids_to_cancel:
-                                process = self.os.process_table.get(pid)
-                                if process:
-                                    process.task.cancel()
-                                    # The CancelledError handler in pipeline.py will print a 'cancelled' message.
-                                    # We add a more specific message here.
-                                    await uio.print(":: Your sleep was interrupted by a direct message.")
-                        # --- END NEW LOGIC ---
-
                         if not uio.paused:
-                            dm_msg_for_recipient = f'\n[{from_user} -> me {now}] << {actual_msg}'
-                            # Ring the terminal bell if the recipient is the console user
-                            if uio.dev == self.os.CONSOLE_DEV:
-                                dm_msg_for_recipient = '\a' + dm_msg_for_recipient
-                            await uio.print(dm_msg_for_recipient)
+                            dm_msg = f'\n[{from_addr} -> me {now}] << {actual_msg}'
+                            await uio.print(dm_msg)
 
-                # Send a confirmation copy to the sender
+                # Send confirmation to sender
                 sender_io = self.os.users.get(from_user)
                 if sender_io:
                     recipient_str = ', '.join(recipients)
-                    dm_msg_for_sender = f'\n[me -> {recipient_str} {now}] << {actual_msg}'
-                    await sender_io.print(dm_msg_for_sender)
+                    dm_conf = f'\n[me -> {recipient_str} {now}] << {actual_msg}'
+                    await sender_io.print(dm_conf)
+                
+                return # End of DM handling
 
-                return # End of direct message handling
-
-        # --- Broadcast/System Message Handling ---
-        if not sys:
+        # --- Room Broadcast Handling ---
+        if self.active_room:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            msg = f'\n[{from_user} {now}] << {msg}'
+            from_addr = f"{from_user}@{self.os.hostname}"
+            
+            # Broadcast to local participants
+            local_msg = f'\n[{from_addr} {now}] << {msg}'
+            for user in self.local_room_participants:
+                if user == from_user: continue
+                if user in self.os.users:
+                    await self.os.users[user].print(local_msg)
+            
+            # Broadcast to network peers
+            payload = {
+                "type": "room_message",
+                "from_addr": from_addr,
+                "room_name": self.active_room,
+                "content": msg
+            }
+            await self.os.port.broadcast_to_peers(payload)
+        else:
+            # No active room, inform the user
+            sender_io = self.os.users.get(from_user)
+            if sender_io:
+                await sender_io.error("!! No active room. Use 'room <name>' to start one.")
 
-        for user, uio in self.os.users.items():
-            # System messages go to everyone. User messages go to everyone else.
-            if not sys and user == from_user: continue
-            if uio.paused: continue
-            await uio.print(msg)
+    # --- Netroom Lifecycle API ---
 
+    async def open_room(self, io, room_name: str) -> bool:
+        if self.active_room:
+            await io.error(f"!! A room ('{self.active_room}') is already active on this system.")
+            return False
+
+        self.active_room = room_name
+        self.room_owner = io.user
+        self.local_room_participants = {io.user}
+
+        room_dir = join('/var/room', room_name)
+        owner_file = join(room_dir, 'owner')
+        topic_file = join(room_dir, 'topic')
+        motd_file = join(room_dir, 'motd')
+
+        if not await self.os.exists(io, room_dir):
+            await self.os.create_dir(io, room_dir, parents=True)
+            await self.os.create(io, owner_file)
+            # This is a bit awkward. create+write would be better.
+            with open(self.os.box(owner_file), 'w') as f:
+                f.write(io.user)
+
+        self.room_topic = await self.os.get(io, topic_file)
+        motd = await self.os.get(io, motd_file)
+
+        await io.print(f":: room '{room_name}' opened.")
+        if motd:
+            await io.print(motd)
+
+        await self.os.port.broadcast_to_peers({
+            'type': 'room_update',
+            'action': 'open',
+            'name': self.active_room,
+            'host': self.os.hostname,
+            'owner': self.room_owner,
+            'topic': self.room_topic
+        })
+        return True
+
+    async def close_room(self, io) -> bool:
+        if not self.active_room:
+            await io.error("!! No room is currently active.")
+            return False
+        
+        if not io.su and io.user != self.room_owner:
+            await io.error(f"!! Permission denied. Only the owner ('{self.room_owner}') or a superuser can close the room.")
+            return False
+
+        closing_msg = f":: room '{self.active_room}' is closing."
+        await self.send(self.os.hostname, closing_msg, sys=True)
+
+        closed_room_name = self.active_room
+        self.active_room = None
+        self.room_topic = None
+        self.room_owner = None
+        self.local_room_participants.clear()
+        
+        await io.print(f":: room '{closed_room_name}' closed.")
+
+        await self.os.port.broadcast_to_peers({
+            'type': 'room_update', 'action': 'close', 'name': closed_room_name, 'host': self.os.hostname
+        })
+        return True
+
+    async def add_to_room(self, target_io) -> bool:
+        if not self.active_room:
+            await target_io.error("!! Cannot join: no room is active.")
+            return False
+        
+        self.local_room_participants.add(target_io.user)
+
+        motd_file = join('/var/room', self.active_room, 'motd')
+        motd = await self.os.get(target_io, motd_file)
+        if motd:
+            await target_io.print(motd)
+        
+        arrival_msg = f":: {target_io.user} has joined the room."
+        for user in self.local_room_participants:
+            if user != target_io.user and user in self.os.users:
+                await self.os.users[user].print(arrival_msg)
+        
+        return True
+    
+    async def remove_from_room(self, user_name: str):
+        if user_name in self.local_room_participants:
+            self.local_room_participants.remove(user_name)
+            # Announce departure
+            departure_msg = f":: {user_name} has left the room."
+            for user in self.local_room_participants:
+                if user in self.os.users:
+                    await self.os.users[user].print(departure_msg)
+
+    async def handle_network_message(self, message: dict):
+        msg_type = message.get("type")
+        
+        if msg_type == "room_message":
+            if self.active_room and message.get("room_name") == self.active_room:
+                from_addr = message.get("from_addr", "unknown@unknown")
+                content = message.get("content", "")
+                now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                local_msg = f'\n[{from_addr} {now}] << {content}'
+                
+                for user in self.local_room_participants:
+                    if user in self.os.users:
+                        await self.os.users[user].print(local_msg)
+        
+        elif msg_type == "direct_message":
+            to_users = message.get("to_users", [])
+            from_addr = message.get("from_addr", "unknown@unknown")
+            content = message.get("content", "")
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            for user in to_users:
+                if user in self.local_room_participants:
+                    if user in self.os.users:
+                        uio = self.os.users[user]
+                        dm_msg = f'\n[{from_addr} -> me {now}] << {content}'
+                        await uio.print(dm_msg)
 
 class Engagement:
     CODE = 0 # per-run code instance counter
@@ -489,4 +615,3 @@ class Engagement:
 
         # Remove the original markdown block from the text that will be processed for chat broadcast.
         return text.replace(original_block, '')
-

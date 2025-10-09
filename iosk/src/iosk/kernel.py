@@ -4,6 +4,8 @@
 from .io import Context, Capture, print_flush as print
 from .parser import CommandLineParser
 from .pipeline import CommandPipelineExecutor
+from .chat import AIMessenger
+from .port import PortManager
 
 from binaryornot.check import is_binary
 import tiktoken
@@ -52,7 +54,15 @@ class IOSK:
 
         self.system = None # Context
         self.users = { } # handle:Context
-        self.chat = None
+        
+        # Netroom subsystems
+        self.port: PortManager = None
+        self.chat: AIMessenger = None
+
+        # Netroom state
+        self.hostname: str = 'localhost'
+        self.network_users: dict = {}
+        self.network_rooms: dict = {}
 
         self.parser = CommandLineParser(self)
         self.pipeline_executor = CommandPipelineExecutor(self) # Instantiate the executor
@@ -123,6 +133,20 @@ class IOSK:
 
             await io.print(f'IOSK boot number {self.BOOT}...')
 
+        if not fail:
+            # Read hostname
+            hostname_path = self.box('/etc/hostname')
+            if exists(hostname_path):
+                with open(hostname_path, 'r') as f:
+                    self.hostname = f.read().strip() or 'localhost'
+            else:
+                self.hostname = os.path.basename(os.path.abspath(self.root)) or 'localhost'
+            
+            # Instantiate subsystems
+            self.port = PortManager(self)
+            self.chat = AIMessenger(self)
+            await io.print(f'System hostname: {self.hostname}')
+
         if fail:
             if io: await io.error(f'!! {fail}')
             else: print(f'!! {fail}')
@@ -146,6 +170,9 @@ class IOSK:
         await self.halt.wait() # wait here for shutdown
         #-------------------------------------------------#
         await io.print(f'IOSK shutdown signal received...')
+
+        if self.port:
+            await self.port.stop()
 
         for user, uio in self.users.copy().items():
             disconnect = f':: {user} has been disconnected (shutdown)'
@@ -328,6 +355,15 @@ class IOSK:
         if exists(self.box(skrc_user_path)):
             await self.exec(io, skrc_user_path)
 
+        # Announce user login to network peers
+        if self.port:
+            await self.port.broadcast_to_peers({
+                'type': 'user_update',
+                'action': 'login',
+                'user': user,
+                'host': self.hostname
+            })
+
         if interactive:
             await self.interactive(io)
 
@@ -339,7 +375,16 @@ class IOSK:
             try:
                 # This outer try handles Ctrl+C when idle at the prompt
                 try:
-                    while (text := await io.input(f'[{io.user} {io.pwd}] >> ')) is None:
+                    # Determine prompt character based on room status
+                    if self.chat and self.chat.active_room:
+                        prompt_char = '>>'
+                    else:
+                        prompt_char = '$'
+                    
+                    # Construct the prompt
+                    prompt_str = f'[{io.user} {io.pwd}] {prompt_char} '
+
+                    while (text := await io.input(prompt=prompt_str)) is None:
                         # non-blocking inputs return None until data
                         delay = (datetime.now() - start).total_seconds()
                         if delay < 0.1:
@@ -378,11 +423,94 @@ class IOSK:
             return False
 
         await self.system.print(f'IOSK logout: {io.user}')
+        
+        user_to_logout = io.user
+        del self.users[user_to_logout]
+
         if disconnect:
-            if self.chat: await self.chat.send(io.user, disconnect, sys=True)
+            if self.chat: await self.chat.send(user_to_logout, disconnect, sys=True)
             else: await io.print(disconnect)
-        del self.users[io.user]
+
+        # Announce user logout to network peers
+        if self.port:
+            await self.port.broadcast_to_peers({
+                'type': 'user_update',
+                'action': 'logout',
+                'user': user_to_logout,
+                'host': self.hostname
+            })
+        
         return True
+
+    async def login_network_user(self, username, websocket):
+        """Called by PortManager to log in a user from a network client."""
+        await self.ready.wait()
+        if self.halt.is_set(): return None
+
+        if username in self.users:
+            await self.system.error(f"!! login failed: user '{username}' already logged in.")
+            return None
+        
+        device_path = f"network:{id(websocket)}"
+        
+        io = self.system.fork()
+        io.login_time = datetime.now()
+        io.banks = {}
+        io.log = Capture.log(self, join(self.USER_LOG, username), True)
+        io.dev = device_path
+        io.user = username
+        io.su = False
+        io.base = True
+        io.bot = False
+        io.network_input_queue = asyncio.Queue()
+        self.users[username] = io
+
+        home_dir_virtual = f'/home/{username}'
+        home_dir_host = self.box(home_dir_virtual, io_context=io)
+        if not os.path.exists(home_dir_host):
+            try:
+                os.makedirs(home_dir_host)
+                skel_skrc_path = self.SKEL_SKRC
+                user_skrc_path = join(home_dir_virtual, '.skrc')
+                if await self.exists(io, skel_skrc_path):
+                    await self.copy(io, skel_skrc_path, user_skrc_path)
+            except Exception as e:
+                await self.system.error(f"!! failed to create home directory {home_dir_virtual}: {e}")
+        
+        io.pwd = home_dir_virtual
+        
+        skrc_global_path = self.SKRC
+        if exists(self.box(skrc_global_path)):
+            await self.exec(io, skrc_global_path)
+        
+        skrc_user_path = join('/home', username, '.skrc')
+        if exists(self.box(skrc_user_path)):
+            await self.exec(io, skrc_user_path)
+
+        if self.port:
+            await self.port.broadcast_to_peers({
+                'type': 'user_update',
+                'action': 'login',
+                'user': username,
+                'host': self.hostname
+            })
+        
+        asyncio.create_task(self.interactive(io))
+        
+        return io
+
+    async def logout_network_user(self, username):
+        """Called by PortManager when a client disconnects."""
+        if username in self.users:
+            io = self.users[username]
+            await self.logout(io, disconnect=f':: {username} has disconnected (network)')
+    
+    async def handle_client_input(self, username, data):
+        """Called by PortManager to feed input to a network user's session."""
+        if username in self.users:
+            io = self.users[username]
+            if hasattr(io, 'network_input_queue') and isinstance(io.network_input_queue, asyncio.Queue):
+                await io.network_input_queue.put(data)
 
     ###
     ### COMMAND
@@ -602,6 +730,11 @@ class IOSK:
 
     async def send(self, io:Context, dev:str, data):
         """Send data to device."""
+        if dev.startswith('network:'):
+            if self.port:
+                await self.port.send_to_client(io.user, data)
+            return
+
         if not dev.startswith('/dev/'):
             await io.error(f'!! not a device: {dev}')
             return False
@@ -623,6 +756,16 @@ class IOSK:
 
     async def recv(self, io:Context, dev:str, prompt=None):
         """Receive data from device."""
+        if dev.startswith('network:'):
+            if prompt and self.port:
+                await self.port.send_to_client(io.user, prompt)
+            
+            if hasattr(io, 'network_input_queue'):
+                return await io.network_input_queue.get()
+            else:
+                await io.error("!! network user has no input queue.")
+                raise EOFError
+
         if not dev.startswith('/dev/'):
             await io.error(f'!! not a device: {dev}')
             return None
