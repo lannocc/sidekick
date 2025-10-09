@@ -2,6 +2,8 @@ import os
 from os.path import join, isfile, exists, normpath
 import importlib, importlib.util
 
+SHELL_BUILTINS = ['exit', 'logout']
+
 async def iocall(io, argv):
     """Locate a command executable in the PATH.
 
@@ -23,6 +25,11 @@ async def iocall(io, argv):
         return False
 
     command_name = argv[0]
+
+    # First, check if the command is a shell built-in
+    if command_name in SHELL_BUILTINS:
+        await io.print(f"{command_name}: shell built-in command")
+        return True
 
     # List of potential virtual paths where the command might be found.
     # We follow IOSK.call's logic for prioritization: .py files first, then scripts.

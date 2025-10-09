@@ -230,4 +230,3 @@ class CommandPipelineExecutor:
             await io.error(f'!! exception calling {cmd}: {e}')
             traceback.print_exc()
             return False
-

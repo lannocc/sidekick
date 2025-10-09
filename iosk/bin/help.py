@@ -115,9 +115,9 @@ async def iocall(io, argv):
     if len(argv) == 1:
         command_name = argv[0]
 
-        # Special handling for 'exit'
-        if command_name == 'exit':
-            await io.print("Usage: exit\n\nExits the current IOSK session.")
+        # Special handling for built-in commands
+        if command_name in ('exit', 'logout'):
+            await io.print(f"Usage: {command_name}\n\nExits the current IOSK session.")
             return True
 
         # io.os.call is expected to handle execution, including error messages
@@ -133,3 +133,4 @@ async def iocall(io, argv):
     # If we reach here, it means invalid arguments were provided (e.g., `help cmd1 cmd2`)
     await io.error("!! help: too many arguments or unknown option. Use 'help --help' for usage.")
     return False
+

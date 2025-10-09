@@ -16,7 +16,7 @@ on the screen, clearing the screen before each execution. This is useful
 for monitoring changes over time.
 
 This command is only available to users on a console device
-(e.g., /dev/console, /dev/terminal).
+(e.g., /dev/console).
 
 Options:
   -n <seconds>   Specify the update interval. The command is executed every
@@ -25,8 +25,7 @@ Options:
                  command's output are stripped. This option preserves them.
   -h, --help     Display this help message.
 
-To exit, press any key (on /dev/terminal), press Ctrl-C, or use the 
-'kill' command on this process's PID.
+To exit, press Ctrl-C, or use the 'kill' command on this process's PID.
 """
 
 async def _wait_for_keypress(loop):
@@ -105,10 +104,6 @@ async def iocall(io, argv):
         await io.error("!! watch: this command is only available for console users.")
         return False
 
-    # FIX: Determine which console type we are on. /dev/console uses a simpler
-    # driver (aioconsole) that conflicts with the keypress detection logic.
-    is_simple_console = (io.dev == '/dev/console')
-
     # --- 3. Main Loop ---
     ansi_escape_re = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     clear_screen_code = "\033[H\033[2J"  # Move cursor home, then clear screen
@@ -125,7 +120,7 @@ async def iocall(io, argv):
             now_str = datetime.now().strftime('%a %b %d %H:%M:%S %Y')
             
             # Use a different exit message depending on the console type
-            exit_msg = "(Press Ctrl-C to exit)" if is_simple_console else "(Press any key to exit)"
+            exit_msg = "(Press Ctrl-C to exit)"
             header = f"Every {interval:.1f}s: {command_str} {exit_msg}    {now_str}\n\n"
             
             await io.output(header)
@@ -145,29 +140,10 @@ async def iocall(io, argv):
             # d. Print the captured output
             await io.output(output)
 
-            # e. Wait for the next interval OR for a key press
-            if is_simple_console:
-                # On /dev/console, just sleep and rely on Ctrl-C.
-                # The KeyboardInterrupt is handled by the outer try/except block.
-                await asyncio.sleep(interval)
-            else:
-                # On /dev/terminal, we can use the advanced keypress detection.
-                sleep_task = asyncio.create_task(asyncio.sleep(interval))
-                keypress_task = asyncio.create_task(_wait_for_keypress(loop))
-                
-                done, pending = await asyncio.wait(
-                    {sleep_task, keypress_task},
-                    return_when=asyncio.FIRST_COMPLETED
-                )
-
-                # Cancel the task that didn't finish to prevent it from running later
-                for task in pending:
-                    task.cancel()
-
-                # If the keypress task is the one that completed, break the loop.
-                if keypress_task in done:
-                    await io.output("\n:: Key pressed. Exiting watch.")
-                    break
+            # e. Wait for the next interval
+            # On /dev/console, just sleep and rely on Ctrl-C.
+            # The KeyboardInterrupt is handled by the outer try/except block.
+            await asyncio.sleep(interval)
 
     except asyncio.CancelledError:
         # This is the expected interruption from `kill` or `Ctrl+C` (via pipeline).

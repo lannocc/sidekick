@@ -1,3 +1,4 @@
+# src/iosk/cmd.py
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
@@ -48,44 +49,59 @@ def run(args=sys.argv[1:]):
         unix_task = asyncio.create_task(kernel.run())
         console_task = asyncio.create_task(_run_console_session(kernel))
 
-        pending = {unix_task, console_task}
+        # --- Phase 1: Active Console Session ---
+        # Wait for the root user to log out (e.g., via 'exit' or Ctrl+D).
+        # Ctrl+C is handled within the interactive loop and won't bubble up here.
+        await console_task
+        
+        # --- Phase 2: Headless Operation ---
+        print('\n:: Root console disconnected. System running in headless mode.')
+        print(':: Press Ctrl+D for graceful shutdown, or Ctrl+C for immediate exit.')
         
         try:
-            # 4. Wait for either task to finish
-            done, pending = await asyncio.wait(
-                pending,
-                return_when=asyncio.FIRST_COMPLETED
-            )
-
-            # 5. Lifecycle Management
-            if console_task in done:
-                # The root user logged out. This signals a system shutdown.
-                print('\n:: Root console session ended. Initiating system shutdown.')
-                kernel.halt.set()
-            
+            # The kernel is still running. We wait here for a host signal
+            # or for an internal shutdown command to complete the unix_task.
+            await unix_task
+        except (KeyboardInterrupt, EOFError) as e:
+            # This block now ONLY executes after the user has logged out.
+            if isinstance(e, EOFError):
+                # Ctrl+D: Graceful Shutdown
+                print('\n:: Graceful shutdown initiated by host signal.')
+                if not kernel.halt.is_set():
+                    kernel.halt.set()
+                # Wait for kernel to finish its shutdown sequence
+                if not unix_task.done():
+                    try:
+                        await unix_task
+                    except CancelledError:
+                        pass # This is expected if it was cancelled.
+            elif isinstance(e, KeyboardInterrupt):
+                # Ctrl+C: Immediate Shutdown
+                print('\n:: Immediate shutdown initiated by host signal.')
+                if not unix_task.done():
+                    unix_task.cancel()
+                try:
+                    await unix_task # Allow cleanup from cancellation
+                except CancelledError:
+                    pass
         finally:
-            # 6. Graceful Shutdown & Cleanup
-            # Ensure all tasks are cancelled.
-            for task in pending:
-                if not task.done():
-                    task.cancel()
-            
-            # Wait for the kernel's shutdown sequence to complete.
+            # Final cleanup check
             if not unix_task.done():
+                unix_task.cancel()
                 try:
                     await unix_task
                 except CancelledError:
-                    pass # This is expected if it was cancelled.
+                    pass
 
-    # Run the main async loop and handle top-level interruptions
+    # Run the main async loop and handle top-level interruptions (e.g., during startup)
     try:
         asyncio.run(async_run())
     except (KeyboardInterrupt, EOFError):
-        print('\n:: Shutdown initiated by user.')
+        #print('\n:: Shutdown initiated by user during startup.')
         if kernel and not kernel.halt.is_set():
             kernel.halt.set()
 
-    print("IOSK system has shut down.")
+    print("IOSK is done.")
 
 # This simplified structure removes the old SET dictionary and command dispatching.
 # The `run` function is now the sole purpose of this module, as per the netroom proposal.

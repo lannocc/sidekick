@@ -1,6 +1,6 @@
 # Proposal: Standardizing Session Termination and Interrupt Handling
 
-**Status**: Proposed
+**Status**: Now Testing -- Mostly working
 
 ### 1. Introduction
 
@@ -65,14 +65,14 @@ The most significant change is to decouple the root console session from the sys
         # ... kernel startup ...
         unix_task = asyncio.create_task(kernel.run())
         console_task = asyncio.create_task(_run_console_session(kernel))
-
+    
         # --- Phase 1: Active Console Session ---
         await console_task # Wait for the root user to log out.
         
         # --- Phase 2: Headless Operation ---
         print('\n:: Root console disconnected. System running in headless mode.')
         print(':: Press Ctrl+D for graceful shutdown, or Ctrl+C for immediate exit.')
-
+    
         try:
             # The kernel is still running. We wait here for a host signal.
             # The only way to exit now is a KeyboardInterrupt or EOFError

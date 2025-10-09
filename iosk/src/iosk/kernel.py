@@ -311,9 +311,9 @@ class IOSK:
         io.log = Capture.log(self, join(self.USER_LOG, user), True)
         io.dev = device
         io.user = user
-        io.su = device in (self.CONSOLE_DEV, '/dev/terminal') # if you have console, you're super
+        io.su = device == self.CONSOLE_DEV # if you have console, you're super
         io.base = True
-        io.bot = device not in (self.CONSOLE_DEV, '/dev/terminal')
+        io.bot = device != self.CONSOLE_DEV
         self.users[user] = io
 
         # --- CWD and Home Directory Initialization ---
@@ -422,11 +422,7 @@ class IOSK:
 
                     for line in text.split('\n'):
                         line = line.rstrip()
-                        if not line:
-                            continue
-                        if line == '$ exit':
-                            return
-                        if line.startswith('#'):
+                        if not line or line.startswith('#'):
                             continue
 
                         is_command = False
@@ -441,6 +437,12 @@ class IOSK:
                             command_line = line
 
                         if is_command:
+                            # Check for built-in exit commands before executing
+                            # This handles 'exit' and 'logout' without a '$' at the shell prompt.
+                            first_word = command_line.strip().split(' ', 1)[0]
+                            if first_word in ('exit', 'logout'):
+                                return # Exit the interactive loop
+
                             if command_line:
                                 io.history.append(command_line)
                             await self.call(io, command_line)
