@@ -141,7 +141,7 @@ class AIMessenger:
                 # We have a valid DM
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 remote_from_addr = f"{from_user}.{self.os.hostname}"
-                
+
                 remote_recipients = {} # host -> [user1, user2]
                 local_recipients = []
 
@@ -153,7 +153,7 @@ class AIMessenger:
                         remote_recipients[r_host].append(r_user)
                     else:
                         local_recipients.append(r_addr)
-                
+
                 # Send to remote users via PortManager
                 for host, users in remote_recipients.items():
                     payload = {
@@ -171,7 +171,8 @@ class AIMessenger:
                         uio = self.os.users[user]
                         if not uio.paused:
                             # For local recipients, the sender is local, so don't show host.
-                            dm_msg = f'\n[{from_user} -> me {now}] << {actual_msg}'
+                            # ADDED: ASCII BELL character '\a' for terminal ring
+                            dm_msg = f'\a\n[{from_user} -> me {now}] << {actual_msg}'
                             await uio.print(dm_msg)
 
                 # Send confirmation to sender
@@ -180,21 +181,21 @@ class AIMessenger:
                     recipient_str = ', '.join(recipients)
                     dm_conf = f'\n[me -> {recipient_str} {now}] << {actual_msg}'
                     await sender_io.print(dm_conf)
-                
+
                 return # End of DM handling
 
         # --- Room Broadcast Handling ---
         if self.active_room:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             remote_from_addr = f"{from_user}.{self.os.hostname}"
-            
+
             # Broadcast to local participants
             # For local participants, the sender is also local, so don't show host.
             local_msg = f'\n[{from_user} {now}] << {msg}'
             for user in self.local_room_participants:
                 if user in self.os.users:
                     await self.os.users[user].print(local_msg)
-            
+
             # Broadcast to network peers
             payload = {
                 "type": "room_message",
@@ -258,7 +259,7 @@ class AIMessenger:
         if not self.active_room:
             await io.error("!! No room is currently active.")
             return False
-        
+
         if not io.su and io.user != self.room_owner:
             await io.error(f"!! Permission denied. Only the owner ('{self.room_owner}') or a superuser can close the room.")
             return False
@@ -279,7 +280,7 @@ class AIMessenger:
         self.room_topic = None
         self.room_owner = None
         self.local_room_participants.clear()
-        
+
         await io.print(f":: room '{closed_room_name}' closed.")
 
         await self.os.port.broadcast_to_peers({
@@ -291,7 +292,7 @@ class AIMessenger:
         if not self.active_room:
             await target_io.error("!! Cannot join: no room is active.")
             return False
-        
+
         self.local_room_participants.add(target_io.user)
 
         # Update network_rooms for the new user
@@ -302,14 +303,14 @@ class AIMessenger:
         motd = await self.os.get(target_io, motd_file)
         if motd:
             await target_io.print(motd)
-        
+
         arrival_msg = f":: {target_io.user} has joined the room."
         for user in self.local_room_participants:
             if user != target_io.user and user in self.os.users:
                 await self.os.users[user].print(arrival_msg)
-        
+
         return True
-    
+
     async def remove_from_room(self, user_name: str):
         if user_name in self.local_room_participants:
             self.local_room_participants.remove(user_name)
@@ -326,7 +327,7 @@ class AIMessenger:
 
     async def handle_network_message(self, message: dict):
         msg_type = message.get("type")
-        
+
         if msg_type == "room_message":
             if self.active_room and message.get("room_name") == self.active_room:
                 from_addr = message.get("from_addr", "unknown.unknown")
@@ -338,19 +339,19 @@ class AIMessenger:
                     r_user, r_host = from_addr.split('.', 1)
                     if r_host == self.os.hostname:
                         display_addr = r_user
-                
+
                 local_msg = f'\n[{display_addr} {now}] << {content}'
-                
+
                 for user in self.local_room_participants:
                     if user in self.os.users:
                         await self.os.users[user].print(local_msg)
-        
+
         elif msg_type == "direct_message":
             to_users = message.get("to_users", [])
             from_addr = message.get("from_addr", "unknown.unknown")
             content = message.get("content", "")
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            
+
             display_addr = from_addr
             if '.' in from_addr:
                 r_user, r_host = from_addr.split('.', 1)
@@ -360,7 +361,8 @@ class AIMessenger:
             for user in to_users:
                 if user in self.os.users:
                     uio = self.os.users[user]
-                    dm_msg = f'\n[{display_addr} -> me {now}] << {content}'
+                    # ADDED: ASCII BELL character '\a' for terminal ring
+                    dm_msg = f'\a\n[{display_addr} -> me {now}] << {content}'
                     await uio.print(dm_msg)
 
 class Engagement:
@@ -535,7 +537,7 @@ class Engagement:
 
                 # Await readiness (waits for cooldowns and throttles if TPM is high)
                 await self.io.os.await_device_readiness(self.io.user, self.io.dev, prompt_tokens)
-                
+
                 client = await self.io.os.get_device_client(self.io, self.io.dev)
 
                 if not client:
@@ -552,20 +554,20 @@ class Engagement:
                                 # This is a rate limit error, handle it reactively
                                 await self.io.os.system.error(f':: API rate limit hit for {self.io.user} on {self.io.dev}: {e}')
                                 await self.io.print(":: API rate limit hit. Analyzing cooldown...")
-                                
+
                                 # Parse delay from error message, with a fallback
                                 match = re.search(r"'retryDelay': '(\d+)s'", str(e))
                                 delay = int(match.group(1)) + 2 if match else 15
-                                
+
                                 await self.io.os.system.print(f":: Enforcing device cooldown for {delay} seconds.")
                                 await self.io.print(f":: Enforcing device cooldown for {delay} seconds.")
-                                
+
                                 # Trigger kernel to manage cooldown (runs in background)
                                 asyncio.create_task(self.io.os.enforce_cooldown(self.io.dev, delay))
 
                                 # Wait for the cooldown to complete before retrying.
                                 await self.io.os.await_device_readiness(self.io.user, self.io.dev, 0)
-                                
+
                                 # Continue to the next attempt in the retry loop
                                 continue
                             else:
@@ -580,7 +582,7 @@ class Engagement:
                             if attempt < 2: # if not the last attempt
                                 await asyncio.sleep((attempt + 1) * 1.5) # simple backoff
                             # Let the loop continue to the next attempt
-                    
+
                     # After the loop finishes (either by success, failure, or exhaustion of retries)
                     self.waiting = False
                     await self.io.os.log_trip_trace(self.io, prompt_text_for_trip, reply or "")
@@ -657,3 +659,4 @@ class Engagement:
 
         # Remove the original markdown block from the text that will be processed for chat broadcast.
         return text.replace(original_block, '')
+
