@@ -116,6 +116,19 @@ class PortManager:
                     await websocket.close()
                     return
 
+                if peer_hostname == self.kernel.hostname:
+                    reason = f"Cannot connect to self: remote host has same name '{self.kernel.hostname}'."
+                    await self.kernel.system.error(f"!! {reason}")
+                    await websocket.close()
+                    return
+
+                remote_peers = ack_message.get("peers", [])
+                if self.kernel.hostname in remote_peers:
+                    reason = f"Hostname conflict: remote mesh already contains a peer named '{self.kernel.hostname}'."
+                    await self.kernel.system.error(f"!! Peer connection aborted: {reason}")
+                    await websocket.close()
+                    return
+                
                 # ADDED: Process the user list from the peer
                 peer_users = ack_message.get("users", [])
                 await self.kernel.update_network_state({
@@ -148,7 +161,7 @@ class PortManager:
                     if conn_data.type == 'peer' and conn_data.hostname in self.peers:
                         del self.peers[conn_data.hostname]
                         log.info(f"Peer '{conn_data.hostname}' disconnected.")
-                elif websocket and not websocket.closed:
+                elif websocket: # and not websocket.closed:
                     # Ensure the socket is closed if it was opened but never fully registered
                     await websocket.close()
 
@@ -220,6 +233,20 @@ class PortManager:
             if not hostname:
                 raise ValueError("Invalid peer handshake: missing hostname")
             
+            if hostname == self.kernel.hostname:
+                reason = f"Hostname conflict: both systems are named '{hostname}'."
+                await self.kernel.system.error(f"!! Peer handshake rejected: {reason}")
+                await websocket.send(json.dumps({"type": "handshake_ack", "status": "error", "reason": reason}))
+                await websocket.close(1008, reason)  # 1008 is "policy violation"
+                return None
+
+            if hostname in self.peers:
+                reason = f"Hostname '{hostname}' already exists in the mesh."
+                await self.kernel.system.error(f"!! Peer handshake rejected: {reason}")
+                await websocket.send(json.dumps({"type": "handshake_ack", "status": "error", "reason": reason}))
+                await websocket.close(1008, reason)
+                return None
+
             # ADDED: Process incoming user list and sync state
             peer_users = message.get("users", [])
             await self.kernel.update_network_state({
@@ -235,7 +262,8 @@ class PortManager:
                 "type": "handshake_ack", 
                 "status": "ok", 
                 "hostname": self.kernel.hostname,
-                "users": list(self.kernel.users.keys()) # ADDED
+                "users": list(self.kernel.users.keys()), # ADDED
+                "peers": list(self.peers.keys())
             }))
             return Connection(websocket=websocket, type='peer', hostname=hostname)
         

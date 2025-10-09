@@ -20,8 +20,9 @@ def run(args=sys.argv[1:]):
         sys.exit(1)
     
     # Set the logging level for the google-genai library to WARNING to suppress INFO messages
-    logging.getLogger('google_genai').setLevel(logging.WARNING)
-    logging.getLogger('httpx').setLevel(logging.WARNING)
+    #logging.getLogger('google_genai').setLevel(logging.WARNING)
+    #logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.disable(logging.INFO) # all INFO and less are disabled
     
     root_directory = args[0]
 
