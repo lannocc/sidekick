@@ -171,7 +171,7 @@ class PortManager:
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
 
-    async def _connection_handler(self, websocket: WebSocketServerProtocol, path: str):
+    async def _connection_handler(self, websocket: WebSocketServerProtocol): #, path: str):
         """Handles the entire lifecycle of a single network connection."""
         connection_metadata = None
         try:
@@ -181,9 +181,11 @@ class PortManager:
                 log.info(f"Handshake successful: {connection_metadata}")
                 await self._message_loop(websocket, connection_metadata)
         except ConnectionClosed:
-            log.info(f"Connection closed: {path}")
+            #log.info(f"Connection closed: {path}")
+            log.info(f"Connection closed: {websocket}")
         except Exception as e:
-            log.error(f"Error in connection handler for {path}: {e}")
+            #log.error(f"Error in connection handler for {path}: {e}")
+            log.error(f"Error in connection handler for {websocket}: {e}")
             await websocket.close(1011, "Internal server error")
         finally:
             if websocket in self.active_connections:
