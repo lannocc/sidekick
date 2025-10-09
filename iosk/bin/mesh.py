@@ -33,27 +33,41 @@ async def iocall(io, argv):
 
     # Case 1: 'mesh' (status check)
     if not argv:
-        if not port_manager.peers:
-            await io.print(":: No peers connected.")
-            return True
+        # Create a list to hold all systems in the mesh (local + peers)
+        mesh_systems = []
 
-        # Print header
+        # Add our own system's info
+        our_hostname = io.os.hostname
+        # Append '*' if our listening port is open
+        if port_manager.port is not None:
+            our_hostname += "*"
+        # Address is blank for the local system
+        mesh_systems.append({'hostname': our_hostname, 'address': ''})
+
+        # Add information for all connected peers
+        for hostname, websocket in port_manager.peers.items():
+            address = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
+            mesh_systems.append({'hostname': hostname, 'address': address})
+
+        # Sort the list alphabetically by hostname for consistent output
+        sorted_systems = sorted(mesh_systems, key=lambda x: x['hostname'].strip('*'))
+
+        # Print the formatted table
         await io.print(f"{'HOSTNAME':<20} ADDRESS")
         await io.print(f"{'-'*20} {'-'*20}")
 
-        # Print each peer's information
-        for hostname, websocket in sorted(port_manager.peers.items()):
-            address = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
-            await io.print(f"{hostname:<20} {address}")
+        for system in sorted_systems:
+            await io.print(f"{system['hostname']:<20} {system['address']}")
 
-        count = len(port_manager.peers)
-        await io.print(f"\n:: {count} peer{'s' if count != 1 else ''} connected.")
+        # Print the final summary count
+        count = len(sorted_systems)
+        await io.print(f"\n:: {count} system{'s' if count != 1 else ''} in mesh.")
         return True
 
     # Case 2: 'mesh <host[:port]>' (connect to peer)
     if len(argv) == 1:
         host_arg = argv[0]
-        
+
         # Parse host and port
         if ':' in host_arg:
             host, port_str = host_arg.split(':', 1)
@@ -68,16 +82,17 @@ async def iocall(io, argv):
 
         # Construct WebSocket URI
         uri = f"ws://{host}:{port}"
-        
+
         await io.print(f":: Connecting to {host}:{port}...")
-        
+
         # The connect_to_peer method runs the connection handler in the background.
         # It handles its own error reporting. We just initiate the connection.
         await port_manager.connect_to_peer(uri)
-        
+
         # The user can run 'mesh' again after a moment to verify the connection.
         return True
 
     # Case 3: Too many arguments
     await io.error("!! mesh: too many arguments. Use 'mesh --help' for usage.")
     return False
+
