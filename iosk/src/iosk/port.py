@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import traceback
+import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, Any, Optional
 
@@ -41,6 +42,7 @@ class PortManager:
         self.peers: Dict[str, WebSocketServerProtocol] = {}
         self.routing_table: Dict[str, Dict[str, Any]] = {}
         self._connecting_peers: set[str] = set()
+        self.remote_exec_sessions: Dict[str, Dict[str, Any]] = {}
 
     # --------------------------------------------------------------------------
     # Public API (Kernel-Facing)
@@ -295,6 +297,43 @@ class PortManager:
         else:
             log.error(f"Unknown route type '{route.get('type')}' for host '{target_host}'.")
 
+    async def stream_remote_exec(self, host: str, command_str: str, io: "Context") -> bool:
+        """Initiates a remote command execution and streams the output."""
+        request_id = str(uuid.uuid4())
+        completion_event = asyncio.Event()
+
+        # Store the necessary context for handling the response stream
+        self.remote_exec_sessions[request_id] = {
+            'io': io,
+            'event': completion_event,
+            'success': True # Assume success until an error occurs
+        }
+
+        # Construct the request payload
+        request_payload = {
+            'type': 'remote_exec_request',
+            'request_id': request_id,
+            'command_str': command_str
+        }
+
+        # Send the request to the target host
+        await self.route_message(host, request_payload)
+
+        # Wait for the completion event, which will be set by the message dispatcher
+        try:
+            # Add a timeout to prevent waiting forever
+            await asyncio.wait_for(completion_event.wait(), timeout=300.0) # 5-minute timeout
+        except asyncio.TimeoutError:
+            await io.error(f"!! on: command timed out on host '{host}'.")
+            self.remote_exec_sessions[request_id]['success'] = False
+
+        # Retrieve final status and clean up
+        final_success = self.remote_exec_sessions.get(request_id, {}).get('success', False)
+        if request_id in self.remote_exec_sessions:
+            del self.remote_exec_sessions[request_id]
+
+        return final_success
+
     # --------------------------------------------------------------------------
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
@@ -475,6 +514,9 @@ class PortManager:
                 # This is a complex handler that streams output back
                 await self._handle_remote_exec(websocket, message)
 
+            elif msg_type == "remote_exec_response":
+                await self._handle_remote_exec_response(message)
+
             elif msg_type in ("direct_message", "room_message"):
                 await self.kernel.chat.handle_network_message(message)
 
@@ -494,20 +536,23 @@ class PortManager:
     async def _handle_remote_exec(self, websocket: WebSocketServerProtocol, message: Dict[str, Any]):
         """Handles a remote execution request and streams output back."""
         command_str = message.get('command_str', '')
-        if not command_str:
+        request_id = message.get('request_id')
+        if not command_str or not request_id:
             return
 
         exec_io = self.kernel.system.fork()
 
         # Custom writer to stream stdout back over the websocket
         class RemoteWriter:
-            def __init__(self, ws, stream_name):
+            def __init__(self, ws, stream_name, req_id):
                 self.ws = ws
                 self.stream_name = stream_name
+                self.req_id = req_id
 
             def write(self, data: str):
                 response = {
                     "type": "remote_exec_response",
+                    "request_id": self.req_id,
                     "stream": self.stream_name,
                     "data": data,
                     "is_complete": False
@@ -517,15 +562,47 @@ class PortManager:
             def flush(self):
                 pass
 
-        exec_io.stdout = RemoteWriter(websocket, 'stdout')
+        exec_io.stdout = RemoteWriter(websocket, 'stdout', request_id)
         # TODO: A proper solution would also capture stderr
 
         try:
             await self.kernel.call(exec_io, command_str)
         finally:
             # Signal completion
-            response = {"type": "remote_exec_response", "stream": "status", "data": "", "is_complete": True}
+            response = {
+                "type": "remote_exec_response",
+                "request_id": request_id,
+                "stream": "status",
+                "data": "",
+                "is_complete": True
+            }
             await websocket.send(json.dumps(response))
+
+    async def _handle_remote_exec_response(self, message: Dict[str, Any]):
+        """Handles a streamed response from a remote execution command."""
+        request_id = message.get('request_id')
+        if not request_id or request_id not in self.remote_exec_sessions:
+            # This could be a response for a timed-out request, or malformed.
+            log.warning(f"Received remote_exec_response for unknown or stale request_id: {request_id}")
+            return
+
+        session = self.remote_exec_sessions[request_id]
+        io_context = session['io']
+        completion_event = session['event']
+
+        data = message.get('data', '')
+        stream = message.get('stream')
+        is_complete = message.get('is_complete', False)
+
+        if stream == 'stdout' and data:
+            # Use io.output to avoid extra formatting/logging from io.print
+            await io_context.output(data)
+        elif stream == 'stderr' and data: # Future-proofing
+            await io_context.error(data)
+
+        # Check for completion signal
+        if is_complete:
+            completion_event.set()
 
     async def _process_network_state_update(self, message: dict):
         """Processes state update messages from peers to update the kernel's state caches."""
