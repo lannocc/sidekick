@@ -105,7 +105,29 @@ The most significant change is to decouple the root console session from the sys
 | `Ctrl+C`                      | Host terminal (console inactive) | Initiates an **immediate** system shutdown (hard stop).               | System shuts down.        |
 | `$ shutdown`                  | At idle prompt (console active) | Initiates a **graceful** system shutdown from within the session.     | System shuts down.        |
 
-### 5. Conclusion
+### 5. Implementation Plan
+
+#### 5.1. File: `src/iosk/cmd.py`
+
+1.  **Locate the `async_run` function.**
+2.  **Replace `asyncio.wait()`**: Change the existing `asyncio.wait(..., return_when=asyncio.FIRST_COMPLETED)` block to a simple `await console_task`.
+3.  **Implement Headless Mode**: After `await console_task`, add print statements to inform the administrator that the system is entering headless mode and to explain the new host-level signals (`Ctrl+C`, `Ctrl+D`).
+4.  **Add Host Signal Handling**: Wrap the final `await unix_task` in a `try...except (KeyboardInterrupt, EOFError)` block. Inside this block:
+    *   Handle `EOFError` (`Ctrl+D`) by setting `kernel.halt.set()` to trigger a graceful shutdown.
+    *   Handle `KeyboardInterrupt` (`Ctrl+C`) by calling `unix_task.cancel()` for an immediate shutdown.
+
+#### 5.2. File: `src/iosk/kernel.py`
+
+1.  **Locate the `interactive()` method.**
+2.  **Add Built-in Exit Commands**: Inside the main `while` loop, after a `line` of input is received, add a new conditional check: `if line == '$ exit': return`. This will catch the exit command before it is sent to the command pipeline.
+3.  **Verify `EOFError` Handling**: Confirm that the `except EOFError:` block at the end of the `try...except` block simply contains `return`. This ensures that `Ctrl+D` at a prompt correctly terminates the session by exiting the `interactive` loop.
+4.  **Verify `KeyboardInterrupt` Handling**: Confirm that the `except KeyboardInterrupt:` block correctly prints `^C` and continues the loop, preserving the session.
+
+#### 5.3. File: `src/iosk/pipeline.py`
+
+1.  **Locate the `_execute_single_command` method.**
+2.  **Verify Interrupt Handling**: Confirm that the `try...except KeyboardInterrupt:` block correctly cancels the running `task`, prints `^C` to the user's console, and returns `False` to signal that the command was interrupted and did not complete successfully. No changes should be required if the logic is already present.
+
+### 6. Conclusion
 
 This proposal establishes a clear, predictable, and powerful model for session and process control within IOSK. By aligning `Ctrl+C` and `Ctrl+D` with UNIX conventions, we make the system more intuitive for experienced users. Most importantly, by decoupling the `root` session from the system lifecycle, we enable a critical new capability: persistent, headless operation. This transforms IOSK from a transient, single-session tool into a true background service, capable of running network services and autonomous AI agents indefinitely, even without an active administrative console.
-
