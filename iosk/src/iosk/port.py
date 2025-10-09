@@ -491,50 +491,6 @@ class PortManager:
         except Exception:
             log.error(f"Error dispatching message: {traceback.format_exc()}")
 
-    async def _dispatch_message(self, websocket: WebSocketServerProtocol, conn_meta: Connection, message_str: str):
-        """Parses and routes a single incoming message based on its type."""
-        try:
-            message = json.loads(message_str)
-            msg_type = message.get("type")
-
-            if msg_type == "forward_request":
-                final_destination = message.get('final_destination')
-                payload = message.get('payload')
-                if not final_destination or payload is None:
-                    log.warning(f"Malformed forward_request received: {message}")
-                    return
-                # Do not process locally. Unwrap and route it onward.
-                await self.route_message(final_destination, payload)
-
-            # --- MESHING PROPAGATION ---
-            elif msg_type == "peer_update":
-                await self._handle_peer_update(message)
-            # --- END MESHING PROPAGATION ---
-
-            # State updates are now processed by the PortManager itself.
-            elif msg_type in ("user_update", "room_update", "state_sync"):
-                await self._process_network_state_update(message)
-
-            elif msg_type == "remote_exec_request":
-                # This is a complex handler that streams output back
-                await self._handle_remote_exec(websocket, message)
-
-            elif msg_type in ("direct_message", "room_message"):
-                await self.kernel.chat.handle_network_message(message)
-
-            elif msg_type == "client_input":
-                if conn_meta.type == 'client' and conn_meta.username:
-                    await self.kernel.handle_client_input(conn_meta.username, message.get("data", ""))
-                else:
-                    log.warning("Received client_input from non-client connection.")
-            else:
-                log.warning(f"Received unknown message type: {msg_type}")
-
-        except json.JSONDecodeError:
-            log.error("Failed to decode JSON message.")
-        except Exception:
-            log.error(f"Error dispatching message: {traceback.format_exc()}")
-
     async def _handle_remote_exec(self, websocket: WebSocketServerProtocol, message: Dict[str, Any]):
         """Handles a remote execution request and streams output back."""
         command_str = message.get('command_str', '')
