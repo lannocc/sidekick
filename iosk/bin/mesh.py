@@ -7,7 +7,8 @@ Usage: mesh
        mesh --help
 
 mesh:
-  Lists all currently connected peer systems in the network mesh.
+  Lists all currently connected peer systems in the network mesh, including
+  both direct and indirect (routed) connections.
 
 mesh <host[:port]>:
   Establishes an outbound connection to another IOSK system's listener
@@ -33,34 +34,62 @@ async def iocall(io, argv):
 
     # Case 1: 'mesh' (status check)
     if not argv:
-        # Create a list to hold all systems in the mesh (local + peers)
-        mesh_systems = []
+        # Get the routing table from the port manager.
+        routing_table = port_manager.routing_table
 
-        # Add our own system's info
+        # Create a list to hold display data for all systems in the mesh.
+        display_list = []
+
+        # Add our own system's info first.
         our_hostname = io.os.hostname
-        # Append '*' if our listening port is open
         if port_manager.port is not None:
-            our_hostname += "*"
-        # Address is blank for the local system
-        mesh_systems.append({'hostname': our_hostname, 'address': ''})
+            our_hostname += "*"  # Indicate that the listening port is open.
+        display_list.append({'hostname': our_hostname, 'address': ''})
 
-        # Add information for all connected peers
-        for hostname, websocket in port_manager.peers.items():
-            address = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
-            mesh_systems.append({'hostname': hostname, 'address': address})
+        # Process all known peers from the routing table.
+        peer_list = []
+        for hostname, route_info in routing_table.items():
+            address_str = ''
+            route_type = route_info.get('type')
 
-        # Sort the list alphabetically by hostname for consistent output
-        sorted_systems = sorted(mesh_systems, key=lambda x: x['hostname'].strip('*'))
+            if route_type == 'direct':
+                websocket = route_info.get('websocket')
+                if websocket and hasattr(websocket, 'remote_address'):
+                    address_str = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
+                else:
+                    address_str = "[direct - error]"
+            elif route_type == 'indirect':
+                via_host = route_info.get('via')
+                if via_host:
+                    address_str = f"[via {via_host}]"
+                else:
+                    address_str = "[indirect - error]"
+            else:
+                address_str = f"[unknown route type: {route_type}]"
 
-        # Print the formatted table
-        await io.print(f"{'HOSTNAME':<20} ADDRESS")
-        await io.print(f"{'-'*20} {'-'*20}")
+            peer_list.append({'hostname': hostname, 'address': address_str})
 
-        for system in sorted_systems:
-            await io.print(f"{system['hostname']:<20} {system['address']}")
+        # Sort peers alphabetically by hostname and add to the main display list.
+        display_list.extend(sorted(peer_list, key=lambda x: x['hostname']))
 
-        # Print the final summary count
-        count = len(sorted_systems)
+        # Dynamically calculate column widths for clean formatting.
+        max_host_len = len("HOSTNAME")
+        for system in display_list:
+            if len(system['hostname']) > max_host_len:
+                max_host_len = len(system['hostname'])
+
+        # Add padding
+        max_host_len += 2
+
+        # Print the formatted table.
+        await io.print(f"{'HOSTNAME':<{max_host_len}} ADDRESS")
+        await io.print(f"{'-' * max_host_len} {'-' * 20}")
+
+        for system in display_list:
+            await io.print(f"{system['hostname']:<{max_host_len}} {system['address']}")
+
+        # The total count is the local host plus all known peers.
+        count = 1 + len(routing_table)
         await io.print(f"\n:: {count} system{'s' if count != 1 else ''} in mesh.")
         return True
 
