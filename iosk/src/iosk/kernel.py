@@ -1,3 +1,4 @@
+# src/iosk/kernel.py
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
@@ -315,28 +316,39 @@ class IOSK:
         self.users[user] = io
 
         # --- CWD and Home Directory Initialization ---
-        home_dir_virtual = f'/home/{user}'
-        # Box the home directory path to get its actual location on the host filesystem.
-        # Pass io_context=io for consistency, though an absolute path ignores io.pwd in box().
-        home_dir_host = self.box(home_dir_virtual, io_context=io)
+        if user == 'root':
+            home_dir_virtual = '/root'
+            home_dir_host = self.box(home_dir_virtual, io_context=io)
+            
+            if not os.path.exists(home_dir_host):
+                # If /root does not exist on the host, set PWD to /
+                io.pwd = '/'
+                await io.print(f":: /root home directory not found. Setting PWD to /")
+            else:
+                # If /root exists on the host, set PWD to /root
+                io.pwd = home_dir_virtual
+                await io.print(f":: root home directory is {home_dir_virtual}")
+            # Skip automatic creation and .skrc copying for root
+        else:
+            home_dir_virtual = f'/home/{user}'
+            home_dir_host = self.box(home_dir_virtual, io_context=io)
 
-        if not os.path.exists(home_dir_host):
-            try:
-                os.makedirs(home_dir_host)
-                await io.print(f":: created home directory: {home_dir_virtual}")
+            if not os.path.exists(home_dir_host):
+                try:
+                    os.makedirs(home_dir_host)
+                    await io.print(f":: created home directory: {home_dir_virtual}")
 
-                # Copy /etc/skel/skrc to ~/.skrc if it exists
-                skel_skrc_path = self.SKEL_SKRC
-                user_skrc_path = join(home_dir_virtual, '.skrc')
-                if await self.exists(io, skel_skrc_path):
-                    await io.print(f":: copying {skel_skrc_path} to {user_skrc_path}")
-                    await self.copy(io, skel_skrc_path, user_skrc_path)
+                    # Copy /etc/skel/skrc to ~/.skrc if it exists
+                    skel_skrc_path = self.SKEL_SKRC
+                    user_skrc_path = join(home_dir_virtual, '.skrc')
+                    if await self.exists(io, skel_skrc_path):
+                        await io.print(f":: copying {skel_skrc_path} to {user_skrc_path}")
+                        await self.copy(io, skel_skrc_path, user_skrc_path)
 
-            except Exception as e:
-                await self.system.error(f"!! failed to create home directory {home_dir_virtual}: {e}")
-                # For now, allow login to proceed but log the error.
-
-        io.pwd = home_dir_virtual # Set the current working directory for the user
+                except Exception as e:
+                    await self.system.error(f"!! failed to create home directory {home_dir_virtual}: {e}")
+                    # For now, allow login to proceed but log the error.
+            io.pwd = home_dir_virtual # Set the current working directory for the user
 
         if io_callback:
             await io_callback(io)
@@ -391,22 +403,37 @@ class IOSK:
                             await asyncio.sleep(0.1 - delay)
                         start = datetime.now()
 
+                    is_room_active = self.chat and self.chat.active_room
+
                     for line in text.split('\n'):
                         line = line.rstrip()
-                        if line == '$ exit': return
-
+                        if not line:
+                            continue
+                        if line == '$ exit':
+                            return
                         if line.startswith('#'):
-                            pass
+                            continue
 
-                        elif line.startswith('$ '):
+                        is_command = False
+                        command_line = ''
+
+                        if line.startswith('$ '):
+                            is_command = True
                             command_line = line[2:]
-                            if command_line: # Don't add empty commands to history
+                        elif not is_room_active:
+                            # Not in a room, so treat as a command.
+                            is_command = True
+                            command_line = line
+                        
+                        if is_command:
+                            if command_line:
                                 io.history.append(command_line)
-                            await self.call(io, command_line) # Pass the string after '$ '
-
-                        elif line:
-                            if self.chat: await self.chat.send(io.user, line)
-                            else: await io.print(line)
+                            await self.call(io, command_line)
+                        else:  # Is a chat message because we are in a room and not a command
+                            if self.chat:
+                                await self.chat.send(io.user, line)
+                            else:
+                                await io.print(line)
 
                 except EOFError: # This handles Ctrl+D to log out
                     return
@@ -465,19 +492,32 @@ class IOSK:
         io.network_input_queue = asyncio.Queue()
         self.users[username] = io
 
-        home_dir_virtual = f'/home/{username}'
-        home_dir_host = self.box(home_dir_virtual, io_context=io)
-        if not os.path.exists(home_dir_host):
-            try:
-                os.makedirs(home_dir_host)
-                skel_skrc_path = self.SKEL_SKRC
-                user_skrc_path = join(home_dir_virtual, '.skrc')
-                if await self.exists(io, skel_skrc_path):
-                    await self.copy(io, skel_skrc_path, user_skrc_path)
-            except Exception as e:
-                await self.system.error(f"!! failed to create home directory {home_dir_virtual}: {e}")
-        
-        io.pwd = home_dir_virtual
+        if username == 'root':
+            home_dir_virtual = '/root'
+            home_dir_host = self.box(home_dir_virtual, io_context=io)
+            
+            if not os.path.exists(home_dir_host):
+                io.pwd = '/'
+                await self.system.print(f":: Network root login: /root home directory not found. Setting PWD to /")
+            else:
+                io.pwd = home_dir_virtual
+                await self.system.print(f":: Network root login: root home directory is {home_dir_virtual}")
+        else:
+            home_dir_virtual = f'/home/{username}'
+            home_dir_host = self.box(home_dir_virtual, io_context=io)
+            if not os.path.exists(home_dir_host):
+                try:
+                    os.makedirs(home_dir_host)
+                    # For network users, output these messages to the system log, not their non-existent local console.
+                    await self.system.print(f":: created home directory for network user {username}: {home_dir_virtual}")
+                    skel_skrc_path = self.SKEL_SKRC
+                    user_skrc_path = join(home_dir_virtual, '.skrc')
+                    if await self.exists(io, skel_skrc_path):
+                        await self.system.print(f":: copying {skel_skrc_path} to {user_skrc_path} for network user {username}")
+                        await self.copy(io, skel_skrc_path, user_skrc_path)
+                except Exception as e:
+                    await self.system.error(f"!! failed to create home directory {home_dir_virtual} for network user {username}: {e}")
+            io.pwd = home_dir_virtual
         
         skrc_global_path = self.SKRC
         if exists(self.box(skrc_global_path)):

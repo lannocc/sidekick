@@ -419,9 +419,9 @@ def ask(args):
 
 
 def iosk(args):
-    from .iosk.cmd import main as iosk_main
+    from .iosk.cmd import run as iosk_run
 
-    iosk_main(args)
+    iosk_run(args)
 
 
 OPTIONS = {
@@ -470,5 +470,5 @@ COMMANDS = {
     #'ask': (ask,
     #    'ask commands'),
     'iosk': (iosk,
-        'iosk commands'),
+        'run iosk system'),
 }

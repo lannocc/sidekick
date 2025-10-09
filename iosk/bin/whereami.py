@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # bin/whereami.py
 
-DOCSTRING = """Display the configured hostname of the local IOSK system.
+DOCSTRING = """Display the configured hostname and active room of the local IOSK system.
 
 Usage: whereami
        whereami --help
 
-Displays the unique hostname of the local IOSK system on the network,
-as configured in /etc/hostname or derived at startup.
+Displays the unique hostname of the local IOSK system on the network.
+If a chat room is active, its name is appended, e.g., 'hostname/room_name'.
 """
 
 async def iocall(io, argv):
@@ -22,8 +22,14 @@ async def iocall(io, argv):
         return False
 
     # The kernel reads /etc/hostname at startup and stores the result.
-    # Accessing the kernel's state is the canonical way to get the hostname.
     hostname = io.os.hostname
-    await io.print(hostname)
+    output = hostname
+
+    # Check for an active chat room and append it if it exists.
+    if hasattr(io.os, 'chat') and io.os.chat and io.os.chat.active_room:
+        room_name = io.os.chat.active_room
+        output = f"{hostname}/{room_name}"
+
+    await io.print(output)
 
     return True
