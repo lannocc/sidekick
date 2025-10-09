@@ -83,13 +83,68 @@ class PortManager:
 
     async def connect_to_peer(self, host_uri: str):
         """Establishes an outbound connection to another IOSK system."""
-        try:
-            websocket = await websockets.connect(host_uri)
-            # Run the same handler as for incoming connections
-            # but in the background.
-            asyncio.create_task(self._connection_handler(websocket, f"outbound to {host_uri}"))
-        except Exception as e:
-            await self.kernel.system.error(f"!! failed to connect to peer {host_uri}: {e}")
+        
+        # This function launches a background task to handle the full
+        # connection and handshake lifecycle for an outbound connection.
+        async def _outbound_connect_and_manage():
+            websocket = None
+            try:
+                websocket = await websockets.connect(host_uri)
+                
+                # 1. Send our handshake message (CLIENT sends first)
+                handshake_payload = {
+                    "type": "handshake",
+                    "id": "peer",
+                    "hostname": self.kernel.hostname
+                }
+                await websocket.send(json.dumps(handshake_payload))
+
+                # 2. Wait for the server's acknowledgement
+                ack_str = await websocket.recv()
+                ack_message = json.loads(ack_str)
+
+                if not (ack_message.get("type") == "handshake_ack" and ack_message.get("status") == "ok"):
+                    reason = ack_message.get("reason", "unknown error")
+                    await self.kernel.system.error(f"!! peer handshake failed: {reason}")
+                    await websocket.close()
+                    return
+
+                peer_hostname = ack_message.get("hostname")
+                if not peer_hostname:
+                    await self.kernel.system.error("!! peer handshake failed: ACK missing hostname")
+                    await websocket.close()
+                    return
+                
+                # 3. Handshake successful, set up connection metadata and state
+                conn_meta = Connection(websocket=websocket, type='peer', hostname=peer_hostname)
+                self.peers[peer_hostname] = websocket
+                self.active_connections[websocket] = conn_meta
+                log.info(f"Handshake successful with peer: {conn_meta}")
+
+                # 4. Enter the message loop for the duration of the connection
+                await self._message_loop(websocket, conn_meta)
+
+            except (ConnectionClosed, websockets.exceptions.InvalidURI, websockets.exceptions.InvalidHandshake, OSError) as e:
+                # Handle expected connection/handshake errors without a big traceback
+                await self.kernel.system.error(f"!! failed to connect to peer {host_uri}: {e}")
+            except Exception as e:
+                # Handle other unexpected errors
+                await self.kernel.system.error(f"!! an unexpected error occurred while connecting to peer {host_uri}: {e}")
+                log.error(f"Full error for peer connection to {host_uri}: {traceback.format_exc()}")
+            finally:
+                # This cleanup logic is crucial for outbound connections, mirroring the
+                # server-side handler's finally block.
+                if websocket and websocket in self.active_connections:
+                    conn_data = self.active_connections.pop(websocket)
+                    if conn_data.type == 'peer' and conn_data.hostname in self.peers:
+                        del self.peers[conn_data.hostname]
+                        log.info(f"Peer '{conn_data.hostname}' disconnected.")
+                elif websocket and not websocket.closed:
+                    # Ensure the socket is closed if it was opened but never fully registered
+                    await websocket.close()
+
+        # The `mesh` command should not block. Run the connection logic in the background.
+        asyncio.create_task(_outbound_connect_and_manage())
 
     async def broadcast_to_peers(self, message: Dict[str, Any]):
         """Sends a message to all connected IOSK peer systems."""
