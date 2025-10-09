@@ -55,7 +55,7 @@ class IOSK:
 
         self.system = None # Context
         self.users = { } # handle:Context
-        
+
         # Netroom subsystems
         self.port: PortManager = None
         self.chat: AIMessenger = None
@@ -142,7 +142,7 @@ class IOSK:
                     self.hostname = f.read().strip() or 'localhost'
             else:
                 self.hostname = os.path.basename(os.path.abspath(self.root)) or 'localhost'
-            
+
             # Instantiate subsystems
             self.port = PortManager(self)
             self.chat = AIMessenger(self)
@@ -196,16 +196,16 @@ class IOSK:
 
         now = datetime.now()
         one_minute_ago = now - timedelta(seconds=60)
-        
+
         # Filter out old entries and calculate the sum of recent tokens
         recent_entries = [
             (ts, count) for ts, count in self.device_tpm_trackers[device_path]
             if ts > one_minute_ago
         ]
-        
+
         # Update the tracker with the pruned list
         self.device_tpm_trackers[device_path] = recent_entries
-        
+
         # Return the sum of tokens from the recent entries
         return sum(count for _, count in recent_entries)
 
@@ -219,13 +219,13 @@ class IOSK:
             self.device_cooldowns[device_path].set()
 
         event = self.device_cooldowns[device_path]
-        
+
         # Clear the event to signal that the device is now unavailable
         event.clear()
-        
+
         # Wait for the specified delay
         await asyncio.sleep(delay_seconds)
-        
+
         # Set the event to signal that the device is ready again
         event.set()
 
@@ -249,7 +249,7 @@ class IOSK:
 
         while True: # Loop to re-check after sleeping
             current_tpm = self._get_current_tpm(device_path)
-            
+
             if current_tpm + tokens_in_prompt <= TPM_THRESHOLD:
                 # We are under the threshold, safe to proceed
                 break
@@ -260,14 +260,14 @@ class IOSK:
             if not tracker:
                 # Should not happen if current_tpm > 0, but as a safeguard.
                 break
-                
+
             oldest_timestamp, _ = tracker[0]
             now = datetime.now()
-            
+
             # Calculate how long until the oldest entry expires from the 60s window
             time_since_oldest = (now - oldest_timestamp).total_seconds()
             sleep_duration = 60.1 - time_since_oldest # Sleep a bit extra to be safe
-            
+
             if sleep_duration <= 0:
                 # This can happen if pruning is slightly out of sync.
                 # Just re-run the loop to get a fresh TPM count.
@@ -319,7 +319,7 @@ class IOSK:
         if user == 'root':
             home_dir_virtual = '/root'
             home_dir_host = self.box(home_dir_virtual, io_context=io)
-            
+
             if not os.path.exists(home_dir_host):
                 # If /root does not exist on the host, set PWD to /
                 io.pwd = '/'
@@ -401,7 +401,7 @@ class IOSK:
                         prompt_char = '>>'
                     else:
                         prompt_char = '$'
-                    
+
                     # Construct the prompt
                     prompt_str = f'[{io.user} {io.pwd}] {prompt_char} '
 
@@ -433,7 +433,7 @@ class IOSK:
                             # Not in a room, so treat as a command.
                             is_command = True
                             command_line = line
-                        
+
                         if is_command:
                             if command_line:
                                 io.history.append(command_line)
@@ -459,7 +459,7 @@ class IOSK:
             return False
 
         await self.system.print(f'IOSK logout: {io.user}')
-        
+
         user_to_logout = io.user
         del self.users[user_to_logout]
 
@@ -480,7 +480,7 @@ class IOSK:
                 'user': user_to_logout,
                 'host': self.hostname
             })
-        
+
         return True
 
     async def login_network_user(self, username, websocket):
@@ -491,9 +491,9 @@ class IOSK:
         if username in self.users:
             await self.system.error(f"!! login failed: user '{username}' already logged in.")
             return None
-        
+
         device_path = f"network:{id(websocket)}"
-        
+
         io = self.system.fork()
         io.login_time = datetime.now()
         io.banks = {}
@@ -509,7 +509,7 @@ class IOSK:
         if username == 'root':
             home_dir_virtual = '/root'
             home_dir_host = self.box(home_dir_virtual, io_context=io)
-            
+
             if not os.path.exists(home_dir_host):
                 io.pwd = '/'
                 await self.system.print(f":: Network root login: /root home directory not found. Setting PWD to /")
@@ -532,7 +532,7 @@ class IOSK:
                 except Exception as e:
                     await self.system.error(f"!! failed to create home directory {home_dir_virtual} for network user {username}: {e}")
             io.pwd = home_dir_virtual
-        
+
         skrc_global_path = self.SKRC
         if exists(self.box(skrc_global_path)):
             await self.exec(io, skrc_global_path)
@@ -553,12 +553,12 @@ class IOSK:
                 'user': username,
                 'host': self.hostname
             })
-        
+
         if self.chat and self.chat.active_room:
             await self.chat.add_to_room(io)
-        
+
         asyncio.create_task(self.interactive(io))
-        
+
         return io
 
     async def logout_network_user(self, username):
@@ -566,7 +566,7 @@ class IOSK:
         if username in self.users:
             io = self.users[username]
             await self.logout(io, disconnect=f':: {username} has disconnected (network)')
-    
+
     async def handle_client_input(self, username, data):
         """Called by PortManager to feed input to a network user's session."""
         if username in self.users:
@@ -635,19 +635,37 @@ class IOSK:
 
             if shebang.startswith('/bin/'): # HACK
                 interpreter = shebang[5:] # e.g., 'skrip'
-
-                # The script path itself is an implicit argument to the interpreter
-                # followed by the arguments passed to the script.
                 script_and_args_for_interpreter = [path] + argv
 
-                # The interpreter's name is the command, and the script to run
-                # (plus any of its own arguments) are the arguments for the interpreter.
-                interpreter_full_command = [interpreter] + script_and_args_for_interpreter
+                # --- BEGIN FIX ---
+                # The original code called `self.call`, creating a potential infinite recursion
+                # if a script specified itself as its interpreter. The fix is to directly
+                # resolve the interpreter as a Python module and execute its `iocall` method,
+                # bypassing the main `call` pathway. This breaks the recursive loop.
 
-                # Call the interpreter using the main `self.call` method.
-                # self.call will parse this new command string and invoke skrip.py correctly,
-                # which will then execute the contents of the target script file.
-                return await self.call(io, shlex.join(interpreter_full_command))
+                # We resolve the interpreter path and check if it's a valid Python module.
+                # This logic is a simplified version of what's in `pipeline.py`.
+                interpreter_path = join('/bin', interpreter)
+                sandboxed_py_path = self.box(f'{interpreter_path}.py', io_context=io)
+
+                if exists(sandboxed_py_path) and isfile(sandboxed_py_path):
+                    try:
+                        modname_for_pymod = interpreter_path.strip("/").replace("/", ".")
+                        py_mod = self.pymod(modname_for_pymod, sandboxed_py_path)
+                        if py_mod and hasattr(py_mod, 'iocall'):
+                            # Execute the interpreter's iocall method directly.
+                            return await py_mod.iocall(io, script_and_args_for_interpreter)
+                        else:
+                            await io.error(f"!! interpreter '{interpreter}' is not a valid module with iocall.")
+                            return False
+                    except Exception as e:
+                        await io.error(f"!! exception calling interpreter '{interpreter}': {e}")
+                        traceback.print_exc()
+                        return False
+                else:
+                    await io.error(f"!! interpreter not found or not a Python module: {interpreter_path}.py")
+                    return False
+                # --- END FIX ---
 
             else:
                 await io.error(f'!! bad shebang: {path}')
@@ -852,7 +870,7 @@ class IOSK:
         if dev.startswith('network:'):
             if prompt and self.port:
                 await self.port.send_to_client(io.user, prompt)
-            
+
             if hasattr(io, 'network_input_queue'):
                 return await io.network_input_queue.get()
             else:
@@ -942,7 +960,7 @@ class IOSK:
                 device_path = io.dev
                 if device_path not in self.device_tpm_trackers:
                     self.device_tpm_trackers[device_path] = []
-                
+
                 self.device_tpm_trackers[device_path].append((datetime.now(), total_tokens))
                 # Pruning of old entries is handled by _get_current_tpm before the next trip.
         except Exception as e:
