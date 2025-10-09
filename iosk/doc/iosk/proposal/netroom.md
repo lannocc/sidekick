@@ -1,6 +1,6 @@
 # Proposal: IOSK Networking and Rooms
 
-**Status**: Proposed (General First Draft -- see `netroom/` subdirectory for updated and specific details)
+**Status**: Now Testing (General First Draft -- see `netroom/` subdirectory for updated and specific details)
 
 ### 1. Introduction
 

@@ -1,5 +1,7 @@
 # IOSK Netroom Implementation Plan
 
+**Status**: All Implemented (Now Testing)
+
 This document outlines the detailed, actionable steps for implementing the IOSK Netroom architecture as specified in the proposal documents. This plan follows a logical order, starting with core system modifications and progressively adding networking features and user-facing commands.
 
 When implementing the Netroom feature set, refer to the detailed specifications in the `doc/iosk/proposal/netroom/` subdirectory as the primary source of truth for each component.
