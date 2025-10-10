@@ -85,7 +85,7 @@ class PortManager:
         self.server_task = None
         log.info("IOSK PortManager stopped.")
 
-    async def connect_to_peer(self, host_uri: str):
+    async def connect_to_peer(self, host_uri: str, via_peer: Optional[str] = None):
         """Establishes an outbound connection to another IOSK system."""
 
         # This function launches a background task to handle the full
@@ -177,7 +177,7 @@ class PortManager:
                         log.info(f"Proactively attempting to connect to new mesh peer '{new_peer_host}' at {new_peer_addr}")
                         # connect_to_peer is non-blocking and will spawn a new background task.
                         # Using `await` is fine because the function returns immediately.
-                        await self.connect_to_peer(f"ws://{new_peer_addr}")
+                        await self.connect_to_peer(f"ws://{new_peer_addr}", via_peer=peer_hostname)
 
                 # ADDED: Process the user and room list from the peer
                 await self._process_network_state_update({
@@ -197,10 +197,8 @@ class PortManager:
                 }
                 log.info(f"Handshake successful with peer: {conn_meta}")
 
-                # Announce connection to local system and mesh
-                connect_msg = f":: host '{self.kernel.hostname}' connected to '{peer_hostname}'"
-                await self.kernel.system.print(connect_msg)
-                await self.broadcast_to_peers({'type': 'system_broadcast', 'message': connect_msg})
+                # Announce connection to local system log
+                await self.kernel.system.print(f":: host '{self.kernel.hostname}' connected to '{peer_hostname}'")
 
                 # --- MESHING PROPAGATION ---
                 # The address is from the URI we used to connect.
@@ -212,8 +210,22 @@ class PortManager:
                 await self._message_loop(websocket, conn_meta)
 
             except (ConnectionClosed, websockets.exceptions.InvalidURI, websockets.exceptions.InvalidHandshake, OSError) as e:
-                # Handle expected connection/handshake errors without a big traceback
-                await self.kernel.system.error(f"!! failed to connect to peer {host_uri}: {e}")
+                # MODIFIED: Handle connection failures differently for proactive vs. user-initiated connections
+                peer_host_from_uri = host_uri.split('//')[1].split(':')[0]
+                if via_peer:
+                    # This was a proactive, indirect connection attempt that failed.
+                    # This is expected behavior with firewalls. Set up an indirect route.
+                    target_host = peer_host_from_uri
+                    if target_host in self.routing_table:
+                        return # Route already exists, do nothing.
+
+                    log.warning(f"Proactive direct connection to '{target_host}' failed: {e}. Establishing indirect route via '{via_peer}'.")
+                    self.routing_table[target_host] = {'type': 'indirect', 'via': via_peer}
+                    # Announce to the local system that a new (indirect) peer is available.
+                    await self.kernel.system.print(f":: host '{target_host}' discovered in mesh (routed via {via_peer})")
+                else:
+                    # This was a direct, user-initiated `mesh` command that failed. This is an error.
+                    await self.kernel.system.error(f"!! failed to connect to peer {host_uri}: {e}")
             except Exception as e:
                 # Handle other unexpected errors
                 await self.kernel.system.error(f"!! an unexpected error occurred while connecting to peer {host_uri}: {e}")
@@ -232,10 +244,8 @@ class PortManager:
                             del self.routing_table[conn_data.hostname]
                         log.info(f"Peer '{conn_data.hostname}' disconnected.")
 
-                        # Announce disconnection to local system and remaining peers
-                        disconnect_msg = f":: host '{disconnected_host}' disconnected from mesh"
-                        await self.kernel.system.print(disconnect_msg)
-                        await self.broadcast_to_peers({'type': 'system_broadcast', 'message': disconnect_msg})
+                        # Announce disconnection to local system log
+                        await self.kernel.system.print(f":: host '{disconnected_host}' disconnected from mesh")
 
                 elif websocket: # and not websocket.closed:
                     # Ensure the socket is closed if it was opened but never fully registered
@@ -356,10 +366,8 @@ class PortManager:
                     new_peer_addr = f"{addr[0]}:{addr[1]}"
                     await self._broadcast_peer_connect(new_peer_host, new_peer_addr)
 
-                    # Announce connection to local system and mesh
-                    connect_msg = f":: host '{new_peer_host}' connected to mesh"
-                    await self.kernel.system.print(connect_msg)
-                    await self.broadcast_to_peers({'type': 'system_broadcast', 'message': connect_msg})
+                    # Announce connection to local system log
+                    await self.kernel.system.print(f":: host '{new_peer_host}' connected to mesh")
                 # --- END MESHING PROPAGATION ---
 
                 await self._message_loop(websocket, connection_metadata)
@@ -380,10 +388,8 @@ class PortManager:
                         del self.routing_table[conn_data.hostname]
                     log.info(f"Peer '{conn_data.hostname}' disconnected.")
 
-                    # Announce disconnection to local system and remaining peers
-                    disconnect_msg = f":: host '{disconnected_host}' disconnected from mesh"
-                    await self.kernel.system.print(disconnect_msg)
-                    await self.broadcast_to_peers({'type': 'system_broadcast', 'message': disconnect_msg})
+                    # Announce disconnection to local system log
+                    await self.kernel.system.print(f":: host '{disconnected_host}' disconnected from mesh")
 
                 elif conn_data.type == 'client' and conn_data.username:
                     await self.kernel.logout_network_user(conn_data.username)
@@ -498,7 +504,9 @@ class PortManager:
 
             # --- MESHING PROPAGATION ---
             elif msg_type == "peer_update":
-                await self._handle_peer_update(message)
+                # MODIFIED: Pass the hostname of the peer that sent this message
+                from_peer_hostname = conn_meta.hostname
+                await self._handle_peer_update(message, from_peer=from_peer_hostname)
             # --- END MESHING PROPAGATION ---
 
             # State updates are now processed by the PortManager itself.
@@ -696,7 +704,7 @@ class PortManager:
         aws = [ws.send(payload) for ws in peers_to_notify.values()]
         await asyncio.gather(*aws, return_exceptions=True)
 
-    async def _handle_peer_update(self, message: Dict[str, Any]):
+    async def _handle_peer_update(self, message: Dict[str, Any], from_peer: Optional[str] = None):
         """Handles a peer_update message, typically for proactive connection."""
         action = message.get('action')
         peer_info = message.get('peer_info')
@@ -718,7 +726,8 @@ class PortManager:
                 return # Already connected or trying.
 
             log.info(f"Peer Update: Proactively connecting to new peer '{hostname}' at {address}")
-            await self.connect_to_peer(f"ws://{address}")
+            # Pass the intermediary peer's hostname.
+            await self.connect_to_peer(f"ws://{address}", via_peer=from_peer)
 
         # Future actions like 'disconnect' could be handled here.
 
