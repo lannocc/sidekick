@@ -85,7 +85,7 @@ class PortManager:
         self.server_task = None
         log.info("IOSK PortManager stopped.")
 
-    async def connect_to_peer(self, host_uri: str, via_peer: Optional[str] = None):
+    async def connect_to_peer(self, host_uri: str, target_hostname: Optional[str] = None, via_peer: Optional[str] = None):
         """Establishes an outbound connection to another IOSK system."""
 
         # This function launches a background task to handle the full
@@ -96,11 +96,14 @@ class PortManager:
             try:
                 # Simple parse of ws://host:port to get 'host' for tracking
                 peer_host_from_uri = host_uri.split('//')[1].split(':')[0]
-                if peer_host_from_uri in self.peers or peer_host_from_uri in self._connecting_peers:
-                    log.info(f"Connection to '{peer_host_from_uri}' is already established or in progress. Skipping.")
+                # Use target_hostname if provided, otherwise fall back to parsed host
+                effective_target_host = target_hostname or peer_host_from_uri
+
+                if effective_target_host in self.peers or effective_target_host in self._connecting_peers:
+                    log.info(f"Connection to '{effective_target_host}' is already established or in progress. Skipping.")
                     return
 
-                self._connecting_peers.add(peer_host_from_uri)
+                self._connecting_peers.add(effective_target_host)
 
                 websocket = await websockets.connect(host_uri)
 
@@ -120,6 +123,9 @@ class PortManager:
                 }
                 await websocket.send(json.dumps(handshake_payload))
 
+                # Before state update, capture current network state for diffing
+                old_network_users = set(self.kernel.network_users.keys())
+
                 # 2. Wait for the server's acknowledgement
                 ack_str = await websocket.recv()
                 ack_message = json.loads(ack_str)
@@ -134,6 +140,14 @@ class PortManager:
                 if not peer_hostname:
                     await self.kernel.system.error("!! peer handshake failed: ACK missing hostname")
                     await websocket.close()
+                    return
+
+                # After handshake, we have the canonical hostname. Check if we're already connected.
+                if peer_hostname in self.peers:
+                    # This handles user-initiated connections via IP/alias when already connected via canonical name.
+                    if not via_peer: # Only print for user-initiated commands
+                        await self.kernel.system.print(f":: Already connected to peer '{peer_hostname}'.")
+                    await websocket.close(1000, "Redundant connection")
                     return
 
                 if peer_hostname == self.kernel.hostname:
@@ -175,9 +189,7 @@ class PortManager:
 
                         # 3. It's a new peer, attempt to connect in the background.
                         log.info(f"Proactively attempting to connect to new mesh peer '{new_peer_host}' at {new_peer_addr}")
-                        # connect_to_peer is non-blocking and will spawn a new background task.
-                        # Using `await` is fine because the function returns immediately.
-                        await self.connect_to_peer(f"ws://{new_peer_addr}", via_peer=peer_hostname)
+                        await self.connect_to_peer(f"ws://{new_peer_addr}", target_hostname=new_peer_host, via_peer=peer_hostname)
 
                 # ADDED: Process the user and room list from the peer
                 await self._process_network_state_update({
@@ -200,29 +212,33 @@ class PortManager:
                 # Announce connection to local system log
                 await self.kernel.system.print(f":: host '{self.kernel.hostname}' connected to '{peer_hostname}'")
 
-                # --- MESHING PROPAGATION ---
-                # The address is from the URI we used to connect.
+                # --- GOSSIP LOGIC ---
+                await self._gossip_state_after_connection(
+                    new_peer_hostname=peer_hostname,
+                    new_peer_ws=websocket,
+                    old_network_users=old_network_users,
+                    newly_learned_users_list=ack_message.get("users", [])
+                )
+
+                # MESHING PROPAGATION for topology
                 addr_part = host_uri.split('//')[1]
                 await self._broadcast_peer_connect(peer_hostname, addr_part)
-                # --- END MESHING PROPAGATION ---
 
                 # 4. Enter the message loop for the duration of the connection
                 await self._message_loop(websocket, conn_meta)
 
             except (ConnectionClosed, websockets.exceptions.InvalidURI, websockets.exceptions.InvalidHandshake, OSError) as e:
                 # MODIFIED: Handle connection failures differently for proactive vs. user-initiated connections
-                peer_host_from_uri = host_uri.split('//')[1].split(':')[0]
+                effective_target_host = target_hostname or peer_host_from_uri
                 if via_peer:
                     # This was a proactive, indirect connection attempt that failed.
-                    # This is expected behavior with firewalls. Set up an indirect route.
-                    target_host = peer_host_from_uri
-                    if target_host in self.routing_table:
+                    if effective_target_host in self.routing_table:
                         return # Route already exists, do nothing.
 
-                    log.warning(f"Proactive direct connection to '{target_host}' failed: {e}. Establishing indirect route via '{via_peer}'.")
-                    self.routing_table[target_host] = {'type': 'indirect', 'via': via_peer}
+                    log.warning(f"Proactive direct connection to '{effective_target_host}' failed: {e}. Establishing indirect route via '{via_peer}'.")
+                    self.routing_table[effective_target_host] = {'type': 'indirect', 'via': via_peer}
                     # Announce to the local system that a new (indirect) peer is available.
-                    await self.kernel.system.print(f":: host '{target_host}' discovered in mesh (routed via {via_peer})")
+                    await self.kernel.system.print(f":: host '{effective_target_host}' discovered in mesh (routed via {via_peer})")
                 else:
                     # This was a direct, user-initiated `mesh` command that failed. This is an error.
                     await self.kernel.system.error(f"!! failed to connect to peer {host_uri}: {e}")
@@ -231,8 +247,9 @@ class PortManager:
                 await self.kernel.system.error(f"!! an unexpected error occurred while connecting to peer {host_uri}: {e}")
                 log.error(f"Full error for peer connection to {host_uri}: {traceback.format_exc()}")
             finally:
-                if peer_host_from_uri and peer_host_from_uri in self._connecting_peers:
-                    self._connecting_peers.remove(peer_host_from_uri)
+                effective_target_host = target_hostname or peer_host_from_uri
+                if effective_target_host and effective_target_host in self._connecting_peers:
+                    self._connecting_peers.remove(effective_target_host)
                 # This cleanup logic is crucial for outbound connections, mirroring the
                 # server-side handler's finally block.
                 if websocket and websocket in self.active_connections:
@@ -348,7 +365,6 @@ class PortManager:
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
 
-
     async def _connection_handler(self, websocket: WebSocketServerProtocol): #, path: str):
         """Handles the entire lifecycle of a single network connection."""
         connection_metadata = None
@@ -372,10 +388,8 @@ class PortManager:
 
                 await self._message_loop(websocket, connection_metadata)
         except ConnectionClosed:
-            #log.info(f"Connection closed: {path}")
             log.info(f"Connection closed: {websocket}")
         except Exception as e:
-            #log.error(f"Error in connection handler for {path}: {e}")
             log.error(f"Error in connection handler for {websocket}: {e}")
             await websocket.close(1011, "Internal server error")
         finally:
@@ -423,6 +437,8 @@ class PortManager:
                 await websocket.close(1008, reason)
                 return None
 
+            # Before state update, capture current network state for diffing
+            old_network_users = set(self.kernel.network_users.keys())
 
             # ADDED: Process incoming user and room list and sync state
             await self._process_network_state_update({
@@ -433,7 +449,6 @@ class PortManager:
             })
 
             # Create the detailed peer list for the handshake acknowledgement.
-            # This list contains all peers currently connected *before* adding the new one.
             peers_for_ack = []
             for peer_name, peer_ws in self.peers.items():
                 addr = peer_ws.remote_address
@@ -463,6 +478,15 @@ class PortManager:
                 "room": local_room_info,
                 "peers": peers_for_ack
             }))
+
+            # --- GOSSIP LOGIC ---
+            await self._gossip_state_after_connection(
+                new_peer_hostname=hostname,
+                new_peer_ws=websocket,
+                old_network_users=old_network_users,
+                newly_learned_users_list=message.get("users", [])
+            )
+
             return Connection(websocket=websocket, type='peer', hostname=hostname)
 
         elif conn_id == "client":
@@ -480,7 +504,6 @@ class PortManager:
 
         else:
             raise ValueError(f"Invalid handshake: unknown id '{conn_id}'")
-
 
     async def _message_loop(self, websocket: WebSocketServerProtocol, conn_meta: Connection):
         """Continuously receives and dispatches messages from a connection."""
@@ -507,10 +530,18 @@ class PortManager:
                 # MODIFIED: Pass the hostname of the peer that sent this message
                 from_peer_hostname = conn_meta.hostname
                 await self._handle_peer_update(message, from_peer=from_peer_hostname)
-            # --- END MESHING PROPAGATION ---
 
-            # State updates are now processed by the PortManager itself.
-            elif msg_type in ("user_update", "room_update", "state_sync"):
+            elif msg_type in ("user_update", "room_update"):
+                # 1. Process locally first
+                await self._process_network_state_update(message)
+                # 2. Forward the update to all other peers
+                peers_to_notify = {h: ws for h, ws in self.peers.items() if h != conn_meta.hostname}
+                if peers_to_notify:
+                    log.info(f"Forwarding {msg_type} from {conn_meta.hostname} to {list(peers_to_notify.keys())}")
+                    aws = [ws.send(message_str) for ws in peers_to_notify.values()]
+                    await asyncio.gather(*aws, return_exceptions=True)
+
+            elif msg_type == "state_sync":
                 await self._process_network_state_update(message)
 
             elif msg_type == "system_broadcast":
@@ -678,7 +709,32 @@ class PortManager:
                 for user_addr in users_on_host:
                     self.kernel.network_rooms[user_addr] = room_name
 
-    # --- MESHING-SPECIFIC METHODS ---
+    # --------------------------------------------------------------------------
+    # MESHING-SPECIFIC METHODS
+    # --------------------------------------------------------------------------
+    async def _gossip_state_after_connection(self, new_peer_hostname, new_peer_ws, old_network_users, newly_learned_users_list):
+        """Symmetrically exchanges user state with a new peer to sync the mesh."""
+        # 1. Tell our other peers about the users from the new peer.
+        other_peers = {h: ws for h, ws in self.peers.items() if h != new_peer_hostname}
+        if other_peers and newly_learned_users_list:
+            log.info(f"Gossiping about {new_peer_hostname}'s {len(newly_learned_users_list)} user(s) to {len(other_peers)} other peer(s).")
+            for user in newly_learned_users_list:
+                update_msg = {"type": "user_update", "action": "login", "user": user, "host": new_peer_hostname}
+                payload = json.dumps(update_msg)
+                aws = [ws.send(payload) for ws in other_peers.values()]
+                await asyncio.gather(*aws, return_exceptions=True)
+
+        # 2. Tell the new peer about all the users we knew about *before* this connection.
+        if old_network_users:
+            log.info(f"Gossiping about {len(old_network_users)} existing user(s) to new peer '{new_peer_hostname}'.")
+            for user_addr in old_network_users:
+                user, host = user_addr.split('.', 1)
+                update_msg = {"type": "user_update", "action": "login", "user": user, "host": host}
+                try:
+                    await new_peer_ws.send(json.dumps(update_msg))
+                except ConnectionClosed:
+                    log.warning(f"Could not gossip to new peer '{new_peer_hostname}', connection closed.")
+                    break
 
     async def _broadcast_peer_connect(self, new_peer_hostname: str, new_peer_address: str):
         """Broadcasts a 'peer_update' message to all other peers about a new connection."""
@@ -727,7 +783,5 @@ class PortManager:
 
             log.info(f"Peer Update: Proactively connecting to new peer '{hostname}' at {address}")
             # Pass the intermediary peer's hostname.
-            await self.connect_to_peer(f"ws://{address}", via_peer=from_peer)
-
-        # Future actions like 'disconnect' could be handled here.
+            await self.connect_to_peer(f"ws://{address}", target_hostname=hostname, via_peer=from_peer)
 
