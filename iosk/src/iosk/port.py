@@ -38,6 +38,7 @@ class PortManager:
         self.kernel = kernel
         self.server_task: Optional[asyncio.Task] = None
         self.port: Optional[int] = None
+        self.host: Optional[str] = None
         self.active_connections: Dict[WebSocketServerProtocol, Connection] = {}
         self.peers: Dict[str, WebSocketServerProtocol] = {}
         self.routing_table: Dict[str, Dict[str, Any]] = {}
@@ -55,9 +56,10 @@ class PortManager:
             return False
 
         self.port = port_num
+        self.host = "0.0.0.0"
         try:
             server = await websockets.serve(
-                self._connection_handler, "0.0.0.0", self.port
+                self._connection_handler, self.host, self.port
             )
             self.server_task = asyncio.create_task(server.wait_closed())
             log.info(f"IOSK PortManager started on port {self.port}")
@@ -65,6 +67,7 @@ class PortManager:
         except Exception as e:
             await self.kernel.system.error(f"!! failed to start port manager: {e}")
             self.port = None
+            self.host = None
             return False
 
     async def stop(self):
@@ -82,6 +85,7 @@ class PortManager:
         self.active_connections.clear()
         self.peers.clear()
         self.port = None
+        self.host = None
         self.server_task = None
         log.info("IOSK PortManager stopped.")
 

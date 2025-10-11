@@ -2,13 +2,21 @@ import asyncio
 
 DOCSTRING = """Connect to other IOSK systems or view the current network mesh.
 
-Usage: mesh
+Usage: mesh [-s | --simple]
        mesh <host[:port]>
        mesh --help
 
 mesh:
   Lists all currently connected peer systems in the network mesh, including
-  both direct and indirect (routed) connections.
+  both direct and indirect (routed) connections. The local system's hostname
+  is prepended with a tilde (~). If the local system has its listener port
+  open, an asterisk (*) is appended to its hostname.
+
+  Options:
+    -s, --simple     Use a compact, single-column format: 'hostname[ip:port]'.
+                     The local host is indicated by a leading tilde (~), and
+                     an asterisk (*) if its listener is open. The '[ip:port]'
+                     part is shown only for direct connections.
 
 mesh <host[:port]>:
   Establishes an outbound connection to another IOSK system's listener
@@ -32,23 +40,39 @@ async def iocall(io, argv):
 
     port_manager = io.os.port
 
-    # Case 1: 'mesh' (status check)
+    # --- Argument Parsing for status command options ---
+    simple_mode = False
+    cleaned_argv = []
+    for arg in argv:
+        if arg == '-s' or arg == '--simple':
+            simple_mode = True
+        else:
+            cleaned_argv.append(arg)
+    argv = cleaned_argv
+
+    # Case 1: 'mesh' (status check) - after options are parsed
     if not argv:
-        # Get the routing table from the port manager.
-        routing_table = port_manager.routing_table
+        mesh_items = [] # Stores structured data for all systems
 
-        # Create a list to hold display data for all systems in the mesh.
-        display_list = []
+        # Add our own system's info
+        local_hostname = io.os.hostname
+        is_listening = (port_manager.port is not None)
+        local_address = ""
+        if is_listening:
+            # For the local host, show the listening bind address and port.
+            bind_host = getattr(port_manager, 'host', '0.0.0.0')
+            local_address = f"{bind_host}:{port_manager.port}"
 
-        # Add our own system's info first.
-        our_hostname = io.os.hostname
-        if port_manager.port is not None:
-            our_hostname += "*"  # Indicate that the listening port is open.
-        display_list.append({'hostname': our_hostname, 'address': ''})
+        mesh_items.append({
+            'hostname': local_hostname,
+            'is_local': True,
+            'is_listening': is_listening,
+            'address': local_address,
+            'route_type': 'local' # Custom type for local entry
+        })
 
         # Process all known peers from the routing table.
-        peer_list = []
-        for hostname, route_info in routing_table.items():
+        for hostname, route_info in port_manager.routing_table.items():
             address_str = ''
             route_type = route_info.get('type')
 
@@ -56,41 +80,94 @@ async def iocall(io, argv):
                 websocket = route_info.get('websocket')
                 if websocket and hasattr(websocket, 'remote_address'):
                     address_str = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
-                else:
-                    address_str = "[direct - error]"
+                # If direct but no remote_address, address_str remains empty
             elif route_type == 'indirect':
                 via_host = route_info.get('via')
                 if via_host:
-                    address_str = f"[via {via_host}]"
+                    address_str = f"[via {via_host}]" # This format is for verbose mode
                 else:
-                    address_str = "[indirect - error]"
-            else:
-                address_str = f"[unknown route type: {route_type}]"
+                    address_str = "[indirect - error]" # This format is for verbose mode
+            # For simple mode, indirect/unknown connections will not show an address part if empty.
 
-            peer_list.append({'hostname': hostname, 'address': address_str})
+            mesh_items.append({
+                'hostname': hostname,
+                'is_local': False,
+                'is_listening': False, # We don't know if a peer is listening from this context
+                'address': address_str,
+                'route_type': route_type
+            })
 
-        # Sort peers alphabetically by hostname and add to the main display list.
-        display_list.extend(sorted(peer_list, key=lambda x: x['hostname']))
+        # Sort all items by hostname
+        sorted_mesh_items = sorted(mesh_items, key=lambda x: x['hostname'])
 
-        # Dynamically calculate column widths for clean formatting.
-        max_host_len = len("HOSTNAME")
-        for system in display_list:
-            if len(system['hostname']) > max_host_len:
-                max_host_len = len(system['hostname'])
+        # Ensure local host is always first in the display
+        # Find the local entry and move it to the front if it's not already.
+        local_entry_idx = -1
+        for i, item in enumerate(sorted_mesh_items):
+            if item['is_local']:
+                local_entry_idx = i
+                break
+        if local_entry_idx > 0:
+            local_entry = sorted_mesh_items.pop(local_entry_idx)
+            sorted_mesh_items.insert(0, local_entry)
 
-        # Add padding
-        max_host_len += 2
 
-        # Print the formatted table.
-        await io.print(f"{'HOSTNAME':<{max_host_len}} ADDRESS")
-        await io.print(f"{'-' * max_host_len} {'-' * 20}")
+        if simple_mode:
+            # Simple output format: ~hostname*[ip:port]
+            for item in sorted_mesh_items:
+                display_line_parts = []
+                if item['is_local']:
+                    display_line_parts.append('~')
 
-        for system in display_list:
-            await io.print(f"{system['hostname']:<{max_host_len}} {system['address']}")
+                display_line_parts.append(item['hostname'])
 
-        # The total count is the local host plus all known peers.
-        count = 1 + len(routing_table)
-        await io.print(f"\n:: {count} system{'s' if count != 1 else ''} in mesh.")
+                if item['is_local'] and item['is_listening']:
+                    display_line_parts.append('*')
+
+                # Show [ip:port] for direct connections OR for the local host if it is listening.
+                if ((item['is_local'] and item['is_listening']) or item['route_type'] == 'direct') and item['address'] and ':' in item['address']:
+                    display_line_parts.append(f"[{item['address']}]")
+
+                await io.print("".join(display_line_parts))
+            # No final count in simple mode, consistent with rooms and where.
+
+        else:
+            # Verbose output format (existing table)
+            # Dynamically calculate column widths for clean formatting.
+            max_host_len = len("HOSTNAME")
+            max_address_len = len("ADDRESS")
+
+            for item in sorted_mesh_items:
+                hostname_display = item['hostname']
+                if item['is_local']:
+                    hostname_display = f"~{hostname_display}"
+                    if item['is_listening']:
+                        hostname_display += "*"
+
+                if len(hostname_display) > max_host_len:
+                    max_host_len = len(hostname_display)
+
+                # The verbose output includes `[via host]` or `[indirect - error]` in the address.
+                # So we consider the full `item['address']` for width calculation.
+                if len(item['address']) > max_address_len:
+                    max_address_len = len(item['address'])
+
+            # Print the formatted table.
+            await io.print(f"{'HOSTNAME':<{max_host_len}}  {'ADDRESS':<{max_address_len}}")
+            await io.print(f"{'-' * max_host_len}  {'-' * max_address_len}")
+
+            for item in sorted_mesh_items:
+                hostname_display = item['hostname']
+                if item['is_local']:
+                    hostname_display = f"~{hostname_display}"
+                    if item['is_listening']:
+                        hostname_display += "*"
+
+                await io.print(f"{hostname_display:<{max_host_len}}  {item['address']:<{max_address_len}}")
+
+            # The total count is the local host plus all known peers.
+            count = len(sorted_mesh_items)
+            await io.print(f"\n:: {count} system{'s' if count != 1 else ''} in mesh.")
         return True
 
     # Case 2: 'mesh <host[:port]>' (connect to peer)
@@ -121,7 +198,7 @@ async def iocall(io, argv):
         # The user can run 'mesh' again after a moment to verify the connection.
         return True
 
-    # Case 3: Too many arguments
+    # Case 3: Too many arguments (after -s processing)
     await io.error("!! mesh: too many arguments. Use 'mesh --help' for usage.")
     return False
 
