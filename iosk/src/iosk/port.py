@@ -254,23 +254,8 @@ class PortManager:
                 effective_target_host = target_hostname or peer_host_from_uri
                 if effective_target_host and effective_target_host in self._connecting_peers:
                     self._connecting_peers.remove(effective_target_host)
-                # This cleanup logic is crucial for outbound connections, mirroring the
-                # server-side handler's finally block.
-                if websocket and websocket in self.active_connections:
-                    conn_data = self.active_connections.pop(websocket)
-                    if conn_data.type == 'peer' and conn_data.hostname in self.peers:
-                        disconnected_host = conn_data.hostname # Capture
-                        del self.peers[conn_data.hostname]
-                        if conn_data.hostname in self.routing_table:
-                            del self.routing_table[conn_data.hostname]
-                        log.info(f"Peer '{conn_data.hostname}' disconnected.")
-
-                        # Announce disconnection to local system log
-                        await self.kernel.system.print(f":: host '{disconnected_host}' disconnected from mesh")
-
-                elif websocket: # and not websocket.closed:
-                    # Ensure the socket is closed if it was opened but never fully registered
-                    await websocket.close()
+                if websocket:
+                    await self._cleanup_and_propagate_disconnect(websocket)
 
         # The `mesh` command should not block. Run the connection logic in the background.
         asyncio.create_task(_outbound_connect_and_manage())
@@ -397,21 +382,7 @@ class PortManager:
             log.error(f"Error in connection handler for {websocket}: {e}")
             await websocket.close(1011, "Internal server error")
         finally:
-            if websocket in self.active_connections:
-                conn_data = self.active_connections.pop(websocket)
-                if conn_data.type == 'peer' and conn_data.hostname in self.peers:
-                    disconnected_host = conn_data.hostname  # Capture hostname
-                    del self.peers[conn_data.hostname]
-                    if conn_data.hostname in self.routing_table:
-                        del self.routing_table[conn_data.hostname]
-                    log.info(f"Peer '{conn_data.hostname}' disconnected.")
-
-                    # Announce disconnection to local system log
-                    await self.kernel.system.print(f":: host '{disconnected_host}' disconnected from mesh")
-
-                elif conn_data.type == 'client' and conn_data.username:
-                    await self.kernel.logout_network_user(conn_data.username)
-                    log.info(f"Client '{conn_data.username}' disconnected.")
+            await self._cleanup_and_propagate_disconnect(websocket)
 
     async def _handshake(self, websocket: WebSocketServerProtocol) -> Optional[Connection]:
         """Performs the initial handshake to identify the connection type."""
@@ -765,7 +736,7 @@ class PortManager:
         await asyncio.gather(*aws, return_exceptions=True)
 
     async def _handle_peer_update(self, message: Dict[str, Any], from_peer: Optional[str] = None):
-        """Handles a peer_update message, typically for proactive connection."""
+        """Handles a peer_update message for both connecting and disconnecting peers."""
         action = message.get('action')
         peer_info = message.get('peer_info')
         if not all([action, peer_info]):
@@ -773,12 +744,16 @@ class PortManager:
             return
 
         hostname = peer_info.get('hostname')
-        address = peer_info.get('address')
-        if not all([hostname, address]):
-            log.warning(f"Malformed peer_info in peer_update: {peer_info}")
+        if not hostname:
+            log.warning(f"Malformed peer_info in peer_update (missing hostname): {peer_info}")
             return
 
         if action == 'connect':
+            address = peer_info.get('address')
+            if not address:
+                log.warning(f"Malformed peer_info in 'connect' peer_update (missing address): {peer_info}")
+                return
+
             # Proactively try to form a direct connection.
             if hostname == self.kernel.hostname:
                 return # It's us.
@@ -786,6 +761,96 @@ class PortManager:
                 return # Already connected or trying.
 
             log.info(f"Peer Update: Proactively connecting to new peer '{hostname}' at {address}")
-            # Pass the intermediary peer's hostname.
             await self.connect_to_peer(f"ws://{address}", target_hostname=hostname, via_peer=from_peer)
+
+        elif action == 'disconnect':
+            log.info(f"Processing disconnect notification for peer '{hostname}' from '{from_peer}'.")
+
+            # If we don't know this host, we're done.
+            if hostname not in self.routing_table and hostname not in self.peers:
+                return
+
+            # If we have a direct connection, let the local websocket closure handle it.
+            # The local connection state is the source of truth for direct peers.
+            if hostname in self.peers:
+                return
+
+            # This peer is known via an indirect route. Clean it up.
+            if hostname in self.routing_table:
+                del self.routing_table[hostname]
+
+            # Also clean up users from that host.
+            users_to_remove = [user_addr for user_addr in self.kernel.network_users if user_addr.endswith(f'.{hostname}')]
+            for user_addr in users_to_remove:
+                del self.kernel.network_users[user_addr]
+                if user_addr in self.kernel.network_rooms:
+                    del self.kernel.network_rooms[user_addr]
+            if users_to_remove:
+                log.info(f"Cleaned up {len(users_to_remove)} users from disconnected host '{hostname}' via propagation.")
+
+            await self.kernel.system.print(f":: host '{hostname}' disconnected from mesh (propagated via {from_peer})")
+
+            # Forward the disconnect message to our other peers.
+            # Don't send it back to the peer who told us.
+            peers_to_notify = {h: ws for h, ws in self.peers.items() if h != from_peer}
+            if peers_to_notify:
+                log.info(f"Forwarding disconnect notification for '{hostname}' to {len(peers_to_notify)} other peer(s).")
+                payload = json.dumps(message)
+                aws = [ws.send(payload) for ws in peers_to_notify.values()]
+                await asyncio.gather(*aws, return_exceptions=True)
+
+    async def _broadcast_peer_disconnect(self, disconnected_hostname: str):
+        """Broadcasts a 'peer_update' with action 'disconnect' to all remaining peers."""
+        if not self.peers:
+            return
+
+        message = {
+            'type': 'peer_update',
+            'action': 'disconnect',
+            'peer_info': {
+                'hostname': disconnected_hostname
+            }
+        }
+        payload = json.dumps(message)
+        log.info(f"Broadcasting disconnection of '{disconnected_hostname}' to {len(self.peers)} remaining peer(s).")
+        aws = [ws.send(payload) for ws in self.peers.values()]
+        await asyncio.gather(*aws, return_exceptions=True)
+
+    async def _cleanup_and_propagate_disconnect(self, websocket: WebSocketServerProtocol):
+        """
+        Handles the cleanup of a disconnected peer and propagates the event to the mesh.
+        This is the single source of truth for handling peer disconnections.
+        """
+        if websocket not in self.active_connections:
+            return
+
+        conn_data = self.active_connections.pop(websocket)
+
+        if conn_data.type == 'client' and conn_data.username:
+            await self.kernel.logout_network_user(conn_data.username)
+            log.info(f"Client '{conn_data.username}' disconnected.")
+            return
+
+        if conn_data.type == 'peer' and conn_data.hostname:
+            disconnected_host = conn_data.hostname
+            # 1. Clean up local peer state
+            if disconnected_host in self.peers:
+                del self.peers[disconnected_host]
+            if disconnected_host in self.routing_table:
+                del self.routing_table[disconnected_host]
+
+            log.info(f"Peer '{disconnected_host}' disconnected.")
+            await self.kernel.system.print(f":: host '{disconnected_host}' disconnected from mesh")
+
+            # 2. Clean up users from that host
+            users_to_remove = [user_addr for user_addr in self.kernel.network_users if user_addr.endswith(f'.{disconnected_host}')]
+            for user_addr in users_to_remove:
+                del self.kernel.network_users[user_addr]
+                if user_addr in self.kernel.network_rooms:
+                    del self.kernel.network_rooms[user_addr]
+            if users_to_remove:
+                log.info(f"Cleaned up {len(users_to_remove)} users from disconnected host '{disconnected_host}'")
+
+            # 3. Propagate the disconnection to remaining peers
+            await self._broadcast_peer_disconnect(disconnected_host)
 
