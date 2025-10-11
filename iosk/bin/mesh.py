@@ -17,6 +17,7 @@ mesh:
                      The local host is indicated by a leading tilde (~), and
                      an asterisk (*) if its listener is open. The '[ip:port]'
                      part is shown only for direct connections.
+                     For indirect connections, '[via host]' is shown.
 
 mesh <host[:port]>:
   Establishes an outbound connection to another IOSK system's listener
@@ -84,9 +85,10 @@ async def iocall(io, argv):
             elif route_type == 'indirect':
                 via_host = route_info.get('via')
                 if via_host:
-                    address_str = f"[via {via_host}]" # This format is for verbose mode
+                    # Keep this format for indirect routes
+                    address_str = f"[via {via_host}]"
                 else:
-                    address_str = "[indirect - error]" # This format is for verbose mode
+                    address_str = "[indirect - error]"
             # For simple mode, indirect/unknown connections will not show an address part if empty.
 
             mesh_items.append({
@@ -113,7 +115,7 @@ async def iocall(io, argv):
 
 
         if simple_mode:
-            # Simple output format: ~hostname*[ip:port]
+            # Simple output format: ~hostname*[ip:port] or hostname[via host]
             for item in sorted_mesh_items:
                 display_line_parts = []
                 if item['is_local']:
@@ -124,9 +126,21 @@ async def iocall(io, argv):
                 if item['is_local'] and item['is_listening']:
                     display_line_parts.append('*')
 
-                # Show [ip:port] for direct connections OR for the local host if it is listening.
-                if ((item['is_local'] and item['is_listening']) or item['route_type'] == 'direct') and item['address'] and ':' in item['address']:
-                    display_line_parts.append(f"[{item['address']}]")
+                # MODIFICATION START: Handle address part for simple mode
+                address_part = ""
+                if item['is_local'] and item['is_listening'] and item['address'] and ':' in item['address']:
+                    # Local listening host, show [ip:port]
+                    address_part = f"[{item['address']}]"
+                elif item['route_type'] == 'direct' and item['address'] and ':' in item['address']:
+                    # Direct peer, show [ip:port]
+                    address_part = f"[{item['address']}]"
+                elif item['route_type'] == 'indirect' and item['address']:
+                    # Indirect peer, show [via host] (address is already formatted)
+                    address_part = item['address']
+
+                if address_part:
+                    display_line_parts.append(address_part)
+                # MODIFICATION END
 
                 await io.print("".join(display_line_parts))
             # No final count in simple mode, consistent with rooms and where.
