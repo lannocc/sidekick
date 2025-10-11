@@ -1,10 +1,8 @@
-# ./dev/ollama.py
+# ./src/iosk/dev/ollama.py
 from ollama import AsyncClient
 
-#MODEL='deepseek-r1'
-#MODEL='deepseek-coder'
-#MODEL='codellama'
-MODEL='gemma3'
+
+DEFAULT_MODEL='gemma3:latest'
 
 # No global client variable.
 
@@ -17,10 +15,10 @@ async def get_client(io):
     # so we just instantiate it.
     return AsyncClient()
 
-async def trip(client, prompt, model=MODEL): # round trip
+async def trip(client, prompt, model): # round trip
     """
     Performs a round trip using the provided Ollama client instance.
-    This function is now stateless and relies on the caller to provide the client.
+    This function is now stateless and relies on the caller to provide the client and model.
     """
     if not client:
         raise ValueError("Ollama client is not initialized.")
@@ -33,16 +31,22 @@ async def trip(client, prompt, model=MODEL): # round trip
     reply = response['response']
     return reply
 
+
 async def iosend(io, data):
+    await iosender(io, data, DEFAULT_MODEL)
+
+
+async def iosender(io, data, model):
     """
-    Sets up an engagement for the default model.
-    Passes a direct reference to the static `trip` function. The Engagement
-    class is responsible for calling it with a client and prompt.
+    Sets up an engagement for a specific model.
+    Uses a lambda to create a function that has the 'model' argument
+    pre-filled. The Engagement class will later call this with (client, prompt).
     """
     engagement = io.os.chat.engagements.get(io.user)
     if not engagement:
         return
-    engagement.append(data, trip)
+    model_specific_trip = lambda client, prompt: trip(client, prompt, model=model)
+    engagement.append(data, model_specific_trip)
 
 async def iorecv(io, prompt=None):
     """Receives data from the engagement input buffer. Unchanged."""
@@ -51,3 +55,4 @@ async def iorecv(io, prompt=None):
         return None
     data = await engagement.input()
     return data
+
