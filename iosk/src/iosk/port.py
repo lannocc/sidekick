@@ -44,6 +44,8 @@ class PortManager:
         self.routing_table: Dict[str, Dict[str, Any]] = {}
         self._connecting_peers: set[str] = set()
         self.remote_exec_sessions: Dict[str, Dict[str, Any]] = {}
+        self.seen_message_ids: set = set()
+        self.MESSAGE_ID_CACHE_SIZE = 500
 
     # --------------------------------------------------------------------------
     # Public API (Kernel-Facing)
@@ -531,7 +533,27 @@ class PortManager:
             elif msg_type == "remote_exec_response":
                 await self._handle_remote_exec_response(message)
 
-            elif msg_type in ("direct_message", "room_message"):
+            elif msg_type == "room_message":
+                msg_id = message.get("msg_id")
+                if msg_id:
+                    if msg_id in self.seen_message_ids:
+                        return  # Already processed this message, drop it.
+                    self.seen_message_ids.add(msg_id)
+                    if len(self.seen_message_ids) > self.MESSAGE_ID_CACHE_SIZE:
+                        self.seen_message_ids.pop() # Evict an old ID
+
+                # 1. Process the message locally
+                await self.kernel.chat.handle_network_message(message)
+
+                # 2. Forward the message to all other connected peers
+                from_peer_hostname = conn_meta.hostname
+                peers_to_forward = {h: ws for h, ws in self.peers.items() if h != from_peer_hostname}
+                if peers_to_forward:
+                    log.info(f"Forwarding room message from '{from_peer_hostname}' to {list(peers_to_forward.keys())}")
+                    aws = [ws.send(message_str) for ws in peers_to_forward.values()]
+                    await asyncio.gather(*aws, return_exceptions=True)
+
+            elif msg_type == "direct_message":
                 await self.kernel.chat.handle_network_message(message)
 
             elif msg_type == "client_input":

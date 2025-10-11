@@ -14,6 +14,7 @@ from os.path import exists, join
 import re
 import tempfile
 import traceback
+import uuid
 
 
 class AIMessenger:
@@ -199,6 +200,7 @@ class AIMessenger:
             # Broadcast to network peers
             payload = {
                 "type": "room_message",
+                "msg_id": str(uuid.uuid4()),
                 "from_addr": remote_from_addr,
                 "room_name": self.active_room,
                 "content": msg
