@@ -197,13 +197,21 @@ class PortManager:
                         log.info(f"Proactively attempting to connect to new mesh peer '{new_peer_host}' at {new_peer_addr}")
                         await self.connect_to_peer(f"ws://{new_peer_addr}", target_hostname=new_peer_host, via_peer=peer_hostname)
 
-                # ADDED: Process the user and room list from the peer
-                await self._process_network_state_update({
-                    "type": "state_sync",
-                    "host": peer_hostname,
-                    "users": ack_message.get("users", []),
-                    "room": ack_message.get("room", {})
-                })
+                # Prioritize full mesh state sync if available.
+                mesh_state = ack_message.get("mesh_state")
+                if mesh_state:
+                    log.info(f"Received full mesh state from {peer_hostname}. Syncing...")
+                    self.kernel.network_users = mesh_state.get("users", {})
+                    self.kernel.network_rooms = mesh_state.get("rooms", {})
+                else:
+                    # Fallback for older peers: process only the peer's local state.
+                    log.warning(f"Peer {peer_hostname} did not provide full mesh state. Performing partial sync.")
+                    await self._process_network_state_update({
+                        "type": "state_sync",
+                        "host": peer_hostname,
+                        "users": ack_message.get("users", []),
+                        "room": ack_message.get("room", {})
+                    })
 
                 # 3. Handshake successful, set up connection metadata and state
                 conn_meta = Connection(websocket=websocket, type='peer', hostname=peer_hostname)
@@ -453,7 +461,12 @@ class PortManager:
                 "hostname": self.kernel.hostname,
                 "users": list(self.kernel.users.keys()),
                 "room": local_room_info,
-                "peers": peers_for_ack
+                "peers": peers_for_ack,
+                # This new field contains the full state of the mesh as known by this peer.
+                "mesh_state": {
+                    "users": self.kernel.network_users,
+                    "rooms": self.kernel.network_rooms
+                }
             }))
 
             # --- GOSSIP LOGIC ---
