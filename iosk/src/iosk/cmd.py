@@ -15,6 +15,21 @@ def run(args=sys.argv[1:]):
     Primary entry point for launching an IOSK system.
     This is now exclusively for launching the local root console.
     """
+    # --- BEGIN FIX ---
+    # On Windows, the default console may not use UTF-8, causing UnicodeEncodeError
+    # when printing characters from other languages. This reconfigures the standard
+    # output and error streams to use UTF-8 to prevent this.
+    if sys.platform == "win32":
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+            sys.stderr.reconfigure(encoding='utf-8')
+        except (TypeError, AttributeError):
+            # This is a best-effort fix. In some environments (e.g., older Python
+            # versions or when not running in a real console), reconfigure may
+            # not be available or may fail.
+            print(":: warning: could not reconfigure console to UTF-8.")
+    # --- END FIX ---
+
     # 1. Argument Parsing
     if len(args) != 1 or args[0].startswith('-'):
         print("Usage: iosk <root_directory>")
@@ -105,3 +120,4 @@ def run(args=sys.argv[1:]):
 
 # This simplified structure removes the old SET dictionary and command dispatching.
 # The `run` function is now the sole purpose of this module, as per the netroom proposal.
+
