@@ -21,7 +21,7 @@ def main(args, called=''):
 
     shot = False
     file = None
-    pkg = None
+    pkg = []  # Changed: Start with a list to collect all package paths
     lang = None
     save = None
 
@@ -60,11 +60,8 @@ def main(args, called=''):
                 if not args:
                     print(f'!!! need a directory path to package')
                     return
-
-                if pkg:
-                    if isinstance(pkg, list): pkg.append(args[0])
-                    else: pkg = [ pkg, args[0] ]
-                else: pkg = args[0]
+                # Changed: Always append to the list
+                pkg.append(args[0])
                 args = args[1:]
 
             elif op == '-e':
@@ -90,19 +87,29 @@ def main(args, called=''):
             print(f'!!! unknown option: {op}')
             return
 
+    # Changed: Any non-option arguments are now treated as package paths
+    if args and (task or ask):
+        pkg.extend(args)
+        args = []  # Consume the arguments
+
+    # Changed: Finalize the package argument for function calls
+    final_pkg = None
+    if len(pkg) == 1:
+        final_pkg = pkg[0]
+    elif len(pkg) > 1:
+        final_pkg = pkg
+
     # prompt mode
     if task or ask:
-        #if not args:
-        #    print('need a prompt')
-        #    return
+        # Changed: Prompt is no longer read from command line arguments.
+        # It will be handled interactively or via pipe in the called function.
+        prompt = None
 
-        if len(args) > 1: prompt = ' '.join(args)
-        elif args: prompt = args[0]
-        else: prompt = None
-
-        if task: do_task(prompt, shot=shot, file=file, package=pkg, quiet=quiet,
+        if task:
+            do_task(prompt, shot=shot, file=file, package=final_pkg, quiet=quiet,
                          chatter=chatter, model=model)
-        else: ask_question(prompt, shot=shot, file=file, package=pkg,
+        else:
+            ask_question(prompt, shot=shot, file=file, package=final_pkg,
                            mdlang=lang, mdsave=save, quiet=quiet,
                            chatter=chatter, model=model, use_openai=use_openai)
 
@@ -134,6 +141,7 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
                  model=config.GEMINI_MODEL_QUICK_2, use_openai=False):
     from .ai import google, openai
     from .util import get_md_code_block
+    import sys
 
     if not quiet:
         print('Ask a Question')
@@ -163,15 +171,23 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         print('!!! need either both mdlang and mdsave, or neither')
         return
 
-    if prompt:
-        print(f' >> {prompt}')
-
+    # Changed: Get prompt from multi-line interactive input or pipe
+    if sys.stdin.isatty():
+        # Interactive mode
+        if not quiet:
+            print('    (Ctrl+D to finish)')
+            print(' >> ', end='')
+        prompt = sys.stdin.read()
     else:
-        print(' >> ', end='')
-        prompt = input()
+        # Piped mode
+        prompt = sys.stdin.read()
 
     if not prompt:
         return
+
+    if not quiet:
+        print()
+        print("...waiting for reply...")
 
     ai_provider = openai if use_openai else google
 
@@ -265,7 +281,7 @@ def help(args):
     print()
     print('GENERAL USAGE:')
     #print('     sk [options] <command> [args...]')
-    print('    ask [options] <question-prompt>')
+    print('    ask [options] [directory-to-package ...]')
     print('   task [options] <command-prompt>')
     print()
     #print('Use `sk` for sidekick commands, `ask` questions, `task` for tasks.')
@@ -472,3 +488,4 @@ COMMANDS = {
     'iosk': (iosk,
         'run iosk system'),
 }
+
