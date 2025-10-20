@@ -119,19 +119,19 @@ def get_directory_tree_as_text(path, indent='', markdown=False, count=False, dir
         items = os.listdir(path)
     except OSError:
         return ''
-        
+
     ignores = get_ignore_set(path)
-    
+
     # Pre-filter the list of items to be displayed to correctly draw the tree branches
     visible_items = []
     for item in sorted(items):
         if is_ignorable_path(item, ignores):
             continue
-        
+
         full_path = os.path.join(path, item)
         if dirs_only and not os.path.isdir(full_path):
             continue
-            
+
         visible_items.append(item)
 
     for i, item in enumerate(visible_items):
@@ -139,10 +139,10 @@ def get_directory_tree_as_text(path, indent='', markdown=False, count=False, dir
 
         # Use the index relative to the visible list to determine the prefix
         if i < len(visible_items) - 1:
-            prefix = '* ' if markdown else '├── '
-            new_indent = indent + ('    ' if markdown else '│   ')
+            prefix = '* ' if markdown else '|-- '
+            new_indent = indent + ('    ' if markdown else '|   ')
         else: # This is the last visible item
-            prefix = '* ' if markdown else '└── '
+            prefix = '* ' if markdown else '`-- '
             new_indent = indent + '    '
 
         suffix = ''
@@ -157,12 +157,12 @@ def get_directory_tree_as_text(path, indent='', markdown=False, count=False, dir
             # The recursive call should not perform the count itself.
             text += get_directory_tree_as_text(full_path, new_indent,
                                                markdown=markdown,
-                                               count=False, 
+                                               count=False,
                                                dirs_only=dirs_only)
 
     if count:
         # The 'data' for counting includes the tree structure text itself...
-        data = text 
+        data = text
         if not dirs_only:
              # ...and the contents of all files within the directory (recursively).
              data += get_directory_contents_as_text(path)
@@ -342,3 +342,4 @@ def play_scratch():
 
 def play_thinking():
     play('assets/three_tones.wav')
+
