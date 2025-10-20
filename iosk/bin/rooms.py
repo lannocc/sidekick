@@ -1,17 +1,19 @@
+# bin/rooms.py
 import os
 
 DOCSTRING = """List all rooms created on the local system.
 
-Usage: rooms [-v | --verbose]
+Usage: rooms [-s | --simple]
        rooms --help
 
-Lists all rooms that have been created on the local system by listing
-the directories in /var/room/. The currently active room, if any, is
-indicated with a leading asterisk (*), followed by the count of active
-users in parentheses, e.g., '*iosk(2)'.
+By default, lists all rooms in a verbose, multi-column format showing ROOM and TOPIC.
+The currently active room, if any, is indicated with a leading tilde (~),
+followed by the count of active users in parentheses, e.g., '~iosk(2)'.
 
 Options:
-  -v, --verbose    Use a verbose, multi-column format showing ROOM and TOPIC.
+  -s, --simple     Use a compact, single-column format.
+                   Active rooms are indicated with a leading tilde (~) and
+                   user count, e.g., '~iosk(2)'.
   --help           Displays this help message.
 """
 
@@ -22,16 +24,17 @@ async def iocall(io, argv):
         await io.print(DOCSTRING.strip())
         return True
 
-    verbose = False
-    if '-v' in argv:
-        verbose = True
-        argv.remove('-v')
-    if '--verbose' in argv:
-        verbose = True
-        argv.remove('--verbose')
+    simple_mode = False
+    # Check and remove -s or --simple arguments
+    if '-s' in argv:
+        simple_mode = True
+        argv.remove('-s')
+    if '--simple' in argv:
+        simple_mode = True
+        argv.remove('--simple')
 
     if argv:
-        await io.error("!! rooms: command takes no arguments other than -v/--verbose.")
+        await io.error("!! rooms: command takes no arguments other than -s/--simple.")
         return False
 
     room_dir_virtual = '/var/room'
@@ -68,7 +71,14 @@ async def iocall(io, argv):
     # 1. Gather data for all rooms
     for name in room_names:
         topic_path = f'/var/room/{name}/topic'
-        topic_content = await io.os.get(io, topic_path)
+        topic_content = None # Initialize to None
+
+        # Check if the topic file exists before attempting to get its content
+        if await io.os.exists(io, topic_path):
+            topic_content = await io.os.get(io, topic_path)
+            # io.os.get will return None if it's not a file or is binary,
+            # which is still handled correctly by the next line.
+
         topic = topic_content.strip() if topic_content else '(none)'
 
         is_active = (name == active_room_name)
@@ -81,15 +91,16 @@ async def iocall(io, argv):
             'is_active': is_active
         })
 
-    if not verbose:
-        # Non-verbose output
+    if simple_mode:
+        # New simple (old non-verbose) output
         for data in room_data:
             display_name = data['name']
             if data['is_active']:
-                display_name = f"*{display_name}"
+                # The prompt specifies ~roomname(user_count) for active rooms in simple mode too.
+                display_name = f"~{display_name}({data['users']})" 
             await io.print(display_name)
     else:
-        # Verbose, multi-column output
+        # New default (old verbose) output
         # 2. Calculate dynamic column widths
         max_room_len = len("ROOM")
         max_topic_len = len("TOPIC")
@@ -97,7 +108,7 @@ async def iocall(io, argv):
         for data in room_data:
             display_name = data['name']
             if data['is_active']:
-                display_name = f"*{display_name}[{data['users']}]" # Includes count in name for active room
+                display_name = f"~{display_name}({data['users']})" # Includes count in name for active room
             
             if len(display_name) > max_room_len:
                 max_room_len = len(display_name)
@@ -114,16 +125,16 @@ async def iocall(io, argv):
         for data in room_data:
             display_name = data['name']
             if data['is_active']:
-                display_name = f"*{display_name}({data['users']})" # Same logic as for max_room_len
+                display_name = f"~{display_name}({data['users']})" 
             
             await io.print(f"{display_name:<{max_room_len}}  {data['topic']:<{max_topic_len}}")
     
     # Final count
     count = len(room_names)
-    if verbose:
-        await io.print("") # Add a newline before the final count for better spacing
-
-    await io.print(f":: {count} room{'s' if count != 1 else ''} found.")
+    # Add a newline before the final count for better spacing in default (verbose) mode
+    if not simple_mode:
+        await io.print("") 
+        await io.print(f":: {count} room{'s' if count != 1 else ''} found.")
 
     return True
 

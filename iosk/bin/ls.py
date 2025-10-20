@@ -1,5 +1,6 @@
 import os
-from os.path import exists, isdir, join
+import posixpath
+from os.path import exists, isdir
 #from sk.util import get_ignore_set
 
 
@@ -78,7 +79,8 @@ async def iocall(io, argv):
         ]
 
         await io.print(c.join(
-            [ f'{file}{"/" if isdir(io.os.box(join(path, file), io_context=io)) else ""}'
+            [ f'{file}{"/" if isdir(io.os.box(posixpath.join(path, file), io_context=io)) else ""}'
               for file in filtered_listing ]))
 
     return not errors
+

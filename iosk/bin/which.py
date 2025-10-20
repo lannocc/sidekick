@@ -1,5 +1,6 @@
 import os
-from os.path import join, isfile, exists, normpath
+import posixpath
+from os.path import isfile, exists
 import importlib, importlib.util
 
 SHELL_BUILTINS = ['exit', 'logout']
@@ -38,11 +39,11 @@ async def iocall(io, argv):
     # Case 1: Command is an absolute or explicit relative path (e.g., /bin/ls, ./script.sh)
     # For these, we only check the given path itself, not with .py extensions implicitly.
     if command_name.startswith('/') or command_name.startswith('./') or command_name.startswith('../'):
-        candidate_virtual_paths.append(normpath(command_name))
+        candidate_virtual_paths.append(posixpath.normpath(command_name))
     else:
         # Case 2: Command is a bare name, search PATH or default to /bin
         path_env = io.environ().get('PATH')
-        path_dirs = path_env.split(os.pathsep) if path_env else []
+        path_dirs = path_env.split(':') if path_env else []
         if not path_dirs:
             # Default to /bin if PATH is not set or empty
             path_dirs = ['/bin']
@@ -56,12 +57,13 @@ async def iocall(io, argv):
             # We construct candidate paths in this priority order.
 
             # Candidate 1: Check for command_name.py (and if it's a loadable Python module)
-            virtual_py_path = normpath(join(p_dir, f'{command_name}.py'))
+            virtual_py_path = posixpath.normpath(posixpath.join(p_dir, f'{command_name}.py'))
             host_py_path = io.os.box(virtual_py_path, io_context=io)
             if exists(host_py_path) and isfile(host_py_path):
                 # Simulate spec creation to ensure it's a valid Python module,
                 # as kernel.call would do.
-                modname_for_spec = f'sk.iosk.{virtual_py_path.strip("/").replace("/", ".")}'
+                mod_base = virtual_py_path.removesuffix('.py').strip('/').replace('/', '.').replace('-', '_')
+                modname_for_spec = f'sk.iosk.{mod_base}'
                 try:
                     spec = importlib.util.spec_from_file_location(modname_for_spec, host_py_path)
                     if spec and spec.loader:
@@ -70,7 +72,7 @@ async def iocall(io, argv):
                     pass # Not a loadable Python module, ignore for this check
 
             # Candidate 2: Check for command_name (plain executable)
-            virtual_cmd_path = normpath(join(p_dir, command_name))
+            virtual_cmd_path = posixpath.normpath(posixpath.join(p_dir, command_name))
             host_cmd_path = io.os.box(virtual_cmd_path, io_context=io)
             if exists(host_cmd_path) and isfile(host_cmd_path):
                 candidate_virtual_paths.append(virtual_cmd_path)

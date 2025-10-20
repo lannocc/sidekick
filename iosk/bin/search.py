@@ -1,5 +1,6 @@
 import os
-from os.path import isfile, join, relpath
+import posixpath
+from os.path import isfile, relpath
 from binaryornot.check import is_binary
 
 async def iocall(io, argv):
@@ -88,12 +89,14 @@ async def iocall(io, argv):
 
         for root, _dirs, files in walk_iter:
             for name in files:
-                fp = join(root, name)
+                fp = os.path.join(root, name)
                 try:
                     if not isfile(fp) or is_binary(fp): continue
 
                     rel = relpath(fp, base_fs) if os.path.isdir(base_fs) else name
-                    iosk_path = path if rel in ('', '.') else (join(path, rel))
+                    # On Windows, relpath uses '\', so convert to '/' for virtual path
+                    rel = rel.replace(os.sep, '/')
+                    iosk_path = path if rel in ('', '.') else (posixpath.join(path, rel))
 
                     try:
                         with open(fp, 'r', encoding='utf-8', errors='ignore') as f:

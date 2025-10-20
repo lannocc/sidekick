@@ -2,7 +2,7 @@
 # bin/reattach.py
 
 import asyncio
-from os.path import join
+import posixpath
 from sk.iosk.chat import Engagement
 
 async def iocall(io, argv):
@@ -38,7 +38,7 @@ async def iocall(io, argv):
         return False
     target_io = io.os.users[target_user_name]
 
-    new_device_virtual_path = join('/dev', device_name_input)
+    new_device_virtual_path = posixpath.join('/dev', device_name_input)
     if not await io.os.exists(io, new_device_virtual_path):
         await io.error(f"!! reattach: device '{device_name_input}' not found in /dev/.")
         return False
@@ -105,7 +105,7 @@ async def iocall(io, argv):
             await new_engagement.ioset(user_io_to_change)
 
             device_name_for_mod = new_path.replace('/dev/', '', 1)
-            mod_name_for_pymod = device_name_for_mod.replace('/', '.')
+            mod_name_for_pymod = device_name_for_mod.replace('/', '.').replace('-', '_')
 
             potential_host_py_path = io.os.box(f"{new_path}.py", io_context=io)
             new_device_mod = io.os.pymod(f'dev.{mod_name_for_pymod}', potential_host_py_path)

@@ -1,3 +1,4 @@
+import os
 from sk.util import get_directory_tree_as_text
 
 async def iocall(io, argv):
@@ -42,20 +43,22 @@ async def iocall(io, argv):
     for i, path in enumerate(paths):
         await io.print(f'{path}{"/" if not path.endswith("/") else ""}:')
 
-        if not await io.os.exists(io, path):
-            await io.error(f'!! tree: path does not exist: {path}\n')
+        host_path = io.os.box(path, io_context=io)
+        if not os.path.exists(host_path) or not os.path.isdir(host_path):
+            await io.error(f'!! tree: path does not exist or is not a directory: {path}\n')
             errors = True
             continue
 
         try:
             tree_text = get_directory_tree_as_text(
-                io.os.box(path, io_context=io),
+                host_path,
                 count=count,
                 dirs_only=dirs_only
             )
             await io.print(tree_text)
         except Exception as e:
-            await io.error(f'!! tree: failed to traverse path for {path}\n')
+            await io.error(f'!! tree: failed to traverse path for {path}: {e}\n')
             errors = True
 
     return not errors
+

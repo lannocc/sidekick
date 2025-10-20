@@ -5,7 +5,7 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **alias**: Manage IOSK command aliases.
     *   Usage: `$ alias` (list) or `$ alias NAME=VALUE` (define/update).
     *   Notes: `NAME=VALUE` defines a new alias or updates an existing one. NAME is the alias, VALUE is the command it expands to. Variables within an alias definition (e.g., `$PATH`) are expanded *during the alias definition itself*, not during alias execution. The parser struggles with nested quotes in alias definitions.
-    *   Status: Working (with caveats - alias quoting and expansion issues exist but are not a high priority to resolve immediately given the parser proposal's status).
+    *   Status: Working (with caveats - alias quoting and variable expansion issues exist but are not a high priority to resolve immediately given the parser status).
 *   **ask**: Ask an AI a question, with optional file/directory context.
     *   Usage: `$ ask [options] <prompt>` or `... | ask [options]`
     *   Options: `-h, --help` (Displays this help message.); `-q, --quiet` (Quiet mode. Only print the final AI response.); `-f <file>` (Attach the contents of the specified file to the prompt. Can be specified multiple times.); `-p <directory>` (Package and attach the contents of the specified directory. Can be specified multiple times.); `-e <lang> <file>` (Extract the first markdown code block of `<lang>` from the response and save it to `<file>.`); `-1` (Use model: gemini-2.0-flash-lite.); `-2` (Use model: gemini-2.5-flash (default).); `-3` (Use model: gemini-2.5-pro.).
@@ -13,7 +13,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **attach**: Attach a device as a user.
     *   Usage: `$ attach <device> [handle]`
-    *   Notes: `handle` defaults to `device` if not provided and is normalized to replace '/' with '-'. Requires an active chat system.
+    *   Notes: `handle` defaults to `device` if not provided and is normalized to replace '/' with '-'. Requires an active chat system and will bring the attached user into the current active room.
     *   Status: Working.
 *   **bank**: Load a file's content into core memory banks.
     *   Usage: `$ bank <path components...>` or `... | bank`
@@ -25,7 +25,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **banks**: List memory accounts currently banked.
     *   Usage: `$ banks`
-    *   Notes: Prints the keys (paths) of all loaded memory banks.
+    *   Notes: Prints the virtual paths (keys) of all loaded memory banks.
     *   Status: Working.
 *   **cat**: Display the contents of a file.
     *   Usage: `$ cat <filename>`
@@ -45,7 +45,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **cp**: Copy a file or directory.
     *   Usage: `$ cp <source> <destination>`
-    *   Notes: Handles file to file copy and file to existing directory copy. Errors if source does not exist.
+    *   Notes: Handles file-to-file copy and file-to-existing-directory copy. Errors if source does not exist.
     *   Status: Working.
 *   **date**: Display the current date and time, with optional formatting.
     *   Usage: `$ date` or `$ date <format>`
@@ -93,7 +93,7 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **history**: Show recent command history for this session.
     *   Usage: `$ history [N]`
     *   Notes: `N` is the number of most recent commands to show. If omitted, the entire session history is displayed. Only lines entered as commands (`$ ...`) are shown.
-    *   Status: Working as expected.
+    *   Status: Working.
 *   **hostname**: Display or set the system's hostname.
     *   Usage: `$ hostname` or `$ hostname <new-hostname>`
     *   Notes: `hostname` prints the current hostname. `hostname <new-hostname>` sets the system's hostname to the new value, updating both `/etc/hostname` and the runtime configuration.
@@ -113,7 +113,7 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **ls**: List directory contents.
     *   Usage: `$ ls [options] [path ...]`
     *   Options: `-l` (long listing format), `-a` (list all entries, including those starting with '.').
-    *   Notes: Honors `.skignore` files and hides system dotfiles by default unless `-a` is used.
+    *   Notes: Hides system dotfiles (`.`, `..`, `__pycache__`, `~`-ending files) by default unless `-a` is used.
     *   Status: Working.
 *   **mesh**: Connect to other IOSK systems or view the current network mesh.
     *   Usage: `$ mesh` or `$ mesh <host[:port]>`
@@ -154,7 +154,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **reattach**: Reattach a user to a different device.
     *   Usage: `$ reattach <device> [user]`
-    *   Notes: `<device>` is the device name (e.g., 'dummy', 'google', 'openai/gpt-4o'). `[user]` is the username (defaults to current). Console device targets (`/dev/console`) allow swapping if already occupied.
+    *   Notes: `<device>` is the device name (e.g., 'dummy', 'google', 'openai/gpt-4'). `[user]` is the username (defaults to current). Console device targets (`/dev/console`) allow swapping if already occupied.
     *   Status: Working.
 *   **replace**: Replaces occurrences of a string in a file with another string.
     *   Usage: `replace <filename> <old_string> <new_string>`
@@ -177,8 +177,8 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Notes: Opens a new chat room on the local system. Defaults to 'iosk'. Only one room can be active at a time.
     *   Status: Working.
 *   **rooms**: List all rooms created on the local system.
-    *   Usage: `$ rooms [-v | --verbose]`
-    *   Notes: Lists all rooms created on the local system. Active room is indicated with an asterisk (*). `-v` provides verbose output with ROOM and TOPIC.
+    *   Usage: `$ rooms [-s | --simple]`
+    *   Notes: Lists all rooms created on the local system. By default, lists in verbose, multi-column format showing ROOM and TOPIC. The currently active room is indicated with a leading tilde (~), followed by the count of active users in parentheses, e.g., `~iosk(2)`. The `-s, --simple` option uses a compact, single-column format.
     *   Status: Working.
 *   **search**: Search for a term within text files or stdin.
     *   Usage: `$ search [-i] [-n] [-l] [-c] <term> [path ...]`
@@ -187,7 +187,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **send**: Send file contents or piped data as a message to the chat.
     *   Usage: `$ send [-u <user>]... <file>...` or `... | send [-u <user>]...`
-    *   Options: `-u <user>` (Send a direct message to a specific user. This option can be used multiple times to specify multiple recipients.).
+    *   Options: `-u <user>` (Send a direct message to a specific user. This option can be used multiple times to specify multiple recipients in `user` or `user.host` format.).
     *   Notes: Reads the contents of one or more files, or reads from standard input, and sends the result as a raw text message. By default, the message is broadcast to other users in the current chat.
     *   Status: Working.
 *   **skrip**: Execute a skrip file or command.
@@ -204,8 +204,8 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **su**: Execute a command as another user, with optional piped input.
     *   Usage: `$ su <user> <command> [args...]` or `... | su <user> <command> [args...]`
-    *   Notes: When standard input is piped to `su`, it is passed as standard input to the executed command.
-    *   Status: Working (functionality for super-users is assumed based on the explicit error for non-super-users).
+    *   Notes: When standard input is piped to `su`, it is passed as standard input to the executed command. Requires super-user privileges.
+    *   Status: Working.
 *   **system**: Execute a command in the underlying host system.
     *   Usage: `$ system <command> [args...]`
     *   Notes: Executes directly on the host OS. Path-like arguments are sandboxed to host filesystem equivalents. Use with caution.
@@ -273,13 +273,9 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ welcome`
     *   Notes: A simple skrip that prints "Welcome to IOSK!".
     *   Status: Working.
-*   **whatami**: Display the name of the current device.
-    *   Usage: `$ whatami`
-    *   Notes: Does not accept arguments. Strips the `/dev/` prefix from the device path for a cleaner display.
-    *   Status: Working.
 *   **where**: Display a list of all known users across the network mesh.
-    *   Usage: `$ where [-v | --verbose]`
-    *   Notes: Displays a compact list of users in the format 'user.host/room'. The user running the command is indicated with a leading asterisk (*). `-v` provides a verbose, multi-column format.
+    *   Usage: `$ where [-s | --simple]`
+    *   Notes: By default, displays a verbose, multi-column format showing USER, HOST, and ROOM. The user running the command is indicated with a leading tilde (~). For the local host, the HOST column is blank. The `-s, --simple` option uses a compact, single-column format: 'user.host/room'.
     *   Status: Working.
 *   **whereami**: Display the configured hostname and active room of the local IOSK system.
     *   Usage: `$ whereami`
@@ -293,14 +289,15 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ who`
     *   Notes: Displays a list of all logged-in users, their device, and login time.
     *   Status: Working.
-*   **whoami**: Display the current username.
-    *   Usage: `$ whoami`
-    *   Notes: Does not accept arguments.
+*   **whoami**: Display the current username or device.
+    *   Usage: `$ whoami [-d]`
+    *   Options: `-d` (Display the name of the current device, stripping the `/dev/` prefix for cleaner output.)
+    *   Notes: Displays the current username by default.
     *   Status: Working.
 *   **xargs**: Build and execute command lines from standard input.
     *   Usage: `... | xargs [options] [command [initial-arguments]]`
     *   Options: `-n <max-args>` (use at most `max-args` arguments per command line); `-I <replace-str>` (replace occurrences of `replace-str` in initial arguments); `--help` (display help).
-    *   Notes: Reads items from standard input, delimited by spaces or newlines. If no command is given, `echo` is used by default. Options `-I` and `-n` are mutually exclusive. `-p` (prompt for execution) is problematic in non-interactive environments, and `stderr` output from `-t` or non-existent commands is not directly visible in chat.
+    *   Notes: Reads items from standard input, delimited by spaces or newlines. If no command is given, `echo` is used by default. Options `-I` and `-n` are mutually exclusive. The `-p` (prompt for execution) option is problematic in non-interactive environments, and `stderr` output from `-t` or non-existent commands is not directly visible in chat.
     *   Status: Working (with noted behaviors for `-p` and `stderr` visibility).
 
 ## /sbin Commands
@@ -315,3 +312,4 @@ These commands are typically used for system administration tasks. Most `/sbin` 
     *   Usage: `$ shutdown`
     *   Notes: Initiates the shutdown sequence for the IOSK system. This command signals the underlying operating system to halt the system.
     *   Status: Assumed working. No further testing required as execution interrupts the running system.
+
