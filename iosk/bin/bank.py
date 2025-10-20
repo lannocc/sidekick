@@ -1,5 +1,6 @@
 import os
 import uuid
+import posixpath
 
 async def iocall(io, argv):
     """Load a file's content into core memory banks.
@@ -59,11 +60,11 @@ async def iocall(io, argv):
 
     # Resolve path
     if path_arg.startswith('/'):
-        resolved_path = os.path.normpath(path_arg)
+        resolved_path = posixpath.normpath(path_arg)
     elif path_arg.startswith('./') or path_arg.startswith('../'):
-        resolved_path = os.path.normpath(os.path.join(io.pwd, path_arg))
+        resolved_path = posixpath.normpath(posixpath.join(io.pwd, path_arg))
     else:
-        resolved_path = os.path.normpath(os.path.join('/bank', path_arg))
+        resolved_path = posixpath.normpath(posixpath.join('/bank', path_arg))
 
     # Try adding .md if the original path is not found and doesn't already end with .md
     if not await io.os.exists(io, resolved_path) and not resolved_path.endswith('.md'):
@@ -97,3 +98,4 @@ async def iocall(io, argv):
         await io.print(f":: memory bank loaded from '{resolved_path}' (raw content)")
 
     return True
+

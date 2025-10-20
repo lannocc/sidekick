@@ -16,7 +16,8 @@ import asyncio
 import aioconsole
 from datetime import datetime, timedelta
 import os
-from os.path import join, isdir, isfile, exists
+import posixpath
+from os.path import isdir, isfile, exists
 import importlib, importlib.util
 import sys
 import shutil
@@ -103,7 +104,7 @@ class IOSK:
                 with open(boot, 'r') as bf:
                     self.BOOT = int(bf.read()) + 1
 
-            chatter = self.box(join(Context.CHATTER, str(self.BOOT)))
+            chatter = self.box(f'{Context.CHATTER}/{self.BOOT}')
             if not exists(chatter):
                 os.makedirs(chatter) # creates /var/cache
             elif not isdir(chatter):
@@ -308,7 +309,7 @@ class IOSK:
         io = self.system.fork()
         io.login_time = datetime.now()
         io.banks = { } # A user's base context gets its own banks.
-        io.log = Capture.log(self, join(self.USER_LOG, user), True)
+        io.log = Capture.log(self, f'{self.USER_LOG}/{user}', True)
         io.dev = device
         io.user = user
         io.su = device == self.CONSOLE_DEV # if you have console, you're super
@@ -341,7 +342,7 @@ class IOSK:
 
                     # Copy /etc/skel/skrc to ~/.skrc if it exists
                     skel_skrc_path = self.SKEL_SKRC
-                    user_skrc_path = join(home_dir_virtual, '.skrc')
+                    user_skrc_path = posixpath.join(home_dir_virtual, '.skrc')
                     if await self.exists(io, skel_skrc_path):
                         await io.print(f":: copying {skel_skrc_path} to {user_skrc_path}")
                         await self.copy(io, skel_skrc_path, user_skrc_path)
@@ -366,7 +367,7 @@ class IOSK:
         # Execute user-specific .skrc
         # The user's PWD is set to their home directory (e.g., /root, /home/user)
         # So we can construct the .skrc path relative to PWD.
-        skrc_user_path = join(io.pwd, '.skrc')
+        skrc_user_path = posixpath.join(io.pwd, '.skrc')
         if await self.exists(io, skrc_user_path): # Use self.exists as it handles virtual paths properly
             await self.exec(io, skrc_user_path)
 
@@ -514,7 +515,7 @@ class IOSK:
         io = self.system.fork()
         io.login_time = datetime.now()
         io.banks = {}
-        io.log = Capture.log(self, join(self.USER_LOG, username), True)
+        io.log = Capture.log(self, f'{self.USER_LOG}/{username}', True)
         io.dev = device_path
         io.user = username
         io.su = False
@@ -542,7 +543,7 @@ class IOSK:
                     # For network users, output these messages to the system log, not their non-existent local console.
                     await self.system.print(f":: created home directory for network user {username}: {home_dir_virtual}")
                     skel_skrc_path = self.SKEL_SKRC
-                    user_skrc_path = join(home_dir_virtual, '.skrc')
+                    user_skrc_path = posixpath.join(home_dir_virtual, '.skrc')
                     if await self.exists(io, skel_skrc_path):
                         await self.system.print(f":: copying {skel_skrc_path} to {user_skrc_path} for network user {username}")
                         await self.copy(io, skel_skrc_path, user_skrc_path)
@@ -555,7 +556,7 @@ class IOSK:
             await self.exec(io, skrc_global_path)
 
         # Use the user's PWD to find their .skrc file
-        skrc_user_path = join(io.pwd, '.skrc')
+        skrc_user_path = posixpath.join(io.pwd, '.skrc')
         if await self.exists(io, skrc_user_path): # Use self.exists for consistency
             await self.exec(io, skrc_user_path)
 
@@ -635,7 +636,7 @@ class IOSK:
 
                 # We resolve the interpreter path and check if it's a valid Python module.
                 # This logic is a simplified version of what's in `pipeline.py`.
-                interpreter_path = join('/bin', interpreter)
+                interpreter_path = posixpath.join('/bin', interpreter)
                 sandboxed_py_path = self.box(f'{interpreter_path}.py', io_context=io)
 
                 if exists(sandboxed_py_path) and isfile(sandboxed_py_path):
@@ -688,9 +689,9 @@ class IOSK:
 
         # First, resolve the path to an absolute virtual path to be safe.
         if io and io.pwd and not path.startswith('/'):
-            virtual_path = os.path.normpath(os.path.join(io.pwd, path))
+            virtual_path = posixpath.normpath(posixpath.join(io.pwd, path))
         else:
-            virtual_path = os.path.normpath(path)
+            virtual_path = posixpath.normpath(path)
 
         # Convert virtual path to module path suffix, e.g., '/dev/google' -> 'dev.google'
         mod_suffix = virtual_path.lstrip('/')
@@ -841,7 +842,7 @@ class IOSK:
             return False
 
         dev = dev[5:]
-        path = self.box(join('/dev', dev))
+        path = self.box(posixpath.join('/dev', dev))
         py = self.pymod(f'dev.{dev}', path)
 
         if py:
@@ -872,7 +873,7 @@ class IOSK:
             return None
 
         dev = dev[5:]
-        path = self.box(join('/dev', dev))
+        path = self.box(posixpath.join('/dev', dev))
         py = self.pymod(f'dev.{dev}', path)
 
         if py:
@@ -1002,32 +1003,31 @@ class IOSK:
 
     def box(self, virtual_path_input: str, io_context=None) -> str:
         """
-        Sandboxes a given virtual path to the host filesystem.
+        Sandboxes a given virtual path to the host filesystem, handling OS-specific separators.
         If io_context is provided and the path is relative, it resolves it relative to io_context.pwd.
         Returns the absolute host filesystem path.
         """
-        # Step 1: Determine the effective virtual path
+        # Step 1: Determine the effective virtual path using posixpath for virtual FS logic.
         effective_virtual_path = virtual_path_input
-        if io_context and io_context.pwd and not virtual_path_input.startswith('/'):
-            # Path is relative, resolve it against the current working directory of the context
-            effective_virtual_path = os.path.join(io_context.pwd, virtual_path_input)
+        if io_context and io_context.pwd and not posixpath.isabs(virtual_path_input):
+            # Path is relative, resolve it against the current working directory.
+            effective_virtual_path = posixpath.join(io_context.pwd, virtual_path_input)
 
-        # Step 2: Normalize the virtual path to handle '.', '..', and multiple slashes
-        # This converts paths like '/a/./b' to '/a/b' and '/a/../b' to '/b'
-        normalized_virtual_path = os.path.normpath(effective_virtual_path)
+        # Step 2: Normalize the virtual path to handle '.', '..', and multiple slashes using posixpath.
+        normalized_virtual_path = posixpath.normpath(effective_virtual_path)
 
-        # Step 3: Ensure the normalized path is absolute within the virtual filesystem
-        # os.path.normpath might return '..' if the path resolves above the virtual root (e.g., /a/../../b -> /b)
-        if not normalized_virtual_path.startswith('/'):
-            normalized_virtual_path = '/' + normalized_virtual_path
-
-        # Step 4: Convert the normalized virtual path into a host path by joining it with self.root
-        # Strip the leading '/' from the normalized virtual path for os.path.join
+        # Step 3: Convert the virtual path to a host path.
+        # Strip the leading '/' from the virtual path for os.path.join.
         path_relative_to_virtual_root = normalized_virtual_path.lstrip('/')
-        host_path = os.path.join(self.root, path_relative_to_virtual_root)
-        abs_path = os.path.abspath(host_path)
 
-        return abs_path
+        # Split the sanitized virtual path by its separator '/' and join the components
+        # to the host root path using the host OS's native separator via os.path.join.
+        # This is the bridge between the virtual (posix) and host filesystems.
+        path_components = path_relative_to_virtual_root.split('/')
+        host_path = os.path.join(self.root, *path_components)
+
+        # Return the absolute path on the host filesystem for consistency.
+        return os.path.abspath(host_path)
 
     def pymod(self, modname, path):
         """Import python module at path as the given module name."""

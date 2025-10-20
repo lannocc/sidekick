@@ -1,4 +1,4 @@
-from os.path import join
+import posixpath
 
 async def iocall(io, argv):
     """Attach a device as a user.
@@ -23,7 +23,7 @@ async def iocall(io, argv):
     handle = argv[1] if len(argv) > 1 else device
     handle = handle.replace('/', '-')
 
-    device_path = join('/dev', device)
+    device_path = posixpath.join('/dev', device)
 
     new_io = await io.os.chat.join(handle, device_path)
 

@@ -1,6 +1,7 @@
 import re
 import os
-from os.path import join, relpath, normpath
+import posixpath
+from os.path import relpath, exists, isdir
 
 DOCSTRING = """Search for a regular expression PATTERN in each FILE or standard input.
 
@@ -159,34 +160,36 @@ async def iocall(io, argv):
         files_to_search = []
         for p in paths:
             host_p = io.os.box(p, io_context=io)
-            if not os.path.exists(host_p):
+            if not exists(host_p):
                 await io.error(f"!! grep: {p}: No such file or directory")
                 any_errors = True
                 continue
 
-            if os.path.isdir(host_p):
+            if isdir(host_p):
                 if not opts['recursive']:
                     await io.error(f"!! grep: {p}: is a directory")
                     any_errors = True
                     continue
                 # Recursive search
-                base_dir = os.path.dirname(p) if os.path.dirname(p) else '.'
+                base_dir = posixpath.dirname(p) if posixpath.dirname(p) else '.'
                 for root, _, files in os.walk(host_p):
                     for name in files:
-                        full_host_path = join(root, name)
+                        full_host_path = os.path.join(root, name)
                         # Convert host path back to a virtual path relative to the initial dir
                         relative_path = relpath(full_host_path, io.os.box(base_dir, io_context=io))
-                        virtual_file_path = normpath(join(base_dir, relative_path))
+                        # IMPORTANT: Re-join using POSIX separator for virtual path
+                        virtual_file_path = posixpath.normpath(posixpath.join(base_dir, relative_path.replace(os.sep, '/')))
                         files_to_search.append(virtual_file_path)
             else:  # is a file
                 files_to_search.append(p)
-        
+
         # Determine if filenames should be prefixed to output lines.
         # This is standard grep behavior: show names for more than one file.
         show_filenames = len(files_to_search) > 1
-        
+
         # Now search the collected files
         for f_path in sorted(files_to_search):
             await search_file(f_path, show_filenames)
 
     return not any_errors
+

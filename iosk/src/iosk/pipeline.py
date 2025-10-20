@@ -1,7 +1,8 @@
 import shlex
 import asyncio
 import os
-from os.path import join, isdir, isfile, exists
+import posixpath
+from os.path import isdir, isfile, exists
 import importlib, importlib.util
 import sys
 import shutil
@@ -136,7 +137,7 @@ class CommandPipelineExecutor:
         from .kernel import Process
         process = Process(pid, io.user, argv, datetime.now(), task)
         self.os.process_table[pid] = process
-        
+
         try:
             # Await the task that is now being tracked.
             return await task
@@ -170,17 +171,17 @@ class CommandPipelineExecutor:
         if cmd.startswith('/') or cmd.startswith('./') or cmd.startswith('../'):
             if cmd.startswith('./') or cmd.startswith('../'):
                 # Resolve relative to current working directory
-                potential_base_paths.append(os.path.normpath(os.path.join(io.pwd if io.pwd else '/', cmd)))
+                potential_base_paths.append(posixpath.normpath(posixpath.join(io.pwd if io.pwd else '/', cmd)))
             else:
                 # Absolute path
                 potential_base_paths.append(cmd)
         else:
             # Search PATH environment variable
             path_env = io.environ().get('PATH', '/bin')
-            path_dirs = path_env.split(os.pathsep)
+            path_dirs = path_env.split(':')
             for p_dir in path_dirs:
                 if p_dir: # Skip empty entries
-                    potential_base_paths.append(join(p_dir, cmd))
+                    potential_base_paths.append(posixpath.join(p_dir, cmd))
 
         # Iterate through potential paths to find the first existing and executable one
         # Prioritize Python modules over generic scripts/executables if both exist
@@ -230,3 +231,4 @@ class CommandPipelineExecutor:
             await io.error(f'!! exception calling {cmd}: {e}')
             traceback.print_exc()
             return False
+

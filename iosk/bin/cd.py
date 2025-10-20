@@ -1,5 +1,6 @@
 # bin/cd.py
 import os
+import posixpath
 
 async def iocall(io, argv):
     """Change the current working directory.
@@ -29,9 +30,9 @@ async def iocall(io, argv):
 
     # Resolve the target path to an absolute virtual path
     if target_path_input.startswith('/'):
-        canonical_virtual_path = os.path.normpath(target_path_input)
+        canonical_virtual_path = posixpath.normpath(target_path_input)
     else:
-        canonical_virtual_path = os.path.normpath(os.path.join(io.pwd, target_path_input))
+        canonical_virtual_path = posixpath.normpath(posixpath.join(io.pwd, target_path_input))
 
     # Ensure it's truly an absolute path in the virtual FS (e.g., handles '//' or 'a/../b')
     if not canonical_virtual_path.startswith('/'):
