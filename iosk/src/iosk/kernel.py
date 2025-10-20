@@ -879,6 +879,10 @@ class IOSK:
         if py:
             try:
                 return await py.iorecv(io, prompt=prompt)
+            except EOFError:
+                # EOFError is a signal for logout, it must be propagated up
+                # to the interactive loop.
+                raise
             except Exception as e:
                 await self.system.error(f'!! error receiving from /dev/{dev}: {e}')
                 traceback.print_exc()
