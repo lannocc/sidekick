@@ -26,6 +26,7 @@ async def trip(client, prompt, model): # round trip
     response = await client.generate(
         model=model,
         prompt=prompt,
+	think=False,
     )
 
     reply = response['response']
