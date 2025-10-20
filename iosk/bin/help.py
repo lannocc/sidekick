@@ -76,9 +76,8 @@ User/Device Management:
     $ tokens        - calculate total bytes and estimate tokens for session context
     $ unpause       - unpause a bot user's AI engagement
     $ users         - list online local users (see also: where)
-    $ whatami       - see your current device name
     $ who           - display who is logged on, their device, and login time
-    $ whoami        - see your current username
+    $ whoami        - see your current username or device
 
 Networking & Chat Room Management:
     $ clroom        - close the active chat room
@@ -146,3 +145,4 @@ async def iocall(io, argv):
     # If we reach here, it means invalid arguments were provided (e.g., `help cmd1 cmd2`)
     await io.error("!! help: too many arguments or unknown option. Use 'help --help' for usage.")
     return False
+
