@@ -442,6 +442,7 @@ class IOSK:
                             # This handles 'exit' and 'logout' without a '$' at the shell prompt.
                             first_word = command_line.strip().split(' ', 1)[0]
                             if first_word in ('exit', 'logout'):
+                                await self.logout(io)
                                 return # Exit the interactive loop
 
                             if command_line:
@@ -454,6 +455,7 @@ class IOSK:
                                 await io.print(line)
 
                 except EOFError: # This handles Ctrl+D to log out
+                    await self.logout(io)
                     return
 
             except KeyboardInterrupt: # This handles Ctrl+C at the prompt
