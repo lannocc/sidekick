@@ -10,7 +10,7 @@ def run():
     try:
         main(sys.argv[1:])
 
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         pass
 
 
