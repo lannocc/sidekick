@@ -82,9 +82,7 @@ class CommandLineParser:
             backtick_pos = -1
             dollar_paren_pos = -1
 
-            # Scan for the next unescaped, unquoted backtick or $(
-            # This logic needs to correctly track quoting and escaping to find the *true* start of a substitution
-            # without modifying the text.
+            # Scan for the next unescaped, un-single-quoted backtick or $(
             scan_idx = pos
             in_single_quotes = False
             in_double_quotes = False
@@ -101,7 +99,8 @@ class CommandLineParser:
                 elif char == '"' and not in_single_quotes and not is_escaped:
                     in_double_quotes = not in_double_quotes
 
-                if not in_single_quotes and not in_double_quotes and not is_escaped:
+                # --- FIX: Allow substitution inside double quotes ---
+                if not in_single_quotes and not is_escaped:
                     if char == '`':
                         backtick_pos = scan_idx
                         break
@@ -131,26 +130,25 @@ class CommandLineParser:
             inner_command = None
             sub_end = -1
 
-            # Reset state for scanning inside the substitution
-            in_single_quotes = False
-            in_double_quotes = False
-            is_escaped = False
+            # --- FIX: Use local state variables for inner scan to prevent bugs ---
+            in_single_quotes_inner = False
+            in_double_quotes_inner = False
+            is_escaped_inner = False
 
             if is_backtick:
-                level = 0 # Not strictly a level for backticks, but helps track nesting if any
                 scan_pos = sub_start + 1
                 found_end = False
                 while scan_pos < len(text):
                     char = text[scan_pos]
-                    if is_escaped:
-                        is_escaped = False
-                    elif char == '\\' and not in_single_quotes:
-                        is_escaped = True
-                    elif char == "'" and not in_double_quotes and not is_escaped:
-                        in_single_quotes = not in_single_quotes
-                    elif char == '"' and not in_single_quotes and not is_escaped:
-                        in_double_quotes = not in_double_quotes
-                    elif char == '`' and not in_single_quotes and not in_double_quotes and not is_escaped:
+                    if is_escaped_inner:
+                        is_escaped_inner = False
+                    elif char == '\\' and not in_single_quotes_inner:
+                        is_escaped_inner = True
+                    elif char == "'" and not in_double_quotes_inner and not is_escaped_inner:
+                        in_single_quotes_inner = not in_single_quotes_inner
+                    elif char == '"' and not in_single_quotes_inner and not is_escaped_inner:
+                        in_double_quotes_inner = not in_double_quotes_inner
+                    elif char == '`' and not in_single_quotes_inner and not is_escaped_inner:
                         sub_end = scan_pos
                         inner_command = text[sub_start + 1 : sub_end]
                         pos = sub_end + 1
@@ -169,17 +167,17 @@ class CommandLineParser:
                 found_end = False
                 while scan_pos < len(text):
                     char = text[scan_pos]
-                    if is_escaped:
-                        is_escaped = False
-                    elif char == '\\' and not in_single_quotes:
-                        is_escaped = True
-                    elif char == "'" and not in_double_quotes and not is_escaped:
-                        in_single_quotes = not in_single_quotes
-                    elif char == '"' and not in_single_quotes and not is_escaped:
-                        in_double_quotes = not in_double_quotes
-                    elif char == '(' and not in_single_quotes and not in_double_quotes and not is_escaped:
+                    if is_escaped_inner:
+                        is_escaped_inner = False
+                    elif char == '\\' and not in_single_quotes_inner:
+                        is_escaped_inner = True
+                    elif char == "'" and not in_double_quotes_inner and not is_escaped_inner:
+                        in_single_quotes_inner = not in_single_quotes_inner
+                    elif char == '"' and not in_single_quotes_inner and not is_escaped_inner:
+                        in_double_quotes_inner = not in_double_quotes_inner
+                    elif char == '(' and not in_single_quotes_inner and not is_escaped_inner:
                         level += 1
-                    elif char == ')' and not in_single_quotes and not in_double_quotes and not is_escaped:
+                    elif char == ')' and not in_single_quotes_inner and not is_escaped_inner:
                         level -= 1
                         if level == 0:
                             sub_end = scan_pos
