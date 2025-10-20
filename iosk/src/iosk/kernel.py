@@ -457,7 +457,7 @@ class IOSK:
             except KeyboardInterrupt: # This handles Ctrl+C at the prompt
                 # When Ctrl+C is pressed while idle, aioconsole raises KeyboardInterrupt.
                 # We catch it, print a newline with ^C, and continue the loop to show a new prompt.
-                await io.print("\n^C")
+                #await io.print("\n^C")
                 continue
 
     async def logout(self, io:Context, disconnect=None):
