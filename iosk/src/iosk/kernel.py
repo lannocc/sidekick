@@ -641,7 +641,7 @@ class IOSK:
 
                 if exists(sandboxed_py_path) and isfile(sandboxed_py_path):
                     try:
-                        modname_for_pymod = interpreter_path.strip("/").replace("/", ".")
+                        modname_for_pymod = interpreter_path.strip("/").replace("/", ".").replace("-", "_")
                         py_mod = self.pymod(modname_for_pymod, sandboxed_py_path)
                         if py_mod and hasattr(py_mod, 'iocall'):
                             # Execute the interpreter's iocall method directly.
@@ -700,7 +700,7 @@ class IOSK:
 
         # The convention is to find modules relative to the 'iosk' package.
         # Example: /dev/google -> dev.google -> iosk.dev.google
-        full_mod_name = f'iosk.{mod_suffix.replace("/", ".")}'
+        full_mod_name = f'iosk.{mod_suffix.replace("/", ".").replace("-", "_")}'
 
         try:
             # Use find_spec to check for module existence without importing it.
@@ -843,7 +843,7 @@ class IOSK:
 
         dev = dev[5:]
         path = self.box(posixpath.join('/dev', dev))
-        py = self.pymod(f'dev.{dev}', path)
+        py = self.pymod(f'dev.{dev.replace("/", ".").replace("-", "_")}', path)
 
         if py:
             try:
@@ -874,7 +874,7 @@ class IOSK:
 
         dev = dev[5:]
         path = self.box(posixpath.join('/dev', dev))
-        py = self.pymod(f'dev.{dev}', path)
+        py = self.pymod(f'dev.{dev.replace("/", ".").replace("-", "_")}', path)
 
         if py:
             try:
@@ -898,7 +898,7 @@ class IOSK:
         # Client not cached, so create it.
         # This requires a standardized way to get a client from a device module.
         dev_name = dev_virtual_path.replace('/dev/', '', 1)
-        mod_name_for_pymod = dev_name.replace('/', '.')
+        mod_name_for_pymod = dev_name.replace('/', '.').replace('-', '_')
         host_py_path = self.box(f"{dev_virtual_path}.py", io_context=io)
         dev_mod = self.pymod(f'dev.{mod_name_for_pymod}', host_py_path)
 

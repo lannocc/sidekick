@@ -62,7 +62,8 @@ async def iocall(io, argv):
             if exists(host_py_path) and isfile(host_py_path):
                 # Simulate spec creation to ensure it's a valid Python module,
                 # as kernel.call would do.
-                modname_for_spec = f'sk.iosk.{virtual_py_path.strip("/").replace("/", ".")}'
+                mod_base = virtual_py_path.removesuffix('.py').strip('/').replace('/', '.').replace('-', '_')
+                modname_for_spec = f'sk.iosk.{mod_base}'
                 try:
                     spec = importlib.util.spec_from_file_location(modname_for_spec, host_py_path)
                     if spec and spec.loader:

@@ -33,7 +33,15 @@ async def trip(client, prompt, model): # round trip
 
 
 async def iosend(io, data):
-    await iosender(io, data, DEFAULT_MODEL)
+    """
+    Sets up an engagement for the default model.
+    Passes a direct reference to the static `trip` function. The Engagement
+    class is responsible for calling it with a client and prompt.
+    """
+    engagement = io.os.chat.engagements.get(io.user)
+    if not engagement:
+        return
+    engagement.append(data, trip)
 
 
 async def iosender(io, data, model):
