@@ -392,9 +392,6 @@ class IOSK:
         if self.chat and self.chat.active_room:
             await self.chat.add_to_room(io)
 
-        if interactive:
-            await self.interactive(io)
-
         return io
 
     async def interactive(self, io):
@@ -442,8 +439,7 @@ class IOSK:
                             # This handles 'exit' and 'logout' without a '$' at the shell prompt.
                             first_word = command_line.strip().split(' ', 1)[0]
                             if first_word in ('exit', 'logout'):
-                                await self.logout(io)
-                                return # Exit the interactive loop
+                                raise EOFError
 
                             if command_line:
                                 io.history.append(command_line)
