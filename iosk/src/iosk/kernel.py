@@ -180,6 +180,15 @@ class IOSK:
             disconnect = f':: {user} has been disconnected (shutdown)'
             await self.logout(uio, disconnect=disconnect)
 
+        # --- ADDED: Log system uptime on shutdown ---
+        if self.started:
+            uptime_td = datetime.now() - self.started
+            days = uptime_td.days
+            hours, remainder = divmod(uptime_td.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            uptime_str = f"{days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
+            await io.print(f':: System uptime was {uptime_str}.')
+
         await io.print(f'IOSK system halted.')
         self.system = None
 
