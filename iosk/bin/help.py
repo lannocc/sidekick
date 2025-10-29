@@ -15,6 +15,7 @@ General Utilities:
     $ hostname      - display or set the system's hostname
     $ status        - display system status (date, whoami, users)
     $ ticket        - view ticket details from the database
+    $ uptime        - show how long the system has been running
     $ ver           - display the current version of SideKick/IOSK
     $ welcome       - display a welcome message (auto-called on login)
 

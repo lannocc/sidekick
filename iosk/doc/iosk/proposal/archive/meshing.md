@@ -1,6 +1,6 @@
  # Proposal: Evolving IOSK Netroom to a Full Mesh Network
 
-**Status**: Implemented -- Now testing
+**Status**: Implemented
 
 ### 1. Introduction
 

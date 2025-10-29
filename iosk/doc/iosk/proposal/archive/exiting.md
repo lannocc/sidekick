@@ -1,6 +1,6 @@
 # Proposal: Standardizing Session Termination and Interrupt Handling
 
-**Status**: Now Testing -- Mostly working
+**Status**: Implemented
 
 ### 1. Introduction
 
