@@ -8,103 +8,104 @@ print = print_flush
 
 
 def main(args, called=''):
-    use_openai = '--openai' in args
-    if use_openai:
-        args.remove('--openai')
-
-    quiet = '-q' in args or (args and args[0] == 'md')
-    chatter = '-c' in args
-    if not quiet: print('SIDEKICK: ', end='')
+    # All parsing happens in a single pass to allow mixing of options and arguments.
+    use_openai = False
+    quiet_flag_present = False
+    chatter = False
+    shot = False
+    file = None
+    pkg = []
+    lang = None
+    save = None
+    model_flag = None
 
     task = called.endswith('task')
     ask = not task and called.endswith('ask')
 
-    shot = False
-    file = None
-    pkg = []  # Changed: Start with a list to collect all package paths
-    lang = None
-    save = None
+    remaining_args = []
+    args_list = list(args)  # Create a mutable copy to pop from
 
-    if use_openai:
-        model = config.OPENAI_MODEL_QUICK_2
-    else:
-        model = config.GEMINI_MODEL_QUICK_2
+    while args_list:
+        arg = args_list.pop(0)
 
-    # options
-    while args and args[0].startswith('-'):
-        op = args[0]
-        args = args[1:]
-        if op == '--help': op = '-h'
+        if arg.startswith('-'):
+            op = arg
+            if op == '--help': op = '-h'
 
-        if op in OPTIONS:
+            if op not in OPTIONS:
+                # Handle unknown options
+                if ask or task:
+                    print(f'!!! unknown option: {op}')
+                    return
+                # For `sk` command, treat as part of the command/args
+                remaining_args.append(op)
+                continue
+
             ops = OPTIONS[op]
 
+            # Handle options that cause an immediate exit
             if ops[0] is help or ops[0] is version:
                 print(ops[1])
                 ops[0](None)
                 return
 
-            elif op == '-s':
-                shot = True
+            # Handle options without arguments (flags)
+            if op == '--openai': use_openai = True
+            elif op == '-q': quiet_flag_present = True
+            elif op == '-c': chatter = True
+            elif op == '-s': shot = True
+            elif op in ['-1', '-2', '-3']: model_flag = op
 
+            # Handle options that take arguments
             elif op == '-f':
-                if args:
-                    file = args[0]
-                    args = args[1:]
-
-                if not file:
-                    print(f'!!! need a filename to upload')
+                if not args_list or args_list[0].startswith('-'):
+                    print(f'!!! need a filename for -f')
                     return
-
+                file = args_list.pop(0)
             elif op == '-p':
-                if not args:
-                    print(f'!!! need a directory path to package')
+                if not args_list or args_list[0].startswith('-'):
+                    print(f'!!! need a directory path for -p')
                     return
-                # Changed: Always append to the list
-                pkg.append(args[0])
-                args = args[1:]
-
+                pkg.append(args_list.pop(0))
             elif op == '-e':
-                if len(args) < 2 or args[0].startswith('-') \
-                        or args[1].startswith('-'):
+                if len(args_list) < 2 or args_list[0].startswith('-') or args_list[1].startswith('-'):
                     print(f'!!! -e needs 2 arguments: <language> <file>')
                     return
+                lang = args_list.pop(0)
+                save = args_list.pop(0)
 
-                lang = args[0]
-                save = args[1]
-                args = args[2:]
+        else:  # Not an option, so it's a non-option argument
+            remaining_args.append(arg)
 
-            elif op == '-1':
-                model = config.OPENAI_MODEL_QUICK_1 if use_openai else config.GEMINI_MODEL_QUICK_1
+    # --- Post-parsing setup ---
 
-            elif op == '-2':
-                model = config.OPENAI_MODEL_QUICK_2 if use_openai else config.GEMINI_MODEL_QUICK_2
+    quiet = quiet_flag_present or (remaining_args and remaining_args[0] == 'md')
+    if not quiet: print('SIDEKICK: ', end='')
 
-            elif op == '-3':
-                model = config.OPENAI_MODEL_SMART if use_openai else config.GEMINI_MODEL_SMART
+    # Set model based on flags
+    if use_openai:
+        if model_flag == '-1': model = config.OPENAI_MODEL_QUICK_1
+        elif model_flag == '-3': model = config.OPENAI_MODEL_SMART
+        else: model = config.OPENAI_MODEL_QUICK_2  # Default or -2
+    else:
+        if model_flag == '-1': model = config.GEMINI_MODEL_QUICK_1
+        elif model_flag == '-3': model = config.GEMINI_MODEL_SMART
+        else: model = config.GEMINI_MODEL_QUICK_2   # Default or -2
 
-        else:
-            print(f'!!! unknown option: {op}')
-            return
 
-    # Changed: Any non-option arguments are now treated as package paths
-    if args and (task or ask):
-        pkg.extend(args)
-        args = []  # Consume the arguments
+    # --- Mode Dispatch ---
 
-    # Changed: Finalize the package argument for function calls
-    final_pkg = None
-    if len(pkg) == 1:
-        final_pkg = pkg[0]
-    elif len(pkg) > 1:
-        final_pkg = pkg
-
-    # prompt mode
     if task or ask:
-        # Changed: Prompt is no longer read from command line arguments.
-        # It will be handled interactively or via pipe in the called function.
-        prompt = None
+        # For ask/task, all remaining non-option args are package paths
+        pkg.extend(remaining_args)
 
+        final_pkg = None
+        if len(pkg) == 1:
+            final_pkg = pkg[0]
+        elif len(pkg) > 1:
+            final_pkg = pkg
+
+        prompt = None # Prompt is now handled interactively or via pipe
         if task:
             do_task(prompt, shot=shot, file=file, package=final_pkg, quiet=quiet,
                          chatter=chatter, model=model)
@@ -112,28 +113,24 @@ def main(args, called=''):
             ask_question(prompt, shot=shot, file=file, package=final_pkg,
                            mdlang=lang, mdsave=save, quiet=quiet,
                            chatter=chatter, model=model, use_openai=use_openai)
-
         return
 
-    # command mode
-    cmd = args[0] if args else None #'help'
+    # command mode for `sk`
+    args = remaining_args
+    cmd = args[0] if args else None
     args = args[1:]
 
     if cmd not in COMMANDS:
         if cmd is None:
             print('!!! need an option or command')
-            #help(args)
-
         else:
             print(f'!!! unknown command: {cmd}')
-
         if not quiet: print('Try `sk help` for a list of commands.')
-
         return
 
-    cmd = COMMANDS[cmd]
-    if not quiet: print(cmd[1])
-    cmd[0](args)
+    cmd_details = COMMANDS[cmd]
+    if not quiet: print(cmd_details[1])
+    cmd_details[0](args)
 
 
 def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
