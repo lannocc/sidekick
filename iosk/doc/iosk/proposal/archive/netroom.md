@@ -1,6 +1,6 @@
 # Proposal: IOSK Networking and Rooms
 
-**Status**: Now Testing (General First Draft -- see `netroom/` subdirectory for updated and specific details) -- Rich Terminal Client (`skh`) not implemented yet.
+**Status**: Mostly Implemented (General First Draft -- see `netroom/` subdirectory for updated and specific details) -- Rich Terminal Client (`skh`) not implemented yet.
 
 ### 1. Introduction
 
