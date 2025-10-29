@@ -2,6 +2,21 @@ Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
 
+v0.4.1
+======
+
+Date: October 29, 2025
+
+    * Lots of fixes and improvements to meshing.
+    * Add a selection of ollama models.
+    * Path fixes for running directly on Windows.
+    * Parser fixes for quoted strings and command substitution.
+    * Make sure logout actually happens for `exit` and `logout`.
+    * Improvements to key handling for shutdown / headless mode.
+    * Remove `whatami` command; add '-d' option to `whoami` to get device.
+    * Add `uptime` command.
+
+
 v0.4.0
 ======
 
