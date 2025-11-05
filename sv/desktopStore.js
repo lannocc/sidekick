@@ -6,7 +6,13 @@ function loadSettings() {
         if (typeof localStorage !== 'undefined') {
             const saved = localStorage.getItem('sidekickDesktopSettings');
             if (saved) {
-                return JSON.parse(saved);
+                const parsed = JSON.parse(saved);
+                // Ensure new settings have default values if not present in localStorage
+                return {
+                    focusFollowsMouse: false,
+                    focusDelay: 420,
+                    ...parsed
+                };
             }
         }
     } catch (e) {
@@ -18,7 +24,9 @@ function loadSettings() {
         bgColor: '#34495e',
         bgGradientStart: '#2c3e50',
         bgGradientEnd: '#46627f',
-        bgImage: ''
+        bgImage: '',
+        focusFollowsMouse: false,
+        focusDelay: 420
     };
 }
 

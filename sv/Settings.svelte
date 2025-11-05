@@ -129,5 +129,21 @@
             {/if}
         </div>
     </fieldset>
+
+    <fieldset>
+        <legend>Focus</legend>
+        <label>
+            <input type="checkbox" bind:checked={settings.focusFollowsMouse} on:change={handleUpdate}>
+            Focus follows mouse
+        </label>
+        {#if settings.focusFollowsMouse}
+        <div class="options-group">
+            <label class="color-picker-label">
+                <span>Focus Delay (ms)</span>
+                <input class="text-input" type="number" bind:value={settings.focusDelay} on:input={handleUpdate} min="0" step="10" style="width: 80px;">
+            </label>
+        </div>
+        {/if}
+    </fieldset>
 </div>
 

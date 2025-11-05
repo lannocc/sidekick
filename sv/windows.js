@@ -22,17 +22,18 @@ function createWindowManager() {
             y: 50 + (windowIdCounter % 10) * 20,
             ...defaults,
             ...props,
-            zIndex: 100, // Initial z-index, will be managed by focusWindow
+            zIndex: 100,
             minimized: false,
             maximized: false,
+            isActive: true, // New windows are active by default
             prevX: 0, prevY: 0, prevWidth: 0, prevHeight: 0,
         };
 
         update(windows => {
-            // Set all other windows to a lower z-index
-            const focusedWindows = windows.map(w => ({ ...w, zIndex: w.zIndex - 10 }));
-            newWindow.zIndex = focusedWindows.reduce((max, w) => Math.max(max, w.zIndex), 99) + 1;
-            return [...focusedWindows, newWindow];
+            // Set all other windows to inactive and a lower z-index
+            const updatedWindows = windows.map(w => ({ ...w, zIndex: w.zIndex - 10, isActive: false }));
+            newWindow.zIndex = updatedWindows.reduce((max, w) => Math.max(max, w.zIndex), 99) + 1;
+            return [...updatedWindows, newWindow];
         });
         return newWindow.id;
     };
@@ -41,21 +42,36 @@ function createWindowManager() {
         update(windows => windows.filter(w => w.id !== id));
     };
 
+    const setActiveWindow = (id) => {
+        update(windows => {
+            // Avoid re-rendering if the window is already active
+            const targetWindow = windows.find(w => w.id === id);
+            if (targetWindow && targetWindow.isActive) return windows;
+
+            return windows.map(w => ({
+                ...w,
+                isActive: w.id === id
+            }));
+        });
+    };
+
     const focusWindow = (id) => {
         update(windows => {
-            const maxZ = windows.reduce((max, w) => Math.max(max, w.zIndex), 99);
-            const targetWindow = windows.find(w => w.id === id);
+            const currentTopWindow = windows.reduce((top, w) => (!top || w.zIndex > top.zIndex) ? w : top, null);
 
-            // Only reshuffle if the target window is not already on top
-            if (targetWindow && targetWindow.zIndex <= maxZ) {
-                return windows.map(w => {
-                    if (w.id === id) {
-                        return { ...w, zIndex: maxZ + 1 };
-                    }
-                    return w;
-                });
+            // If the target window is already the active top window, do nothing.
+            if (currentTopWindow && currentTopWindow.id === id && currentTopWindow.isActive) {
+                return windows;
             }
-            return windows;
+
+            const maxZ = windows.reduce((max, w) => Math.max(max, w.zIndex), 99);
+            return windows.map(w => {
+                if (w.id === id) {
+                    return { ...w, zIndex: maxZ + 1, isActive: true };
+                }
+                // Set others to inactive, but preserve their z-index relative to each other.
+                return { ...w, isActive: false };
+            });
         });
     };
 
@@ -64,18 +80,28 @@ function createWindowManager() {
     };
 
     const toggleMinimize = (id) => {
-        update(windows => windows.map(w => {
-            if (w.id === id) {
-                const isMinimized = !w.minimized;
-                if (!isMinimized) {
-                    // When un-minimizing, bring to front
-                    const maxZ = windows.reduce((max, w) => Math.max(max, w.zIndex), 99);
-                    return { ...w, minimized: false, zIndex: maxZ + 1};
-                }
-                return { ...w, minimized: true };
+        update(windows => {
+            const winToToggle = windows.find(w => w.id === id);
+            if (!winToToggle) return windows;
+
+            // If the window is currently minimized, we are restoring it.
+            if (winToToggle.minimized) {
+                const maxZ = windows.reduce((max, w) => Math.max(max, w.zIndex), 99);
+                return windows.map(w => {
+                    if (w.id === id) {
+                        return { ...w, minimized: false, zIndex: maxZ + 1, isActive: true };
+                    }
+                    return { ...w, isActive: false };
+                });
+            } else { // Window is being minimized.
+                 // Deactivate window when minimizing
+                const updated = windows.map(w => (w.id === id ? { ...w, minimized: true, isActive: false } : w));
+                // Focus the next highest window if available
+                const nextWindow = updated.filter(w => !w.minimized).reduce((top, w) => (!top || w.zIndex > top.zIndex) ? w : top, null);
+                if(nextWindow) focusWindow(nextWindow.id);
+                return updated;
             }
-            return w;
-        }));
+        });
     };
 
     const toggleMaximize = (id) => {
@@ -83,33 +109,21 @@ function createWindowManager() {
             const maxZ = windows.reduce((max, w) => Math.max(max, w.zIndex), 99);
             return windows.map(w => {
                 if (w.id === id) {
-                    if (w.maximized) {
-                        // Restore
-                        return {
-                            ...w,
+                    const newProps = w.maximized
+                        ? { // Restore
                             maximized: false,
-                            x: w.prevX,
-                            y: w.prevY,
-                            width: w.prevWidth,
-                            height: w.prevHeight,
-                            zIndex: maxZ + 1,
-                        };
-                    } else {
-                        // Maximize
-                        return {
-                            ...w,
+                            x: w.prevX, y: w.prevY,
+                            width: w.prevWidth, height: w.prevHeight,
+                          }
+                        : { // Maximize
                             maximized: true,
-                            prevX: w.x,
-                            prevY: w.y,
-                            prevWidth: w.width,
-                            prevHeight: w.height,
-                            x: 0,
-                            y: 0,
-                            zIndex: maxZ + 1,
-                        };
-                    }
+                            prevX: w.x, prevY: w.y,
+                            prevWidth: w.width, prevHeight: w.height,
+                            x: 0, y: 0,
+                          };
+                    return { ...w, ...newProps, zIndex: maxZ + 1, isActive: true };
                 }
-                return w;
+                return { ...w, isActive: false };
             });
         });
     };
@@ -119,6 +133,7 @@ function createWindowManager() {
         addWindow,
         removeWindow,
         focusWindow,
+        setActiveWindow,
         updateWindowProps,
         toggleMinimize,
         toggleMaximize
@@ -137,6 +152,6 @@ export function newCalculator() {
 }
 
 export function newSettings() {
-    windows.addWindow(Settings, { title: 'Settings', width: 400, height: 350 });
+    windows.addWindow(Settings, { title: 'Settings', width: 400, height: 400 });
 }
 

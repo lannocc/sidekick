@@ -5,6 +5,7 @@
 <script>
     import { createEventDispatcher } from 'svelte';
     import { windows } from './windows.js';
+    import { desktopSettings } from './desktopStore.js';
 
     export let id;
     export let component;
@@ -16,8 +17,12 @@
     export let zIndex;
     export let minimized;
     export let maximized;
+    export let isActive;
 
     const dispatch = createEventDispatcher();
+
+    let settings;
+    desktopSettings.subscribe(value => settings = value);
 
     let isDragging = false;
     let isResizing = false;
@@ -25,6 +30,8 @@
 
     let resizeDirection = '';
     let initialResizeState = {};
+    let focusTimeout = null;
+
 
     function getResizeDirection(event) {
         const relativeX = event.clientX - x;
@@ -57,7 +64,12 @@
         dragOffsetY = event.clientY - y;
         window.addEventListener('mousemove', onDrag);
         window.addEventListener('mouseup', onDragEnd);
-        windows.focusWindow(id);
+
+        if (event.altKey || event.metaKey) {
+            windows.setActiveWindow(id);
+        } else {
+            windows.focusWindow(id);
+        }
     }
 
     function onDrag(event) {
@@ -98,7 +110,12 @@
 
         window.addEventListener('mousemove', onResize);
         window.addEventListener('mouseup', onResizeEnd);
-        windows.focusWindow(id);
+
+        if (event.altKey || event.metaKey) {
+            windows.setActiveWindow(id);
+        } else {
+            windows.focusWindow(id);
+        }
     }
 
     function onResize(event) {
@@ -163,18 +180,31 @@
     }
 
     function handleFrameMouseDown(event) {
-        // Always focus the window on any click that reaches the frame
-        windows.focusWindow(id);
+        clearTimeout(focusTimeout);
 
         // Check for Alt/Meta key for special actions, but not on maximized windows
         if ((event.altKey || event.metaKey) && !maximized) {
             if (event.button === 0) { // Left-click for drag
                 onDragStart(event);
             } else if (event.button === 2) { // Right-click for resize
-                // onResizeStart is called here. The context menu is prevented by on:contextmenu
                 onResizeStart(event);
             }
+        } else {
+            // A regular click on the frame should focus and raise the window.
+            windows.focusWindow(id);
         }
+    }
+
+    function handleMouseEnter() {
+        if (settings?.focusFollowsMouse && !isActive) {
+            focusTimeout = setTimeout(() => {
+                windows.setActiveWindow(id);
+            }, settings.focusDelay);
+        }
+    }
+
+    function handleMouseLeave() {
+        clearTimeout(focusTimeout);
     }
 </script>
 
@@ -189,6 +219,10 @@
         flex-direction: column;
         min-width: 250px;
         min-height: 150px;
+        transition: border-color 0.2s ease-in-out;
+    }
+    .window-frame:not(.active) {
+        border-color: #7f8c8d;
     }
     .window-frame.minimized {
         display: none;
@@ -216,6 +250,10 @@
         border-top-left-radius: 5px;
         border-top-right-radius: 5px;
         user-select: none;
+        transition: background-color 0.2s ease-in-out;
+    }
+    .window-frame:not(.active) .title-bar {
+        background-color: #7f8c8d; /* Muted color for inactive windows */
     }
     .title-text {
         overflow: hidden;
@@ -256,6 +294,7 @@
     class="window-frame"
     class:minimized
     class:maximized
+    class:active={isActive}
     style:left="{x}px"
     style:top="{y}px"
     style:width="{maximized ? null : width + 'px'}"
@@ -263,6 +302,8 @@
     style:z-index="{zIndex}"
     on:mousedown={handleFrameMouseDown}
     on:contextmenu={e => (e.altKey || e.metaKey) && e.preventDefault()}
+    on:mouseenter={handleMouseEnter}
+    on:mouseleave={handleMouseLeave}
 >
     <div class="title-bar" on:mousedown|stopPropagation={onDragStart} on:dblclick={() => windows.toggleMaximize(id)}>
         <div class="window-controls">
