@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import IoskConsole from './IoskConsole.svelte';
+import Calculator from './Calculator.svelte';
 
 let windowIdCounter = 0;
 
@@ -7,14 +8,19 @@ function createWindowManager() {
     const { subscribe, update } = writable([]);
 
     const addWindow = (component, props = {}) => {
+        const defaults = {
+            title: 'New Window',
+            width: 800,
+            height: 600,
+        };
+
         const newWindow = {
             id: ++windowIdCounter,
             component: component,
-            title: props.title || 'New Window',
             x: 50 + (windowIdCounter % 10) * 20,
             y: 50 + (windowIdCounter % 10) * 20,
-            width: 800,
-            height: 600,
+            ...defaults,
+            ...props,
             zIndex: 100, // Initial z-index, will be managed by focusWindow
             minimized: false,
             maximized: false,
@@ -123,5 +129,9 @@ export const windows = createWindowManager();
 // Function to be called from other components like the Taskbar
 export function newIoskConnection() {
     windows.addWindow(IoskConsole, { title: 'New IOSK Connection' });
+}
+
+export function newCalculator() {
+    windows.addWindow(Calculator, { title: 'Calculator', width: 320, height: 450 });
 }
 
