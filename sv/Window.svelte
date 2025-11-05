@@ -23,6 +23,33 @@
     let isResizing = false;
     let dragOffsetX, dragOffsetY;
 
+    let resizeDirection = '';
+    let initialResizeState = {};
+
+    function getResizeDirection(event) {
+        const relativeX = event.clientX - x;
+        const relativeY = event.clientY - y;
+
+        // Define a third of the window as the edge area for resize detection
+        const borderThird = 1 / 3;
+
+        const onTop = relativeY < height * borderThird;
+        const onBottom = relativeY > height * (1 - borderThird);
+        const onLeft = relativeX < width * borderThird;
+        const onRight = relativeX > width * (1 - borderThird);
+
+        let vertical = '';
+        if (onTop) vertical = 'n';
+        else if (onBottom) vertical = 's';
+
+        let horizontal = '';
+        if (onLeft) horizontal = 'w';
+        else if (onRight) horizontal = 'e';
+
+        return vertical + horizontal;
+    }
+
+
     function onDragStart(event) {
         if (event.target.classList.contains('window-control') || maximized) return;
         isDragging = true;
@@ -48,9 +75,27 @@
 
     function onResizeStart(event) {
         if (maximized) return;
+
+        let direction;
+        // The dedicated resize handle always resizes from the south-east
+        if (event.target.classList.contains('resize-handle')) {
+            direction = 'se';
+        } else {
+            direction = getResizeDirection(event);
+        }
+
+        // Do not start resize if click is in the central area of the window
+        if (!direction) return;
+
         isResizing = true;
-        dragOffsetX = event.clientX;
-        dragOffsetY = event.clientY;
+        resizeDirection = direction;
+
+        initialResizeState = {
+            x, y, width, height,
+            mouseX: event.clientX,
+            mouseY: event.clientY,
+        };
+
         window.addEventListener('mousemove', onResize);
         window.addEventListener('mouseup', onResizeEnd);
         windows.focusWindow(id);
@@ -58,17 +103,61 @@
 
     function onResize(event) {
         if (!isResizing) return;
-        const dx = event.clientX - dragOffsetX;
-        const dy = event.clientY - dragOffsetY;
-        width += dx;
-        height += dy;
-        dragOffsetX = event.clientX;
-        dragOffsetY = event.clientY;
-        windows.updateWindowProps(id, { width, height });
+
+        const { x: ix, y: iy, width: iw, height: ih, mouseX: startX, mouseY: startY } = initialResizeState;
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+
+        // Minimum dimensions are set in CSS, we enforce them here to prevent inversion
+        const minWidth = 250;
+        const minHeight = 150;
+
+        let newX = ix;
+        let newY = iy;
+        let newWidth = iw;
+        let newHeight = ih;
+
+        if (resizeDirection.includes('e')) {
+            newWidth = iw + dx;
+        }
+        if (resizeDirection.includes('w')) {
+            newWidth = iw - dx;
+            newX = ix + dx;
+        }
+        if (resizeDirection.includes('s')) {
+            newHeight = ih + dy;
+        }
+        if (resizeDirection.includes('n')) {
+            newHeight = ih - dy;
+            newY = iy + dy;
+        }
+
+        // Clamp to minimum size and adjust position accordingly
+        if (newWidth < minWidth) {
+            if (resizeDirection.includes('w')) {
+                newX = ix + (iw - minWidth);
+            }
+            newWidth = minWidth;
+        }
+        if (newHeight < minHeight) {
+            if (resizeDirection.includes('n')) {
+                newY = iy + (ih - minHeight);
+            }
+            newHeight = minHeight;
+        }
+
+        x = newX;
+        y = newY;
+        width = newWidth;
+        height = newHeight;
+
+        windows.updateWindowProps(id, { x, y, width, height });
     }
 
     function onResizeEnd() {
         isResizing = false;
+        resizeDirection = '';
+        initialResizeState = {};
         window.removeEventListener('mousemove', onResize);
         window.removeEventListener('mouseup', onResizeEnd);
     }

@@ -10,11 +10,9 @@
     let startButton;
 
     function handleTaskClick(win) {
-        if (win.minimized) {
-            windows.toggleMinimize(win.id);
-        } else {
-            windows.focusWindow(win.id);
-        }
+        // If the window is minimized, this will restore and focus it.
+        // If the window is open, this will minimize it as requested.
+        windows.toggleMinimize(win.id);
     }
 
     function handleWindowClick(event) {
