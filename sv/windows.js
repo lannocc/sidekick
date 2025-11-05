@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import IoskConsole from './IoskConsole.svelte';
 import Calculator from './Calculator.svelte';
+import Settings from './Settings.svelte';
 
 let windowIdCounter = 0;
 
@@ -133,5 +134,9 @@ export function newIoskConnection() {
 
 export function newCalculator() {
     windows.addWindow(Calculator, { title: 'Calculator', width: 320, height: 450 });
+}
+
+export function newSettings() {
+    windows.addWindow(Settings, { title: 'Settings', width: 400, height: 350 });
 }
 

@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows, newIoskConnection, newCalculator } from './windows.js';
+    import { windows, newIoskConnection, newCalculator, newSettings } from './windows.js';
 
     let showMenu = false;
     let startButton;
@@ -28,6 +28,11 @@
 
     function launchCalculator() {
         newCalculator();
+        showMenu = false;
+    }
+
+    function launchSettings() {
+        newSettings();
         showMenu = false;
     }
 
@@ -118,6 +123,7 @@
         <div class="start-menu">
             <button class="menu-item" on:click={launchIosk}>New IOSK Connection</button>
             <button class="menu-item" on:click={launchCalculator}>Calculator</button>
+            <button class="menu-item" on:click={launchSettings}>Settings</button>
         </div>
     {/if}
 
