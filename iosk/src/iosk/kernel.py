@@ -444,11 +444,12 @@ class IOSK:
                             command_line = line
 
                         if is_command:
-                            # Check for built-in exit commands before executing
-                            # This handles 'exit' and 'logout' without a '$' at the shell prompt.
+                            # Check for built-in exit commands before executing.
+                            # This is now the sole place `exit` is handled.
                             first_word = command_line.strip().split(' ', 1)[0]
                             if first_word in ('exit', 'logout'):
-                                raise EOFError
+                                await self.logout(io)
+                                return 'logout' # Return reason for exit
 
                             if command_line:
                                 io.history.append(command_line)
@@ -461,7 +462,7 @@ class IOSK:
 
                 except EOFError: # This handles Ctrl+D to log out
                     await self.logout(io)
-                    return
+                    return 'eof' # Return reason for exit
 
             except KeyboardInterrupt: # This handles Ctrl+C at the prompt
                 # When Ctrl+C is pressed while idle, aioconsole raises KeyboardInterrupt.
