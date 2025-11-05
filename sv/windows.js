@@ -17,6 +17,8 @@ function createWindowManager() {
             height: 600,
             zIndex: 100, // Initial z-index, will be managed by focusWindow
             minimized: false,
+            maximized: false,
+            prevX: 0, prevY: 0, prevWidth: 0, prevHeight: 0,
         };
 
         update(windows => {
@@ -69,13 +71,50 @@ function createWindowManager() {
         }));
     };
 
+    const toggleMaximize = (id) => {
+        update(windows => {
+            const maxZ = windows.reduce((max, w) => Math.max(max, w.zIndex), 99);
+            return windows.map(w => {
+                if (w.id === id) {
+                    if (w.maximized) {
+                        // Restore
+                        return {
+                            ...w,
+                            maximized: false,
+                            x: w.prevX,
+                            y: w.prevY,
+                            width: w.prevWidth,
+                            height: w.prevHeight,
+                            zIndex: maxZ + 1,
+                        };
+                    } else {
+                        // Maximize
+                        return {
+                            ...w,
+                            maximized: true,
+                            prevX: w.x,
+                            prevY: w.y,
+                            prevWidth: w.width,
+                            prevHeight: w.height,
+                            x: 0,
+                            y: 0,
+                            zIndex: maxZ + 1,
+                        };
+                    }
+                }
+                return w;
+            });
+        });
+    };
+
     return {
         subscribe,
         addWindow,
         removeWindow,
         focusWindow,
         updateWindowProps,
-        toggleMinimize
+        toggleMinimize,
+        toggleMaximize
     };
 }
 
