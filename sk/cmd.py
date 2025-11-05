@@ -32,6 +32,18 @@ def main(args, called=''):
             op = arg
             if op == '--help': op = '-h'
 
+            # If a command has already been seen, treat all subsequent options
+            # as arguments for that command, not as global options.
+            has_command = False
+            for r_arg in remaining_args:
+                if r_arg in COMMANDS:
+                    has_command = True
+                    break
+
+            if has_command:
+                remaining_args.append(arg)
+                continue
+
             if op not in OPTIONS:
                 # Handle unknown options
                 if ask or task:
