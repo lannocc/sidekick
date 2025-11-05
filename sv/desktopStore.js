@@ -2,32 +2,31 @@ import { writable } from 'svelte/store';
 
 // Function to load settings from localStorage, or return defaults
 function loadSettings() {
-    try {
-        if (typeof localStorage !== 'undefined') {
-            const saved = localStorage.getItem('sidekickDesktopSettings');
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                // Ensure new settings have default values if not present in localStorage
-                return {
-                    focusFollowsMouse: false,
-                    focusDelay: 420,
-                    ...parsed
-                };
-            }
-        }
-    } catch (e) {
-        console.error("Could not load settings from localStorage", e);
-    }
-    // Default settings
-    return {
+    const defaults = {
         bgType: 'gradient', // 'gradient', 'color', 'image'
         bgColor: '#34495e',
         bgGradientStart: '#2c3e50',
         bgGradientEnd: '#46627f',
         bgImage: '',
+        bgImageDisplayMode: 'cover', // 'cover', 'contain', 'stretch', 'tile'
         focusFollowsMouse: false,
         focusDelay: 420
     };
+
+    try {
+        if (typeof localStorage !== 'undefined') {
+            const saved = localStorage.getItem('sidekickDesktopSettings');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                // Merge saved settings with defaults to ensure new properties are added
+                return { ...defaults, ...parsed };
+            }
+        }
+    } catch (e) {
+        console.error("Could not load settings from localStorage", e);
+    }
+    // Return defaults if nothing is saved or an error occurs
+    return defaults;
 }
 
 export const desktopSettings = writable(loadSettings());

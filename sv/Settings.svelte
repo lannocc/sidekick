@@ -63,6 +63,13 @@
         width: 100%;
         box-sizing: border-box;
     }
+    .select-input {
+        background-color: var(--console-bg);
+        border: 1px solid var(--border-color);
+        color: var(--title-bar-text);
+        padding: 5px;
+        border-radius: 3px;
+    }
     .color-picker-label {
         display: flex;
         justify-content: space-between;
@@ -124,6 +131,15 @@
             <div class="options-group">
                 <label>
                     <input class="text-input" type="text" bind:value={settings.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                </label>
+                <label class="color-picker-label">
+                    <span>Display Mode</span>
+                    <select class="select-input" bind:value={settings.bgImageDisplayMode} on:change={handleUpdate}>
+                        <option value="cover">Cover</option>
+                        <option value="contain">Fit</option>
+                        <option value="stretch">Stretch</option>
+                        <option value="tile">Tile</option>
+                    </select>
                 </label>
             </div>
             {/if}

@@ -75,6 +75,12 @@
         font-style: italic;
         opacity: 0.7;
     }
+    .task-item.active {
+        /* Use the accent color from the start button for a consistent look */
+        border-bottom: 2px solid #27c93f;
+        /* Adjust padding to keep the button height consistent */
+        padding-bottom: 4px;
+    }
     .start-button {
         background-color: #27c93f; /* Standout color */
         border: 1px solid #1a9c2a;
@@ -131,6 +137,7 @@
         <button
             class="task-item"
             class:minimized={win.minimized}
+            class:active={win.isActive}
             title={win.title}
             on:click={() => handleTaskClick(win)}
         >

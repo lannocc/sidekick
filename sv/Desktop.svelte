@@ -15,7 +15,28 @@
         } else if (settings.bgType === 'color') {
             backgroundStyle = settings.bgColor;
         } else if (settings.bgType === 'image' && settings.bgImage) {
-            backgroundStyle = `url('${settings.bgImage}')`;
+            let size = 'cover';
+            let repeat = 'no-repeat';
+            let position = 'center center';
+
+            switch (settings.bgImageDisplayMode) {
+                case 'contain': // fit
+                    size = 'contain';
+                    break;
+                case 'stretch':
+                    size = '100% 100%';
+                    break;
+                case 'tile':
+                    size = 'auto';
+                    repeat = 'repeat';
+                    position = '0 0'; // Tiling starts from top-left
+                    break;
+                case 'cover':
+                default:
+                    // 'cover' is the default case
+                    break;
+            }
+            backgroundStyle = `url('${settings.bgImage}') ${position} / ${size} ${repeat}`;
         } else {
             // Fallback to default gradient
             backgroundStyle = `linear-gradient(45deg, #2c3e50 0%, #46627f 100%)`;
@@ -32,7 +53,6 @@
         /* Default background color */
         background-color: var(--background-color);
         /* Dynamic background is applied via style attribute */
-        background-size: cover;
         background-position: center;
         transition: background 0.5s ease-in-out;
     }

@@ -321,7 +321,7 @@
         </div>
     </div>
     <div class="content-area">
-        <svelte:component this={component} {id} bind:title={title} />
+        <svelte:component this={component} {id} bind:title={title} {isActive} />
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
 </div>

@@ -3,6 +3,10 @@
   @%@~LICENSE~@%@
 -->
 <script>
+    import { onMount, onDestroy } from 'svelte';
+
+    export let isActive;
+
     let display = '0';
     let currentInput = '';
     let previousInput = '';
@@ -13,6 +17,17 @@
         currentInput = '';
         previousInput = '';
         operator = null;
+    }
+
+    function backspace() {
+        if (display === 'Error') {
+            clear();
+            return;
+        }
+        if (currentInput.length > 0) {
+            currentInput = currentInput.slice(0, -1);
+            display = currentInput === '' ? '0' : currentInput;
+        }
     }
 
     function appendNumber(num) {
@@ -79,6 +94,61 @@
         operator = null;
     }
 
+    function handleKeydown(e) {
+        if (!isActive) return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+        const key = e.key;
+        let handled = true;
+
+        switch (key) {
+            case '0': case '1': case '2': case '3': case '4':
+            case '5': case '6': case '7': case '8': case '9':
+                appendNumber(key);
+                break;
+            case '.':
+                appendDecimal();
+                break;
+            case '+':
+                chooseOperator('+');
+                break;
+            case '-':
+                chooseOperator('-');
+                break;
+            case '*':
+                chooseOperator('*');
+                break;
+            case '/':
+                chooseOperator('÷');
+                break;
+            case 'Enter':
+            case '=':
+                calculate();
+                break;
+            case 'Escape':
+            case 'Delete':
+                clear();
+                break;
+            case 'Backspace':
+                backspace();
+                break;
+            default:
+                handled = false;
+                break;
+        }
+
+        if (handled) {
+            e.preventDefault();
+        }
+    }
+
+    onMount(() => {
+        window.addEventListener('keydown', handleKeydown);
+    });
+
+    onDestroy(() => {
+        window.removeEventListener('keydown', handleKeydown);
+    });
 </script>
 
 <style>

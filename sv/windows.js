@@ -152,6 +152,6 @@ export function newCalculator() {
 }
 
 export function newSettings() {
-    windows.addWindow(Settings, { title: 'Settings', width: 400, height: 400 });
+    windows.addWindow(Settings, { title: 'Settings', width: 400, height: 480 });
 }
 
