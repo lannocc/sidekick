@@ -13,6 +13,9 @@
     let isConnected = false;
     let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
     let command = '';
+    let commandHistory = [];
+    let historyIndex = 0;
+    let unsentCommand = '';
 
     let terminalEl;
     let commandInput;
@@ -105,6 +108,13 @@
         const promptText = `[${username}] $ `;
         output = [...output, {type: 'prompt', content: promptText + fullCommand}];
 
+        // Add to history if it's not a consecutive duplicate
+        if (commandHistory.length === 0 || commandHistory[commandHistory.length - 1] !== fullCommand) {
+            commandHistory = [...commandHistory, fullCommand];
+        }
+        historyIndex = commandHistory.length;
+        unsentCommand = '';
+
         // Send command to backend via this console's WebSocket
         if (ws && ws.readyState === WebSocket.OPEN) {
             const message = { type: 'client_input', data: fullCommand + '\n' };
@@ -115,6 +125,39 @@
 
         command = '';
         shouldScroll = true;
+    }
+
+    function handleKeydown(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sendCommand();
+            return;
+        }
+
+        if (commandHistory.length === 0) {
+            return;
+        }
+
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (historyIndex === commandHistory.length) {
+                // Starting navigation from a new command line
+                unsentCommand = command;
+            }
+            if (historyIndex > 0) {
+                historyIndex--;
+                command = commandHistory[historyIndex];
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (historyIndex < commandHistory.length - 1) {
+                historyIndex++;
+                command = commandHistory[historyIndex];
+            } else if (historyIndex === commandHistory.length - 1) {
+                historyIndex++;
+                command = unsentCommand; // Restore the command being typed
+            }
+        }
     }
 
     onMount(() => {
@@ -219,7 +262,7 @@
                 type="text"
                 bind:this={commandInput}
                 bind:value={command}
-                on:keydown={e => e.key === 'Enter' && sendCommand()}
+                on:keydown={handleKeydown}
                 spellcheck="false"
             />
         </div>
