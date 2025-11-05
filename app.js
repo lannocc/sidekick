@@ -7,7 +7,7 @@ import { mount } from 'svelte';
 import SideKick from './sv/SideKick.svelte';
 
 const app = mount(SideKick, {
-    target: document.body,
+    target: document.getElementById('sk-app-root'),
 });
 
 export default app;
