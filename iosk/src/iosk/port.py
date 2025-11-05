@@ -270,6 +270,26 @@ class PortManager:
         # The `mesh` command should not block. Run the connection logic in the background.
         asyncio.create_task(_outbound_connect_and_manage())
 
+    async def send_to_client(self, username: str, data: str):
+        """Sends a data payload to a specific connected client."""
+        target_ws: Optional[WebSocketServerProtocol] = None
+        for ws, conn_meta in self.active_connections.items():
+            if conn_meta.type == 'client' and conn_meta.username == username:
+                target_ws = ws
+                break
+
+        if not target_ws:
+            log.warning(f"send_to_client: Could not find active connection for user '{username}'.")
+            return
+
+        payload = {"output": data}
+        message_to_send = f"SK1:{json.dumps(payload)}"
+
+        try:
+            await target_ws.send(message_to_send)
+        except ConnectionClosed:
+            log.info(f"send_to_client: Connection for user '{username}' was already closed.")
+
     async def broadcast_to_peers(self, message: Dict[str, Any]):
         """Sends a message to all connected IOSK peer systems."""
         if not self.peers:

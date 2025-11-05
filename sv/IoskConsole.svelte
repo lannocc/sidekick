@@ -17,6 +17,10 @@
     let terminalEl;
     let commandInput;
 
+    // WebSocket instance for this specific console window
+    let ws = null;
+    const PREAMBLE = "SK1:";
+
     // Auto-scrolling logic
     let shouldScroll = true;
     afterUpdate(() => {
@@ -25,50 +29,73 @@
         }
     });
 
-    // The websocket communication layer expects `sws_send` to send a JSON object.
-    // Our backend's `port.py` expects specific message types.
-    // This is a direct call to the underlying WebSocket send function in sidekick.js
-    // as `sk_call` is a higher-level abstraction we don't need here.
-    function sendRaw(messageObject) {
-        if(window.sws && window.sws.readyState === WebSocket.OPEN) {
-            // The preamble is added by the global sws_send function.
-            // We just need to stringify our JSON payload.
-            const msg = window.PREAMBLE + JSON.stringify(messageObject);
-            window.sws.send(msg);
-        }
-    }
-
-    function onMessage(data) {
-        // The backend `port.py` sends raw text via `send_to_client`.
-        // The `sidekick.js` message handler JSON.parses the event.data.
-        // We will assume the backend wraps its output in a simple JSON object.
-        // Let's design for: `{"output": "text from iosk..."}`
-        if (data.output) {
-            // Split by newline to handle multi-line responses cleanly
-            const lines = data.output.split('\n');
-            output = [...output, ...lines.map(line => ({type: 'output', content: line}))];
-        }
-    }
-
     async function connect() {
-        if (!window.sws) {
-            alert("SideKick websocket not initialized. Check sidekick.js");
+        if (ws) {
+            output = [...output, {type: 'output', content: `Already connected or connecting.`}];
             return;
         }
 
-        // Use the window id as the unique slot for the message handler
-        window.sk_on_message(onMessage, id);
-
-        // Send handshake message
-        const handshake = { type: 'handshake', id: 'client', user: username };
-        sendRaw(handshake);
-
-        isConnected = true;
-        title = `${username}@${new URL(wsUrl).hostname}`;
         output = [...output, {type: 'output', content: `Connecting to ${wsUrl} as ${username}...`}];
 
-        // Wait for connection to be ready before focusing input
-        setTimeout(() => commandInput?.focus(), 100);
+        try {
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log(`WebSocket connected for console ${id}.`);
+                isConnected = true;
+                title = `${username}@${new URL(wsUrl).hostname}`;
+
+                // Send handshake message to backend `port.py`
+                const handshake = { type: 'handshake', id: 'client', user: username };
+                ws.send(JSON.stringify(handshake));
+
+                // Focus command input
+                setTimeout(() => commandInput?.focus(), 100);
+            };
+
+            ws.onmessage = (event) => {
+                // The backend `port.py` sends JSON messages with a preamble.
+                if (typeof event.data === 'string' && event.data.startsWith(PREAMBLE)) {
+                    try {
+                        const jsonData = event.data.substring(PREAMBLE.length);
+                        const data = JSON.parse(jsonData);
+
+                        // We expect a format like `{"output": "text from iosk..."}`
+                        if (data.output) {
+                            // Split by newline to handle multi-line responses cleanly
+                            const lines = data.output.split('\n');
+                            output = [...output, ...lines.map(line => ({type: 'output', content: line}))];
+                        }
+                    } catch (e) {
+                        console.error("Error parsing WebSocket message:", e);
+                        output = [...output, {type: 'output', content: `[Error] Could not parse message from server.`}];
+                    }
+                }
+            };
+
+            ws.onclose = () => {
+                console.log(`WebSocket disconnected for console ${id}.`);
+                isConnected = false;
+                ws = null; // Allow reconnection
+                output = [...output, {type: 'output', content: `Connection closed.`}];
+                title = `[Disconnected] ${username}@${new URL(wsUrl).hostname}`;
+            };
+
+            ws.onerror = (error) => {
+                console.error(`WebSocket error for console ${id}:`, error);
+                isConnected = false;
+                if (ws) { // ws might already be null if onclose was called
+                    ws.close();
+                    ws = null;
+                }
+                output = [...output, {type: 'output', content: `[Error] Could not establish connection to ${wsUrl}.`}];
+                title = `[Error] ${username}@${new URL(wsUrl).hostname}`;
+            };
+
+        } catch (e) {
+            console.error("Failed to create WebSocket:", e);
+            output = [...output, {type: 'output', content: `[Error] Failed to create WebSocket: ${e.message}`}];
+        }
     }
 
     function sendCommand() {
@@ -78,9 +105,13 @@
         const promptText = `[${username}] $ `;
         output = [...output, {type: 'prompt', content: promptText + fullCommand}];
 
-        // Send command to backend
-        const message = { type: 'client_input', data: fullCommand + '\n' };
-        sendRaw(message);
+        // Send command to backend via this console's WebSocket
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            const message = { type: 'client_input', data: fullCommand + '\n' };
+            ws.send(JSON.stringify(message));
+        } else {
+            output = [...output, {type: 'output', content: `[Error] Not connected.`}];
+        }
 
         command = '';
         shouldScroll = true;
@@ -93,8 +124,11 @@
     });
 
     onDestroy(() => {
-        // Clean up the message handler when the component is destroyed
-        window.sk_on_message(null, id);
+        // Clean up the websocket connection when the component is destroyed
+        if (ws) {
+            ws.onclose = null; // prevent onclose handler from running on manual close
+            ws.close();
+        }
     });
 </script>
 
