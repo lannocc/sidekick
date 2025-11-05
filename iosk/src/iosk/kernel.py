@@ -1,4 +1,4 @@
-# src/iosk/kernel.py
+# sk/iosk/kernel.py
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
@@ -868,7 +868,7 @@ class IOSK:
         """Receive data from device."""
         if dev.startswith('network:'):
             if prompt and self.port:
-                await self.port.send_to_client(io.user, prompt)
+                await self.port.send_prompt_to_client(io.user, prompt)
 
             if hasattr(io, 'network_input_queue'):
                 return await io.network_input_queue.get()

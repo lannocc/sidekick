@@ -16,6 +16,7 @@
     let commandHistory = [];
     let historyIndex = 0;
     let unsentCommand = '';
+    let currentPrompt = '';
 
     let terminalEl;
     let commandInput;
@@ -69,6 +70,9 @@
                             const lines = data.output.split('\n');
                             output = [...output, ...lines.map(line => ({type: 'output', content: line}))];
                         }
+                        if (data.prompt) {
+                            currentPrompt = data.prompt;
+                        }
                     } catch (e) {
                         console.error("Error parsing WebSocket message:", e);
                         output = [...output, {type: 'output', content: `[Error] Could not parse message from server.`}];
@@ -105,7 +109,7 @@
         if (!command.trim()) return;
 
         const fullCommand = command;
-        const promptText = `[${username}] $ `;
+        const promptText = currentPrompt;
         output = [...output, {type: 'prompt', content: promptText + fullCommand}];
 
         // Add to history if it's not a consecutive duplicate
@@ -226,6 +230,7 @@
     .input-area span {
         color: var(--console-prompt);
         padding-right: 5px;
+        white-space: pre;
     }
     .input-area input {
         flex-grow: 1;
@@ -257,7 +262,7 @@
 
     {#if isConnected}
         <div class="input-area" on:click={() => commandInput.focus()}>
-            <span>[{username}] $</span>
+            <span>{currentPrompt}</span>
             <input
                 type="text"
                 bind:this={commandInput}
