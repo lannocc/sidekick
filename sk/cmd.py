@@ -17,6 +17,7 @@ def main(args, called=''):
     pkg = []
     lang = None
     save = None
+    save_work = None
     model_flag = None
 
     task = called.endswith('task')
@@ -31,6 +32,7 @@ def main(args, called=''):
         if arg.startswith('-'):
             op = arg
             if op == '--help': op = '-h'
+            if op == '--work': op = '-w'
 
             # If a command has already been seen, treat all subsequent options
             # as arguments for that command, not as global options.
@@ -80,11 +82,19 @@ def main(args, called=''):
                     return
                 lang = args_list.pop(0)
                 save = args_list.pop(0)
+            elif op == '-w':
+                if not args_list or args_list[0].startswith('-'):
+                    print(f'!!! need a filename for -w/--work')
+                    return
+                save_work = args_list.pop(0)
 
         else:  # Not an option, so it's a non-option argument
             remaining_args.append(arg)
 
     # --- Post-parsing setup ---
+    if save and save_work:
+        print('!!! -e and -w cannot be used together.')
+        return
 
     quiet = quiet_flag_present or (remaining_args and remaining_args[0] == 'md')
     if not quiet: print('SIDEKICK: ', end='')
@@ -118,7 +128,7 @@ def main(args, called=''):
                          chatter=chatter, model=model)
         else:
             ask_question(prompt, shot=shot, file=file, package=final_pkg,
-                           mdlang=lang, mdsave=save, quiet=quiet,
+                           mdlang=lang, mdsave=save, work_file=save_work, quiet=quiet,
                            chatter=chatter, model=model, use_openai=use_openai)
         return
 
@@ -141,7 +151,7 @@ def main(args, called=''):
 
 
 def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
-                 mdsave=None, quiet=False, chatter=False,
+                 mdsave=None, work_file=None, quiet=False, chatter=False,
                  model=config.GEMINI_MODEL_QUICK_2, use_openai=False):
     from .ai import google, openai
     from .util import get_md_code_block
@@ -202,12 +212,20 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
     else:
         answer = ai_provider.prompt_for_text(prompt, chatter=chatter, model=model)
 
+    summary = None
+    answer_for_display = answer
+
+    if work_file:
+        from . import worker
+        answer_for_display, summary = worker.do_work(prompt, answer, work_file)
+
+    md = None
     if mdlang:
         md = get_md_code_block(mdlang or None, answer)
-        if md: answer = answer.replace(md, '$$$ CODE EXTRACTED $$$')
+        if md: answer_for_display = answer.replace(md, '$$$ CODE EXTRACTED $$$')
 
     print()
-    print(f' << {answer}')
+    print(f' << {answer_for_display}')
     print()
 
     if mdsave:
@@ -219,6 +237,10 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
 
         else:
             print(f'!! NO CODE TO SAVE')
+
+    if summary:
+        print(summary)
+        print()
 
 
 def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
@@ -458,7 +480,9 @@ OPTIONS = {
     '-a': (None,
         'attach binary image/document with -a <filename>'),
     '-e': (None,
-        '(ask only) extract markdown code and save with -e <language> <file>'),
+        '(ask only) extract a single markdown code block and save with -e <language> <file>'),
+    '-w': (None,
+        '(ask only) work on files, applying code blocks from reply, saves transcript to -w <file> (also --work)'),
     '--openai': (None,
         '(ask only) use OpenAI models instead of Google Gemini'),
     '-1': (None,
