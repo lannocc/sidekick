@@ -21,16 +21,6 @@
         return win.maximized ? screenWidth / 2 : win.x + win.width / 2;
     }
 
-    // Reactive statements to filter and sort windows for left and right taskbar sections
-    $: leftWindows = $windows
-        .filter(win => screenWidth && getWindowCenterX(win) < screenWidth / 2)
-        .sort((a, b) => getWindowCenterX(a) - getWindowCenterX(b));
-
-    $: rightWindows = $windows
-        .filter(win => screenWidth && getWindowCenterX(win) >= screenWidth / 2)
-        .sort((a, b) => getWindowCenterX(a) - getWindowCenterX(b));
-
-
     function handleTaskClick(win) {
         // If the window is minimized, this will restore and focus it.
         // If the window is open, this will minimize it as requested.
@@ -79,12 +69,14 @@
         justify-content: space-between; /* This will space out left, center, and right sections */
         padding: 0 10px;
         flex-shrink: 0;
-        position: relative; /* For menu positioning */
+        position: relative; /* For menu positioning and absolute children */
     }
     .taskbar-left, .taskbar-right {
         display: flex;
         align-items: center;
         gap: 8px;
+        position: relative; /* Establish stacking context */
+        z-index: 10;      /* Keep static items on top */
     }
     .taskbar-center {
         /* The clock is absolutely centered to prevent it from shifting
@@ -92,6 +84,7 @@
         position: absolute;
         left: 50%;
         transform: translateX(-50%);
+        z-index: 10; /* Keep clock on top */
     }
     .task-item {
         background-color: var(--taskbar-button-bg);
@@ -104,6 +97,12 @@
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 150px;
+        /* Positioning styles for tracking the window */
+        position: absolute;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        transition: left 0.3s ease-out;
+        z-index: 1;
     }
     .task-item:hover {
         background-color: var(--taskbar-button-hover-bg);
@@ -117,6 +116,7 @@
         border-bottom: 2px solid #27c93f;
         /* Adjust padding to keep the button height consistent */
         padding-bottom: 4px;
+        z-index: 2; /* Active button on top of other buttons */
     }
     .start-button {
         background-color: #27c93f; /* Standout color */
@@ -222,37 +222,26 @@
                 {/if}
             </div>
         {/if}
-
-        {#each leftWindows as win (win.id)}
-            <button
-                class="task-item"
-                class:minimized={win.minimized}
-                class:active={win.isActive}
-                title={win.title}
-                on:click={() => handleTaskClick(win)}
-            >
-                {win.title}
-            </button>
-        {/each}
     </div>
+
+    {#each $windows as win (win.id)}
+        <button
+            class="task-item"
+            class:minimized={win.minimized}
+            class:active={win.isActive}
+            title={win.title}
+            on:click={() => handleTaskClick(win)}
+            style="left: {screenWidth ? (getWindowCenterX(win) / screenWidth) * 100 : 50}%;"
+        >
+            {win.title}
+        </button>
+    {/each}
 
     <div class="taskbar-center">
         <Clock />
     </div>
 
     <div class="taskbar-right">
-        {#each rightWindows as win (win.id)}
-            <button
-                class="task-item"
-                class:minimized={win.minimized}
-                class:active={win.isActive}
-                title={win.title}
-                on:click={() => handleTaskClick(win)}
-            >
-                {win.title}
-            </button>
-        {/each}
-
         <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => showMenu = !showMenu}>
             SK
         </button>
