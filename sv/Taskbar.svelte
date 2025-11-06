@@ -13,6 +13,24 @@
     let showWindowsMenu = false; // For Windows list menu
     let windowsButton;
 
+    let screenWidth;
+
+    // Helper to calculate a window's horizontal center
+    function getWindowCenterX(win) {
+        // A maximized window's center is the screen's center
+        return win.maximized ? screenWidth / 2 : win.x + win.width / 2;
+    }
+
+    // Reactive statements to filter and sort windows for left and right taskbar sections
+    $: leftWindows = $windows
+        .filter(win => screenWidth && getWindowCenterX(win) < screenWidth / 2)
+        .sort((a, b) => getWindowCenterX(a) - getWindowCenterX(b));
+
+    $: rightWindows = $windows
+        .filter(win => screenWidth && getWindowCenterX(win) >= screenWidth / 2)
+        .sort((a, b) => getWindowCenterX(a) - getWindowCenterX(b));
+
+
     function handleTaskClick(win) {
         // If the window is minimized, this will restore and focus it.
         // If the window is open, this will minimize it as requested.
@@ -69,7 +87,11 @@
         gap: 8px;
     }
     .taskbar-center {
-        /* The clock goes here, centered automatically */
+        /* The clock is absolutely centered to prevent it from shifting
+           when the number of buttons on the left or right changes. */
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
     }
     .task-item {
         background-color: var(--taskbar-button-bg);
@@ -177,6 +199,8 @@
     }
 </style>
 
+<svelte:window bind:innerWidth={screenWidth} />
+
 <div class="taskbar">
     <div class="taskbar-left">
         <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => showWindowsMenu = !showWindowsMenu}>
@@ -199,7 +223,7 @@
             </div>
         {/if}
 
-        {#each $windows as win (win.id)}
+        {#each leftWindows as win (win.id)}
             <button
                 class="task-item"
                 class:minimized={win.minimized}
@@ -217,6 +241,18 @@
     </div>
 
     <div class="taskbar-right">
+        {#each rightWindows as win (win.id)}
+            <button
+                class="task-item"
+                class:minimized={win.minimized}
+                class:active={win.isActive}
+                title={win.title}
+                on:click={() => handleTaskClick(win)}
+            >
+                {win.title}
+            </button>
+        {/each}
+
         <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => showMenu = !showMenu}>
             SK
         </button>
