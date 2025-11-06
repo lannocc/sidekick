@@ -128,6 +128,10 @@ function createWindowManager() {
         });
     };
 
+    const closeAllWindows = () => {
+        update(() => []);
+    };
+
     return {
         subscribe,
         addWindow,
@@ -136,7 +140,8 @@ function createWindowManager() {
         setActiveWindow,
         updateWindowProps,
         toggleMinimize,
-        toggleMaximize
+        toggleMaximize,
+        closeAllWindows
     };
 }
 

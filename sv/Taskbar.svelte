@@ -6,8 +6,11 @@
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings } from './windows.js';
 
-    let showMenu = false;
+    let showMenu = false; // For Start menu
     let startButton;
+
+    let showWindowsMenu = false; // For Windows list menu
+    let windowsButton;
 
     function handleTaskClick(win) {
         // If the window is minimized, this will restore and focus it.
@@ -16,8 +19,11 @@
     }
 
     function handleWindowClick(event) {
-        if (showMenu && !startButton.contains(event.target)) {
+        if (showMenu && startButton && !startButton.contains(event.target)) {
             showMenu = false;
+        }
+        if (showWindowsMenu && windowsButton && !windowsButton.contains(event.target)) {
+            showWindowsMenu = false;
         }
     }
 
@@ -91,6 +97,18 @@
         cursor: pointer;
         margin-left: auto; /* Pushes button to the far right */
     }
+    .windows-button {
+        background-color: var(--taskbar-button-bg);
+        border: 1px solid var(--border-color);
+        color: var(--taskbar-text);
+        font-weight: bold;
+        border-radius: 4px;
+        padding: 5px 10px;
+        cursor: pointer;
+    }
+    .windows-button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
     .start-menu {
         position: absolute;
         top: 45px; /* Position below the taskbar */
@@ -103,6 +121,21 @@
         display: flex;
         flex-direction: column;
         width: 200px;
+    }
+    .windows-menu {
+        position: absolute;
+        top: 45px; /* Position below the taskbar */
+        left: 10px;
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        width: 200px;
+        max-height: 300px;
+        overflow-y: auto;
     }
     .menu-item {
         background: none;
@@ -119,9 +152,43 @@
     .menu-item:hover {
         background-color: var(--taskbar-button-hover-bg);
     }
+    .menu-item-empty {
+        padding: 10px 15px;
+        color: #7f8c8d; /* Muted color */
+        font-style: italic;
+    }
+    .menu-item.close-all {
+        color: #e74c3c;
+        border-top: 1px solid var(--border-color);
+        border-bottom: none;
+    }
+    .menu-item.close-all:hover {
+        background-color: #c0392b;
+        color: white;
+    }
 </style>
 
 <div class="taskbar">
+    <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => showWindowsMenu = !showWindowsMenu}>
+        Windows
+    </button>
+    {#if showWindowsMenu}
+        <div class="windows-menu">
+            {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
+                <button class="menu-item" on:click={() => { windows.focusWindow(win.id); showWindowsMenu = false; }}>
+                    {win.title}
+                </button>
+            {:else}
+                <span class="menu-item-empty">No open windows</span>
+            {/each}
+            {#if $windows.length > 0}
+                <button class="menu-item close-all" on:click={() => { windows.closeAllWindows(); showWindowsMenu = false; }}>
+                    Close All
+                </button>
+            {/if}
+        </div>
+    {/if}
+
     {#each $windows as win (win.id)}
         <button
             class="task-item"
