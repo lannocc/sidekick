@@ -13,6 +13,8 @@
     let showWindowsMenu = false; // For Windows list menu
     let windowsButton;
 
+    let showDashboard = false; // For dashboard toggle
+
     let screenWidth;
 
     // Elements for layout calculation
@@ -228,6 +230,18 @@
         cursor: pointer;
         /* Pushes button to the far right */
     }
+    .quick-launch-button {
+        background-color: #3498db; /* A distinct, functional blue */
+        border: 1px solid #2980b9;
+        color: white;
+        font-weight: bold;
+        border-radius: 4px;
+        padding: 5px 10px;
+        cursor: pointer;
+    }
+    .quick-launch-button:hover {
+        background-color: #2980b9;
+    }
     .windows-button {
         background-color: var(--taskbar-button-bg);
         border: 1px solid var(--border-color);
@@ -238,6 +252,9 @@
         cursor: pointer;
     }
     .windows-button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .windows-button.active {
         background-color: var(--taskbar-button-hover-bg);
     }
     .start-menu {
@@ -304,7 +321,10 @@
 <div class="taskbar">
     <div class="taskbar-left" bind:this={leftSectionEl}>
         <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => showWindowsMenu = !showWindowsMenu}>
-            Windows
+            W~
+        </button>
+        <button class="windows-button" class:active={showDashboard} on:click={() => showDashboard = !showDashboard} title="Toggle Dashboard">
+            &mdash;
         </button>
         {#if showWindowsMenu}
             <div class="windows-menu">
@@ -343,6 +363,9 @@
     </div>
 
     <div class="taskbar-right" bind:this={rightSectionEl}>
+        <button class="quick-launch-button" on:click|stopPropagation={launchIosk} title="New IOSK Connection">
+            $+
+        </button>
         <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => showMenu = !showMenu}>
             SK
         </button>
