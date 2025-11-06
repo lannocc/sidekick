@@ -15,6 +15,104 @@
 
     let screenWidth;
 
+    // Elements for layout calculation
+    let leftSectionEl, centerSectionEl, rightSectionEl;
+
+    // Map to store measured widths of task items
+    let taskItemWidths = new Map();
+
+    // Object to store final calculated layouts
+    let taskItemLayouts = {};
+
+    const GAP = 5; // px gap between items
+
+    // Svelte action to measure an element's width using ResizeObserver
+    function measure(node, id) {
+        const ro = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                // Update map only if the width has actually changed
+                if (taskItemWidths.get(id) !== entry.contentRect.width) {
+                    taskItemWidths.set(id, entry.contentRect.width);
+                    taskItemWidths = taskItemWidths; // Trigger reactivity
+                }
+            }
+        });
+        ro.observe(node);
+
+        return {
+            destroy() {
+                ro.disconnect();
+                if (taskItemWidths.has(id)) {
+                    taskItemWidths.delete(id);
+                    taskItemWidths = taskItemWidths; // Trigger reactivity
+                }
+            }
+        };
+    }
+
+    // Reactive calculation for task item layouts
+    $: if (screenWidth && leftSectionEl && centerSectionEl && rightSectionEl && $windows.length > 0) {
+        // Wait until we have widths for all items before calculating the layout
+        const allWidthsKnown = $windows.every(win => taskItemWidths.has(win.id));
+
+        if (allWidthsKnown) {
+            const leftRect = leftSectionEl.getBoundingClientRect();
+            const centerRect = centerSectionEl.getBoundingClientRect();
+            const rightRect = rightSectionEl.getBoundingClientRect();
+
+            // Prepare items with their ideal positions and widths, then sort by ideal position
+            const items = $windows
+                .map(win => ({
+                    id: win.id,
+                    idealX: getWindowCenterX(win),
+                    width: taskItemWidths.get(win.id) || 100, // Fallback width
+                }))
+                .sort((a, b) => a.idealX - b.idealX);
+
+            const newLayouts = {};
+            let lastItemRightEdge = leftRect.right + GAP;
+
+            // --- Pass 1: Place items from left to right, avoiding collisions ---
+            for (const item of items) {
+                const itemWidth = item.width;
+                let idealLeft = item.idealX - itemWidth / 2;
+
+                // Position is either its ideal spot or right after the previous item
+                let left = Math.max(idealLeft, lastItemRightEdge);
+
+                // Check for collision with the center clock area
+                if ((left + itemWidth + GAP) > centerRect.left && left < (centerRect.right + GAP)) {
+                    // It collides. Push it to be after the clock, ensuring it's also after the previous item.
+                    left = Math.max(lastItemRightEdge, centerRect.right + GAP);
+                }
+
+                newLayouts[item.id] = { left };
+                lastItemRightEdge = left + itemWidth + GAP;
+            }
+
+            // --- Pass 2: Adjust if the whole group overflows past the right section ---
+            let overflow = lastItemRightEdge - (rightRect.left - GAP);
+            if (overflow > 0) {
+                const firstItem = items[0];
+                const firstItemLeft = newLayouts[firstItem.id].left;
+
+                // We can only shift left by the amount of space available on the left
+                const availableShift = firstItemLeft - (leftRect.right + GAP);
+                const shiftAmount = Math.min(overflow, availableShift);
+
+                if (shiftAmount > 0) {
+                    for (const item of items) {
+                        newLayouts[item.id].left -= shiftAmount;
+                    }
+                }
+            }
+
+            taskItemLayouts = newLayouts;
+        }
+    } else if ($windows.length === 0) {
+        taskItemLayouts = {}; // Clear layouts if no windows are open
+    }
+
     // Helper to calculate a window's horizontal center
     function getWindowCenterX(win) {
         // A maximized window's center is the screen's center
@@ -100,7 +198,9 @@
         /* Positioning styles for tracking the window */
         position: absolute;
         top: 50%;
-        transform: translate(-50%, -50%);
+        /* The `left` property is now the start of the button.
+           We only need to translate vertically. */
+        transform: translateY(-50%);
         transition: left 0.3s ease-out;
         z-index: 1;
     }
@@ -202,7 +302,7 @@
 <svelte:window bind:innerWidth={screenWidth} />
 
 <div class="taskbar">
-    <div class="taskbar-left">
+    <div class="taskbar-left" bind:this={leftSectionEl}>
         <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => showWindowsMenu = !showWindowsMenu}>
             Windows
         </button>
@@ -231,17 +331,18 @@
             class:active={win.isActive}
             title={win.title}
             on:click={() => handleTaskClick(win)}
-            style="left: {screenWidth ? (getWindowCenterX(win) / screenWidth) * 100 : 50}%;"
+            use:measure={win.id}
+            style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'};"
         >
             {win.title}
         </button>
     {/each}
 
-    <div class="taskbar-center">
+    <div class="taskbar-center" bind:this={centerSectionEl}>
         <Clock />
     </div>
 
-    <div class="taskbar-right">
+    <div class="taskbar-right" bind:this={rightSectionEl}>
         <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => showMenu = !showMenu}>
             SK
         </button>
