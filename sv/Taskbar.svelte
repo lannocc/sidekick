@@ -5,6 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings } from './windows.js';
+    import Clock from './Clock.svelte';
 
     let showMenu = false; // For Start menu
     let startButton;
@@ -57,10 +58,18 @@
         border-bottom: 1px solid var(--border-color);
         display: flex;
         align-items: center;
+        justify-content: space-between; /* This will space out left, center, and right sections */
         padding: 0 10px;
-        gap: 8px;
         flex-shrink: 0;
         position: relative; /* For menu positioning */
+    }
+    .taskbar-left, .taskbar-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .taskbar-center {
+        /* The clock goes here, centered automatically */
     }
     .task-item {
         background-color: var(--taskbar-button-bg);
@@ -95,7 +104,7 @@
         border-radius: 4px;
         padding: 5px 10px;
         cursor: pointer;
-        margin-left: auto; /* Pushes button to the far right */
+        /* Pushes button to the far right */
     }
     .windows-button {
         background-color: var(--taskbar-button-bg);
@@ -169,48 +178,56 @@
 </style>
 
 <div class="taskbar">
-    <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => showWindowsMenu = !showWindowsMenu}>
-        Windows
-    </button>
-    {#if showWindowsMenu}
-        <div class="windows-menu">
-            {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
-                <button class="menu-item" on:click={() => { windows.focusWindow(win.id); showWindowsMenu = false; }}>
-                    {win.title}
-                </button>
-            {:else}
-                <span class="menu-item-empty">No open windows</span>
-            {/each}
-            {#if $windows.length > 0}
-                <button class="menu-item close-all" on:click={() => { windows.closeAllWindows(); showWindowsMenu = false; }}>
-                    Close All
-                </button>
-            {/if}
-        </div>
-    {/if}
-
-    {#each $windows as win (win.id)}
-        <button
-            class="task-item"
-            class:minimized={win.minimized}
-            class:active={win.isActive}
-            title={win.title}
-            on:click={() => handleTaskClick(win)}
-        >
-            {win.title}
+    <div class="taskbar-left">
+        <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => showWindowsMenu = !showWindowsMenu}>
+            Windows
         </button>
-    {/each}
+        {#if showWindowsMenu}
+            <div class="windows-menu">
+                {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
+                    <button class="menu-item" on:click={() => { windows.focusWindow(win.id); showWindowsMenu = false; }}>
+                        {win.title}
+                    </button>
+                {:else}
+                    <span class="menu-item-empty">No open windows</span>
+                {/each}
+                {#if $windows.length > 0}
+                    <button class="menu-item close-all" on:click={() => { windows.closeAllWindows(); showWindowsMenu = false; }}>
+                        Close All
+                    </button>
+                {/if}
+            </div>
+        {/if}
 
-    <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => showMenu = !showMenu}>
-        SK
-    </button>
+        {#each $windows as win (win.id)}
+            <button
+                class="task-item"
+                class:minimized={win.minimized}
+                class:active={win.isActive}
+                title={win.title}
+                on:click={() => handleTaskClick(win)}
+            >
+                {win.title}
+            </button>
+        {/each}
+    </div>
 
-    {#if showMenu}
-        <div class="start-menu">
-            <button class="menu-item" on:click={launchIosk}>New IOSK Connection</button>
-            <button class="menu-item" on:click={launchCalculator}>Calculator</button>
-            <button class="menu-item" on:click={launchSettings}>Settings</button>
-        </div>
-    {/if}
+    <div class="taskbar-center">
+        <Clock />
+    </div>
+
+    <div class="taskbar-right">
+        <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => showMenu = !showMenu}>
+            SK
+        </button>
+
+        {#if showMenu}
+            <div class="start-menu">
+                <button class="menu-item" on:click={launchIosk}>New IOSK Connection</button>
+                <button class="menu-item" on:click={launchCalculator}>Calculator</button>
+                <button class="menu-item" on:click={launchSettings}>Settings</button>
+            </div>
+        {/if}
+    </div>
 </div>
 
