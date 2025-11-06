@@ -48,7 +48,7 @@
     .taskbar {
         height: 40px;
         background-color: var(--taskbar-bg);
-        border-top: 1px solid var(--border-color);
+        border-bottom: 1px solid var(--border-color);
         display: flex;
         align-items: center;
         padding: 0 10px;
@@ -89,15 +89,16 @@
         border-radius: 4px;
         padding: 5px 10px;
         cursor: pointer;
+        margin-left: auto; /* Pushes button to the far right */
     }
     .start-menu {
         position: absolute;
-        bottom: 45px; /* Position above the taskbar */
-        left: 10px;
+        top: 45px; /* Position below the taskbar */
+        right: 10px;
         background-color: var(--window-bg);
         border: 1px solid var(--border-color);
         border-radius: 4px;
-        box-shadow: 0 -3px 10px rgba(0,0,0,0.2);
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
         z-index: 10000;
         display: flex;
         flex-direction: column;
@@ -121,18 +122,6 @@
 </style>
 
 <div class="taskbar">
-    <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => showMenu = !showMenu}>
-        SK
-    </button>
-
-    {#if showMenu}
-        <div class="start-menu">
-            <button class="menu-item" on:click={launchIosk}>New IOSK Connection</button>
-            <button class="menu-item" on:click={launchCalculator}>Calculator</button>
-            <button class="menu-item" on:click={launchSettings}>Settings</button>
-        </div>
-    {/if}
-
     {#each $windows as win (win.id)}
         <button
             class="task-item"
@@ -144,5 +133,17 @@
             {win.title}
         </button>
     {/each}
+
+    <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => showMenu = !showMenu}>
+        SK
+    </button>
+
+    {#if showMenu}
+        <div class="start-menu">
+            <button class="menu-item" on:click={launchIosk}>New IOSK Connection</button>
+            <button class="menu-item" on:click={launchCalculator}>Calculator</button>
+            <button class="menu-item" on:click={launchSettings}>Settings</button>
+        </div>
+    {/if}
 </div>
 

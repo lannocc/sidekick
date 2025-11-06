@@ -17,7 +17,7 @@
 </style>
 
 <div class="sk-container">
-    <Desktop />
     <Taskbar />
+    <Desktop />
 </div>
 
