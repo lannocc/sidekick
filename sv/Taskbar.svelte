@@ -319,7 +319,7 @@
 
 <div class="taskbar">
     <div class="taskbar-left" bind:this={leftSectionEl}>
-        <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => showWindowsMenu = !showWindowsMenu}>
+        <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashboardActive) dashboardActive.set(false); showWindowsMenu = !showWindowsMenu; }}>
             W~
         </button>
         <button class="windows-button" class:active={$dashboardActive} on:click={() => dashboardActive.update(v => !v)} title="Toggle Dashboard">
@@ -328,14 +328,14 @@
         {#if showWindowsMenu}
             <div class="windows-menu">
                 {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
-                    <button class="menu-item" on:click={() => { windows.focusWindow(win.id); showWindowsMenu = false; }}>
+                    <button class="menu-item" on:click={() => { if ($dashboardActive) dashboardActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
                         {win.title}
                     </button>
                 {:else}
                     <span class="menu-item-empty">No open windows</span>
                 {/each}
                 {#if $windows.length > 0}
-                    <button class="menu-item close-all" on:click={() => { windows.closeAllWindows(); showWindowsMenu = false; }}>
+                    <button class="menu-item close-all" on:click={() => { if ($dashboardActive) dashboardActive.set(false); windows.closeAllWindows(); showWindowsMenu = false; }}>
                         Close All
                     </button>
                 {/if}
@@ -349,7 +349,7 @@
             class:minimized={win.minimized}
             class:active={win.isActive}
             title={win.title}
-            on:click={() => handleTaskClick(win)}
+            on:click={() => { if ($dashboardActive) dashboardActive.set(false); handleTaskClick(win); }}
             use:measure={win.id}
             style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'};"
         >
@@ -362,18 +362,18 @@
     </div>
 
     <div class="taskbar-right" bind:this={rightSectionEl}>
-        <button class="quick-launch-button" on:click|stopPropagation={launchIosk} title="New IOSK Connection">
+        <button class="quick-launch-button" on:click|stopPropagation={() => { if ($dashboardActive) dashboardActive.set(false); launchIosk(); }} title="New IOSK Connection">
             $+
         </button>
-        <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => showMenu = !showMenu}>
+        <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => { if ($dashboardActive) dashboardActive.set(false); showMenu = !showMenu; }}>
             SK
         </button>
 
         {#if showMenu}
             <div class="start-menu">
-                <button class="menu-item" on:click={launchIosk}>New IOSK Connection</button>
-                <button class="menu-item" on:click={launchCalculator}>Calculator</button>
-                <button class="menu-item" on:click={launchSettings}>Settings</button>
+                <button class="menu-item" on:click={() => { if ($dashboardActive) dashboardActive.set(false); launchIosk(); }}>New IOSK Connection</button>
+                <button class="menu-item" on:click={() => { if ($dashboardActive) dashboardActive.set(false); launchCalculator(); }}>Calculator</button>
+                <button class="menu-item" on:click={() => { if ($dashboardActive) dashboardActive.set(false); launchSettings(); }}>Settings</button>
             </div>
         {/if}
     </div>
