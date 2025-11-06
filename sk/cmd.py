@@ -3,6 +3,8 @@
 
 from . import config
 from .util import print_flush, package_directory, take_screenshot
+import os
+from binaryornot.check import is_binary
 
 print = print_flush
 
@@ -113,21 +115,25 @@ def main(args, called=''):
     # --- Mode Dispatch ---
 
     if task or ask:
-        # For ask/task, all remaining non-option args are package paths
-        pkg.extend(remaining_args)
-
-        final_pkg = None
-        if len(pkg) == 1:
-            final_pkg = pkg[0]
-        elif len(pkg) > 1:
-            final_pkg = pkg
+        # For ask/task, all remaining non-option args are package paths (files or dirs)
+        for path in remaining_args:
+            if os.path.isfile(path):
+                if is_binary(path):
+                    print(f'!!! cannot package binary file specified as an argument: {path}')
+                    return
+                pkg.append(path)
+            elif os.path.isdir(path):
+                pkg.append(path)
+            else:
+                print(f'!!! path not found or is not a regular file/directory: {path}')
+                return
 
         prompt = None # Prompt is now handled interactively or via pipe
         if task:
-            do_task(prompt, shot=shot, file=file, package=final_pkg, quiet=quiet,
+            do_task(prompt, shot=shot, file=file, package=pkg or None, quiet=quiet,
                          chatter=chatter, model=model)
         else:
-            ask_question(prompt, shot=shot, file=file, package=final_pkg,
+            ask_question(prompt, shot=shot, file=file, package=pkg or None,
                            mdlang=lang, mdsave=save, work_file=save_work, quiet=quiet,
                            chatter=chatter, model=model, use_openai=use_openai)
         return
