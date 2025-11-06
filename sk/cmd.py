@@ -69,16 +69,11 @@ def main(args, called=''):
             elif op in ['-1', '-2', '-3']: model_flag = op
 
             # Handle options that take arguments
-            elif op == '-f':
+            elif op == '-a':
                 if not args_list or args_list[0].startswith('-'):
-                    print(f'!!! need a filename for -f')
+                    print(f'!!! need a filename for -a')
                     return
                 file = args_list.pop(0)
-            elif op == '-p':
-                if not args_list or args_list[0].startswith('-'):
-                    print(f'!!! need a directory path for -p')
-                    return
-                pkg.append(args_list.pop(0))
             elif op == '-e':
                 if len(args_list) < 2 or args_list[0].startswith('-') or args_list[1].startswith('-'):
                     print(f'!!! -e needs 2 arguments: <language> <file>')
@@ -460,10 +455,8 @@ OPTIONS = {
         'print all chatter (even when quiet is enabled)'),
     '-s': (None,
         'take screenshot to use with prompt'),
-    '-f': (None,
-        'upload file with -f <filename>'),
-    '-p': (None,
-        'package directory text contents and upload with -p <directory>'),
+    '-a': (None,
+        'attach binary image/document with -a <filename>'),
     '-e': (None,
         '(ask only) extract markdown code and save with -e <language> <file>'),
     '--openai': (None,
