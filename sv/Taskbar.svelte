@@ -169,6 +169,7 @@
         padding: 0 10px;
         flex-shrink: 0;
         position: relative; /* For menu positioning and absolute children */
+        z-index: 20000; /* Ensure taskbar and its menus are above all windows */
     }
     .taskbar-left, .taskbar-right {
         display: flex;
