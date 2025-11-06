@@ -5,8 +5,10 @@ from . import config
 from .util import print_flush, package_directory, take_screenshot
 import os
 from binaryornot.check import is_binary
+import tiktoken
 
 print = print_flush
+ENCODING = tiktoken.get_encoding('cl100k_base')
 
 
 def main(args, called=''):
@@ -167,6 +169,8 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         print('Ask a Question')
         print()
 
+    attachment_content = ""
+
     if shot or file or package:
         if sum([ 1 for item in [ shot, file, package ] if item ]) > 1:
             print('!!! only one of screenshot OR file OR package at a time !!!')
@@ -187,6 +191,16 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
                 else: print(counts)
                 print()
 
+    if file and not is_binary(file):
+        with open(file, 'r', encoding='utf-8') as f:
+            attachment_content = f.read()
+        attachment_bytes = len(attachment_content.encode('utf-8'))
+        attachment_tokens = len(ENCODING.encode(attachment_content))
+        if not quiet:
+            print(f'SUBTOTAL Bytes: {attachment_bytes:,}')
+            print(f'SUBTOTAL Tokens: {attachment_tokens:,}')
+            print()
+
     if (mdlang and not mdsave) or (mdsave and not mdlang):
         print('!!! need either both mdlang and mdsave, or neither')
         return
@@ -196,6 +210,7 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         # Interactive mode
         if not quiet:
             print('    (Ctrl+D to finish)')
+            print()
             print(' >> ', end='')
         prompt = sys.stdin.read()
     else:
@@ -206,6 +221,12 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         return
 
     if not quiet:
+        full_text = attachment_content + prompt
+        total_bytes = len(full_text.encode('utf-8'))
+        total_tokens = len(ENCODING.encode(full_text))
+        print()
+        print(f'GRAND TOTAL Bytes: {total_bytes:,}')
+        print(f'GRAND TOTAL Tokens: {total_tokens:,}')
         print()
         print("...waiting for reply...")
 
@@ -230,6 +251,10 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         md = get_md_code_block(mdlang or None, answer)
         if md: answer_for_display = answer.replace(md, '$$$ CODE EXTRACTED $$$')
 
+    if not quiet:
+        output_bytes = len(answer.encode('utf-8'))
+        output_tokens = len(ENCODING.encode(answer))
+
     print()
     print(f' << {answer_for_display}')
     print()
@@ -248,6 +273,11 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         print(summary)
         print()
 
+    if not quiet:
+        print(f':: Output Bytes: {output_bytes:,}')
+        print(f':: Output Tokens: {output_tokens:,}')
+        print()
+
 
 def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
             chatter=False, model=None):
@@ -258,6 +288,8 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
     if not quiet:
         print('Perform a Task')
         print()
+
+    attachment_content = ""
 
     if shot or file or package:
         if sum([ 1 for item in [ shot, file, package ] if item ]) > 1:
@@ -279,6 +311,16 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
                 else: print(counts)
                 print()
 
+    if file and not is_binary(file):
+        with open(file, 'r', encoding='utf-8') as f:
+            attachment_content = f.read()
+        attachment_bytes = len(attachment_content.encode('utf-8'))
+        attachment_tokens = len(ENCODING.encode(attachment_content))
+        if not quiet:
+            print(f'SUBTOTAL Bytes: {attachment_bytes:,}')
+            print(f'SUBTOTAL Tokens: {attachment_tokens:,}')
+            print()
+
     if prompt:
         if not quiet: print(f' >> {prompt}')
 
@@ -289,7 +331,14 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
     if not prompt:
         return
 
-    if not quiet: print()
+    if not quiet:
+        full_text = attachment_content + prompt
+        total_bytes = len(full_text.encode('utf-8'))
+        total_tokens = len(ENCODING.encode(full_text))
+        print(f'GRAND TOTAL Bytes: {total_bytes:,}')
+        print(f'GRAND TOTAL Tokens: {total_tokens:,}')
+        print()
+
     context = Context(file)
 
     try:
@@ -297,6 +346,14 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
 
         if result is not None:
             play_success()
+            if not quiet and result.path_name and os.path.exists(result.path_name) and not is_binary(result.path_name):
+                with open(result.path_name, 'r', encoding='utf-8') as f:
+                    result_content = f.read()
+                output_bytes = len(result_content.encode('utf-8'))
+                output_tokens = len(ENCODING.encode(result_content))
+                print()
+                print(f':: Total Output Bytes: {output_bytes:,}')
+                print(f':: Output Tokens: {output_tokens:,}')
             return result
 
         else:
