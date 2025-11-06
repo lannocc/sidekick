@@ -5,6 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings } from './windows.js';
+    import { dashboardActive } from './desktopStore.js';
     import Clock from './Clock.svelte';
 
     let showMenu = false; // For Start menu
@@ -12,8 +13,6 @@
 
     let showWindowsMenu = false; // For Windows list menu
     let windowsButton;
-
-    let showDashboard = false; // For dashboard toggle
 
     let screenWidth;
 
@@ -323,7 +322,7 @@
         <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => showWindowsMenu = !showWindowsMenu}>
             W~
         </button>
-        <button class="windows-button" class:active={showDashboard} on:click={() => showDashboard = !showDashboard} title="Toggle Dashboard">
+        <button class="windows-button" class:active={$dashboardActive} on:click={() => dashboardActive.update(v => !v)} title="Toggle Dashboard">
             &mdash;
         </button>
         {#if showWindowsMenu}

@@ -5,7 +5,8 @@
 <script>
     import { windows } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings } from './desktopStore.js';
+    import { desktopSettings, dashboardActive } from './desktopStore.js';
+    import Dashboard from './Dashboard.svelte';
 
     let backgroundStyle = '';
 
@@ -56,11 +57,31 @@
         background-position: center;
         transition: background 0.5s ease-in-out;
     }
+    .desktop::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: rgba(0,0,0,0.4);
+        backdrop-filter: blur(5px);
+        opacity: 0;
+        transition: opacity 0.3s ease, backdrop-filter 0.3s ease;
+        z-index: 50; /* Above background, below windows/dashboard */
+        pointer-events: none;
+    }
+    .desktop.dashboard-active::before {
+        opacity: 1;
+    }
 </style>
 
-<div class="desktop" style:background={backgroundStyle}>
-    {#each $windows as win (win.id)}
-        <Window {...win} />
-    {/each}
+<div class="desktop" class:dashboard-active={$dashboardActive} style:background={backgroundStyle}>
+    {#if !$dashboardActive}
+        {#each $windows as win (win.id)}
+            <Window {...win} />
+        {/each}
+    {/if}
+
+    {#if $dashboardActive}
+        <Dashboard />
+    {/if}
 </div>
 

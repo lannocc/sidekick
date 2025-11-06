@@ -42,3 +42,6 @@ desktopSettings.subscribe(value => {
     }
 });
 
+// Store for managing the dashboard's active state
+export const dashboardActive = writable(false);
+
