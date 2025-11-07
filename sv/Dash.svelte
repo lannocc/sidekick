@@ -6,6 +6,7 @@
     import { dashActive, dashLayouts } from './desktopStore.js';
     import { windows, restoreWindow } from './windows.js';
     import { get } from 'svelte/store';
+    import { onMount, onDestroy } from 'svelte';
 
     // Import component types to map them to strings for saving layouts
     import IoskConsole from './IoskConsole.svelte';
@@ -15,6 +16,64 @@
 
     let isLayoutDirty = true;
     let lastSavedLayoutSnapshot = '';
+
+    // --- Context Menu State ---
+    let contextMenu = {
+        visible: false,
+        x: 0,
+        y: 0,
+        layoutId: null
+    };
+
+    function closeContextMenu() {
+        contextMenu = { visible: false, x: 0, y: 0, layoutId: null };
+    }
+
+    onMount(() => {
+        // Close context menu on any click outside of it
+        window.addEventListener('click', closeContextMenu);
+    });
+
+    onDestroy(() => {
+        window.removeEventListener('click', closeContextMenu);
+    });
+
+    function handleRightClick(event, layout) {
+        event.preventDefault();
+        contextMenu = {
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+            layoutId: layout.id
+        };
+    }
+
+    function handleDeleteLayout() {
+        if (contextMenu.layoutId === null) return;
+        if (confirm('Are you sure you want to delete this layout?')) {
+            dashLayouts.update(layouts => layouts.filter(l => l.id !== contextMenu.layoutId));
+        }
+        // closeContextMenu() will be called by the global click handler
+    }
+
+    function handleRenameLayout() {
+        if (contextMenu.layoutId === null) return;
+        const layoutToRename = get(dashLayouts).find(l => l.id === contextMenu.layoutId);
+        if (!layoutToRename) return;
+
+        const newName = prompt("Enter new name for the layout:", layoutToRename.name);
+
+        if (newName && newName.trim() !== '') {
+            dashLayouts.update(layouts =>
+                layouts.map(l =>
+                    l.id === contextMenu.layoutId ? { ...l, name: newName.trim() } : l
+                )
+            );
+        }
+        // closeContextMenu() will be called by the global click handler
+    }
+    // --- End Context Menu Logic ---
+
 
     function getComponentType(component) {
         if (component === IoskConsole) return 'IoskConsole';
@@ -224,6 +283,42 @@
         box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         border-color: var(--taskbar-button-hover-bg);
     }
+    
+    .context-menu {
+        position: fixed; /* Use fixed to position relative to viewport */
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        z-index: 1001; /* Above the dash dialog */
+        display: flex;
+        flex-direction: column;
+        padding: 4px 0;
+        min-width: 120px;
+    }
+
+    .context-menu button {
+        background: none;
+        border: none;
+        color: var(--taskbar-text);
+        padding: 8px 12px;
+        text-align: left;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+    .context-menu button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    
+    .context-menu button.delete {
+        color: #e74c3c;
+    }
+
+    .context-menu button.delete:hover {
+        background-color: #c0392b;
+        color: white;
+    }
 
 </style>
 
@@ -250,6 +345,7 @@
                     class="layout-tile" 
                     title={layout.name}
                     on:click={() => handleRestoreLayout(layout)}
+                    on:contextmenu|preventDefault={e => handleRightClick(e, layout)}
                     role="button" 
                     tabindex="0"
                     on:keydown={e => e.key === 'Enter' && handleRestoreLayout(layout)}
@@ -260,3 +356,14 @@
         </div>
     </div>
 </div>
+
+{#if contextMenu.visible}
+    <div 
+        class="context-menu" 
+        style="top: {contextMenu.y}px; left: {contextMenu.x}px;"
+        on:click|stopPropagation
+    >
+        <button on:click={handleRenameLayout}>Rename</button>
+        <button class="delete" on:click={handleDeleteLayout}>Delete</button>
+    </div>
+{/if}
