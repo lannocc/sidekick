@@ -455,6 +455,9 @@
                 <button class="menu-item" on:click={handleConnect} disabled={isConsoleConnected}>
                     Connect
                 </button>
+                <button class="menu-item" on:click={() => { if (componentInstance && typeof componentInstance.showSettingsDialog === 'function') { componentInstance.showSettingsDialog(); } showOptionsMenu = false; }} disabled={isConsoleConnected}>
+                    Settings...
+                </button>
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={handleDisconnect} disabled={!isConsoleConnected}>
                     Disconnect

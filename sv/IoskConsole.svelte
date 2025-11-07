@@ -26,6 +26,39 @@
     let unsentCommand = '';
     let currentPrompt = '';
 
+    // Settings Modal
+    let showSettings = false;
+    let settingsUrl, settingsUsername;
+    let settingsUrlInput;
+
+    export function showSettingsDialog() {
+        if (isConnected) return; // Do not show settings if connected
+        settingsUrl = wsUrl;
+        settingsUsername = username;
+        showSettings = true;
+        // Focus input on next tick after it becomes visible
+        tick().then(() => settingsUrlInput?.focus());
+    }
+
+    function handleSaveSettings() {
+        wsUrl = settingsUrl;
+        username = settingsUsername;
+        showSettings = false;
+    }
+
+    function handleCancelSettings() {
+        showSettings = false;
+    }
+
+    function handleSettingsKeydown(e) {
+        if (e.key === 'Escape') {
+            handleCancelSettings();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            handleSaveSettings();
+        }
+    }
+
     let terminalEl;
     let commandInput;
 
@@ -330,6 +363,7 @@
         color: var(--console-text);
         font-family: 'Courier New', Courier, monospace;
         font-size: 14px;
+        position: relative; /* For modal positioning */
     }
     .connect-form {
         display: flex;
@@ -407,6 +441,82 @@
         font-family: inherit;
         font-size: inherit;
     }
+
+    /* Added for settings modal */
+    .modal-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(2px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 100; /* Above the console content */
+    }
+    .modal-content {
+        background-color: var(--window-bg);
+        padding: 20px;
+        border-radius: 5px;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        width: 90%;
+        max-width: 400px;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    .modal-content h3 {
+        margin: 0;
+        color: var(--title-bar-text);
+        font-weight: 500;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 10px;
+    }
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    .modal-content label {
+        font-size: 0.9em;
+        color: var(--title-bar-text);
+    }
+    .modal-content input {
+        background-color: var(--console-bg);
+        border: 1px solid var(--border-color);
+        color: var(--title-bar-text);
+        padding: 8px;
+        border-radius: 3px;
+        font-family: monospace;
+    }
+    .buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 10px;
+    }
+    .modal-content button {
+        padding: 8px 16px;
+        border-radius: 3px;
+        cursor: pointer;
+        border: 1px solid var(--border-color);
+        color: var(--title-bar-text);
+        background-color: var(--taskbar-button-bg);
+    }
+    .modal-content button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .modal-content .save-button {
+        background-color: #27c93f;
+        border-color: #1a9c2a;
+        color: white;
+    }
+    .modal-content .save-button:hover {
+        background-color: #1a9c2a;
+    }
 </style>
 
 <div class="console-container">
@@ -439,6 +549,26 @@
                 on:keydown={handleKeydown}
                 spellcheck="false"
             />
+        </div>
+    {/if}
+
+    {#if showSettings}
+        <div class="modal-overlay" on:click|self={handleCancelSettings} on:keydown={handleSettingsKeydown}>
+            <div class="modal-content">
+                <h3>IOSK Connection Settings</h3>
+                <div class="form-group">
+                    <label for="url-setting-{id}">URL</label>
+                    <input id="url-setting-{id}" type="text" bind:this={settingsUrlInput} bind:value={settingsUrl}>
+                </div>
+                <div class="form-group">
+                    <label for="user-setting-{id}">Username</label>
+                    <input id="user-setting-{id}" type="text" bind:value={settingsUsername}>
+                </div>
+                <div class="buttons">
+                    <button on:click={handleCancelSettings}>Cancel</button>
+                    <button class="save-button" on:click={handleSaveSettings}>Save</button>
+                </div>
+            </div>
         </div>
     {/if}
 </div>

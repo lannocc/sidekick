@@ -11,8 +11,6 @@ function loadSettings() {
         bgImageDisplayMode: 'cover', // 'cover', 'contain', 'stretch', 'tile'
         focusFollowsMouse: false,
         focusDelay: 420,
-        defaultIoskUsername: 'root',
-        defaultIoskUrl: 'ws://localhost:4209'
     };
 
     try {
@@ -46,4 +44,3 @@ desktopSettings.subscribe(value => {
 
 // Store for managing the dashboard's active state
 export const dashboardActive = writable(false);
-
