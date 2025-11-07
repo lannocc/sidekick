@@ -199,42 +199,86 @@
     }
 
     function handleKeydown(e) {
-        if (e.ctrlKey && e.key.toLowerCase() === 'd') {
-            e.preventDefault();
-            sendLogout();
-            return;
+        // Handle Ctrl key combinations that we want to override
+        if (e.ctrlKey) {
+            switch (e.key.toLowerCase()) {
+                case 'c':
+                    // Override default copy behavior to clear the line, like a terminal.
+                    e.preventDefault();
+                    command = '';
+                    return;
+                case 'd':
+                    e.preventDefault();
+                    sendLogout();
+                    return;
+                case 'home':
+                    e.preventDefault();
+                    if (terminalEl) {
+                        terminalEl.scrollTop = 0;
+                        shouldScroll = false; // User is scrolling up
+                    }
+                    return;
+                case 'end':
+                    e.preventDefault();
+                    if (terminalEl) {
+                        terminalEl.scrollTop = terminalEl.scrollHeight;
+                        shouldScroll = true; // User is scrolling to the bottom
+                    }
+                    return;
+            }
+            // Let other Ctrl combinations (Ctrl+A, Ctrl+V, etc.) pass through for default input behavior.
         }
 
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            sendCommand();
-            return;
+        // Handle other special keys
+        switch (e.key) {
+            case 'Enter':
+                e.preventDefault();
+                sendCommand();
+                return;
+
+            case 'ArrowUp':
+                e.preventDefault();
+                if (commandHistory.length === 0) return;
+                if (historyIndex === commandHistory.length) {
+                    unsentCommand = command;
+                }
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    command = commandHistory[historyIndex];
+                }
+                return;
+
+            case 'ArrowDown':
+                e.preventDefault();
+                if (commandHistory.length === 0) return;
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    command = commandHistory[historyIndex];
+                } else if (historyIndex === commandHistory.length - 1) {
+                    historyIndex++;
+                    command = unsentCommand;
+                }
+                return;
+
+            case 'PageUp':
+                e.preventDefault();
+                if (terminalEl) {
+                    terminalEl.scrollTop -= terminalEl.clientHeight * 0.9;
+                    shouldScroll = false; // User is scrolling up
+                }
+                return;
+
+            case 'PageDown':
+                e.preventDefault();
+                if (terminalEl) {
+                    terminalEl.scrollTop += terminalEl.clientHeight * 0.9;
+                    // The existing on:scroll handler will re-evaluate shouldScroll correctly
+                }
+                return;
         }
 
-        if (commandHistory.length === 0) {
-            return;
-        }
-
-        if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            if (historyIndex === commandHistory.length) {
-                // Starting navigation from a new command line
-                unsentCommand = command;
-            }
-            if (historyIndex > 0) {
-                historyIndex--;
-                command = commandHistory[historyIndex];
-            }
-        } else if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            if (historyIndex < commandHistory.length - 1) {
-                historyIndex++;
-                command = commandHistory[historyIndex];
-            } else if (historyIndex === commandHistory.length - 1) {
-                historyIndex++;
-                command = unsentCommand; // Restore the command being typed
-            }
-        }
+        // For Home, End (without Ctrl), and other characters, do nothing.
+        // This allows the browser to handle default input behavior like cursor movement.
     }
 
     onMount(() => {
