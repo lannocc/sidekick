@@ -343,7 +343,7 @@ class IOSK:
         # Display MOTD if not joining a room.
         # This mirrors the logic for network clients in port.py.
         if not (self.chat and self.chat.active_room):
-            motd_content = await self.get_motd(io)
+            motd_content = getattr(io, 'motd_cache', None)
             if motd_content:
                 await io.print(motd_content)
 
@@ -432,6 +432,9 @@ class IOSK:
                     await self.system.error(f"!! failed to create home directory {home_dir_virtual}: {e}")
                     # For now, allow login to proceed but log the error.
             io.pwd = home_dir_virtual # Set the current working directory for the user
+
+        # Determine and cache the MOTD for this session to ensure consistency.
+        io.motd_cache = await self.get_motd(io)
 
         if io_callback:
             await io_callback(io)
@@ -622,6 +625,9 @@ class IOSK:
                 except Exception as e:
                     await self.system.error(f"!! failed to create home directory {home_dir_virtual} for network user {username}: {e}")
             io.pwd = home_dir_virtual
+
+        # Determine and cache the MOTD for this session to ensure consistency.
+        io.motd_cache = await self.get_motd(io)
 
         # MODIFIED: Update local network_users and then broadcast
         user_addr = f"{username}.{self.hostname}"
