@@ -180,11 +180,8 @@ export const windows = createWindowManager();
 
 // Function to be called from other components like the Taskbar
 export function newIoskConnection() {
-    const settings = get(desktopSettings);
     windows.addWindow(IoskConsole, {
-        title: 'New IOSK Connection',
-        username: settings.ioskUsername,
-        wsUrl: settings.ioskUrl
+        title: 'New IOSK Connection'
     });
 }
 

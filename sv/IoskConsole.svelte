@@ -17,9 +17,19 @@
         windows.updateWindowProps(id, { isConsoleConnected: isConnected });
     }
 
-    export let wsUrl = 'ws://localhost:4209';
-    export let username = 'root';
+    let wsUrl;
+    let username;
     let isConnected = false;
+
+    desktopSettings.subscribe(settings => {
+        // Only update the local connection details if we are NOT connected.
+        // This allows existing, unconnected consoles to adopt new defaults.
+        if (!isConnected) {
+            wsUrl = settings.ioskUrl;
+            username = settings.ioskUsername;
+        }
+    });
+
     let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
     let command = '';
     let commandHistory = [];
@@ -565,7 +575,7 @@
     {#if showSettings}
         <div class="modal-overlay" on:click|self={handleCancelSettings} on:keydown={handleSettingsKeydown}>
             <div class="modal-content">
-                <h3>IOSK Connection Settings</h3>
+                <h3>IOSK Default Connection Settings</h3>
                 <div class="form-group">
                     <label for="url-setting-{id}">URL</label>
                     <input id="url-setting-{id}" type="text" bind:this={settingsUrlInput} bind:value={settingsUrl}>
