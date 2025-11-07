@@ -73,15 +73,6 @@ def do_work(prompt, answer, transcript_path):
     summary_lines = []
     processed_answer = answer
 
-    # 1. Save the full, original transcript to the specified file.
-    with open(transcript_path, 'w', encoding='utf-8') as f:
-        f.write("--- PROMPT ---\n")
-        f.write(prompt)
-        f.write("\n\n--- ANSWER ---\n")
-        f.write(answer)
-        # The summary will be appended to this file at the end.
-
-    # 2. Find all code blocks and process them.
     matches = list(CODEBLOCK_REGEX.finditer(answer))
     # Iterate in reverse to avoid messing up string indices during replacement.
     for match in reversed(matches):
@@ -135,7 +126,7 @@ def do_work(prompt, answer, transcript_path):
             except Exception as e:
                 summary_lines.append(f"-> FAILED TO WRITE: {filename}\n   {e}")
 
-    # 3. Create the final summary and append it to the transcript file.
+    # Create the final summary and append it to the transcript file.
     summary = ""
     if summary_lines:
         summary = "--- WORK SUMMARY ---\n" + "\n".join(reversed(summary_lines))

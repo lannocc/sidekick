@@ -3,9 +3,12 @@
 
 from . import config
 from .util import print_flush, package_directory, take_screenshot
-import os
+
 from binaryornot.check import is_binary
 import tiktoken
+
+import os
+from datetime import datetime
 
 print = print_flush
 ENCODING = tiktoken.get_encoding('cl100k_base')
@@ -21,7 +24,7 @@ def main(args, called=''):
     pkg = []
     lang = None
     save = None
-    save_work = None
+    work_flag = False
     model_flag = None
 
     task = called.endswith('task')
@@ -87,15 +90,21 @@ def main(args, called=''):
                 lang = args_list.pop(0)
                 save = args_list.pop(0)
             elif op == '-w':
-                if not args_list or args_list[0].startswith('-'):
-                    print(f'!!! need a filename for -w/--work')
-                    return
-                save_work = args_list.pop(0)
+                work_flag = True
 
         else:  # Not an option, so it's a non-option argument
             remaining_args.append(arg)
 
     # --- Post-parsing setup ---
+    save_work = None
+    if work_flag:
+        import tempfile
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        filename = f'sidekick-work-{timestamp}.log'
+        save_work = os.path.join(tempfile.gettempdir(), filename)
+        # Print first thing, before any other output and before waiting for input.
+        print(f':: Work transcript will be saved to: {save_work}')
+
     if save and save_work:
         print('!!! -e and -w cannot be used together.')
         return
@@ -220,6 +229,17 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
     if not prompt:
         return
 
+    if work_file:
+        try:
+            with open(work_file, 'w', encoding='utf-8') as f:
+                f.write("--- PROMPT ---\n")
+                f.write(prompt)
+        except Exception as e:
+            print(f"!!! Error writing prompt to transcript file {work_file}: {e}")
+            # Decide if we should continue without the work file.
+            # For now, we'll disable it and proceed.
+            work_file = None
+
     if not quiet:
         full_text = attachment_content + prompt
         total_bytes = len(full_text.encode('utf-8'))
@@ -239,12 +259,21 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
     else:
         answer = ai_provider.prompt_for_text(prompt, chatter=chatter, model=model)
 
+    if work_file:
+        try:
+            with open(work_file, 'a', encoding='utf-8') as f:
+                f.write("\n\n--- ANSWER ---\n")
+                f.write(answer)
+        except Exception as e:
+            print(f"!!! Error writing answer to transcript file {work_file}: {e}")
+            work_file = None # Disable further work operations on this file
+
     summary = None
     answer_for_display = answer
 
     if work_file:
         from . import worker
-        answer_for_display, summary = worker.do_work(prompt, answer, work_file)
+        answer_for_display, summary = worker.do_work(prompt, answer, work_file) # worker will append summary
 
     md = None
     if mdlang:
@@ -271,6 +300,10 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
 
     if summary:
         print(summary)
+        print()
+
+    if work_file:
+        print(f':: Transcript saved to: {work_file}')
         print()
 
     if not quiet:
@@ -545,7 +578,7 @@ OPTIONS = {
     '-e': (None,
         '(ask only) extract a single markdown code block and save with -e <language> <file>'),
     '-w': (None,
-        '(ask only) work on files, applying code blocks from reply, saves transcript to -w <file> (also --work)'),
+        '(ask only) work on files, applying code blocks from reply, saves transcript to a temporary log file (also --work)'),
     '--openai': (None,
         '(ask only) use OpenAI models instead of Google Gemini'),
     '-1': (None,
