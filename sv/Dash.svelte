@@ -17,6 +17,14 @@
     let isLayoutDirty = true;
     let lastSavedLayoutSnapshot = '';
 
+    // --- State for Preview ---
+    let previewedLayout = null;
+    let previewContainerWidth = 0;
+    let previewContainerHeight = 0;
+    let previewScale = 1;
+    let previewDesktop = { width: 0, height: 0, top: 0, left: 0 };
+
+
     // --- Context Menu State ---
     let contextMenu = {
         visible: false,
@@ -122,8 +130,8 @@
 
     function handleSaveDash() {
         const currentWindows = get(windows);
-        // We only care about position, size, and component info for restoring.
-        const layoutToSave = currentWindows.map(win => ({
+        // Map current windows to a serializable format
+        const layoutWindows = currentWindows.map(win => ({
             componentType: getComponentType(win.component),
             title: win.title,
             x: win.x,
@@ -134,7 +142,19 @@
             consoleId: win.consoleId, // Specific prop for File Explorer
         }));
 
-        dashLayouts.update(layouts => [...layouts, { id: Date.now(), name: `Layout ${layouts.length + 1}`, windows: layoutToSave }]);
+        // Create the full layout object, now including desktop dimensions for accurate preview scaling
+        const layoutToSave = {
+            id: Date.now(),
+            name: `Layout ${layouts.length + 1}`,
+            desktop: {
+                width: window.innerWidth,
+                // The available desktop area height is the viewport height minus the 40px taskbar
+                height: window.innerHeight - 40
+            },
+            windows: layoutWindows
+        };
+
+        dashLayouts.update(layouts => [...layouts, layoutToSave]);
 
         // After saving, mark the current layout as saved and disable the button
         lastSavedLayoutSnapshot = generateLayoutSnapshot(currentWindows);
@@ -165,6 +185,32 @@
         // Exits dash mode and minimizes all windows ("Show Desktop")
         dashActive.set(false);
         windows.minimizeAllWindows();
+    }
+
+    // --- Reactive Calculations for Layout Preview ---
+    $: if (previewedLayout && previewContainerWidth > 0 && previewContainerHeight > 0) {
+        // Fallback for old layouts without saved desktop dimensions, assuming a 16:9 ratio.
+        const savedDesktopWidth = previewedLayout.desktop?.width || 1920;
+        const savedDesktopHeight = previewedLayout.desktop?.height || 1080;
+
+        const scaleX = previewContainerWidth / savedDesktopWidth;
+        const scaleY = previewContainerHeight / savedDesktopHeight;
+        // Use 95% of the smallest scale factor to ensure there's a nice padding.
+        previewScale = Math.min(scaleX, scaleY) * 0.95;
+
+        const scaledWidth = savedDesktopWidth * previewScale;
+        const scaledHeight = savedDesktopHeight * previewScale;
+
+        previewDesktop = {
+            width: scaledWidth,
+            height: scaledHeight,
+            // Center the preview screen within its container.
+            left: (previewContainerWidth - scaledWidth) / 2,
+            top: (previewContainerHeight - scaledHeight) / 2
+        };
+    } else {
+        // Reset when not previewing.
+        previewDesktop = { width: 0, height: 0, top: 0, left: 0 };
     }
 </script>
 
@@ -258,6 +304,26 @@
         align-items: center;
         justify-content: center;
         color: rgba(255, 255, 255, 0.3);
+        position: relative; /* For absolute positioning of preview screen */
+        overflow: hidden; /* Hide anything that might spill out */
+        padding: 10px;
+        box-sizing: border-box;
+    }
+
+    .preview-screen {
+        position: absolute;
+        background-color: rgba(0,0,0,0.2);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .preview-window {
+        position: absolute;
+        background-color: rgba(52, 152, 219, 0.5); /* Semi-transparent blue */
+        border: 1px solid rgba(41, 128, 185, 0.8);
+        border-radius: 2px;
+        box-sizing: border-box;
     }
 
     .dash-layouts {
@@ -346,8 +412,30 @@
     </div>
 
     <div class="dash-body">
-        <div class="dash-preview">
-            <p>Layout Preview</p>
+        <div class="dash-preview" bind:clientWidth={previewContainerWidth} bind:clientHeight={previewContainerHeight}>
+             {#if previewedLayout && previewDesktop.width > 0}
+                <div
+                    class="preview-screen"
+                    style:width="{previewDesktop.width}px"
+                    style:height="{previewDesktop.height}px"
+                    style:top="{previewDesktop.top}px"
+                    style:left="{previewDesktop.left}px"
+                >
+                    {#each previewedLayout.windows as win (`${win.title}-${win.x}-${win.y}`)}
+                        {@const isMaximized = win.maximized}
+                        <div
+                            class="preview-window"
+                            title={win.title}
+                            style:left="{isMaximized ? 0 : (win.x * previewScale)}px"
+                            style:top="{isMaximized ? 0 : (win.y * previewScale)}px"
+                            style:width="{isMaximized ? '100%' : Math.max(2, win.width * previewScale)}px"
+                            style:height="{isMaximized ? '100%' : Math.max(2, win.height * previewScale)}px"
+                        ></div>
+                    {/each}
+                </div>
+            {:else}
+                <p>Hover over a layout to see a preview</p>
+            {/if}
         </div>
         <div class="dash-layouts">
             {#each $dashLayouts as layout (layout.id)}
@@ -355,6 +443,8 @@
                     class="layout-tile" 
                     title={layout.name}
                     on:click={() => handleRestoreLayout(layout)}
+                    on:mouseenter={() => previewedLayout = layout}
+                    on:mouseleave={() => previewedLayout = null}
                     on:contextmenu|preventDefault={e => handleRightClick(e, layout)}
                     role="button" 
                     tabindex="0"
