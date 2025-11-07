@@ -47,7 +47,11 @@
             ws.onopen = () => {
                 console.log(`WebSocket connected for console ${id}.`);
                 isConnected = true;
-                title = `${username}@${new URL(wsUrl).hostname}`;
+                try {
+                    title = `${username}@${new URL(wsUrl).hostname}`;
+                } catch (e) {
+                    title = `${username}@invalid-host`;
+                }
 
                 // Send handshake message to backend `port.py`
                 const handshake = { type: 'handshake', id: 'client', user: username };
@@ -85,7 +89,11 @@
                 isConnected = false;
                 ws = null; // Allow reconnection
                 output = [...output, {type: 'output', content: `Connection closed.`}];
-                title = `[Disconnected] ${username}@${new URL(wsUrl).hostname}`;
+                try {
+                    title = `[Disconnected] ${username}@${new URL(wsUrl).hostname}`;
+                } catch (e) {
+                    title = `[Disconnected] ${username}@invalid-host`;
+                }
             };
 
             ws.onerror = (error) => {
@@ -96,7 +104,11 @@
                     ws = null;
                 }
                 output = [...output, {type: 'output', content: `[Error] Could not establish connection to ${wsUrl}.`}];
-                title = `[Error] ${username}@${new URL(wsUrl).hostname}`;
+                try {
+                    title = `[Error] ${username}@${new URL(wsUrl).hostname}`;
+                } catch (e) {
+                    title = `[Error] ${username}@invalid-host`;
+                }
             };
 
         } catch (e) {
@@ -273,4 +285,3 @@
         </div>
     {/if}
 </div>
-
