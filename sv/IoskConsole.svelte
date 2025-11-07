@@ -23,6 +23,16 @@
     let availableRooms = [];
     let showRoomsMenu = false;
 
+    // --- State for Attach Menu ---
+    let showAttachMenu = false;
+    let attachDevices = [];
+    let attachUsers = [];
+    let selectedDevice = null;
+    let selectedUser = null;
+    let deviceBrowsePath = '/dev';
+    let isLoadingDevices = false;
+    let isLoadingUsers = false;
+
     // --- Internal Component State ---
     let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
     let command = '';
@@ -36,6 +46,7 @@
     let commandInput;
     let settingsUrlInput;
     let roomsButton;
+    let attachButton;
 
     // --- WebSocket instance for this specific console window ---
     let ws = null;
@@ -61,6 +72,9 @@
     function handleGlobalClick(event) {
         if (showRoomsMenu && roomsButton && !roomsButton.contains(event.target)) {
             showRoomsMenu = false;
+        }
+        if (showAttachMenu && attachButton && !attachButton.contains(event.target) && !event.target.closest('.attach-menu')) {
+            showAttachMenu = false;
         }
     }
 
@@ -149,6 +163,13 @@
         }
     }
 
+    function requestFsList(path) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            const message = { type: 'fs_list', path };
+            ws.send(JSON.stringify(message));
+        }
+    }
+
     export async function connect() {
         if (ws) {
             output = [...output, {type: 'output', content: `Already connected or connecting.`}];
@@ -196,7 +217,21 @@
                                 currentPrompt = data.prompt;
                             }
                         } else if (data.type === 'fs_list_response') {
-                            fileSystemResponses.set({ consoleId: id, data: data, timestamp: Date.now() });
+                            if (data.path.startsWith('/dev')) {
+                                deviceBrowsePath = data.path;
+                                let items = data.listing || [];
+                                if (data.path !== '/dev') {
+                                    items.unshift({ name: '..', type: 'dir' });
+                                }
+                                attachDevices = items;
+                                isLoadingDevices = false;
+                            } else if (data.path === '/home') {
+                                attachUsers = (data.listing || []).filter(item => item.type === 'dir');
+                                isLoadingUsers = false;
+                            } else {
+                                // This is a response for a File Explorer, not us.
+                                fileSystemResponses.set({ consoleId: id, data: data, timestamp: Date.now() });
+                            }
                         }
                     } catch (e) {
                         console.error("Error parsing WebSocket message:", e);
@@ -301,6 +336,54 @@
             case 'PageDown': e.preventDefault(); if (terminalEl) terminalEl.scrollTop += terminalEl.clientHeight * 0.9; return;
         }
     }
+
+    function toggleAttachMenu() {
+        showAttachMenu = !showAttachMenu;
+        if (showAttachMenu) {
+            selectedDevice = null;
+            selectedUser = null;
+            if (attachDevices.length === 0) {
+                isLoadingDevices = true;
+                requestFsList('/dev');
+            }
+            if (attachUsers.length === 0) {
+                isLoadingUsers = true;
+                requestFsList('/home');
+            }
+        }
+    }
+
+    function handleDeviceClick(item) {
+        const newPath = deviceBrowsePath === '/' ? `/${item.name}` : `${deviceBrowsePath}/${item.name}`;
+        if (item.type === 'dir') {
+            if (item.name === '..') {
+                const parentPath = deviceBrowsePath.substring(0, deviceBrowsePath.lastIndexOf('/')) || '/';
+                if (parentPath.startsWith('/dev')) {
+                     isLoadingDevices = true;
+                     requestFsList(parentPath);
+                }
+            } else {
+                isLoadingDevices = true;
+                requestFsList(newPath);
+            }
+        } else {
+            selectedDevice = newPath.substring('/dev/'.length);
+        }
+    }
+
+    function handleUserClick(item) {
+        selectedUser = item.name;
+    }
+
+    function performAttach() {
+        if (!selectedDevice || !selectedUser) return;
+        const commandToRun = `$ attach ${selectedDevice} ${selectedUser}`;
+        output = [...output, {type: 'prompt', content: currentPrompt + commandToRun}];
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
+        }
+        showAttachMenu = false;
+    }
 </script>
 
 <style>
@@ -317,6 +400,8 @@
     .connect-form .room-button:hover { background-color: #e0a320; }
     .connect-form .files-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .connect-form .files-button:hover { background-color: #1a9c2a; }
+    .connect-form .attach-button { background-color: #3498db; border-color: #2980b9; color: white; }
+    .connect-form .attach-button:hover { background-color: #2980b9; }
     .header-info { flex-grow: 1; text-align: center; color: #bdc3c7; font-style: italic; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 10px; }
     .main-flex-area { flex-grow: 1; display: flex; overflow: hidden; }
     .terminal-wrapper { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
@@ -349,6 +434,19 @@
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 0; }
     .close-item { color: #e74c3c; }
     .close-item:hover { background-color: #c0392b; color: white; }
+    .attach-menu { position: absolute; top: 45px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 100; display: flex; width: 450px; height: 300px; flex-direction: column; }
+    .attach-panels { display: flex; flex-grow: 1; overflow: hidden; }
+    .attach-panel { width: 50%; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
+    .attach-panel:last-child { border-right: none; }
+    .panel-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
+    .list-item { padding: 4px 8px; cursor: pointer; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .list-item:hover { background-color: var(--taskbar-button-hover-bg); }
+    .list-item.selected { background-color: #3498db; color: white; }
+    .attach-footer { padding: 8px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; flex-shrink: 0; }
+    .attach-footer button { background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 4px 8px; cursor: pointer; border-radius: 3px; }
+    .attach-footer button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .attach-footer button.primary { background-color: #27c93f; border-color: #1a9c2a; color: white; }
+    .path-header { font-size: 0.9em; color: #95a5a6; padding: 2px 8px; flex-shrink: 0; }
 </style>
 
 <div class="console-container">
@@ -364,6 +462,7 @@
                 {roomTopic || motd}
             </div>
             <button type="button" class="header-button files-button" on:click={() => newIoskFileExplorer(id, title)}>Files</button>
+            <button type="button" class="header-button attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
         {/if}
     </form>
 
@@ -382,6 +481,65 @@
                     Close '{roomName}'
                 </button>
             {/if}
+        </div>
+    {/if}
+
+    {#if showAttachMenu}
+        <div class="attach-menu">
+            <div class="attach-panels">
+                <div class="attach-panel">
+                    <div class="panel-header">Device</div>
+                    <div class="path-header">{deviceBrowsePath}</div>
+                    <div class="panel-list">
+                        {#if isLoadingDevices}
+                            <div class="list-item">Loading...</div>
+                        {:else}
+                            {#each attachDevices as item (item.name)}
+                                <div
+                                    class="list-item"
+                                    class:selected={selectedDevice === (deviceBrowsePath === '/' ? item.name : deviceBrowsePath.substring('/dev/'.length) + '/' + item.name)}
+                                    on:click={() => handleDeviceClick(item)}
+                                    title={item.name}
+                                >
+                                    {item.type === 'dir' ? '🗂️' : '🔌'} {item.name}
+                                </div>
+                            {:else}
+                                <div class="list-item">(empty)</div>
+                            {/each}
+                        {/if}
+                    </div>
+                </div>
+                <div class="attach-panel">
+                    <div class="panel-header">User</div>
+                    <div class="path-header">/home</div>
+                     <div class="panel-list">
+                        {#if isLoadingUsers}
+                            <div class="list-item">Loading...</div>
+                        {:else}
+                            {#each attachUsers as item (item.name)}
+                                <div
+                                    class="list-item"
+                                    class:selected={selectedUser === item.name}
+                                    on:click={() => handleUserClick(item)}
+                                    title={item.name}
+                                >
+                                    👤 {item.name}
+                                </div>
+                            {:else}
+                                <div class="list-item">(no users found)</div>
+                            {/each}
+                        {/if}
+                    </div>
+                </div>
+            </div>
+            <div class="attach-footer">
+                <button
+                    class="primary"
+                    disabled={!selectedDevice || !selectedUser}
+                    on:click={performAttach}>
+                    Attach
+                </button>
+            </div>
         </div>
     {/if}
 
