@@ -324,6 +324,13 @@
         border: 1px solid rgba(41, 128, 185, 0.8);
         border-radius: 2px;
         box-sizing: border-box;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 10px;
+        padding: 1px 3px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-shadow: 0 0 2px rgba(0,0,0,0.6);
     }
 
     .dash-layouts {
@@ -430,7 +437,7 @@
                             style:top="{isMaximized ? 0 : (win.y * previewScale)}px"
                             style:width="{isMaximized ? '100%' : Math.max(2, win.width * previewScale)}px"
                             style:height="{isMaximized ? '100%' : Math.max(2, win.height * previewScale)}px"
-                        ></div>
+                        >{win.title}</div>
                     {/each}
                 </div>
             {:else}

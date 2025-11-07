@@ -951,6 +951,26 @@ class IOSK:
         with open(file, 'r', encoding='utf-8') as file:
             return file.read()
 
+    async def get_raw(self, io:Context, path:str):
+        """Get raw file contents as bytes, and determine if it's binary."""
+        file = self.box(path, io_context=io)
+        if not exists(file):
+            error_msg = f'path not found: {path}'
+            return None, False, error_msg
+
+        if not isfile(file):
+            error_msg = f'not a file: {path}'
+            return None, False, error_msg
+        
+        try:
+            is_binary_file = is_binary(file)
+            with open(file, 'rb') as f:
+                content = f.read()
+            return content, is_binary_file, None
+        except Exception as e:
+            error_msg = f'could not read file: {e}'
+            return None, False, error_msg
+
     async def send(self, io:Context, dev:str, data):
         """Send data to device."""
         if dev.startswith('network:'):

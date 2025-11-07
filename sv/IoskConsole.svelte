@@ -94,7 +94,11 @@
         // Listen for file system requests from explorer windows
         requestUnsubscribe = fileSystemRequests.subscribe(request => {
             if (request && request.consoleId === id && ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify(request.command));
+                const payload = { ...request.command };
+                if (request.requesterId) {
+                    payload.requesterId = request.requesterId;
+                }
+                ws.send(JSON.stringify(payload));
             }
         });
         window.addEventListener('click', handleGlobalClick);
@@ -239,6 +243,14 @@
                                 // This is a response for a File Explorer, not us.
                                 fileSystemResponses.set({ consoleId: id, data: data, timestamp: Date.now() });
                             }
+                        } else if (data.type === 'fs_read_response') {
+                            // This is a response for a File Viewer.
+                            fileSystemResponses.set({
+                                consoleId: id,
+                                requesterId: data.requesterId, // Pass this through
+                                data: data,
+                                timestamp: Date.now()
+                            });
                         }
                     } catch (e) {
                         console.error("Error parsing WebSocket message:", e);

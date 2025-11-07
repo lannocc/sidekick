@@ -5,6 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
+    import { newIoskFileViewer } from './windows.js';
 
     export let consoleId;
 
@@ -39,13 +40,18 @@
                 newPath = currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`;
             }
             requestPath(newPath);
+        } else if (item.type === 'file') {
+            const filePath = currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`;
+            newIoskFileViewer(consoleId, filePath);
         }
-        // Future: Could add file view logic here
     }
 
     onMount(() => {
         unsubscribeResponses = fileSystemResponses.subscribe(response => {
             if (response && response.consoleId === consoleId) {
+                // Ensure we only process fs_list_response here
+                if (response.data.type !== 'fs_list_response') return;
+                
                 const { path, listing, error } = response.data;
 
                 if (error) {

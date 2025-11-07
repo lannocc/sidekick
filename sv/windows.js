@@ -3,6 +3,7 @@ import IoskConsole from './IoskConsole.svelte';
 import Calculator from './Calculator.svelte';
 import Settings from './Settings.svelte';
 import IoskFileExplorer from './IoskFileExplorer.svelte';
+import IoskFileViewer from './IoskFileViewer.svelte';
 import { desktopSettings } from './desktopStore.js';
 
 let windowIdCounter = 0;
@@ -12,7 +13,8 @@ const componentMap = {
     'IoskConsole': IoskConsole,
     'Calculator': Calculator,
     'Settings': Settings,
-    'IoskFileExplorer': IoskFileExplorer
+    'IoskFileExplorer': IoskFileExplorer,
+    'IoskFileViewer': IoskFileViewer
 };
 
 function createWindowManager() {
@@ -265,6 +267,17 @@ export function newIoskFileExplorer(consoleId, consoleTitle) {
         title: title,
         consoleId: consoleId,
         width: 400,
+        height: 500,
+    });
+}
+
+export function newIoskFileViewer(consoleId, path) {
+    const title = path.split('/').pop() || path;
+    windows.addWindow(IoskFileViewer, {
+        title: `View - ${title}`,
+        consoleId: consoleId,
+        path: path,
+        width: 700,
         height: 500,
     });
 }

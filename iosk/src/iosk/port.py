@@ -10,6 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, Any, Optional
 import shlex
+import base64
 
 import websockets
 from websockets.server import WebSocketServerProtocol
@@ -702,6 +703,16 @@ class PortManager:
                 else:
                     log.warning("Received fs_list from non-client connection.")
 
+            elif msg_type == "fs_read":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    path = message.get("path")
+                    requesterId = message.get("requesterId")
+                    io_context = self.kernel.users.get(conn_meta.username)
+                    if io_context and path is not None and requesterId is not None:
+                        await self._handle_fs_read(websocket, io_context, path, requesterId)
+                else:
+                    log.warning("Received fs_read from non-client or malformed request.")
+
             else:
                 log.warning(f"Received unknown message type: {msg_type}")
 
@@ -730,6 +741,28 @@ class PortManager:
         except ConnectionClosed:
             # This is expected if the user closes the window quickly.
             log.info(f"Could not send fs_list response to {io_context.user}, connection closed.")
+
+    async def _handle_fs_read(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Any):
+        """Handles a file read request from a client."""
+        response = {
+            "type": "fs_read_response",
+            "path": path,
+            "requesterId": requesterId
+        }
+        
+        content_bytes, is_binary, error = await self.kernel.get_raw(io_context, path)
+
+        if error:
+            response["error"] = error
+        else:
+            response["content_b64"] = base64.b64encode(content_bytes).decode('ascii')
+            response["is_binary"] = is_binary
+
+        message_to_send = f"SK1:{json.dumps(response)}"
+        try:
+            await websocket.send(message_to_send)
+        except ConnectionClosed:
+            log.info(f"Could not send fs_read response to {io_context.user}, connection closed.")
 
     async def _handle_remote_exec(self, websocket: WebSocketServerProtocol, message: Dict[str, Any]):
         """Handles a remote execution request and streams output back."""
