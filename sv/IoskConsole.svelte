@@ -44,7 +44,7 @@
         }
     });
 
-    async function connect() {
+    export async function connect() {
         if (ws) {
             output = [...output, {type: 'output', content: `Already connected or connecting.`}];
             return;
@@ -205,7 +205,7 @@
         shouldScroll = true;
     }
 
-    function disconnect() {
+    export function disconnect() {
         if (ws) {
             ws.close();
         }

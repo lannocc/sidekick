@@ -3,9 +3,10 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { createEventDispatcher, tick } from 'svelte';
+    import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
     import { windows } from './windows.js';
     import { desktopSettings } from './desktopStore.js';
+    import IoskConsole from './IoskConsole.svelte'; // Import for component type checking
 
     export let id;
     export let component;
@@ -19,6 +20,7 @@
     export let maximized;
     export let isActive;
     export let lastFocusedElement; // Received from the store via Desktop.svelte
+    export let isConsoleConnected; // For IoskConsole, passed from the store
 
     const dispatch = createEventDispatcher();
 
@@ -33,8 +35,41 @@
     let initialResizeState = {};
     let focusTimeout = null;
 
+    let showOptionsMenu = false;
+    let optionsButton; // ref for the hamburger button
+    let componentInstance; // ref for the svelte:component instance
+
     let contentAreaEl;
 
+    function handleWindowClick(event) {
+        // If menu is open and click is outside the menu button and the menu itself, close it
+        if (showOptionsMenu && optionsButton && !optionsButton.contains(event.target) && !event.target.closest('.options-menu')) {
+            showOptionsMenu = false;
+        }
+    }
+
+    onMount(() => {
+        // Use a single listener for all window instances
+        window.addEventListener('click', handleWindowClick);
+    });
+
+    onDestroy(() => {
+        window.removeEventListener('click', handleWindowClick);
+    });
+
+    function handleConnect() {
+        if (componentInstance && typeof componentInstance.connect === 'function') {
+            componentInstance.connect();
+        }
+        showOptionsMenu = false;
+    }
+
+    function handleDisconnect() {
+        if (componentInstance && typeof componentInstance.disconnect === 'function') {
+            componentInstance.disconnect();
+        }
+        showOptionsMenu = false;
+    }
 
     async function restoreFocus() {
         // Check if the element to focus is still valid and in the DOM
@@ -299,6 +334,12 @@
     .window-control {
         width: 14px;
         height: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        color: rgba(0,0,0,0.6);
+        font-weight: bold;
         border-radius: 50%;
         cursor: pointer;
         border: 1px solid rgba(0,0,0,0.2);
@@ -306,6 +347,10 @@
     .close { background-color: #ff5f56; }
     .minimize { background-color: #ffbd2e; }
     .maximize { background-color: #27c93f; }
+    .options-menu-button {
+        background-color: #3498db;
+        color: white;
+    }
     .content-area {
         flex-grow: 1;
         overflow: auto;
@@ -318,6 +363,52 @@
         width: 12px;
         height: 12px;
         cursor: se-resize;
+    }
+    .options-menu {
+        position: absolute;
+        top: 35px;
+        left: 50px; /* Positioned under the third button */
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        z-index: 1000; /* Above window content */
+        display: flex;
+        flex-direction: column;
+        min-width: 150px;
+        padding: 4px 0;
+        user-select: none;
+    }
+    .menu-item {
+        background: none;
+        border: none;
+        color: var(--taskbar-text);
+        padding: 8px 12px;
+        text-align: left;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    .menu-item:hover:not(:disabled) {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .menu-item:disabled {
+        color: #7f8c8d;
+        cursor: not-allowed;
+    }
+    .menu-item.close-option {
+        color: #e74c3c;
+    }
+    .menu-item.close-option:hover:not(:disabled) {
+        background-color: #c0392b;
+        color: white;
+    }
+    .menu-separator {
+        height: 1px;
+        background-color: var(--border-color);
+        margin: 4px 0;
+    }
+    .options-menu-button {
+        line-height: 0.8; /* Center the hamburger symbol better */
     }
 </style>
 
@@ -340,6 +431,13 @@
         <div class="window-controls">
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation></div>
             <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation></div>
+            <div
+                class="window-control options-menu-button"
+                title="Options"
+                bind:this={optionsButton}
+                on:click|stopPropagation={() => showOptionsMenu = !showOptionsMenu}>
+                ≡
+            </div>
         </div>
         <span class="title-text">{title}</span>
         <div class="window-controls">
@@ -351,8 +449,26 @@
             </div>
         </div>
     </div>
-    <div class="content-area" bind:this={contentAreaEl} on:focusout={handleFocusOut}>
-        <svelte:component this={component} {id} bind:title={title} {isActive} {...$$restProps} />
+    {#if showOptionsMenu}
+        <div class="options-menu">
+            {#if component === IoskConsole}
+                <button class="menu-item" on:click={handleConnect} disabled={isConsoleConnected}>
+                    Connect
+                </button>
+                <div class="menu-separator"></div>
+                <button class="menu-item" on:click={handleDisconnect} disabled={!isConsoleConnected}>
+                    Disconnect
+                </button>
+                <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>
+                    Close
+                </button>
+            {:else}
+                <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>Close</button>
+            {/if}
+        </div>
+    {/if}
+    <div class="content-area" bind:this={contentAreaEl} on:focusout={handleFocusOut} >
+        <svelte:component bind:this={componentInstance} this={component} {id} bind:title={title} {isActive} {...$$restProps} />
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
 </div>
