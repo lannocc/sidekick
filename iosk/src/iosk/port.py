@@ -319,6 +319,17 @@ class PortManager:
         aws = [ws.send(payload) for ws in self.peers.values()]
         await asyncio.gather(*aws, return_exceptions=True)
 
+    async def broadcast_to_clients(self, message: Dict[str, Any]):
+        """Sends a message to all connected GUI clients."""
+        clients = [ws for ws, conn in self.active_connections.items() if conn.type == 'client']
+        if not clients:
+            return
+
+        # Use the SK1: protocol wrapper for clients
+        payload = f"SK1:{json.dumps(message)}"
+        aws = [ws.send(payload) for ws in clients]
+        await asyncio.gather(*aws, return_exceptions=True)
+
     async def route_message(self, target_host: str, message: Dict[str, Any]):
         """Sends a targeted message to a specific peer host, forwarding if necessary."""
         # Step 1: Look up the target in the routing table
@@ -550,6 +561,35 @@ class PortManager:
                 raise ValueError(f"Client login failed for user {username}")
 
             await websocket.send(json.dumps({"type": "handshake_ack", "status": "ok", "hostname": self.kernel.hostname}))
+
+            # Send initial state info to the new client
+            initial_state_payload = {'type': 'state_info'}
+            if self.kernel.chat and self.kernel.chat.active_room:
+                # Room is active, send room state
+                room = self.kernel.chat
+
+                # Gather participants
+                all_participants = set(room.local_room_participants)
+                for user_addr, room_name in self.kernel.network_rooms.items():
+                    if room_name == room.active_room:
+                            user_part, host_part = user_addr.split('.', 1)
+                            if host_part == self.kernel.hostname:
+                                all_participants.add(user_part)
+                            else:
+                                all_participants.add(user_addr)
+
+                initial_state_payload.update({
+                    'roomName': room.active_room,
+                    'roomTopic': room.room_topic,
+                    'participants': sorted(list(all_participants))
+                })
+            else:
+                # No room, send MOTD. Use system context for this read.
+                motd_content = await self.kernel.get(self.kernel.system, '/etc/motd')
+                initial_state_payload['motd'] = motd_content or ''
+
+            await websocket.send(f"SK1:{json.dumps(initial_state_payload)}")
+
             return Connection(websocket=websocket, type='client', username=username), io_context
 
         else:
@@ -581,7 +621,7 @@ class PortManager:
                 from_peer_hostname = conn_meta.hostname
                 await self._handle_peer_update(message, from_peer=from_peer_hostname)
 
-            elif msg_type in ("user_update", "room_update"):
+            elif msg_type in ("user_update", "room_update", "room_state_update"):
                 # 1. Process locally first
                 await self._process_network_state_update(message)
                 # 2. Forward the update to all other peers
@@ -809,6 +849,9 @@ class PortManager:
                 users_on_host = [u_addr for u_addr in self.kernel.network_users if u_addr.endswith(f'.{host}')]
                 for user_addr in users_on_host:
                     self.kernel.network_rooms[user_addr] = room_name
+
+        if self.kernel.chat:
+            await self.kernel.chat._broadcast_room_state_update()
 
     # --------------------------------------------------------------------------
     # MESHING-SPECIFIC METHODS
