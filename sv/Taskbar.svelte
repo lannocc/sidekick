@@ -79,7 +79,15 @@
         const leftAlignedPos = win.x;
         const rightAlignedPos = win.x + win.width - buttonWidth;
 
-        return leftAlignedPos * (1 - progress) + rightAlignedPos * progress;
+        let idealLeft = leftAlignedPos * (1 - progress) + rightAlignedPos * progress;
+
+        // Clamp the ideal position to be within the screen bounds. This prevents
+        // buttons from having an ideal position far off-screen when their
+        // window is dragged out of view, which fixes the layout calculation.
+        idealLeft = Math.max(0, idealLeft);
+        idealLeft = Math.min(idealLeft, screenWidth - buttonWidth);
+
+        return idealLeft;
     }
 
     // Reactive calculation for task item layouts
