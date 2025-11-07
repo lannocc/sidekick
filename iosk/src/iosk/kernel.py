@@ -738,6 +738,37 @@ class IOSK:
     ### FILE OPS
     ###
 
+    async def get_room_list(self, io: Context) -> list:
+        """
+        Lists all created rooms on the local system.
+        Returns a list of dictionaries, each with 'name' and 'topic'.
+        """
+        room_dir_virtual = '/var/room'
+        room_dir_host = self.box(room_dir_virtual, io_context=io)
+
+        if not exists(room_dir_host) or not isdir(room_dir_host):
+            return []
+
+        try:
+            room_names = sorted([
+                name for name in os.listdir(room_dir_host)
+                if isdir(os.path.join(room_dir_host, name))
+            ])
+        except OSError:
+            return []
+
+        room_data = []
+        for name in room_names:
+            topic_path = posixpath.join(room_dir_virtual, name, 'topic')
+            topic = ""
+            if await self.exists(io, topic_path):
+                 topic_content = await self.get(io, topic_path)
+                 if topic_content:
+                     topic = topic_content.strip()
+            room_data.append({'name': name, 'topic': topic})
+
+        return room_data
+
     async def exists(self, io:Context, path:str):
         """Test if path exists, considering both physical files and Python modules."""
         # 1. Check for physical file/directory existence on the sandboxed filesystem.

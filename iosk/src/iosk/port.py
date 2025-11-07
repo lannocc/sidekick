@@ -9,6 +9,7 @@ import traceback
 import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, Any, Optional
+import shlex
 
 import websockets
 from websockets.server import WebSocketServerProtocol
@@ -564,6 +565,9 @@ class PortManager:
 
             # Send initial state info to the new client
             initial_state_payload = {'type': 'state_info'}
+            # Get available rooms, using the user's new io_context
+            available_rooms = await self.kernel.get_room_list(io_context)
+            initial_state_payload['availableRooms'] = available_rooms
             if self.kernel.chat and self.kernel.chat.active_room:
                 # Room is active, send room state
                 room = self.kernel.chat
@@ -675,6 +679,20 @@ class PortManager:
                 else:
                     log.warning("Received client_input from non-client connection.")
             
+            elif msg_type == "room_action":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    action = message.get("action")
+                    if action == "join":
+                        room_name = message.get("roomName")
+                        if room_name:
+                            command = f"$ room {shlex.quote(room_name)}"
+                            await self.kernel.handle_client_input(conn_meta.username, command + '\n')
+                    elif action == "close":
+                        command = "$ clroom"
+                        await self.kernel.handle_client_input(conn_meta.username, command + '\n')
+                else:
+                    log.warning("Received room_action from non-client connection.")
+
             elif msg_type == "fs_list":
                 if conn_meta.type == 'client' and conn_meta.username:
                     path = message.get("path", "/")

@@ -20,6 +20,8 @@
     let roomTopic = '';
     let motd = '';
     let roomParticipants = [];
+    let availableRooms = [];
+    let showRoomsMenu = false;
 
     // --- Internal Component State ---
     let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
@@ -33,6 +35,7 @@
     let terminalEl;
     let commandInput;
     let settingsUrlInput;
+    let roomsButton;
 
     // --- WebSocket instance for this specific console window ---
     let ws = null;
@@ -55,6 +58,12 @@
         }
     });
 
+    function handleGlobalClick(event) {
+        if (showRoomsMenu && roomsButton && !roomsButton.contains(event.target)) {
+            showRoomsMenu = false;
+        }
+    }
+
     onMount(() => {
         // Automatically focus the connection URL input on mount
         if (!isConnected) {
@@ -67,6 +76,7 @@
                 ws.send(JSON.stringify(request.command));
             }
         });
+        window.addEventListener('click', handleGlobalClick);
     });
 
     onDestroy(() => {
@@ -77,6 +87,7 @@
         if (requestUnsubscribe) {
             requestUnsubscribe();
         }
+        window.removeEventListener('click', handleGlobalClick);
     });
 
     desktopSettings.subscribe(settings => {
@@ -162,15 +173,14 @@
                         const jsonData = event.data.substring(PREAMBLE.length);
                         const data = JSON.parse(jsonData);
 
-                        if (data.type === 'state_info') {
+                        if (data.type === 'state_info' || data.type === 'room_state_update') {
                             roomName = data.roomName || null;
                             roomTopic = data.roomTopic || '';
                             roomParticipants = data.participants || [];
-                            motd = data.motd || '';
-                        } else if (data.type === 'room_state_update') {
-                            roomName = data.roomName || null;
-                            roomTopic = data.roomTopic || '';
-                            roomParticipants = data.participants || [];
+                            availableRooms = data.availableRooms || [];
+                            if (data.type === 'state_info') {
+                                motd = data.motd || '';
+                            }
                             if (!roomName) motd = '';
                         } else if (data.output || data.prompt) {
                             if (data.output) {
@@ -198,7 +208,7 @@
             ws.onclose = async () => {
                 isConnected = false;
                 ws = null;
-                roomName = null; roomTopic = ''; motd = ''; roomParticipants = [];
+                roomName = null; roomTopic = ''; motd = ''; roomParticipants = []; availableRooms = [];
                 output = [...output, {type: 'output', content: `Connection closed.`}];
                 const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
                 windows.updateWindowProps(id, { title: `Disconnected - ${username}@${host}` });
@@ -246,6 +256,22 @@
         shouldScroll = true;
     }
 
+    function joinRoom(roomToJoin) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            const message = { type: 'room_action', action: 'join', roomName: roomToJoin };
+            ws.send(JSON.stringify(message));
+        }
+        showRoomsMenu = false;
+    }
+
+    function closeRoom() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            const message = { type: 'room_action', action: 'close' };
+            ws.send(JSON.stringify(message));
+        }
+        showRoomsMenu = false;
+    }
+
     function sendLogout() {
         let logoutCommand = 'logout';
         if (currentPrompt.trim().endsWith('>>')) logoutCommand = '$ logout';
@@ -287,6 +313,8 @@
     .connect-form .header-button:disabled { opacity: 0.5; cursor: not-allowed; }
     .connect-form .disconnect-button { background-color: #e74c3c; border-color: #c0392b; color: white; }
     .connect-form .disconnect-button:hover { background-color: #c0392b; }
+    .connect-form .room-button { background-color: #ffbd2e; border-color: #e0a320; color: white; }
+    .connect-form .room-button:hover { background-color: #e0a320; }
     .connect-form .files-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .connect-form .files-button:hover { background-color: #1a9c2a; }
     .header-info { flex-grow: 1; text-align: center; color: #bdc3c7; font-style: italic; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 10px; }
@@ -312,6 +340,15 @@
     .modal-content button:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-content .save-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .modal-content .save-button:hover { background-color: #1a9c2a; }
+    .rooms-menu { position: absolute; top: 45px; left: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 100; display: flex; flex-direction: column; min-width: 180px; max-height: 250px; overflow-y: auto; }
+    .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+    .menu-item:last-child { border-bottom: none; }
+    .menu-item:hover:not(:disabled) { background-color: var(--taskbar-button-hover-bg); }
+    .menu-item:disabled { color: #7f8c8d; cursor: not-allowed; font-style: italic; }
+    .menu-item-empty { padding: 8px 12px; color: #7f8c8d; font-style: italic; }
+    .menu-separator { height: 1px; background-color: var(--border-color); margin: 0; }
+    .close-item { color: #e74c3c; }
+    .close-item:hover { background-color: #c0392b; color: white; }
 </style>
 
 <div class="console-container">
@@ -322,12 +359,31 @@
             <button class="connect-button" type="submit">Connect</button>
         {:else}
             <button type="button" class="header-button disconnect-button" on:click={disconnect}>Disconnect</button>
+            <button type="button" class="header-button room-button" bind:this={roomsButton} on:click|stopPropagation={() => showRoomsMenu = !showRoomsMenu} title="Available Rooms">Room</button>
             <div class="header-info" title={roomTopic || motd}>
                 {roomTopic || motd}
             </div>
             <button type="button" class="header-button files-button" on:click={() => newIoskFileExplorer(id, title)}>Files</button>
         {/if}
     </form>
+
+    {#if showRoomsMenu}
+        <div class="rooms-menu">
+            {#each availableRooms as room (room.name)}
+                <button class="menu-item" on:click={() => joinRoom(room.name)} disabled={room.name === roomName} title={room.topic || 'No topic'}>
+                    {room.name}
+                </button>
+            {:else}
+                <span class="menu-item-empty">No rooms available</span>
+            {/each}
+            {#if roomName}
+                <div class="menu-separator"></div>
+                <button class="menu-item close-item" on:click={closeRoom}>
+                    Close '{roomName}'
+                </button>
+            {/if}
+        </div>
+    {/if}
 
     <div class="main-flex-area">
         <div class="terminal-wrapper">

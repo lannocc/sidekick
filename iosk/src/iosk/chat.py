@@ -46,11 +46,15 @@ class AIMessenger:
                     else:
                         all_participants.add(user_addr)
 
+        # Get available rooms. Need a valid IO context for kernel calls. Use system.
+        available_rooms = await self.os.get_room_list(self.os.system)
+
         payload = {
             'type': 'room_state_update',
             'roomName': self.active_room,
             'roomTopic': self.room_topic,
-            'participants': sorted(list(all_participants))
+            'participants': sorted(list(all_participants)),
+            'availableRooms': available_rooms
         }
         await self.os.port.broadcast_to_clients(payload)
 
