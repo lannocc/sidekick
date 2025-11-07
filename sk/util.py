@@ -107,6 +107,8 @@ def get_ignore_set(path):
 def is_ignorable_path(item, ignores=[ ]):
     return item.startswith('.') \
                 or item.endswith('~') \
+                or item.endswith('.bak') \
+                or item.endswith('.orig') \
                 or item == '__pycache__' \
                 or item in ignores
 
