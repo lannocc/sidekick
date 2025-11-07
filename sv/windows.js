@@ -41,7 +41,19 @@ function createWindowManager() {
     };
 
     const removeWindow = (id) => {
-        update(windows => windows.filter(w => w.id !== id));
+        const allWindows = get(windows);
+        const winToRemove = allWindows.find(w => w.id === id);
+
+        if (winToRemove) {
+            // Check for connected IoskConsole before closing
+            if (winToRemove.component === IoskConsole && winToRemove.isConsoleConnected) {
+                if (!confirm("This console has an active connection. Are you sure you want to close it?")) {
+                    return; // Abort closing if user cancels
+                }
+            }
+        }
+
+        update(currentWindows => currentWindows.filter(w => w.id !== id));
     };
 
     const setActiveWindow = (id) => {
@@ -131,7 +143,22 @@ function createWindowManager() {
     };
 
     const closeAllWindows = () => {
-        update(() => []);
+        update(currentWindows => {
+            const windowsToKeep = [];
+            for (const win of currentWindows) {
+                // For connected consoles, ask for individual confirmation
+                if (win.component === IoskConsole && win.isConsoleConnected) {
+                    if (confirm(`Console "${win.title}" has an active connection. Close it anyway?`)) {
+                        // User confirmed, so we don't add it to the 'keep' list.
+                    } else {
+                        windowsToKeep.push(win); // User cancelled, so we keep this window.
+                    }
+                }
+                // All other windows are implicitly removed as they are not added to `windowsToKeep`.
+                // The initial "Close All?" confirmation covers them.
+            }
+            return windowsToKeep;
+        });
     };
 
     return {

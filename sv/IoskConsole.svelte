@@ -10,6 +10,11 @@
     export let id; // Unique ID from the window manager
     export let title;
 
+    // Reactive statement to update the window store with the connection status
+    $: if (id !== undefined) {
+        windows.updateWindowProps(id, { isConsoleConnected: isConnected });
+    }
+
     export let wsUrl = 'ws://localhost:4209';
     export let username = 'root';
     let isConnected = false;

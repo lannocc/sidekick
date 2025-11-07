@@ -126,6 +126,15 @@
         windows.toggleMinimize(win.id);
     }
 
+    function handleCloseAllClick() {
+        if ($windows.length === 0) return;
+        if (confirm("Are you sure you want to close all windows?")) {
+            if ($dashboardActive) dashboardActive.set(false);
+            windows.closeAllWindows();
+            showWindowsMenu = false;
+        }
+    }
+
     function handleWindowClick(event) {
         if (showMenu && startButton && !startButton.contains(event.target)) {
             showMenu = false;
@@ -336,7 +345,7 @@
                     <span class="menu-item-empty">No open windows</span>
                 {/each}
                 {#if $windows.length > 0}
-                    <button class="menu-item close-all" on:click={() => { if ($dashboardActive) dashboardActive.set(false); windows.closeAllWindows(); showWindowsMenu = false; }}>
+                    <button class="menu-item close-all" on:click={handleCloseAllClick}>
                         Close All
                     </button>
                 {/if}
