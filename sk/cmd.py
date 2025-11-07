@@ -33,8 +33,26 @@ def main(args, called=''):
     remaining_args = []
     args_list = list(args)  # Create a mutable copy to pop from
 
+    # Short options that take an argument and thus cannot be combined.
+    options_with_args = {'a', 'e'}
+
     while args_list:
         arg = args_list.pop(0)
+
+        # Check for combined short options like -qcs, which don't take arguments.
+        if arg.startswith('-') and not arg.startswith('--') and len(arg) > 2:
+            chars = arg[1:]
+            all_combinable = True
+            for char in chars:
+                if f'-{char}' not in OPTIONS or char in options_with_args:
+                    all_combinable = False
+                    break
+
+            if all_combinable:
+                # Expand the combined options into individual ones and prepend to the list.
+                expanded_args = [f'-{char}' for char in chars]
+                args_list[0:0] = expanded_args
+                continue # Restart loop to process the first expanded option
 
         if arg.startswith('-'):
             op = arg
