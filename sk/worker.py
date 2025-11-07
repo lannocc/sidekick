@@ -1,5 +1,4 @@
-# Copyright (C) 2025 LANNOCC
-# @%@~LICENSE~@%@
+# sk/worker.py
 
 import re
 import os
@@ -132,18 +131,19 @@ def do_work(prompt, answer, transcript_path):
                 summary_lines.append(f"-> SKIPPED: Could not determine target file for a diff block.")
                 continue
 
+            backup_info = ""
             if os.path.exists(target_file):
                 backup_filename = f"{target_file}.bak"
                 try:
                     shutil.copy2(target_file, backup_filename)
-                    summary_lines.append(f"-> BACKED UP: {target_file} to {backup_filename}")
+                    backup_info = f" (original saved to {backup_filename})"
                 except Exception as e:
                     summary_lines.append(f"-> FAILED TO BACK UP: {target_file}\n   {e}")
                     continue
 
             success, message = apply_patch(target_file, code)
             if success:
-                summary_lines.append(f"-> PATCHED: {target_file}")
+                summary_lines.append(f"-> PATCHED: {target_file}{backup_info}")
             else:
                 summary_lines.append(f"-> FAILED TO PATCH: {target_file}\n   {message}")
 
@@ -162,18 +162,19 @@ def do_work(prompt, answer, transcript_path):
                 if directory:
                     os.makedirs(directory, exist_ok=True)
 
+                backup_info = ""
                 if os.path.exists(target_file):
                     backup_filename = f"{target_file}.bak"
                     try:
                         shutil.copy2(target_file, backup_filename)
-                        summary_lines.append(f"-> BACKED UP: {target_file} to {backup_filename}")
+                        backup_info = f" (original saved to {backup_filename})"
                     except Exception as e:
                         summary_lines.append(f"-> FAILED TO BACK UP: {target_file}\n   {e}")
                         continue
 
                 with open(target_file, 'w', encoding='utf-8') as f:
                     f.write(code)
-                summary_lines.append(f"-> WROTE: {target_file}")
+                summary_lines.append(f"-> WROTE: {target_file}{backup_info}")
 
                 replacement_text = f"\n[... content for {target_file} saved ...]\n"
                 processed_answer = processed_answer[:match.start()] + replacement_text + processed_answer[match.end():]
@@ -191,4 +192,3 @@ def do_work(prompt, answer, transcript_path):
             f.write(summary)
 
     return processed_answer, summary
-
