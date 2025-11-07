@@ -198,6 +198,7 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
     from .ai import google, openai
     from .util import get_md_code_block
     import sys
+    import time
 
     if not quiet:
         print('Ask a Question')
@@ -281,12 +282,15 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
 
     ai_provider = openai if use_openai else google
 
+    start_time = time.monotonic()
     if file:
         answer = ai_provider.prompt_with_file_for_text(prompt, file, chatter=chatter,
                                               model=model)
 
     else:
         answer = ai_provider.prompt_for_text(prompt, chatter=chatter, model=model)
+    end_time = time.monotonic()
+    turnaround_time = end_time - start_time
 
     output_bytes = len(answer.encode('utf-8'))
     output_tokens = len(ENCODING.encode(answer))
@@ -305,10 +309,18 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
 
     summary = None
     answer_for_display = answer
+    turnaround_summary_line = f"Turn-around time: {turnaround_time:.2f} seconds"
 
     if work_file:
         from . import worker
         answer_for_display, summary = worker.do_work(prompt, answer, work_file) # worker will append summary
+        try:
+            with open(work_file, 'a', encoding='utf-8') as f:
+                f.write("\n\n--- PERFORMANCE ---\n")
+                f.write(f"{turnaround_summary_line}\n")
+        except Exception as e:
+            print(f"!!! Error writing performance to transcript file {work_file}: {e}")
+
 
     md = None
     if mdlang:
@@ -340,6 +352,7 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
     if not quiet:
         print(f':: Output Bytes: {output_bytes:,}')
         print(f':: Output Tokens: {output_tokens:,}')
+        print(f':: {turnaround_summary_line}')
         print()
 
 
