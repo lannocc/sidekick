@@ -118,7 +118,7 @@
             // --- Pass 1: Place items from left to right, avoiding collisions ---
             for (const item of items) {
                 const itemWidth = item.width;
-                
+
                 // Position is either its ideal spot or right after the previous item
                 let left = Math.max(item.idealLeft, lastItemRightEdge);
 
@@ -143,13 +143,13 @@
                 for (let i = items.length - 1; i >= 0; i--) {
                     const item = items[i];
                     const itemWidth = item.width;
-                    
+
                     // The item's current position from Pass 1.
                     const currentLeft = newLayouts[item.id].left;
-                    
+
                     // The maximum left position allowed by the boundary.
                     const maxLeft = requiredRightEdge - itemWidth;
-                    
+
                     // The final position is the lesser of the two.
                     const finalLeft = Math.min(currentLeft, maxLeft);
                     newLayouts[item.id].left = finalLeft;
@@ -406,7 +406,7 @@
     .taskbar-left > .windows-button:first-child::after {
         content: '';
         position: absolute;
-        bottom: 5px;
+        bottom: 0px;
         right: 5px;
         width: 0;
         height: 0;
@@ -479,3 +479,4 @@
         {/if}
     </div>
 </div>
+
