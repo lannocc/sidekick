@@ -1,7 +1,8 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import IoskConsole from './IoskConsole.svelte';
 import Calculator from './Calculator.svelte';
 import Settings from './Settings.svelte';
+import { desktopSettings } from './desktopStore.js';
 
 let windowIdCounter = 0;
 
@@ -149,7 +150,11 @@ export const windows = createWindowManager();
 
 // Function to be called from other components like the Taskbar
 export function newIoskConnection() {
-    windows.addWindow(IoskConsole, { title: 'New IOSK Connection' });
+    const settings = get(desktopSettings);
+    windows.addWindow(IoskConsole, {
+        title: 'New IOSK Connection',
+        username: settings.defaultIoskUsername || 'root'
+    });
 }
 
 export function newCalculator() {
@@ -157,6 +162,6 @@ export function newCalculator() {
 }
 
 export function newSettings() {
-    windows.addWindow(Settings, { title: 'Settings', width: 400, height: 480 });
+    windows.addWindow(Settings, { title: 'Settings', width: 400, height: 550 });
 }
 

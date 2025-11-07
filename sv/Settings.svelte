@@ -147,6 +147,14 @@
     </fieldset>
 
     <fieldset>
+        <legend>IOSK Console</legend>
+        <label class="color-picker-label">
+            <span>Default Username</span>
+            <input class="text-input" type="text" bind:value={settings.defaultIoskUsername} on:input={handleUpdate} style="width: 150px;">
+        </label>
+    </fieldset>
+
+    <fieldset>
         <legend>Focus</legend>
         <label>
             <input type="checkbox" bind:checked={settings.focusFollowsMouse} on:change={handleUpdate}>

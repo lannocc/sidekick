@@ -9,7 +9,7 @@
     export let title;
 
     let wsUrl = 'ws://localhost:4209';
-    let username = 'root';
+    export let username = 'root';
     let isConnected = false;
     let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
     let command = '';
