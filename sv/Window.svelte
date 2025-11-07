@@ -4,7 +4,7 @@
 -->
 <script>
     import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
-    import { windows } from './windows.js';
+    import { windows, newIoskFileExplorer } from './windows.js';
     import { desktopSettings } from './desktopStore.js';
     import IoskConsole from './IoskConsole.svelte'; // Import for component type checking
 
@@ -459,6 +459,10 @@
                     Settings...
                 </button>
                 <div class="menu-separator"></div>
+                <button class="menu-item" on:click={() => { newIoskFileExplorer(id, title); showOptionsMenu = false; }} disabled={!isConsoleConnected}>
+                    Files...
+                </button>
+                <div class="menu-separator"></div>
                 <button class="menu-item" on:click={handleDisconnect} disabled={!isConsoleConnected}>
                     Disconnect
                 </button>
@@ -475,3 +479,4 @@
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
 </div>
+

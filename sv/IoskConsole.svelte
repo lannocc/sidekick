@@ -287,6 +287,8 @@
     .connect-form .header-button:disabled { opacity: 0.5; cursor: not-allowed; }
     .connect-form .disconnect-button { background-color: #e74c3c; border-color: #c0392b; color: white; }
     .connect-form .disconnect-button:hover { background-color: #c0392b; }
+    .connect-form .files-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
+    .connect-form .files-button:hover { background-color: #1a9c2a; }
     .header-info { flex-grow: 1; text-align: center; color: #bdc3c7; font-style: italic; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 10px; }
     .main-flex-area { flex-grow: 1; display: flex; overflow: hidden; }
     .terminal-wrapper { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
@@ -323,7 +325,7 @@
             <div class="header-info" title={roomTopic || motd}>
                 {roomTopic || motd}
             </div>
-            <button type="button" class="header-button" on:click={() => newIoskFileExplorer(id, title)}>Files</button>
+            <button type="button" class="header-button files-button" on:click={() => newIoskFileExplorer(id, title)}>Files</button>
         {/if}
     </form>
 
