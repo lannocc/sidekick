@@ -10,6 +10,9 @@ import shutil
 # string line after the backticks (e.g., "python:path/to/file.py").
 CODEBLOCK_REGEX = re.compile(r'```(?P<language>[^\n]*)\n(?P<code>.*?)\n```', re.DOTALL)
 
+# Regex to find ">>> BEGIN FILE <path>:" markers before code blocks.
+BEGIN_FILE_REGEX = re.compile(r'>>> BEGIN FILE\s+([^:\n]+):')
+
 # Regex to find file paths in backticks, updated to allow spaces in the path.
 FILENAME_REGEX = re.compile(r'`([^`]+)`')
 
@@ -112,7 +115,7 @@ def do_work(prompt, answer, transcript_path):
         # Default lang is the part before ':', or the whole string if no ':'.
         lang = language_info.split(':', 1)[0].lower().strip()
 
-        # 1. NEW: Prioritize filename from the language info line (e.g., ```python:path/to/file.py)
+        # 1. Prioritize filename from the language info line (e.g., ```python:path/to/file.py)
         # This is considered the strongest signal for the filename.
         if ':' in language_info:
             parts = language_info.split(':', 1)
@@ -129,7 +132,16 @@ def do_work(prompt, answer, transcript_path):
         # --- Fallback to existing methods if filename not found in language line ---
         search_window = answer[max(0, match.start() - 512):match.start()]
 
-        # 2. Look for a filename in a markdown heading.
+        # 2. Look for ">>> BEGIN FILE <path>:" marker, another strong signal.
+        if not filename:
+            begin_file_matches = BEGIN_FILE_REGEX.findall(search_window)
+            if begin_file_matches:
+                # Take the last one found before the code block.
+                candidate = begin_file_matches[-1].strip()
+                if candidate: # Check it's not empty
+                    filename = candidate
+
+        # 3. Look for a filename in a markdown heading.
         if not filename:
             # We'll take the last one found before the code block.
             heading_matches = HEADING_FILENAME_REGEX.findall(search_window)
@@ -143,7 +155,7 @@ def do_work(prompt, answer, transcript_path):
                 if is_plausible:
                     filename = candidate
 
-        # 3. If no heading match, infer from general context (backticked text).
+        # 4. If no heading match, infer from general context (backticked text).
         if not filename:
             context_filenames = FILENAME_REGEX.findall(search_window)
             if context_filenames:
@@ -159,7 +171,7 @@ def do_work(prompt, answer, transcript_path):
                         filename = candidate
                         break # Stop after finding the first plausible one from the end.
 
-        # 4. Fallback: If still no filename, try to find one in code comments.
+        # 5. Fallback: If still no filename, try to find one in code comments.
         if not filename:
             filename = extract_target_from_code(code)
 
