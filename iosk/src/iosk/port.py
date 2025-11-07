@@ -400,6 +400,26 @@ class PortManager:
 
         return final_success
 
+    async def disconnect_client(self, username: str):
+        """
+        Finds and closes the connection for a specific client username.
+        Called by the kernel when a network user logs out.
+        """
+        target_ws: Optional[WebSocketServerProtocol] = None
+        for ws, conn_meta in self.active_connections.items():
+            if conn_meta.type == 'client' and conn_meta.username == username:
+                target_ws = ws
+                break
+
+        if target_ws:
+            log.info(f"Programmatically disconnecting client '{username}' on server-side logout.")
+            # Closing the connection will trigger the cleanup logic in the
+            # _connection_handler's finally block.
+            await target_ws.close(1000, "User logged out")
+        else:
+            # This might happen if the connection was already dropped, which is not an error.
+            log.warning(f"disconnect_client: Could not find active connection for user '{username}' to disconnect.")
+
     # --------------------------------------------------------------------------
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------

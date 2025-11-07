@@ -479,6 +479,7 @@ class IOSK:
         await self.system.print(logout_msg)
 
         user_to_logout = io.user
+        user_is_network_client = io.dev.startswith('network:')
         del self.users[user_to_logout]
 
         if disconnect:
@@ -503,6 +504,9 @@ class IOSK:
                 'type': 'system_broadcast',
                 'message': logout_msg
             })
+            # If the user was a network client, close their connection
+            if user_is_network_client:
+                await self.port.disconnect_client(user_to_logout)
 
         return True
 
