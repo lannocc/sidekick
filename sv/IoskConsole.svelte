@@ -397,16 +397,16 @@
 </style>
 
 <div class="console-container">
-    <div class="connect-form">
+    <form class="connect-form" on:submit|preventDefault={connect}>
         {#if !isConnected}
             <input id="url-input-{id}" type="text" bind:value={wsUrl} placeholder="ws://host:port">
             <input type="text" bind:value={username} placeholder="username">
-            <button class="connect-button" on:click={connect}>Connect</button>
+            <button class="connect-button" type="submit">Connect</button>
         {:else}
-            <button class="header-button" on:click={() => newIoskFileExplorer(id, title)}>Files</button>
-            <button class="header-button disconnect-button" style="margin-left: auto;" on:click={disconnect}>Disconnect</button>
+            <button type="button" class="header-button" on:click={() => newIoskFileExplorer(id, title)}>Files</button>
+            <button type="button" class="header-button disconnect-button" style="margin-left: auto;" on:click={disconnect}>Disconnect</button>
         {/if}
-    </div>
+    </form>
 
     <div class="terminal" bind:this={terminalEl} on:scroll={() => shouldScroll = (terminalEl.scrollTop + terminalEl.clientHeight >= terminalEl.scrollHeight - 10)}>
         {#each output as line}
@@ -429,3 +429,4 @@
         </div>
     {/if}
 </div>
+
