@@ -132,20 +132,30 @@
                 lastItemRightEdge = left + itemWidth + GAP;
             }
 
-            // --- Pass 2: Adjust if the whole group overflows past the right section ---
+            // --- Pass 2: Adjust for overflow, compressing from the right ---
             let overflow = lastItemRightEdge - (rightRect.left - GAP);
             if (overflow > 0) {
-                const firstItem = items[0];
-                const firstItemLeft = newLayouts[firstItem.id].left;
+                // The group of buttons overflows past the right-side controls.
+                // We must compress the layout by iterating backwards and pulling
+                // items left to fit.
+                let requiredRightEdge = rightRect.left - GAP;
 
-                // We can only shift left by the amount of space available on the left
-                const availableShift = firstItemLeft - (leftRect.right + GAP);
-                const shiftAmount = Math.min(overflow, availableShift);
+                for (let i = items.length - 1; i >= 0; i--) {
+                    const item = items[i];
+                    const itemWidth = item.width;
+                    
+                    // The item's current position from Pass 1.
+                    const currentLeft = newLayouts[item.id].left;
+                    
+                    // The maximum left position allowed by the boundary.
+                    const maxLeft = requiredRightEdge - itemWidth;
+                    
+                    // The final position is the lesser of the two.
+                    const finalLeft = Math.min(currentLeft, maxLeft);
+                    newLayouts[item.id].left = finalLeft;
 
-                if (shiftAmount > 0) {
-                    for (const item of items) {
-                        newLayouts[item.id].left -= shiftAmount;
-                    }
+                    // The next item to the left must now end before this one begins.
+                    requiredRightEdge = finalLeft - GAP;
                 }
             }
 
