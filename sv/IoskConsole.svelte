@@ -8,7 +8,7 @@
     export let id; // Unique ID from the window manager
     export let title;
 
-    let wsUrl = 'ws://localhost:4209';
+    export let wsUrl = 'ws://localhost:4209';
     export let username = 'root';
     let isConnected = false;
     let output = []; // Array of { type: 'prompt'|'output', content: 'text' }

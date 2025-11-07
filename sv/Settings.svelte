@@ -150,7 +150,11 @@
         <legend>IOSK Console</legend>
         <label class="color-picker-label">
             <span>Default Username</span>
-            <input class="text-input" type="text" bind:value={settings.defaultIoskUsername} on:input={handleUpdate} style="width: 150px;">
+            <input class="text-input" type="text" bind:value={settings.defaultIoskUsername} on:input={handleUpdate} style="width: 60%;">
+        </label>
+        <label class="color-picker-label">
+            <span>Default URL</span>
+            <input class="text-input" type="text" bind:value={settings.defaultIoskUrl} on:input={handleUpdate} style="width: 60%;">
         </label>
     </fieldset>
 

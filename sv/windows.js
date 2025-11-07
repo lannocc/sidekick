@@ -153,7 +153,8 @@ export function newIoskConnection() {
     const settings = get(desktopSettings);
     windows.addWindow(IoskConsole, {
         title: 'New IOSK Connection',
-        username: settings.defaultIoskUsername || 'root'
+        username: settings.defaultIoskUsername || 'root',
+        wsUrl: settings.defaultIoskUrl || 'ws://localhost:4209'
     });
 }
 
