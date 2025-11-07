@@ -470,13 +470,13 @@
                     Connect
                 </button>
                 <div class="menu-separator"></div>
-                <button class="menu-item submenu" on:click={() => { if (componentInstance && typeof componentInstance.toggleAttachMenu === 'function') { componentInstance.toggleAttachMenu(); } showOptionsMenu = false; }} disabled={!isConsoleConnected}>
+                <button class="menu-item submenu" on:click|stopPropagation={() => { if (componentInstance && typeof componentInstance.toggleAttachMenu === 'function') { componentInstance.toggleAttachMenu(); } showOptionsMenu = false; }} disabled={!isConsoleConnected}>
                     Attach
                 </button>
                 <button class="menu-item" on:click={() => { newIoskFileExplorer(id, title); showOptionsMenu = false; }} disabled={!isConsoleConnected}>
                     Files...
                 </button>
-                <button class="menu-item submenu" on:click={() => { if (componentInstance && typeof componentInstance.toggleRoomsMenu === 'function') { componentInstance.toggleRoomsMenu(); } showOptionsMenu = false; }} disabled={!isConsoleConnected}>
+                <button class="menu-item submenu" on:click|stopPropagation={() => { if (componentInstance && typeof componentInstance.toggleRoomsMenu === 'function') { componentInstance.toggleRoomsMenu(); } showOptionsMenu = false; }} disabled={!isConsoleConnected}>
                     Rooms
                 </button>
                 <div class="menu-separator"></div>
