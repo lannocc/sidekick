@@ -403,8 +403,8 @@
             <input type="text" bind:value={username} placeholder="username">
             <button class="connect-button" type="submit">Connect</button>
         {:else}
-            <button type="button" class="header-button" on:click={() => newIoskFileExplorer(id, title)}>Files</button>
-            <button type="button" class="header-button disconnect-button" style="margin-left: auto;" on:click={disconnect}>Disconnect</button>
+            <button type="button" class="header-button disconnect-button" on:click={disconnect}>Disconnect</button>
+            <button type="button" class="header-button" style="margin-left: auto;" on:click={() => newIoskFileExplorer(id, title)}>Files</button>
         {/if}
     </form>
 
@@ -429,4 +429,3 @@
         </div>
     {/if}
 </div>
-
