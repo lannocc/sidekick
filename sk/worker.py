@@ -5,6 +5,7 @@ import re
 import os
 import subprocess
 import tempfile
+import shutil
 
 # Regex to find code blocks, adapted from sk/util.py to be non-greedy.
 CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```', re.DOTALL)
@@ -96,6 +97,15 @@ def do_work(prompt, answer, transcript_path):
                 summary_lines.append(f"-> SKIPPED: Could not determine target file for a diff block.")
                 continue
 
+            if os.path.exists(target_file):
+                backup_filename = f"{target_file}.bak"
+                try:
+                    shutil.copy2(target_file, backup_filename)
+                    summary_lines.append(f"-> BACKED UP: {target_file} to {backup_filename}")
+                except Exception as e:
+                    summary_lines.append(f"-> FAILED TO BACK UP: {target_file}\n   {e}")
+                    continue
+
             success, message = apply_patch(target_file, code)
             if success:
                 summary_lines.append(f"-> PATCHED: {target_file}")
@@ -115,6 +125,15 @@ def do_work(prompt, answer, transcript_path):
                 directory = os.path.dirname(filename)
                 if directory:
                     os.makedirs(directory, exist_ok=True)
+
+                if os.path.exists(filename):
+                    backup_filename = f"{filename}.bak"
+                    try:
+                        shutil.copy2(filename, backup_filename)
+                        summary_lines.append(f"-> BACKED UP: {filename} to {backup_filename}")
+                    except Exception as e:
+                        summary_lines.append(f"-> FAILED TO BACK UP: {filename}\n   {e}")
+                        continue
 
                 with open(filename, 'w', encoding='utf-8') as f:
                     f.write(code)
