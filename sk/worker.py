@@ -106,32 +106,24 @@ def do_work(prompt, answer, transcript_path):
         # --- Filename Inference Logic ---
         filename = None
 
-        # 1. Infer from context: Look for path-like names in backticks in the
-        #    entire text preceding the code block.
-        preceding_text = answer[:match.start()].rstrip()
-        if preceding_text:
-            potential_files = [m.strip() for m in FILENAME_REGEX.findall(preceding_text)]
+        # 1. Infer from context: Look for a path-like name in backticks in the
+        #    text immediately preceding the code block.
+        # We search a reasonable window (e.g., 512 chars) before the block starts.
+        search_window = answer[max(0, match.start() - 512):match.start()]
+        context_filenames = FILENAME_REGEX.findall(search_window)
 
-            plausible_filenames = []
-            for pf in potential_files:
-                # A string is a plausible filename if it contains a path separator,
-                # or if it contains a dot and no spaces (to avoid picking up
-                # phrases like `some command`).
-                if '/' in pf or '\\' in pf or ('.' in pf and ' ' not in pf):
-                    plausible_filenames.append(pf)
-
-            if plausible_filenames:
-                # If exactly one of the plausible names contains a path separator,
-                # it's very likely the target file. This handles the case in the
-                # example log where `sk/util.py` is mentioned alongside `.bak`.
-                with_separator = [f for f in plausible_filenames if '/' in f or '\\' in f]
-                if len(with_separator) == 1:
-                    filename = with_separator[0]
-                else:
-                    # Otherwise, fall back to the last plausible name found.
-                    # This handles cases like "Here is `main.py`:" or when
-                    # multiple full paths are mentioned.
-                    filename = plausible_filenames[-1]
+        if context_filenames:
+            # The most likely candidate is the LAST filename mentioned before the code block.
+            candidate = context_filenames[-1].strip()
+            # A simple plausibility check for what constitutes a filename to avoid
+            # matching other backticked words like command names or variables.
+            is_plausible = (
+                '/' in candidate or
+                '\\' in candidate or
+                ('.' in candidate and ' ' not in candidate)
+            )
+            if is_plausible:
+                filename = candidate
 
         # 2. Fallback: If no filename was found in the context, try to find one
         #    commented in the first few lines of the code itself.
