@@ -12,6 +12,9 @@ CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```', re.DO
 # Regex to find file paths in backticks, updated to allow spaces in the path.
 FILENAME_REGEX = re.compile(r'`([^`]+)`')
 
+# Regex to find a filename inside a markdown heading.
+HEADING_FILENAME_REGEX = re.compile(r'^#+\s*.*`([^`\n]+)`.*$', re.MULTILINE)
+
 
 def extract_target_from_diff(diff_content):
     """Extracts the target filename from a diff's '---' or '+++' line."""
@@ -105,16 +108,14 @@ def do_work(prompt, answer, transcript_path):
 
         # --- Filename Inference Logic ---
         filename = None
-
-        # 1. Infer from context: Look for a path-like name in backticks in the
-        #    text immediately preceding the code block.
         # We search a reasonable window (e.g., 512 chars) before the block starts.
         search_window = answer[max(0, match.start() - 512):match.start()]
-        context_filenames = FILENAME_REGEX.findall(search_window)
 
-        if context_filenames:
-            # The most likely candidate is the LAST filename mentioned before the code block.
-            candidate = context_filenames[-1].strip()
+        # 1. Look for a filename in a markdown heading. This is a strong signal.
+        # We'll take the last one found before the code block.
+        heading_matches = HEADING_FILENAME_REGEX.findall(search_window)
+        if heading_matches:
+            candidate = heading_matches[-1].strip()
             # A simple plausibility check for what constitutes a filename to avoid
             # matching other backticked words like command names or variables.
             is_plausible = (
@@ -125,8 +126,25 @@ def do_work(prompt, answer, transcript_path):
             if is_plausible:
                 filename = candidate
 
-        # 2. Fallback: If no filename was found in the context, try to find one
-        #    commented in the first few lines of the code itself.
+        # 2. If no heading match, infer from general context. Look for any
+        #    backticked text that looks like a path.
+        if not filename:
+            context_filenames = FILENAME_REGEX.findall(search_window)
+            if context_filenames:
+                # Iterate in reverse to find the most recent plausible filename.
+                for candidate in reversed(context_filenames):
+                    candidate = candidate.strip()
+                    is_plausible = (
+                        '/' in candidate or
+                        '\\' in candidate or
+                        ('.' in candidate and ' ' not in candidate)
+                    )
+                    if is_plausible:
+                        filename = candidate
+                        break # Stop after finding the first plausible one from the end.
+
+        # 3. Fallback: If still no filename, try to find one commented in the
+        #    first few lines of the code itself.
         if not filename:
             filename = extract_target_from_code(code)
 
