@@ -104,18 +104,34 @@ def do_work(prompt, answer, transcript_path):
         original_block = match.group(0)
 
         # --- Filename Inference Logic ---
-        # 1. Infer from context: Look for a filename in backticks in the line
-        #    immediately preceding the code block.
-        preceding_text = answer[:match.start()].rstrip()
-        context = ""
-        if preceding_text:
-            last_line_start = preceding_text.rfind('\n') + 1
-            context = preceding_text[last_line_start:]
-
         filename = None
-        filename_match = FILENAME_REGEX.search(context)
-        if filename_match:
-            filename = filename_match.group(1)
+
+        # 1. Infer from context: Look for path-like names in backticks in the
+        #    entire text preceding the code block.
+        preceding_text = answer[:match.start()].rstrip()
+        if preceding_text:
+            potential_files = [m.strip() for m in FILENAME_REGEX.findall(preceding_text)]
+
+            plausible_filenames = []
+            for pf in potential_files:
+                # A string is a plausible filename if it contains a path separator,
+                # or if it contains a dot and no spaces (to avoid picking up
+                # phrases like `some command`).
+                if '/' in pf or '\\' in pf or ('.' in pf and ' ' not in pf):
+                    plausible_filenames.append(pf)
+
+            if plausible_filenames:
+                # If exactly one of the plausible names contains a path separator,
+                # it's very likely the target file. This handles the case in the
+                # example log where `sk/util.py` is mentioned alongside `.bak`.
+                with_separator = [f for f in plausible_filenames if '/' in f or '\\' in f]
+                if len(with_separator) == 1:
+                    filename = with_separator[0]
+                else:
+                    # Otherwise, fall back to the last plausible name found.
+                    # This handles cases like "Here is `main.py`:" or when
+                    # multiple full paths are mentioned.
+                    filename = plausible_filenames[-1]
 
         # 2. Fallback: If no filename was found in the context, try to find one
         #    commented in the first few lines of the code itself.
