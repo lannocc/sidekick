@@ -150,6 +150,12 @@
         shouldScroll = true;
     }
 
+    function disconnect() {
+        if (ws) {
+            ws.close();
+        }
+    }
+
     function handleKeydown(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -185,8 +191,10 @@
 
     onMount(() => {
         // Automatically focus the connection URL input on mount
-        const urlInput = document.querySelector(`#url-input-${id}`);
-        urlInput?.focus();
+        if (!isConnected) {
+            const urlInput = document.querySelector(`#url-input-${id}`);
+            urlInput?.focus();
+        }
     });
 
     onDestroy(() => {
@@ -223,12 +231,32 @@
         border: 1px solid var(--border-color);
         padding: 4px;
     }
-    .connect-form button {
+    .connect-form .connect-button {
         background-color: #27c93f;
         border: 1px solid #1a9c2a;
         color: white;
         padding: 4px 8px;
         cursor: pointer;
+        border-radius: 3px;
+    }
+    .connect-form .header-button {
+        background-color: var(--taskbar-button-bg);
+        border: 1px solid var(--border-color);
+        color: var(--title-bar-text);
+        padding: 4px 8px;
+        cursor: pointer;
+        border-radius: 3px;
+    }
+    .connect-form .header-button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .connect-form .disconnect-button {
+        background-color: #e74c3c;
+        border-color: #c0392b;
+        color: white;
+    }
+    .connect-form .disconnect-button:hover {
+        background-color: #c0392b;
     }
     .terminal {
         flex-grow: 1;
@@ -263,13 +291,16 @@
 </style>
 
 <div class="console-container">
-    {#if !isConnected}
-        <div class="connect-form">
+    <div class="connect-form">
+        {#if !isConnected}
             <input id="url-input-{id}" type="text" bind:value={wsUrl} placeholder="ws://host:port">
             <input type="text" bind:value={username} placeholder="username">
-            <button on:click={connect}>Connect</button>
-        </div>
-    {/if}
+            <button class="connect-button" on:click={connect}>Connect</button>
+        {:else}
+            <button class="header-button">Files</button>
+            <button class="header-button disconnect-button" style="margin-left: auto;" on:click={disconnect}>Disconnect</button>
+        {/if}
+    </div>
 
     <div class="terminal" bind:this={terminalEl} on:scroll={() => shouldScroll = (terminalEl.scrollTop + terminalEl.clientHeight >= terminalEl.scrollHeight - 10)}>
         {#each output as line}
