@@ -7,6 +7,14 @@ import { desktopSettings } from './desktopStore.js';
 
 let windowIdCounter = 0;
 
+// Map component type strings to actual components for restoring layouts
+const componentMap = {
+    'IoskConsole': IoskConsole,
+    'Calculator': Calculator,
+    'Settings': Settings,
+    'IoskFileExplorer': IoskFileExplorer
+};
+
 function createWindowManager() {
     const { subscribe, update } = writable([]);
 
@@ -259,4 +267,17 @@ export function newIoskFileExplorer(consoleId, consoleTitle) {
         width: 400,
         height: 500,
     });
+}
+
+export function restoreWindow(winData) {
+    const component = componentMap[winData.componentType];
+    if (!component) {
+        console.error(`Unknown component type for restore: ${winData.componentType}`);
+        return;
+    }
+
+    // Prepare props, excluding componentType which is not a direct prop for the window manager
+    const { componentType, ...props } = winData;
+
+    windows.addWindow(component, props);
 }

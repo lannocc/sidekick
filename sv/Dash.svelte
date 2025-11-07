@@ -4,7 +4,7 @@
 -->
 <script>
     import { dashActive, dashLayouts } from './desktopStore.js';
-    import { windows } from './windows.js';
+    import { windows, restoreWindow } from './windows.js';
     import { get } from 'svelte/store';
 
     // Import component types to map them to strings for saving layouts
@@ -13,12 +13,42 @@
     import Settings from './Settings.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
 
+    let isLayoutDirty = true;
+    let lastSavedLayoutSnapshot = '';
+
     function getComponentType(component) {
         if (component === IoskConsole) return 'IoskConsole';
         if (component === Calculator) return 'Calculator';
         if (component === Settings) return 'Settings';
         if (component === IoskFileExplorer) return 'IoskFileExplorer';
         return 'Unknown';
+    }
+
+    // Helper to create a comparable snapshot of the window layout
+    function generateLayoutSnapshot(windowsArray) {
+        if (!windowsArray) return '[]';
+        // Sort by ID to ensure consistent string output for comparison
+        const sortedWindows = [...windowsArray].sort((a, b) => a.id - b.id);
+        const relevantData = sortedWindows.map(win => ({
+            id: win.id, // ID is important for comparison
+            x: win.x,
+            y: win.y,
+            width: win.width,
+            height: win.height,
+            minimized: win.minimized,
+            maximized: win.maximized
+        }));
+        return JSON.stringify(relevantData);
+    }
+
+    // Watch for window changes to re-enable the save button
+    $: {
+        if ($windows) {
+            const currentSnapshot = generateLayoutSnapshot($windows);
+            if (currentSnapshot !== lastSavedLayoutSnapshot) {
+                isLayoutDirty = true;
+            }
+        }
     }
 
     function handleSaveDash() {
@@ -36,6 +66,19 @@
         }));
 
         dashLayouts.update(layouts => [...layouts, { id: Date.now(), name: `Layout ${layouts.length + 1}`, windows: layoutToSave }]);
+
+        // After saving, mark the current layout as saved and disable the button
+        lastSavedLayoutSnapshot = generateLayoutSnapshot(currentWindows);
+        isLayoutDirty = false;
+    }
+
+    function handleRestoreLayout(layout) {
+        if (!layout || !layout.windows) return;
+        for (const winData of layout.windows) {
+            restoreWindow(winData);
+        }
+        // Exit dash mode to see the result
+        dashActive.set(false);
     }
 
     function handleMaximizeDash() {
@@ -113,8 +156,12 @@
         transition: background-color 0.2s;
     }
     
-    .control-button:hover {
+    .control-button:hover:not(:disabled) {
         background-color: var(--taskbar-button-hover-bg);
+    }
+    .control-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 
     .control-button.save {
@@ -189,7 +236,7 @@
         <h1 class="dash-title">Dash</h1>
         <div class="header-controls right">
             <button class="control-button" on:click={handleMaximizeDash} title="Full Dash">&#9632;</button>
-            <button class="control-button save" on:click={handleSaveDash} title="Save Current Layout">&#x2713;</button>
+            <button class="control-button save" on:click={handleSaveDash} title="Save Current Layout" disabled={!isLayoutDirty}>&#x2713;</button>
         </div>
     </div>
 
@@ -199,7 +246,14 @@
         </div>
         <div class="dash-layouts">
             {#each $dashLayouts as layout (layout.id)}
-                <div class="layout-tile" title={layout.name}>
+                <div 
+                    class="layout-tile" 
+                    title={layout.name}
+                    on:click={() => handleRestoreLayout(layout)}
+                    role="button" 
+                    tabindex="0"
+                    on:keydown={e => e.key === 'Enter' && handleRestoreLayout(layout)}
+                >
                     {layout.name}
                 </div>
             {/each}
