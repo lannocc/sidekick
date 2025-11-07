@@ -159,6 +159,25 @@
         shouldScroll = true;
     }
 
+    function sendLogout() {
+        // Display the logout command for user feedback.
+        output = [...output, {type: 'prompt', content: currentPrompt + 'logout'}];
+
+        // Send command to backend via this console's WebSocket
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            const message = { type: 'client_input', data: 'logout\n' };
+            ws.send(JSON.stringify(message));
+        } else {
+            output = [...output, {type: 'output', content: `[Error] Not connected.`}];
+        }
+
+        // Clear the current command input, discarding any typed text
+        command = '';
+        unsentCommand = '';
+        historyIndex = commandHistory.length; // Reset history navigation
+        shouldScroll = true;
+    }
+
     function disconnect() {
         if (ws) {
             ws.close();
@@ -166,6 +185,12 @@
     }
 
     function handleKeydown(e) {
+        if (e.ctrlKey && e.key.toLowerCase() === 'd') {
+            e.preventDefault();
+            sendLogout();
+            return;
+        }
+
         if (e.key === 'Enter') {
             e.preventDefault();
             sendCommand();
@@ -346,4 +371,3 @@
         </div>
     {/if}
 </div>
-
