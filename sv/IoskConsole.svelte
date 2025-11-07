@@ -11,7 +11,6 @@
     export let id; // Unique ID from the window manager
     export let title;
     export let isActive;
-    export let isConsoleConnected; // Received from the store
 
     // --- State for Connection & Room Awareness ---
     let wsUrl;
@@ -96,7 +95,7 @@
     // Reactive statement to update the window title based on connection and room state
     $: if (id !== undefined && title !== undefined) {
         let newTitle;
-        if (isConsoleConnected) {
+        if (isConnected) {
             const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
             const userAtHost = `${username}@${host}`;
             newTitle = roomName ? `[${roomName}] ${userAtHost}` : userAtHost;
@@ -202,7 +201,7 @@
                 roomName = null; roomTopic = ''; motd = ''; roomParticipants = [];
                 output = [...output, {type: 'output', content: `Connection closed.`}];
                 const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
-                windows.updateWindowProps(id, { title: `[Disconnected] ${username}@${host}` });
+                windows.updateWindowProps(id, { title: `Disconnected - ${username}@${host}` });
                 if (isActive) {
                     await tick();
                     const urlInput = document.querySelector(`#url-input-${id}`);
