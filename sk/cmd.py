@@ -123,6 +123,13 @@ def main(args, called=''):
         # Print first thing, before any other output and before waiting for input.
         print(f':: Work transcript will be saved to: {save_work}')
 
+        # We intentially open the transcript early and then append to it.
+        # This way we still have a transcript if the program errors.
+        with open(save_work, 'w', encoding='utf-8') as f:
+            f.write("--- ARGUMENTS ---\n")
+            f.write(' '.join([called] + list(args)))
+            f.write("\n\n")
+
     if save and save_work:
         print('!!! -e and -w cannot be used together.')
         return
@@ -247,11 +254,18 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
     if not prompt:
         return
 
+    full_text = attachment_content + prompt
+    total_bytes = len(full_text.encode('utf-8'))
+    total_tokens = len(ENCODING.encode(full_text))
+
     if work_file:
         try:
-            with open(work_file, 'w', encoding='utf-8') as f:
+            with open(work_file, 'a', encoding='utf-8') as f:
                 f.write("--- PROMPT ---\n")
                 f.write(prompt)
+                f.write("\n\n--- INPUT TOTALS ---\n")
+                f.write(f"Bytes: {total_bytes:,}\n")
+                f.write(f"Tokens: {total_tokens:,}\n")
         except Exception as e:
             print(f"!!! Error writing prompt to transcript file {work_file}: {e}")
             # Decide if we should continue without the work file.
@@ -259,9 +273,6 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
             work_file = None
 
     if not quiet:
-        full_text = attachment_content + prompt
-        total_bytes = len(full_text.encode('utf-8'))
-        total_tokens = len(ENCODING.encode(full_text))
         print()
         print(f'GRAND TOTAL Bytes: {total_bytes:,}')
         print(f'GRAND TOTAL Tokens: {total_tokens:,}')
@@ -277,11 +288,17 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
     else:
         answer = ai_provider.prompt_for_text(prompt, chatter=chatter, model=model)
 
+    output_bytes = len(answer.encode('utf-8'))
+    output_tokens = len(ENCODING.encode(answer))
+
     if work_file:
         try:
             with open(work_file, 'a', encoding='utf-8') as f:
                 f.write("\n\n--- ANSWER ---\n")
                 f.write(answer)
+                f.write("\n\n--- OUTPUT TOTALS ---\n")
+                f.write(f"Bytes: {output_bytes:,}\n")
+                f.write(f"Tokens: {output_tokens:,}\n")
         except Exception as e:
             print(f"!!! Error writing answer to transcript file {work_file}: {e}")
             work_file = None # Disable further work operations on this file
@@ -297,10 +314,6 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
     if mdlang:
         md = get_md_code_block(mdlang or None, answer)
         if md: answer_for_display = answer.replace(md, '$$$ CODE EXTRACTED $$$')
-
-    if not quiet:
-        output_bytes = len(answer.encode('utf-8'))
-        output_tokens = len(ENCODING.encode(answer))
 
     print()
     print(f' << {answer_for_display}')
@@ -628,4 +641,3 @@ COMMANDS = {
     'iosk': (iosk,
         'run iosk system'),
 }
-
