@@ -6,8 +6,9 @@ import subprocess
 import tempfile
 import shutil
 
-# Regex to find code blocks, adapted from sk/util.py to be non-greedy.
-CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```', re.DOTALL)
+# Regex to find code blocks. This version captures the entire info
+# string line after the backticks (e.g., "python:path/to/file.py").
+CODEBLOCK_REGEX = re.compile(r'```(?P<language>[^\n]*)\n(?P<code>.*?)\n```', re.DOTALL)
 
 # Regex to find file paths in backticks, updated to allow spaces in the path.
 FILENAME_REGEX = re.compile(r'`([^`]+)`')
@@ -102,22 +103,21 @@ def do_work(prompt, answer, transcript_path):
     matches = list(CODEBLOCK_REGEX.finditer(answer))
     # Iterate in reverse to avoid messing up string indices during replacement.
     for match in reversed(matches):
-        lang = match.group('language').lower()
+        language_info = match.group('language').strip()
         code = match.group('code')
         original_block = match.group(0)
 
         # --- Filename Inference Logic ---
         filename = None
-        # We search a reasonable window (e.g., 512 chars) before the block starts.
-        search_window = answer[max(0, match.start() - 512):match.start()]
+        # Default lang is the part before ':', or the whole string if no ':'.
+        lang = language_info.split(':', 1)[0].lower().strip()
 
-        # 1. Look for a filename in a markdown heading. This is a strong signal.
-        # We'll take the last one found before the code block.
-        heading_matches = HEADING_FILENAME_REGEX.findall(search_window)
-        if heading_matches:
-            candidate = heading_matches[-1].strip()
-            # A simple plausibility check for what constitutes a filename to avoid
-            # matching other backticked words like command names or variables.
+        # 1. NEW: Prioritize filename from the language info line (e.g., ```python:path/to/file.py)
+        # This is considered the strongest signal for the filename.
+        if ':' in language_info:
+            parts = language_info.split(':', 1)
+            candidate = parts[1].strip()
+            # A simple plausibility check to avoid matching random text after a colon.
             is_plausible = (
                 '/' in candidate or
                 '\\' in candidate or
@@ -126,8 +126,24 @@ def do_work(prompt, answer, transcript_path):
             if is_plausible:
                 filename = candidate
 
-        # 2. If no heading match, infer from general context. Look for any
-        #    backticked text that looks like a path.
+        # --- Fallback to existing methods if filename not found in language line ---
+        search_window = answer[max(0, match.start() - 512):match.start()]
+
+        # 2. Look for a filename in a markdown heading.
+        if not filename:
+            # We'll take the last one found before the code block.
+            heading_matches = HEADING_FILENAME_REGEX.findall(search_window)
+            if heading_matches:
+                candidate = heading_matches[-1].strip()
+                is_plausible = (
+                    '/' in candidate or
+                    '\\' in candidate or
+                    ('.' in candidate and ' ' not in candidate)
+                )
+                if is_plausible:
+                    filename = candidate
+
+        # 3. If no heading match, infer from general context (backticked text).
         if not filename:
             context_filenames = FILENAME_REGEX.findall(search_window)
             if context_filenames:
@@ -143,8 +159,7 @@ def do_work(prompt, answer, transcript_path):
                         filename = candidate
                         break # Stop after finding the first plausible one from the end.
 
-        # 3. Fallback: If still no filename, try to find one commented in the
-        #    first few lines of the code itself.
+        # 4. Fallback: If still no filename, try to find one in code comments.
         if not filename:
             filename = extract_target_from_code(code)
 
@@ -180,7 +195,9 @@ def do_work(prompt, answer, transcript_path):
         else: # Assumed to be a full file content block.
             target_file = filename
             if not target_file:
-                summary_lines.append(f"-> SKIPPED: Could not determine filename for a '{lang}' code block.")
+                # Use the whole 'language_info' for a more descriptive skip message.
+                display_lang = language_info or 'unspecified'
+                summary_lines.append(f"-> SKIPPED: Could not determine filename for a '{display_lang}' code block.")
                 continue
 
             try:
