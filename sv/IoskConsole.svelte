@@ -4,6 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy, afterUpdate } from 'svelte';
+    import { windows } from './windows.js';
 
     export let id; // Unique ID from the window manager
     export let title;
@@ -47,11 +48,13 @@
             ws.onopen = () => {
                 console.log(`WebSocket connected for console ${id}.`);
                 isConnected = true;
+                let newTitle;
                 try {
-                    title = `${username}@${new URL(wsUrl).hostname}`;
+                    newTitle = `${username}@${new URL(wsUrl).hostname}`;
                 } catch (e) {
-                    title = `${username}@invalid-host`;
+                    newTitle = `${username}@invalid-host`;
                 }
+                windows.updateWindowProps(id, { title: newTitle });
 
                 // Send handshake message to backend `port.py`
                 const handshake = { type: 'handshake', id: 'client', user: username };
@@ -89,11 +92,13 @@
                 isConnected = false;
                 ws = null; // Allow reconnection
                 output = [...output, {type: 'output', content: `Connection closed.`}];
+                let newTitle;
                 try {
-                    title = `[Disconnected] ${username}@${new URL(wsUrl).hostname}`;
+                    newTitle = `[Disconnected] ${username}@${new URL(wsUrl).hostname}`;
                 } catch (e) {
-                    title = `[Disconnected] ${username}@invalid-host`;
+                    newTitle = `[Disconnected] ${username}@invalid-host`;
                 }
+                windows.updateWindowProps(id, { title: newTitle });
             };
 
             ws.onerror = (error) => {
@@ -104,11 +109,13 @@
                     ws = null;
                 }
                 output = [...output, {type: 'output', content: `[Error] Could not establish connection to ${wsUrl}.`}];
+                let newTitle;
                 try {
-                    title = `[Error] ${username}@${new URL(wsUrl).hostname}`;
+                    newTitle = `[Error] ${username}@${new URL(wsUrl).hostname}`;
                 } catch (e) {
-                    title = `[Error] ${username}@invalid-host`;
+                    newTitle = `[Error] ${username}@invalid-host`;
                 }
+                windows.updateWindowProps(id, { title: newTitle });
             };
 
         } catch (e) {
