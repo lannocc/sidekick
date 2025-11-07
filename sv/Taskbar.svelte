@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings } from './windows.js';
-    import { dashboardActive } from './desktopStore.js';
+    import { dashActive } from './desktopStore.js';
     import Clock from './Clock.svelte';
 
     let showMenu = false; // For Start menu
@@ -181,7 +181,7 @@
     function handleCloseAllClick() {
         if ($windows.length === 0) return;
         if (confirm("Are you sure you want to close all windows?")) {
-            if ($dashboardActive) dashboardActive.set(false);
+            if ($dashActive) dashActive.set(false);
             windows.closeAllWindows();
             showWindowsMenu = false;
         }
@@ -425,16 +425,16 @@
 
 <div class="taskbar">
     <div class="taskbar-left" bind:this={leftSectionEl}>
-        <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashboardActive) dashboardActive.set(false); showWindowsMenu = !showWindowsMenu; }}>
+        <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>
             W~
         </button>
-        <button class="windows-button" class:active={$dashboardActive} on:click={() => dashboardActive.update(v => !v)} title="Toggle Dashboard">
+        <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Toggle Dash">
             &mdash;
         </button>
         {#if showWindowsMenu}
             <div class="windows-menu">
                 {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
-                    <button class="menu-item" on:click={() => { if ($dashboardActive) dashboardActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
+                    <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
                         {win.title}
                     </button>
                 {:else}
@@ -455,7 +455,7 @@
             class:minimized={win.minimized}
             class:active={win.isActive}
             title={win.title}
-            on:click={() => { if ($dashboardActive) dashboardActive.set(false); handleTaskClick(win); }}
+            on:click={() => { if ($dashActive) dashActive.set(false); handleTaskClick(win); }}
             use:measure={win.id}
             style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'};"
         >
@@ -468,18 +468,18 @@
     </div>
 
     <div class="taskbar-right" bind:this={rightSectionEl}>
-        <button class="quick-launch-button" on:click|stopPropagation={() => { if ($dashboardActive) dashboardActive.set(false); launchIosk(); }} title="New IOSK Connection">
+        <button class="quick-launch-button" on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); launchIosk(); }} title="New IOSK Connection">
             $+
         </button>
-        <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => { if ($dashboardActive) dashboardActive.set(false); showMenu = !showMenu; }}>
+        <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }}>
             SK
         </button>
 
         {#if showMenu}
             <div class="start-menu">
-                <button class="menu-item" on:click={() => { if ($dashboardActive) dashboardActive.set(false); launchIosk(); }}>New IOSK Connection</button>
-                <button class="menu-item" on:click={() => { if ($dashboardActive) dashboardActive.set(false); launchCalculator(); }}>Calculator</button>
-                <button class="menu-item" on:click={() => { if ($dashboardActive) dashboardActive.set(false); launchSettings(); }}>Settings</button>
+                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchIosk(); }}>New IOSK Connection</button>
+                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchCalculator(); }}>Calculator</button>
+                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchSettings(); }}>Settings</button>
             </div>
         {/if}
     </div>

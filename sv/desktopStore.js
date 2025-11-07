@@ -32,6 +32,23 @@ function loadSettings() {
     return defaults;
 }
 
+// Function to load dash layouts from localStorage
+function loadDashLayouts() {
+    const defaults = []; // No saved layouts by default
+    try {
+        if (typeof localStorage !== 'undefined') {
+            const saved = localStorage.getItem('sidekickDashLayouts');
+            if (saved) {
+                return JSON.parse(saved);
+            }
+        }
+    } catch (e) {
+        console.error("Could not load dash layouts from localStorage", e);
+    }
+    return defaults;
+}
+
+
 export const desktopSettings = writable(loadSettings());
 
 // Subscribe to changes and save them to localStorage
@@ -45,5 +62,19 @@ desktopSettings.subscribe(value => {
     }
 });
 
-// Store for managing the dashboard's active state
-export const dashboardActive = writable(false);
+// Store for managing the dash mode's active state
+export const dashActive = writable(false);
+
+// Store for saved dash layouts
+export const dashLayouts = writable(loadDashLayouts());
+
+// Subscribe to changes and save layouts to localStorage
+dashLayouts.subscribe(value => {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('sidekickDashLayouts', JSON.stringify(value));
+        }
+    } catch (e) {
+        console.error("Could not save dash layouts to localStorage", e);
+    }
+});

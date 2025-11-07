@@ -5,8 +5,8 @@
 <script>
     import { windows } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashboardActive } from './desktopStore.js';
-    import Dashboard from './Dashboard.svelte';
+    import { desktopSettings, dashActive } from './desktopStore.js';
+    import Dash from './Dash.svelte';
 
     let backgroundStyle = '';
 
@@ -57,7 +57,7 @@
         background-position: center;
         transition: background 0.5s ease-in-out;
     }
-    .desktop.dashboard-active .windows-layer {
+    .desktop.dash-active .windows-layer {
         /* Hide windows without unmounting components, preserving their state */
         visibility: hidden;
     }
@@ -72,19 +72,19 @@
         z-index: 50; /* Above background, below windows/dashboard */
         pointer-events: none;
     }
-    .desktop.dashboard-active::before {
+    .desktop.dash-active::before {
         opacity: 1;
     }
 </style>
 
-<div class="desktop" class:dashboard-active={$dashboardActive} style:background={backgroundStyle}>
+<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle}>
     <div class="windows-layer">
         {#each $windows as win (win.id)}
             <Window {...win} />
         {/each}
     </div>
 
-    {#if $dashboardActive}
-        <Dashboard />
+    {#if $dashActive}
+        <Dash />
     {/if}
 </div>

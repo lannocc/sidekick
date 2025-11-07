@@ -162,6 +162,13 @@ function createWindowManager() {
         });
     };
 
+    const minimizeAllWindows = () => {
+        update(currentWindows => {
+            if (currentWindows.length === 0) return currentWindows;
+            return currentWindows.map(w => ({...w, minimized: true, isActive: false }));
+        });
+    };
+
     const cycleWindow = (forward) => {
         update(currentWindows => {
             const openWindows = currentWindows
@@ -221,6 +228,7 @@ function createWindowManager() {
         toggleMinimize,
         toggleMaximize,
         closeAllWindows,
+        minimizeAllWindows,
         cycleWindow
     };
 }
