@@ -427,23 +427,23 @@ class PortManager:
     async def _connection_handler(self, websocket: WebSocketServerProtocol): #, path: str):
         """Handles the entire lifecycle of a single network connection."""
         connection_metadata = None
+        io_context = None
         try:
-            connection_metadata = await self._handshake(websocket)
+            connection_metadata, io_context = await self._handshake(websocket)
             if connection_metadata:
                 self.active_connections[websocket] = connection_metadata
                 log.info(f"Handshake successful: {connection_metadata}")
 
-                # --- MESHING PROPAGATION ---
                 if connection_metadata.type == 'peer':
                     new_peer_host = connection_metadata.hostname
-                    # The address is from the incoming websocket connection
                     addr = websocket.remote_address
                     new_peer_addr = f"{addr[0]}:{addr[1]}"
                     await self._broadcast_peer_connect(new_peer_host, new_peer_addr)
-
-                    # Announce connection to local system log
                     await self.kernel.system.print(f":: host '{new_peer_host}' connected to mesh")
-                # --- END MESHING PROPAGATION ---
+                elif connection_metadata.type == 'client':
+                    # Now that the connection is registered, run post-login scripts.
+                    if io_context:
+                        await self.kernel.run_post_login_setup(io_context)
 
                 await self._message_loop(websocket, connection_metadata)
         except ConnectionClosed:
@@ -454,8 +454,8 @@ class PortManager:
         finally:
             await self._cleanup_and_propagate_disconnect(websocket)
 
-    async def _handshake(self, websocket: WebSocketServerProtocol) -> Optional[Connection]:
-        """Performs the initial handshake to identify the connection type."""
+    async def _handshake(self, websocket: WebSocketServerProtocol) -> Optional[tuple[Connection, Optional["Context"]]]:
+        """Performs handshake. Returns (Connection, io_context) or (None, None)."""
         message_str = await websocket.recv()
         message = json.loads(message_str)
 
@@ -473,14 +473,14 @@ class PortManager:
                 await self.kernel.system.error(f"!! Peer handshake rejected: {reason}")
                 await websocket.send(json.dumps({"type": "handshake_ack", "status": "error", "reason": reason}))
                 await websocket.close(1008, reason)  # 1008 is "policy violation"
-                return None
+                return None, None
 
             if hostname in self.peers:
                 reason = f"Hostname '{hostname}' already exists in the mesh."
                 await self.kernel.system.error(f"!! Peer handshake rejected: {reason}")
                 await websocket.send(json.dumps({"type": "handshake_ack", "status": "error", "reason": reason}))
                 await websocket.close(1008, reason)
-                return None
+                return None, None
 
             # Before state update, capture current network state for diffing
             old_network_users = set(self.kernel.network_users.keys())
@@ -537,7 +537,7 @@ class PortManager:
                 newly_learned_users_list=message.get("users", [])
             )
 
-            return Connection(websocket=websocket, type='peer', hostname=hostname)
+            return Connection(websocket=websocket, type='peer', hostname=hostname), None
 
         elif conn_id == "client":
             username = message.get("user")
@@ -550,7 +550,7 @@ class PortManager:
                 raise ValueError(f"Client login failed for user {username}")
 
             await websocket.send(json.dumps({"type": "handshake_ack", "status": "ok", "hostname": self.kernel.hostname}))
-            return Connection(websocket=websocket, type='client', username=username)
+            return Connection(websocket=websocket, type='client', username=username), io_context
 
         else:
             raise ValueError(f"Invalid handshake: unknown id '{conn_id}'")

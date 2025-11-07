@@ -290,6 +290,26 @@ class IOSK:
     ### USER LIFECYCLE
     ###
 
+    async def run_post_login_setup(self, io: Context):
+        """Runs startup scripts and other setup after a user is fully logged in."""
+        if not io or not io.user:
+            return
+
+        # Execute system-wide skrc
+        skrc_global_path = self.SKRC
+        if exists(self.box(skrc_global_path)):
+            await self.exec(io, skrc_global_path)
+
+        # Execute user-specific .skrc
+        # The user's PWD is set to their home directory (e.g., /root, /home/user)
+        # So we can construct the .skrc path relative to PWD.
+        skrc_user_path = posixpath.join(io.pwd, '.skrc')
+        if await self.exists(io, skrc_user_path): # Use self.exists as it handles virtual paths properly
+            await self.exec(io, skrc_user_path)
+
+        if self.chat and self.chat.active_room:
+            await self.chat.add_to_room(io)
+
     async def login(self, user, device=None, interactive:bool=True,
                     connect=None, io_callback=None):
         """Log-in to get a Context."""
@@ -368,18 +388,6 @@ class IOSK:
             if self.chat: await self.chat.send(user, connect, sys=True)
             else: await io.print(connect)
 
-        # Execute system-wide skrc
-        skrc_global_path = self.SKRC
-        if exists(self.box(skrc_global_path)):
-            await self.exec(io, skrc_global_path)
-
-        # Execute user-specific .skrc
-        # The user's PWD is set to their home directory (e.g., /root, /home/user)
-        # So we can construct the .skrc path relative to PWD.
-        skrc_user_path = posixpath.join(io.pwd, '.skrc')
-        if await self.exists(io, skrc_user_path): # Use self.exists as it handles virtual paths properly
-            await self.exec(io, skrc_user_path)
-
         # MODIFIED: Update local network_users and then broadcast
         user_addr = f"{user}.{self.hostname}"
         self.network_users[user_addr] = {} # Store user metadata if needed later
@@ -398,8 +406,8 @@ class IOSK:
                 'message': login_msg
             })
 
-        if self.chat and self.chat.active_room:
-            await self.chat.add_to_room(io)
+        # For local logins, run post-setup immediately.
+        await self.run_post_login_setup(io)
 
         return io
 
@@ -563,15 +571,6 @@ class IOSK:
                     await self.system.error(f"!! failed to create home directory {home_dir_virtual} for network user {username}: {e}")
             io.pwd = home_dir_virtual
 
-        skrc_global_path = self.SKRC
-        if exists(self.box(skrc_global_path)):
-            await self.exec(io, skrc_global_path)
-
-        # Use the user's PWD to find their .skrc file
-        skrc_user_path = posixpath.join(io.pwd, '.skrc')
-        if await self.exists(io, skrc_user_path): # Use self.exists for consistency
-            await self.exec(io, skrc_user_path)
-
         # MODIFIED: Update local network_users and then broadcast
         user_addr = f"{username}.{self.hostname}"
         self.network_users[user_addr] = {}
@@ -588,9 +587,7 @@ class IOSK:
                 'message': login_msg
             })
 
-        if self.chat and self.chat.active_room:
-            await self.chat.add_to_room(io)
-
+        # Do not run post-login setup here. The PortManager will do it.
         asyncio.create_task(self.interactive(io))
 
         return io
