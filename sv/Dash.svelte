@@ -145,7 +145,7 @@
         // Create the full layout object, now including desktop dimensions for accurate preview scaling
         const layoutToSave = {
             id: Date.now(),
-            name: `Layout ${layouts.length + 1}`,
+            name: `Layout ${get(dashLayouts).length + 1}`,
             desktop: {
                 width: window.innerWidth,
                 // The available desktop area height is the viewport height minus the 40px taskbar
