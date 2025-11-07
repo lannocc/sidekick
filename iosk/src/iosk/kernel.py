@@ -23,6 +23,7 @@ import sys
 import shutil
 import traceback
 from io import StringIO
+import random
 
 
 # Added for the process management proposal
@@ -290,10 +291,61 @@ class IOSK:
     ### USER LIFECYCLE
     ###
 
+    async def get_motd(self, io: Context) -> str:
+        """
+        Gets the Message of the Day.
+        If /etc/motd is a file, returns its content.
+        If /etc/motd is a directory, returns the content of a randomly selected file from it.
+        """
+        motd_path_virtual = '/etc/motd'
+        motd_path_host = self.box(motd_path_virtual, io_context=io)
+
+        if not await self.exists(io, motd_path_virtual):
+            return ""  # No MOTD found
+
+        if isdir(motd_path_host):
+            try:
+                # Use kernel's list_dir to get contents
+                dir_contents = await self.list_dir(io, motd_path_virtual)
+
+                # Filter for files only
+                files = [item['name'] for item in dir_contents if item['type'] == 'file']
+
+                if not files:
+                    return ""  # Directory is empty
+
+                random_motd_filename = random.choice(files)
+                random_motd_path_virtual = posixpath.join(motd_path_virtual, random_motd_filename)
+
+                # Now, use self.get() to read the file content.
+                content = await self.get(io, random_motd_path_virtual)
+                return content or ""
+
+            except Exception as e:
+                await self.system.error(f"!! Error reading MOTD from directory {motd_path_virtual}: {e}")
+                traceback.print_exc()
+                return ""
+
+        elif isfile(motd_path_host):
+            # It's a file, use self.get() as before.
+            content = await self.get(io, motd_path_virtual)
+            return content or ""
+
+        else:
+            # It exists but is not a file or directory.
+            return ""
+
     async def run_post_login_setup(self, io: Context):
         """Runs startup scripts and other setup after a user is fully logged in."""
         if not io or not io.user:
             return
+
+        # Display MOTD if not joining a room.
+        # This mirrors the logic for network clients in port.py.
+        if not (self.chat and self.chat.active_room):
+            motd_content = await self.get_motd(io)
+            if motd_content:
+                await io.print(motd_content)
 
         # Execute system-wide skrc
         skrc_global_path = self.SKRC

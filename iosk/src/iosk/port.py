@@ -585,7 +585,7 @@ class PortManager:
                 })
             else:
                 # No room, send MOTD. Use system context for this read.
-                motd_content = await self.kernel.get(self.kernel.system, '/etc/motd')
+                motd_content = await self.kernel.get_motd(self.kernel.system)
                 initial_state_payload['motd'] = motd_content or ''
 
             await websocket.send(f"SK1:{json.dumps(initial_state_payload)}")
