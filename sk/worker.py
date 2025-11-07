@@ -10,8 +10,8 @@ import shutil
 # Regex to find code blocks, adapted from sk/util.py to be non-greedy.
 CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```', re.DOTALL)
 
-# Regex to find file paths in backticks, used to infer filenames from context.
-FILENAME_REGEX = re.compile(r'`([^`\s]+)`')
+# Regex to find file paths in backticks, updated to allow spaces in the path.
+FILENAME_REGEX = re.compile(r'`([^`]+)`')
 
 
 def extract_target_from_diff(diff_content):
@@ -24,6 +24,29 @@ def extract_target_from_diff(diff_content):
     match = re.search(r'^--- (?:a/)?([^\t\n]+)', diff_content, re.MULTILINE)
     if match:
         return match.group(1).strip()
+    return None
+
+
+def extract_target_from_code(code_content):
+    """
+    Extracts a filename from comments in the first few lines of a code block.
+    This is a fallback mechanism.
+    """
+    lines = code_content.split('\n', 5) # Check up to the first 5 lines
+    for line in lines:
+        line = line.strip()
+        # Look for patterns like "# file: /path/to/file.py" or "// /path/to/file.js"
+        # Handles various comment styles and an optional "file:" prefix.
+        match = re.search(r'^(?:#|//|--|<!--|\*)\s*(?:file:\s*)?([\w./\-\\]+)', line, re.IGNORECASE)
+        if match:
+            path = match.group(1)
+            # A simple heuristic to avoid matching non-path comments like "# TODO" or common code.
+            # It must contain a separator or a dot.
+            if '.' in path or '/' in path or '\\' in path:
+                 # Avoid matching version numbers or other irrelevant dotted numbers at line start
+                 if re.match(r'^\d+\.\d+', path):
+                     continue
+                 return path.strip()
     return None
 
 
@@ -81,17 +104,29 @@ def do_work(prompt, answer, transcript_path):
         code = match.group('code')
         original_block = match.group(0)
 
-        # Infer filename from the context (one line) preceding the code block.
-        context_start = answer.rfind('\n', 0, match.start()) + 1
-        context = answer[context_start : match.start()].strip()
+        # --- Filename Inference Logic ---
+        # 1. Infer from context: Look for a filename in backticks in the line
+        #    immediately preceding the code block.
+        preceding_text = answer[:match.start()].rstrip()
+        context = ""
+        if preceding_text:
+            last_line_start = preceding_text.rfind('\n') + 1
+            context = preceding_text[last_line_start:]
 
         filename = None
         filename_match = FILENAME_REGEX.search(context)
         if filename_match:
             filename = filename_match.group(1)
 
+        # 2. Fallback: If no filename was found in the context, try to find one
+        #    commented in the first few lines of the code itself.
+        if not filename:
+            filename = extract_target_from_code(code)
+
+
         if lang in ('diff', 'patch'):
-            # The most reliable source for the filename is the diff content itself.
+            # For diffs, the filename in the diff content is most reliable.
+            # The filename from context/comments serves as a fallback.
             target_file = extract_target_from_diff(code) or filename
             if not target_file:
                 summary_lines.append(f"-> SKIPPED: Could not determine target file for a diff block.")
@@ -117,33 +152,34 @@ def do_work(prompt, answer, transcript_path):
             processed_answer = processed_answer[:match.start()] + replacement_text + processed_answer[match.end():]
 
         else: # Assumed to be a full file content block.
-            if not filename:
+            target_file = filename
+            if not target_file:
                 summary_lines.append(f"-> SKIPPED: Could not determine filename for a '{lang}' code block.")
                 continue
 
             try:
-                directory = os.path.dirname(filename)
+                directory = os.path.dirname(target_file)
                 if directory:
                     os.makedirs(directory, exist_ok=True)
 
-                if os.path.exists(filename):
-                    backup_filename = f"{filename}.bak"
+                if os.path.exists(target_file):
+                    backup_filename = f"{target_file}.bak"
                     try:
-                        shutil.copy2(filename, backup_filename)
-                        summary_lines.append(f"-> BACKED UP: {filename} to {backup_filename}")
+                        shutil.copy2(target_file, backup_filename)
+                        summary_lines.append(f"-> BACKED UP: {target_file} to {backup_filename}")
                     except Exception as e:
-                        summary_lines.append(f"-> FAILED TO BACK UP: {filename}\n   {e}")
+                        summary_lines.append(f"-> FAILED TO BACK UP: {target_file}\n   {e}")
                         continue
 
-                with open(filename, 'w', encoding='utf-8') as f:
+                with open(target_file, 'w', encoding='utf-8') as f:
                     f.write(code)
-                summary_lines.append(f"-> WROTE: {filename}")
+                summary_lines.append(f"-> WROTE: {target_file}")
 
-                replacement_text = f"\n[... content for {filename} saved ...]\n"
+                replacement_text = f"\n[... content for {target_file} saved ...]\n"
                 processed_answer = processed_answer[:match.start()] + replacement_text + processed_answer[match.end():]
 
             except Exception as e:
-                summary_lines.append(f"-> FAILED TO WRITE: {filename}\n   {e}")
+                summary_lines.append(f"-> FAILED TO WRITE: {target_file}\n   {e}")
 
     # Create the final summary and append it to the transcript file.
     summary = ""
