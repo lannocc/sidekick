@@ -50,27 +50,37 @@
 
     function handleDeleteLayout() {
         if (contextMenu.layoutId === null) return;
-        if (confirm('Are you sure you want to delete this layout?')) {
-            dashLayouts.update(layouts => layouts.filter(l => l.id !== contextMenu.layoutId));
-        }
-        // closeContextMenu() will be called by the global click handler
+        const layoutIdToDelete = contextMenu.layoutId;
+        closeContextMenu();
+
+        // Use setTimeout to allow the UI to update (hide menu) before the blocking confirm() dialog appears.
+        setTimeout(() => {
+            if (confirm('Are you sure you want to delete this layout?')) {
+                dashLayouts.update(layouts => layouts.filter(l => l.id !== layoutIdToDelete));
+            }
+        }, 0);
     }
 
     function handleRenameLayout() {
         if (contextMenu.layoutId === null) return;
-        const layoutToRename = get(dashLayouts).find(l => l.id === contextMenu.layoutId);
+        const layoutIdToRename = contextMenu.layoutId;
+        const layoutToRename = get(dashLayouts).find(l => l.id === layoutIdToRename);
         if (!layoutToRename) return;
 
-        const newName = prompt("Enter new name for the layout:", layoutToRename.name);
+        closeContextMenu();
 
-        if (newName && newName.trim() !== '') {
-            dashLayouts.update(layouts =>
-                layouts.map(l =>
-                    l.id === contextMenu.layoutId ? { ...l, name: newName.trim() } : l
-                )
-            );
-        }
-        // closeContextMenu() will be called by the global click handler
+        // Use setTimeout to allow the UI to update (hide menu) before the blocking prompt() dialog appears.
+        setTimeout(() => {
+            const newName = prompt("Enter new name for the layout:", layoutToRename.name);
+
+            if (newName && newName.trim() !== '') {
+                dashLayouts.update(layouts =>
+                    layouts.map(l =>
+                        l.id === layoutIdToRename ? { ...l, name: newName.trim() } : l
+                    )
+                );
+            }
+        }, 0);
     }
     // --- End Context Menu Logic ---
 
