@@ -11,6 +11,9 @@ function loadSettings() {
         bgImageDisplayMode: 'cover', // 'cover', 'contain', 'stretch', 'tile'
         focusFollowsMouse: false,
         focusDelay: 420,
+        ioskUrl: 'ws://localhost:4209', // Add this line
+        ioskUsername: 'root',           // Add this line
+
     };
 
     try {

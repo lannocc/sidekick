@@ -6,6 +6,7 @@
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { windows, newIoskFileExplorer } from './windows.js';
     import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
+    import { desktopSettings } from './desktopStore.js';
 
     export let id; // Unique ID from the window manager
     export let title;
@@ -40,10 +41,19 @@
         tick().then(() => settingsUrlInput?.focus());
     }
 
+
     function handleSaveSettings() {
+        // Update the component's local state for immediate effect
         wsUrl = settingsUrl;
         username = settingsUsername;
         showSettings = false;
+
+        // Update the global store to persist the settings for new windows
+        desktopSettings.update(settings => ({
+            ...settings,
+            ioskUrl: wsUrl,
+            ioskUsername: username
+        }));
     }
 
     function handleCancelSettings() {
