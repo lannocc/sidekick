@@ -91,10 +91,12 @@
         border-bottom: 1px solid var(--border-color);
         white-space: nowrap;
         overflow-x: auto;
+        flex-shrink: 0; /* Prevents the path bar from shrinking */
     }
     .error-message {
         color: #e74c3c;
         padding: 8px;
+        flex-shrink: 0; /* Prevents the error message from shrinking */
     }
     .item-list {
         flex-grow: 1;
@@ -149,4 +151,3 @@
         {/each}
     </div>
 </div>
-
