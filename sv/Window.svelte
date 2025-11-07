@@ -410,6 +410,17 @@
     .options-menu-button {
         line-height: 0.8; /* Center the hamburger symbol better */
     }
+    .menu-item.submenu {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .menu-item.submenu::after {
+        content: '▸';
+        font-size: 0.9em;
+        opacity: 0.7;
+        padding-left: 10px;
+    }
 </style>
 
 <div
@@ -429,7 +440,7 @@
 >
     <div class="title-bar" on:mousedown|stopPropagation={onDragStart} on:dblclick={() => windows.toggleMaximize(id)}>
         <div class="window-controls">
-            <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation></div>
+            <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
             <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation></div>
         </div>
         <span class="title-text">{title}</span>
@@ -452,15 +463,21 @@
     {#if showOptionsMenu}
         <div class="options-menu">
             {#if component === IoskConsole}
-                <button class="menu-item" on:click={handleConnect} disabled={isConsoleConnected}>
-                    Connect
-                </button>
                 <button class="menu-item" on:click={() => { if (componentInstance && typeof componentInstance.showSettingsDialog === 'function') { componentInstance.showSettingsDialog(); } showOptionsMenu = false; }} disabled={isConsoleConnected}>
                     Settings...
                 </button>
+                <button class="menu-item" on:click={handleConnect} disabled={isConsoleConnected}>
+                    Connect
+                </button>
                 <div class="menu-separator"></div>
+                <button class="menu-item submenu" on:click={() => { if (componentInstance && typeof componentInstance.toggleAttachMenu === 'function') { componentInstance.toggleAttachMenu(); } showOptionsMenu = false; }} disabled={!isConsoleConnected}>
+                    Attach
+                </button>
                 <button class="menu-item" on:click={() => { newIoskFileExplorer(id, title); showOptionsMenu = false; }} disabled={!isConsoleConnected}>
                     Files...
+                </button>
+                <button class="menu-item submenu" on:click={() => { if (componentInstance && typeof componentInstance.toggleRoomsMenu === 'function') { componentInstance.toggleRoomsMenu(); } showOptionsMenu = false; }} disabled={!isConsoleConnected}>
+                    Rooms
                 </button>
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={handleDisconnect} disabled={!isConsoleConnected}>
@@ -479,4 +496,3 @@
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
 </div>
-

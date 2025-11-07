@@ -337,7 +337,11 @@
         }
     }
 
-    function toggleAttachMenu() {
+    export function toggleRoomsMenu() {
+        showRoomsMenu = !showRoomsMenu;
+    }
+
+    export function toggleAttachMenu() {
         showAttachMenu = !showAttachMenu;
         if (showAttachMenu) {
             selectedDevice = null;
@@ -396,12 +400,15 @@
     .connect-form .header-button:disabled { opacity: 0.5; cursor: not-allowed; }
     .connect-form .disconnect-button { background-color: #e74c3c; border-color: #c0392b; color: white; }
     .connect-form .disconnect-button:hover { background-color: #c0392b; }
-    .connect-form .room-button { background-color: #ffbd2e; border-color: #e0a320; color: white; }
+    .connect-form .room-button { background-color: #ffbd2e; border-color: #e0a320; color: white; position: relative; padding-left: 15px; }
     .connect-form .room-button:hover { background-color: #e0a320; }
     .connect-form .files-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .connect-form .files-button:hover { background-color: #1a9c2a; }
-    .connect-form .attach-button { background-color: #3498db; border-color: #2980b9; color: white; }
+    .connect-form .attach-button { background-color: #3498db; border-color: #2980b9; color: white; position: relative; padding-right: 15px; }
     .connect-form .attach-button:hover { background-color: #2980b9; }
+    .connect-form .room-button::before, .connect-form .attach-button::after { content: ''; position: absolute; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
+    .connect-form .room-button::before { left: 5px; }
+    .connect-form .attach-button::after { right: 5px; }
     .header-info { flex-grow: 1; text-align: center; color: #bdc3c7; font-style: italic; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 10px; }
     .main-flex-area { flex-grow: 1; display: flex; overflow: hidden; }
     .terminal-wrapper { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
@@ -457,7 +464,7 @@
             <button class="connect-button" type="submit">Connect</button>
         {:else}
             <button type="button" class="header-button disconnect-button" on:click={disconnect}>Disconnect</button>
-            <button type="button" class="header-button room-button" bind:this={roomsButton} on:click|stopPropagation={() => showRoomsMenu = !showRoomsMenu} title="Available Rooms">Room</button>
+            <button type="button" class="header-button room-button" bind:this={roomsButton} on:click|stopPropagation={toggleRoomsMenu} title="Available Rooms">Rooms</button>
             <div class="header-info" title={roomTopic || motd}>
                 {roomTopic || motd}
             </div>

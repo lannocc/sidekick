@@ -407,12 +407,17 @@
         content: '';
         position: absolute;
         bottom: 0px;
-        right: 5px;
         width: 0;
         height: 0;
         border-left: 4px solid transparent;
         border-right: 4px solid transparent;
         border-top: 4px solid rgba(255, 255, 255, 0.7); /* Downward pointing triangle */
+    }
+    .start-button::after {
+        right: 5px;
+    }
+    .taskbar-left > .windows-button:first-child::after {
+        left: 5px;
     }
 </style>
 
@@ -479,4 +484,3 @@
         {/if}
     </div>
 </div>
-
