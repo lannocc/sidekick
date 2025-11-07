@@ -4,7 +4,8 @@
 -->
 <script>
     import { onMount, onDestroy, afterUpdate } from 'svelte';
-    import { windows } from './windows.js';
+    import { windows, newIoskFileExplorer } from './windows.js';
+    import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
 
     export let id; // Unique ID from the window manager
     export let title;
@@ -25,6 +26,9 @@
     // WebSocket instance for this specific console window
     let ws = null;
     const PREAMBLE = "SK1:";
+
+    // Event bus subscriptions
+    let requestUnsubscribe;
 
     // Auto-scrolling logic
     let shouldScroll = true;
@@ -72,13 +76,18 @@
                         const data = JSON.parse(jsonData);
 
                         // We expect a format like `{"output": "text from iosk..."}`
-                        if (data.output) {
-                            // Split by newline to handle multi-line responses cleanly
-                            const lines = data.output.split('\n');
-                            output = [...output, ...lines.map(line => ({type: 'output', content: line}))];
-                        }
-                        if (data.prompt) {
-                            currentPrompt = data.prompt;
+                        if (data.output || data.prompt) {
+                             if (data.output) {
+                                // Split by newline to handle multi-line responses cleanly
+                                const lines = data.output.split('\n');
+                                output = [...output, ...lines.map(line => ({type: 'output', content: line}))];
+                            }
+                            if (data.prompt) {
+                                currentPrompt = data.prompt;
+                            }
+                        } else if (data.type === 'fs_list_response') {
+                            // Publish to the event bus for the file explorer
+                            fileSystemResponses.set({ consoleId: id, data: data, timestamp: Date.now() });
                         }
                     } catch (e) {
                         console.error("Error parsing WebSocket message:", e);
@@ -195,6 +204,12 @@
             const urlInput = document.querySelector(`#url-input-${id}`);
             urlInput?.focus();
         }
+        // Listen for file system requests from explorer windows
+        requestUnsubscribe = fileSystemRequests.subscribe(request => {
+            if (request && request.consoleId === id && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(request.command));
+            }
+        });
     });
 
     onDestroy(() => {
@@ -202,6 +217,10 @@
         if (ws) {
             ws.onclose = null; // prevent onclose handler from running on manual close
             ws.close();
+        }
+        // Clean up the event bus subscription
+        if (requestUnsubscribe) {
+            requestUnsubscribe();
         }
     });
 </script>
@@ -247,8 +266,12 @@
         cursor: pointer;
         border-radius: 3px;
     }
-    .connect-form .header-button:hover {
+    .connect-form .header-button:hover:not(:disabled) {
         background-color: var(--taskbar-button-hover-bg);
+    }
+    .connect-form .header-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
     .connect-form .disconnect-button {
         background-color: #e74c3c;
@@ -297,7 +320,7 @@
             <input type="text" bind:value={username} placeholder="username">
             <button class="connect-button" on:click={connect}>Connect</button>
         {:else}
-            <button class="header-button">Files</button>
+            <button class="header-button" on:click={() => newIoskFileExplorer(id, title)}>Files</button>
             <button class="header-button disconnect-button" style="margin-left: auto;" on:click={disconnect}>Disconnect</button>
         {/if}
     </div>
@@ -323,3 +346,4 @@
         </div>
     {/if}
 </div>
+

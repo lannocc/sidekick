@@ -2,6 +2,7 @@ import { writable, get } from 'svelte/store';
 import IoskConsole from './IoskConsole.svelte';
 import Calculator from './Calculator.svelte';
 import Settings from './Settings.svelte';
+import IoskFileExplorer from './IoskFileExplorer.svelte';
 import { desktopSettings } from './desktopStore.js';
 
 let windowIdCounter = 0;
@@ -164,5 +165,15 @@ export function newCalculator() {
 
 export function newSettings() {
     windows.addWindow(Settings, { title: 'Settings', width: 400, height: 550 });
+}
+
+export function newIoskFileExplorer(consoleId, consoleTitle) {
+    const title = `Files - ${consoleTitle || `Console ${consoleId}`}`;
+    windows.addWindow(IoskFileExplorer, {
+        title: title,
+        consoleId: consoleId,
+        width: 400,
+        height: 500,
+    });
 }
 

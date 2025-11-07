@@ -634,6 +634,16 @@ class PortManager:
                     await self.kernel.handle_client_input(conn_meta.username, message.get("data", ""))
                 else:
                     log.warning("Received client_input from non-client connection.")
+            
+            elif msg_type == "fs_list":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    path = message.get("path", "/")
+                    io_context = self.kernel.users.get(conn_meta.username)
+                    if io_context:
+                        await self._handle_fs_list(websocket, io_context, path)
+                else:
+                    log.warning("Received fs_list from non-client connection.")
+
             else:
                 log.warning(f"Received unknown message type: {msg_type}")
 
@@ -641,6 +651,27 @@ class PortManager:
             log.error("Failed to decode JSON message.")
         except Exception:
             log.error(f"Error dispatching message: {traceback.format_exc()}")
+
+    async def _handle_fs_list(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str):
+        """Handles a file system list request from a client."""
+        response = {"type": "fs_list_response", "path": path}
+        try:
+            listing = await self.kernel.list_dir(io_context, path)
+            response["listing"] = listing
+        except FileNotFoundError as e:
+            response["error"] = str(e)
+        except NotADirectoryError as e:
+            response["error"] = str(e)
+        except Exception as e:
+            log.error(f"Error during fs_list for {io_context.user} at '{path}': {e}")
+            response["error"] = "An internal server error occurred."
+
+        message_to_send = f"SK1:{json.dumps(response)}"
+        try:
+            await websocket.send(message_to_send)
+        except ConnectionClosed:
+            # This is expected if the user closes the window quickly.
+            log.info(f"Could not send fs_list response to {io_context.user}, connection closed.")
 
     async def _handle_remote_exec(self, websocket: WebSocketServerProtocol, message: Dict[str, Any]):
         """Handles a remote execution request and streams output back."""
@@ -948,4 +979,3 @@ class PortManager:
 
             # 3. Propagate the disconnection to remaining peers
             await self._broadcast_peer_disconnect(disconnected_host)
-

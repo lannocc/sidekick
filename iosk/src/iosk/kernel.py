@@ -17,7 +17,7 @@ import aioconsole
 from datetime import datetime, timedelta
 import os
 import posixpath
-from os.path import isdir, isfile, exists
+from os.path import isdir, isfile, exists, getsize
 import importlib, importlib.util
 import sys
 import shutil
@@ -820,6 +820,29 @@ class IOSK:
             await io.error(f"!! failed to remove directory '{path}': {e}")
             return False
 
+    async def list_dir(self, io: Context, path: str) -> list:
+        """Lists the contents of a directory in the sandbox."""
+        host_path = self.box(path, io_context=io)
+        if not exists(host_path):
+            raise FileNotFoundError(f"Path not found: {path}")
+        if not isdir(host_path):
+            raise NotADirectoryError(f"Path is not a directory: {path}")
+
+        listing = []
+        try:
+            for item_name in sorted(os.listdir(host_path)):
+                full_item_path = os.path.join(host_path, item_name)
+                item_type = 'dir' if isdir(full_item_path) else 'file'
+                try:
+                    size = getsize(full_item_path)
+                except OSError:
+                    size = -1
+                listing.append({'name': item_name, 'type': item_type, 'size': size})
+        except OSError as e:
+            await io.error(f"Error reading directory {path}: {e}")
+            raise
+        return listing
+
     ###
     ### FILE I/O
     ###
@@ -1066,4 +1089,3 @@ class IOSK:
             except ModuleNotFoundError: pass
 
         return py
-
