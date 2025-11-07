@@ -69,12 +69,19 @@
         }
     });
 
+    async function focusInput() {
+        await tick();
+        commandInput?.focus();
+    }
+
     function handleGlobalClick(event) {
         if (showRoomsMenu && roomsButton && !roomsButton.contains(event.target)) {
             showRoomsMenu = false;
+            focusInput();
         }
         if (showAttachMenu && attachButton && !attachButton.contains(event.target) && !event.target.closest('.attach-menu')) {
             showAttachMenu = false;
+            focusInput();
         }
     }
 
@@ -297,6 +304,7 @@
             ws.send(JSON.stringify(message));
         }
         showRoomsMenu = false;
+        focusInput();
     }
 
     function closeRoom() {
@@ -305,6 +313,7 @@
             ws.send(JSON.stringify(message));
         }
         showRoomsMenu = false;
+        focusInput();
     }
 
     function sendLogout() {
@@ -387,6 +396,7 @@
             ws.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
         }
         showAttachMenu = false;
+        focusInput();
     }
 </script>
 
@@ -468,7 +478,7 @@
             <div class="header-info" title={roomTopic || motd}>
                 {roomTopic || motd}
             </div>
-            <button type="button" class="header-button files-button" on:click={() => newIoskFileExplorer(id, title)}>Files</button>
+            <button type="button" class="header-button files-button" on:click={() => { newIoskFileExplorer(id, title); focusInput(); }}>Files</button>
             <button type="button" class="header-button attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
         {/if}
     </form>

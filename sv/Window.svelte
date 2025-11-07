@@ -344,7 +344,7 @@
         cursor: pointer;
         border: 1px solid rgba(0,0,0,0.2);
     }
-    .close { background-color: #ff5f56; }
+    .close { background-color: #ff5f56; line-height: 18px; }
     .minimize { background-color: #ffbd2e; }
     .maximize { background-color: #27c93f; }
     .options-menu-button {
