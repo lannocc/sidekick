@@ -162,6 +162,55 @@ function createWindowManager() {
         });
     };
 
+    const cycleWindow = (forward) => {
+        update(currentWindows => {
+            const openWindows = currentWindows
+                .filter(w => !w.minimized)
+                .sort((a, b) => b.zIndex - a.zIndex);
+
+            if (openWindows.length < 2) {
+                return currentWindows;
+            }
+
+            // The pool of z-indices used by the open windows
+            const openZIndices = openWindows.map(w => w.zIndex).sort((a,b) => a - b);
+
+            let newOrder;
+            if (forward) {
+                // Forward cycle: Move top window to the bottom of the stack
+                // e.g., [C, B, A] -> [B, A, C]
+                const top = openWindows.shift();
+                openWindows.push(top);
+                newOrder = openWindows;
+            } else {
+                // Backward cycle: Move bottom window to the top of the stack
+                // e.g., [C, B, A] -> [A, C, B]
+                const bottom = openWindows.pop();
+                openWindows.unshift(bottom);
+                newOrder = openWindows;
+            }
+
+            const newProps = {};
+            const activeId = newOrder[0].id;
+
+            // Re-assign the z-indices to the newly ordered windows
+            newOrder.forEach((win, index) => {
+                newProps[win.id] = {
+                    zIndex: openZIndices[openZIndices.length - 1 - index],
+                    isActive: win.id === activeId
+                };
+            });
+
+            // Map over all windows and apply the new properties to the cycled ones
+            return currentWindows.map(w => {
+                if (newProps[w.id]) {
+                    return { ...w, ...newProps[w.id] };
+                }
+                return w;
+            });
+        });
+    };
+
     return {
         subscribe,
         addWindow,
@@ -171,7 +220,8 @@ function createWindowManager() {
         updateWindowProps,
         toggleMinimize,
         toggleMaximize,
-        closeAllWindows
+        closeAllWindows,
+        cycleWindow
     };
 }
 
