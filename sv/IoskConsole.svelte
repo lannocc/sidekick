@@ -52,6 +52,7 @@
             ws.onopen = () => {
                 console.log(`WebSocket connected for console ${id}.`);
                 isConnected = true;
+                output = [...output, {type: 'output', content: `Connected.`}];
                 let newTitle;
                 try {
                     newTitle = `${username}@${new URL(wsUrl).hostname}`;
