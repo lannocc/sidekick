@@ -281,18 +281,27 @@
         padding-bottom: 4px;
         z-index: 2; /* Active button on top of other buttons */
     }
-    .start-button {
-        background-color: #27c93f; /* Standout color */
-        border: 1px solid #1a9c2a;
+
+    /* Color updates for fixed buttons */
+    .taskbar-left > .windows-button:first-child {
+        background-color: #ff5f56; /* Match window close button */
+        border-color: #e0443e;
         color: white;
-        font-weight: bold;
-        border-radius: 4px;
-        padding: 5px 10px;
-        cursor: pointer;
-        /* Pushes button to the far right */
     }
-    .quick-launch-button {
-        background-color: #3498db; /* A distinct, functional blue */
+    .taskbar-left > .windows-button:first-child:hover {
+        background-color: #e0443e;
+    }
+    .taskbar-left > .windows-button:nth-child(2) {
+        background-color: #ffbd2e; /* Match window minimize button */
+        border-color: #e0a320;
+        color: white;
+    }
+     .taskbar-left > .windows-button:nth-child(2):hover {
+        background-color: #e0a320;
+    }
+
+    .start-button {
+        background-color: #3498db; /* Swapped from green to blue */
         border: 1px solid #2980b9;
         color: white;
         font-weight: bold;
@@ -300,8 +309,20 @@
         padding: 5px 10px;
         cursor: pointer;
     }
-    .quick-launch-button:hover {
+    .start-button:hover {
         background-color: #2980b9;
+    }
+    .quick-launch-button {
+        background-color: #27c93f; /* Swapped from blue to green */
+        border: 1px solid #1a9c2a;
+        color: white;
+        font-weight: bold;
+        border-radius: 4px;
+        padding: 5px 10px;
+        cursor: pointer;
+    }
+    .quick-launch-button:hover {
+        background-color: #1a9c2a;
     }
     .windows-button {
         background-color: var(--taskbar-button-bg);
@@ -374,6 +395,24 @@
     .menu-item.close-all:hover {
         background-color: #c0392b;
         color: white;
+    }
+
+    /* Styles for menu indicators on buttons */
+    .start-button,
+    .taskbar-left > .windows-button:first-child {
+        position: relative; /* Required for pseudo-element positioning */
+    }
+    .start-button::after,
+    .taskbar-left > .windows-button:first-child::after {
+        content: '';
+        position: absolute;
+        bottom: 5px;
+        right: 5px;
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 4px solid rgba(255, 255, 255, 0.7); /* Downward pointing triangle */
     }
 </style>
 

@@ -367,7 +367,7 @@
     .options-menu {
         position: absolute;
         top: 35px;
-        left: 50px; /* Positioned under the third button */
+        right: 8px; /* Positioned under the right-side controls */
         background-color: var(--window-bg);
         border: 1px solid var(--border-color);
         border-radius: 4px;
@@ -431,13 +431,6 @@
         <div class="window-controls">
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation></div>
             <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation></div>
-            <div
-                class="window-control options-menu-button"
-                title="Options"
-                bind:this={optionsButton}
-                on:click|stopPropagation={() => showOptionsMenu = !showOptionsMenu}>
-                ≡
-            </div>
         </div>
         <span class="title-text">{title}</span>
         <div class="window-controls">
@@ -446,6 +439,13 @@
                 title={maximized ? 'Restore' : 'Maximize'}
                 on:click={() => windows.toggleMaximize(id)}
                 on:mousedown|stopPropagation>
+            </div>
+            <div
+                class="window-control options-menu-button"
+                title="Options"
+                bind:this={optionsButton}
+                on:click|stopPropagation={() => showOptionsMenu = !showOptionsMenu}>
+                ≡
             </div>
         </div>
     </div>
