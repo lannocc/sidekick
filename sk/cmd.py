@@ -274,8 +274,8 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
 
     if not quiet:
         print()
-        print(f'GRAND TOTAL Bytes: {total_bytes:,}')
-        print(f'GRAND TOTAL Tokens: {total_tokens:,}')
+        print(f'TOTAL INPUT Bytes: {total_bytes:,}')
+        print(f'TOTAL INPUT Tokens: {total_tokens:,}')
         print()
         print("...waiting for reply...")
 
@@ -399,8 +399,8 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
         full_text = attachment_content + prompt
         total_bytes = len(full_text.encode('utf-8'))
         total_tokens = len(ENCODING.encode(full_text))
-        print(f'GRAND TOTAL Bytes: {total_bytes:,}')
-        print(f'GRAND TOTAL Tokens: {total_tokens:,}')
+        print(f'TOTAL INPUT Bytes: {total_bytes:,}')
+        print(f'TOTAL INPUT Tokens: {total_tokens:,}')
         print()
 
     context = Context(file)
