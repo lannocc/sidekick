@@ -78,10 +78,16 @@
 
                         // We expect a format like `{"output": "text from iosk..."}`
                         if (data.output || data.prompt) {
-                             if (data.output) {
-                                // Split by newline to handle multi-line responses cleanly
-                                const lines = data.output.split('\n');
-                                output = [...output, ...lines.map(line => ({type: 'output', content: line}))];
+                            if (data.output) {
+                                const clearScreenCode = "\x1b[H\x1b[2J";
+                                if (data.output === clearScreenCode) {
+                                    // Handle clear screen ANSI code
+                                    output = [];
+                                } else {
+                                    // Split by newline to handle multi-line responses cleanly
+                                    const lines = data.output.split('\n');
+                                    output = [...output, ...lines.map(line => ({type: 'output', content: line}))];
+                                }
                             }
                             if (data.prompt) {
                                 currentPrompt = data.prompt;
