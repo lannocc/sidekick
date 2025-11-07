@@ -19,6 +19,10 @@ FILENAME_REGEX = re.compile(r'`([^`]+)`')
 # Regex to find a filename inside a markdown heading.
 HEADING_FILENAME_REGEX = re.compile(r'^#+\s*.*`([^`\n]+)`.*$', re.MULTILINE)
 
+# Regex to find a filename on a line ending with `filename`:
+# e.g., "The content for `path/to/file.py`:"
+LINE_ENDING_IN_FILENAME_REGEX = re.compile(r'.*`([^`\n]+)`:\s*$', re.MULTILINE | re.IGNORECASE)
+
 
 def extract_target_from_diff(diff_content):
     """Extracts the target filename from a diff's '---' or '+++' line."""
@@ -155,7 +159,21 @@ def do_work(prompt, answer, transcript_path):
                 if is_plausible:
                     filename = candidate
 
-        # 4. If no heading match, infer from general context (backticked text).
+        # 4. Look for a line ending in `filename`:
+        if not filename:
+            line_ending_matches = LINE_ENDING_IN_FILENAME_REGEX.findall(search_window)
+            if line_ending_matches:
+                # Take the last one found before the code block.
+                candidate = line_ending_matches[-1].strip()
+                is_plausible = (
+                    '/' in candidate or
+                    '\\' in candidate or
+                    ('.' in candidate and ' ' not in candidate)
+                )
+                if is_plausible:
+                    filename = candidate
+
+        # 5. If no heading match, infer from general context (backticked text).
         if not filename:
             context_filenames = FILENAME_REGEX.findall(search_window)
             if context_filenames:
@@ -171,7 +189,7 @@ def do_work(prompt, answer, transcript_path):
                         filename = candidate
                         break # Stop after finding the first plausible one from the end.
 
-        # 5. Fallback: If still no filename, try to find one in code comments.
+        # 6. Fallback: If still no filename, try to find one in code comments.
         if not filename:
             filename = extract_target_from_code(code)
 
