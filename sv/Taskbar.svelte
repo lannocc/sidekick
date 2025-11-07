@@ -31,9 +31,20 @@
     function measure(node, id) {
         const ro = new ResizeObserver((entries) => {
             for (const entry of entries) {
-                // Update map only if the width has actually changed
-                if (taskItemWidths.get(id) !== entry.contentRect.width) {
-                    taskItemWidths.set(id, entry.contentRect.width);
+                let newWidth;
+                // Use borderBoxSize for a more accurate width (includes padding and border).
+                // It's an array, so we take the first entry.
+                if (entry.borderBoxSize && entry.borderBoxSize.length > 0) {
+                    newWidth = entry.borderBoxSize[0].inlineSize;
+                } else {
+                    // Fallback for older browsers that don't support borderBoxSize.
+                    // getBoundingClientRect() includes padding and border.
+                    newWidth = entry.target.getBoundingClientRect().width;
+                }
+
+                // Update map only if the width has actually changed to avoid infinite loops
+                if (taskItemWidths.get(id) !== newWidth) {
+                    taskItemWidths.set(id, newWidth);
                     taskItemWidths = taskItemWidths; // Trigger reactivity
                 }
             }
@@ -51,6 +62,26 @@
         };
     }
 
+    // Helper to calculate the ideal alignment for a taskbar button
+    function getIdealButtonLeft(win, buttonWidth) {
+        // A maximized window's task item should be centered
+        if (win.maximized) {
+            return screenWidth / 2 - buttonWidth / 2;
+        }
+
+        const windowCenter = win.x + win.width / 2;
+        // Calculate the window's center position as a fraction of the screen width
+        const progress = Math.max(0, Math.min(1, windowCenter / screenWidth));
+
+        // The button's ideal left position interpolates.
+        // When window is on the left (progress=0), button is left-aligned with window.
+        // When window is on the right (progress=1), button is right-aligned with window.
+        const leftAlignedPos = win.x;
+        const rightAlignedPos = win.x + win.width - buttonWidth;
+
+        return leftAlignedPos * (1 - progress) + rightAlignedPos * progress;
+    }
+
     // Reactive calculation for task item layouts
     $: if (screenWidth && leftSectionEl && centerSectionEl && rightSectionEl && $windows.length > 0) {
         // Wait until we have widths for all items before calculating the layout
@@ -63,12 +94,15 @@
 
             // Prepare items with their ideal positions and widths, then sort by ideal position
             const items = $windows
-                .map(win => ({
-                    id: win.id,
-                    idealX: getWindowCenterX(win),
-                    width: taskItemWidths.get(win.id) || 100, // Fallback width
-                }))
-                .sort((a, b) => a.idealX - b.idealX);
+                .map(win => {
+                    const buttonWidth = taskItemWidths.get(win.id) || 100; // Fallback width
+                    return {
+                        id: win.id,
+                        idealLeft: getIdealButtonLeft(win, buttonWidth),
+                        width: buttonWidth,
+                    };
+                })
+                .sort((a, b) => a.idealLeft - b.idealLeft);
 
             const newLayouts = {};
             let lastItemRightEdge = leftRect.right + GAP;
@@ -76,10 +110,9 @@
             // --- Pass 1: Place items from left to right, avoiding collisions ---
             for (const item of items) {
                 const itemWidth = item.width;
-                let idealLeft = item.idealX - itemWidth / 2;
-
+                
                 // Position is either its ideal spot or right after the previous item
-                let left = Math.max(idealLeft, lastItemRightEdge);
+                let left = Math.max(item.idealLeft, lastItemRightEdge);
 
                 // Check for collision with the center clock area
                 if ((left + itemWidth + GAP) > centerRect.left && left < (centerRect.right + GAP)) {
@@ -112,12 +145,6 @@
         }
     } else if ($windows.length === 0) {
         taskItemLayouts = {}; // Clear layouts if no windows are open
-    }
-
-    // Helper to calculate a window's horizontal center
-    function getWindowCenterX(win) {
-        // A maximized window's center is the screen's center
-        return win.maximized ? screenWidth / 2 : win.x + win.width / 2;
     }
 
     function handleTaskClick(win) {
