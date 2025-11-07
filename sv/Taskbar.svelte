@@ -121,9 +121,16 @@
     }
 
     function handleTaskClick(win) {
-        // If the window is minimized, this will restore and focus it.
-        // If the window is open, this will minimize it as requested.
-        windows.toggleMinimize(win.id);
+        if (win.minimized) {
+            // This will restore and focus the window.
+            windows.toggleMinimize(win.id);
+        } else if (win.isActive) {
+            // If it's already the active window, minimize it.
+            windows.toggleMinimize(win.id);
+        } else {
+            // If it's not active (but not minimized), just raise and focus it.
+            windows.focusWindow(win.id);
+        }
     }
 
     function handleCloseAllClick() {
@@ -388,4 +395,3 @@
         {/if}
     </div>
 </div>
-

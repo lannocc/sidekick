@@ -3,7 +3,7 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { createEventDispatcher } from 'svelte';
+    import { createEventDispatcher, tick } from 'svelte';
     import { windows } from './windows.js';
     import { desktopSettings } from './desktopStore.js';
 
@@ -18,6 +18,7 @@
     export let minimized;
     export let maximized;
     export let isActive;
+    export let lastFocusedElement; // Received from the store via Desktop.svelte
 
     const dispatch = createEventDispatcher();
 
@@ -31,6 +32,34 @@
     let resizeDirection = '';
     let initialResizeState = {};
     let focusTimeout = null;
+
+    let contentAreaEl;
+
+
+    async function restoreFocus() {
+        // Check if the element to focus is still valid and in the DOM
+        if (lastFocusedElement && document.body.contains(lastFocusedElement)) {
+            await tick(); // Wait for any potential re-renders to complete
+            lastFocusedElement.focus({ preventScroll: true });
+        }
+    }
+
+    function handleFocusOut(event) {
+        // When focus leaves the content area, save the last focused element.
+        // `relatedTarget` is where focus is going. If it's outside our content
+        // area, we save the element that just lost focus (`event.target`).
+        if (contentAreaEl && !contentAreaEl.contains(event.relatedTarget)) {
+            if (contentAreaEl.contains(event.target)) {
+                windows.updateWindowProps(id, { lastFocusedElement: event.target });
+            }
+        }
+    }
+
+    // When the window becomes active, restore focus to its last known element.
+    $: if (isActive) {
+        // Use a microtask to ensure any DOM changes from the activation have completed.
+        Promise.resolve().then(restoreFocus);
+    }
 
 
     function getResizeDirection(event) {
@@ -83,6 +112,7 @@
         isDragging = false;
         window.removeEventListener('mousemove', onDrag);
         window.removeEventListener('mouseup', onDragEnd);
+        restoreFocus(); // Restore focus after move is complete
     }
 
     function onResizeStart(event) {
@@ -177,6 +207,7 @@
         initialResizeState = {};
         window.removeEventListener('mousemove', onResize);
         window.removeEventListener('mouseup', onResizeEnd);
+        restoreFocus(); // Restore focus after resize is complete
     }
 
     function handleFrameMouseDown(event) {
@@ -320,9 +351,8 @@
             </div>
         </div>
     </div>
-    <div class="content-area">
+    <div class="content-area" bind:this={contentAreaEl} on:focusout={handleFocusOut}>
         <svelte:component this={component} {id} bind:title={title} {isActive} {...$$restProps} />
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
 </div>
-
