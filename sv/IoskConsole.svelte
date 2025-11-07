@@ -160,12 +160,19 @@
     }
 
     function sendLogout() {
+        let logoutCommand = 'logout';
+        const trimmedPrompt = currentPrompt.trim();
+
+        if (trimmedPrompt.endsWith('>>')) {
+            logoutCommand = '$ logout';
+        }
+
         // Display the logout command for user feedback.
-        output = [...output, {type: 'prompt', content: currentPrompt + 'logout'}];
+        output = [...output, {type: 'prompt', content: currentPrompt + logoutCommand}];
 
         // Send command to backend via this console's WebSocket
         if (ws && ws.readyState === WebSocket.OPEN) {
-            const message = { type: 'client_input', data: 'logout\n' };
+            const message = { type: 'client_input', data: logoutCommand + '\n' };
             ws.send(JSON.stringify(message));
         } else {
             output = [...output, {type: 'output', content: `[Error] Not connected.`}];
