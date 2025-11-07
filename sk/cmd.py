@@ -218,7 +218,7 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         elif package:
             file, counts = package_directory(package)
             if not quiet:
-                print(f'PACKAGED DIRECTORY to: {file}')
+                print(f'PACKAGED to: {file}')
                 if isinstance(counts, list):
                     for i, c in enumerate(counts):
                         print(c)
@@ -380,7 +380,7 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
         elif package:
             file, counts = package_directory(package)
             if not quiet:
-                print(f'PACKAGED DIRECTORY to: {file}')
+                print(f'PACKAGED to: {file}')
                 if isinstance(counts, list):
                     for i, c in enumerate(counts):
                         print(c)
