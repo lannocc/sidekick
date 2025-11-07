@@ -3,12 +3,13 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { onMount, onDestroy, afterUpdate } from 'svelte';
+    import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { windows, newIoskFileExplorer } from './windows.js';
     import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
 
     export let id; // Unique ID from the window manager
     export let title;
+    export let isActive;
 
     // Reactive statement to update the window store with the connection status
     $: if (id !== undefined) {
@@ -108,7 +109,7 @@
                 }
             };
 
-            ws.onclose = () => {
+            ws.onclose = async () => {
                 console.log(`WebSocket disconnected for console ${id}.`);
                 isConnected = false;
                 ws = null; // Allow reconnection
@@ -120,6 +121,13 @@
                     newTitle = `[Disconnected] ${username}@invalid-host`;
                 }
                 windows.updateWindowProps(id, { title: newTitle });
+
+                // If the window is active when it disconnects, focus the URL input.
+                if (isActive) {
+                    await tick(); // Wait for the UI to update and show the input field
+                    const urlInput = document.querySelector(`#url-input-${id}`);
+                    urlInput?.focus();
+                }
             };
 
             ws.onerror = (error) => {
