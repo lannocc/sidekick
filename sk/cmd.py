@@ -4,7 +4,14 @@
 from . import config
 from .util import print_flush, package_directory, take_screenshot
 
+from binaryornot.check import is_binary
+import tiktoken
+
+import os
+from datetime import datetime
+
 print = print_flush
+ENCODING = tiktoken.get_encoding('cl100k_base')
 
 
 def main(args, called=''):
@@ -17,6 +24,7 @@ def main(args, called=''):
     pkg = []
     lang = None
     save = None
+    work_flag = False
     model_flag = None
 
     task = called.endswith('task')
@@ -25,12 +33,43 @@ def main(args, called=''):
     remaining_args = []
     args_list = list(args)  # Create a mutable copy to pop from
 
+    # Short options that take an argument and thus cannot be combined.
+    options_with_args = {'a', 'e'}
+
     while args_list:
         arg = args_list.pop(0)
+
+        # Check for combined short options like -qcs, which don't take arguments.
+        if arg.startswith('-') and not arg.startswith('--') and len(arg) > 2:
+            chars = arg[1:]
+            all_combinable = True
+            for char in chars:
+                if f'-{char}' not in OPTIONS or char in options_with_args:
+                    all_combinable = False
+                    break
+
+            if all_combinable:
+                # Expand the combined options into individual ones and prepend to the list.
+                expanded_args = [f'-{char}' for char in chars]
+                args_list[0:0] = expanded_args
+                continue # Restart loop to process the first expanded option
 
         if arg.startswith('-'):
             op = arg
             if op == '--help': op = '-h'
+            if op == '--work': op = '-w'
+
+            # If a command has already been seen, treat all subsequent options
+            # as arguments for that command, not as global options.
+            has_command = False
+            for r_arg in remaining_args:
+                if r_arg in COMMANDS:
+                    has_command = True
+                    break
+
+            if has_command:
+                remaining_args.append(arg)
+                continue
 
             if op not in OPTIONS:
                 # Handle unknown options
@@ -57,27 +96,43 @@ def main(args, called=''):
             elif op in ['-1', '-2', '-3']: model_flag = op
 
             # Handle options that take arguments
-            elif op == '-f':
+            elif op == '-a':
                 if not args_list or args_list[0].startswith('-'):
-                    print(f'!!! need a filename for -f')
+                    print(f'!!! need a filename for -a')
                     return
                 file = args_list.pop(0)
-            elif op == '-p':
-                if not args_list or args_list[0].startswith('-'):
-                    print(f'!!! need a directory path for -p')
-                    return
-                pkg.append(args_list.pop(0))
             elif op == '-e':
                 if len(args_list) < 2 or args_list[0].startswith('-') or args_list[1].startswith('-'):
                     print(f'!!! -e needs 2 arguments: <language> <file>')
                     return
                 lang = args_list.pop(0)
                 save = args_list.pop(0)
+            elif op == '-w':
+                work_flag = True
 
         else:  # Not an option, so it's a non-option argument
             remaining_args.append(arg)
 
     # --- Post-parsing setup ---
+    save_work = None
+    if work_flag:
+        import tempfile
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        filename = f'sidekick-work-{timestamp}.log'
+        save_work = os.path.join(tempfile.gettempdir(), filename)
+        # Print first thing, before any other output and before waiting for input.
+        print(f':: Work transcript will be saved to: {save_work}')
+
+        # We intentially open the transcript early and then append to it.
+        # This way we still have a transcript if the program errors.
+        with open(save_work, 'w', encoding='utf-8') as f:
+            f.write("--- ARGUMENTS ---\n")
+            f.write(' '.join([called] + list(args)))
+            f.write("\n\n")
+
+    if save and save_work:
+        print('!!! -e and -w cannot be used together.')
+        return
 
     quiet = quiet_flag_present or (remaining_args and remaining_args[0] == 'md')
     if not quiet: print('SIDEKICK: ', end='')
@@ -96,22 +151,26 @@ def main(args, called=''):
     # --- Mode Dispatch ---
 
     if task or ask:
-        # For ask/task, all remaining non-option args are package paths
-        pkg.extend(remaining_args)
-
-        final_pkg = None
-        if len(pkg) == 1:
-            final_pkg = pkg[0]
-        elif len(pkg) > 1:
-            final_pkg = pkg
+        # For ask/task, all remaining non-option args are package paths (files or dirs)
+        for path in remaining_args:
+            if os.path.isfile(path):
+                if is_binary(path):
+                    print(f'!!! cannot package binary file specified as an argument: {path}')
+                    return
+                pkg.append(path)
+            elif os.path.isdir(path):
+                pkg.append(path)
+            else:
+                print(f'!!! path not found or is not a regular file/directory: {path}')
+                return
 
         prompt = None # Prompt is now handled interactively or via pipe
         if task:
-            do_task(prompt, shot=shot, file=file, package=final_pkg, quiet=quiet,
+            do_task(prompt, shot=shot, file=file, package=pkg or None, quiet=quiet,
                          chatter=chatter, model=model)
         else:
-            ask_question(prompt, shot=shot, file=file, package=final_pkg,
-                           mdlang=lang, mdsave=save, quiet=quiet,
+            ask_question(prompt, shot=shot, file=file, package=pkg or None,
+                           mdlang=lang, mdsave=save, work_file=save_work, quiet=quiet,
                            chatter=chatter, model=model, use_openai=use_openai)
         return
 
@@ -134,15 +193,18 @@ def main(args, called=''):
 
 
 def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
-                 mdsave=None, quiet=False, chatter=False,
+                 mdsave=None, work_file=None, quiet=False, chatter=False,
                  model=config.GEMINI_MODEL_QUICK_2, use_openai=False):
     from .ai import google, openai
     from .util import get_md_code_block
     import sys
+    import time
 
     if not quiet:
         print('Ask a Question')
         print()
+
+    attachment_content = ""
 
     if shot or file or package:
         if sum([ 1 for item in [ shot, file, package ] if item ]) > 1:
@@ -156,13 +218,23 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         elif package:
             file, counts = package_directory(package)
             if not quiet:
-                print(f'PACKAGED DIRECTORY to: {file}')
+                print(f'PACKAGED to: {file}')
                 if isinstance(counts, list):
                     for i, c in enumerate(counts):
                         print(c)
                         print(package[i])
                 else: print(counts)
                 print()
+
+    if file and not is_binary(file):
+        with open(file, 'r', encoding='utf-8') as f:
+            attachment_content = f.read()
+        attachment_bytes = len(attachment_content.encode('utf-8'))
+        attachment_tokens = len(ENCODING.encode(attachment_content))
+        if not quiet:
+            print(f'SUBTOTAL Bytes: {attachment_bytes:,}')
+            print(f'SUBTOTAL Tokens: {attachment_tokens:,}')
+            print()
 
     if (mdlang and not mdsave) or (mdsave and not mdlang):
         print('!!! need either both mdlang and mdsave, or neither')
@@ -173,6 +245,7 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         # Interactive mode
         if not quiet:
             print('    (Ctrl+D to finish)')
+            print()
             print(' >> ', end='')
         prompt = sys.stdin.read()
     else:
@@ -182,25 +255,80 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
     if not prompt:
         return
 
+    full_text = attachment_content + prompt
+    total_bytes = len(full_text.encode('utf-8'))
+    total_tokens = len(ENCODING.encode(full_text))
+
+    if work_file:
+        try:
+            with open(work_file, 'a', encoding='utf-8') as f:
+                f.write("--- PROMPT ---\n")
+                f.write(prompt)
+                f.write("\n\n--- INPUT TOTALS ---\n")
+                f.write(f"Bytes: {total_bytes:,}\n")
+                f.write(f"Tokens: {total_tokens:,}\n")
+        except Exception as e:
+            print(f"!!! Error writing prompt to transcript file {work_file}: {e}")
+            # Decide if we should continue without the work file.
+            # For now, we'll disable it and proceed.
+            work_file = None
+
     if not quiet:
+        print()
+        print(f'TOTAL INPUT Bytes: {total_bytes:,}')
+        print(f'TOTAL INPUT Tokens: {total_tokens:,}')
         print()
         print("...waiting for reply...")
 
     ai_provider = openai if use_openai else google
 
+    start_time = time.monotonic()
     if file:
         answer = ai_provider.prompt_with_file_for_text(prompt, file, chatter=chatter,
                                               model=model)
 
     else:
         answer = ai_provider.prompt_for_text(prompt, chatter=chatter, model=model)
+    end_time = time.monotonic()
+    turnaround_time = end_time - start_time
 
+    output_bytes = len(answer.encode('utf-8'))
+    output_tokens = len(ENCODING.encode(answer))
+
+    if work_file:
+        try:
+            with open(work_file, 'a', encoding='utf-8') as f:
+                f.write("\n\n--- ANSWER ---\n")
+                f.write(answer)
+                f.write("\n\n--- OUTPUT TOTALS ---\n")
+                f.write(f"Bytes: {output_bytes:,}\n")
+                f.write(f"Tokens: {output_tokens:,}\n")
+        except Exception as e:
+            print(f"!!! Error writing answer to transcript file {work_file}: {e}")
+            work_file = None # Disable further work operations on this file
+
+    summary = None
+    answer_for_display = answer
+    turnaround_summary_line = f"Turn-around time: {turnaround_time:.2f} seconds"
+
+    if work_file:
+        from . import worker
+        answer_for_display, summary = worker.do_work(prompt, answer, work_file) # worker will append summary
+        try:
+            with open(work_file, 'a', encoding='utf-8') as f:
+                f.write("\n\n--- PERFORMANCE ---\n")
+                f.write(f"{turnaround_summary_line}\n")
+        except Exception as e:
+            print(f"!!! Error writing performance to transcript file {work_file}: {e}")
+
+
+    md = None
     if mdlang:
         md = get_md_code_block(mdlang or None, answer)
-        if md: answer = answer.replace(md, '$$$ CODE EXTRACTED $$$')
+        if md: answer_for_display = answer.replace(md, '$$$ CODE EXTRACTED $$$')
 
     print()
-    print(f' << {answer}')
+    print(f' << {answer_for_display}')
     print()
 
     if mdsave:
@@ -213,6 +341,20 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         else:
             print(f'!! NO CODE TO SAVE')
 
+    if summary:
+        print(summary)
+        print()
+
+    if work_file:
+        print(f':: Transcript saved to: {work_file}')
+        print()
+
+    if not quiet:
+        print(f':: Output Bytes: {output_bytes:,}')
+        print(f':: Output Tokens: {output_tokens:,}')
+        print(f':: {turnaround_summary_line}')
+        print()
+
 
 def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
             chatter=False, model=None):
@@ -223,6 +365,8 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
     if not quiet:
         print('Perform a Task')
         print()
+
+    attachment_content = ""
 
     if shot or file or package:
         if sum([ 1 for item in [ shot, file, package ] if item ]) > 1:
@@ -236,13 +380,23 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
         elif package:
             file, counts = package_directory(package)
             if not quiet:
-                print(f'PACKAGED DIRECTORY to: {file}')
+                print(f'PACKAGED to: {file}')
                 if isinstance(counts, list):
                     for i, c in enumerate(counts):
                         print(c)
                         print(package[i])
                 else: print(counts)
                 print()
+
+    if file and not is_binary(file):
+        with open(file, 'r', encoding='utf-8') as f:
+            attachment_content = f.read()
+        attachment_bytes = len(attachment_content.encode('utf-8'))
+        attachment_tokens = len(ENCODING.encode(attachment_content))
+        if not quiet:
+            print(f'SUBTOTAL Bytes: {attachment_bytes:,}')
+            print(f'SUBTOTAL Tokens: {attachment_tokens:,}')
+            print()
 
     if prompt:
         if not quiet: print(f' >> {prompt}')
@@ -254,7 +408,14 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
     if not prompt:
         return
 
-    if not quiet: print()
+    if not quiet:
+        full_text = attachment_content + prompt
+        total_bytes = len(full_text.encode('utf-8'))
+        total_tokens = len(ENCODING.encode(full_text))
+        print(f'TOTAL INPUT Bytes: {total_bytes:,}')
+        print(f'TOTAL INPUT Tokens: {total_tokens:,}')
+        print()
+
     context = Context(file)
 
     try:
@@ -262,6 +423,14 @@ def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
 
         if result is not None:
             play_success()
+            if not quiet and result.path_name and os.path.exists(result.path_name) and not is_binary(result.path_name):
+                with open(result.path_name, 'r', encoding='utf-8') as f:
+                    result_content = f.read()
+                output_bytes = len(result_content.encode('utf-8'))
+                output_tokens = len(ENCODING.encode(result_content))
+                print()
+                print(f':: Total Output Bytes: {output_bytes:,}')
+                print(f':: Output Tokens: {output_tokens:,}')
             return result
 
         else:
@@ -448,12 +617,12 @@ OPTIONS = {
         'print all chatter (even when quiet is enabled)'),
     '-s': (None,
         'take screenshot to use with prompt'),
-    '-f': (None,
-        'upload file with -f <filename>'),
-    '-p': (None,
-        'package directory text contents and upload with -p <directory>'),
+    '-a': (None,
+        'attach binary image/document with -a <filename>'),
     '-e': (None,
-        '(ask only) extract markdown code and save with -e <language> <file>'),
+        '(ask only) extract a single markdown code block and save with -e <language> <file>'),
+    '-w': (None,
+        '(ask only) work on files, applying code blocks from reply, saves transcript to a temporary log file (also --work)'),
     '--openai': (None,
         '(ask only) use OpenAI models instead of Google Gemini'),
     '-1': (None,
@@ -485,4 +654,3 @@ COMMANDS = {
     'iosk': (iosk,
         'run iosk system'),
 }
-

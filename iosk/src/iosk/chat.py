@@ -29,6 +29,35 @@ class AIMessenger:
         self.room_owner = None
         self.local_room_participants = set()
 
+    async def _broadcast_room_state_update(self):
+        """Gathers current room state and broadcasts it to clients."""
+        if not self.os.port: return
+
+        # Gather participants from local and network
+        all_participants = set()
+        if self.active_room:
+            all_participants.update(self.local_room_participants)
+            for user_addr, room_name in self.os.network_rooms.items():
+                if room_name == self.active_room:
+                    user_part, host_part = user_addr.split('.', 1)
+                    # To present a clean list, show local users by name and remote by full address
+                    if host_part == self.os.hostname:
+                        all_participants.add(user_part)
+                    else:
+                        all_participants.add(user_addr)
+
+        # Get available rooms. Need a valid IO context for kernel calls. Use system.
+        available_rooms = await self.os.get_room_list(self.os.system)
+
+        payload = {
+            'type': 'room_state_update',
+            'roomName': self.active_room,
+            'roomTopic': self.room_topic,
+            'participants': sorted(list(all_participants)),
+            'availableRooms': available_rooms
+        }
+        await self.os.port.broadcast_to_clients(payload)
+
     async def _setup_chat_context(self, io):
         """Executes preamble, caches it, and calculates initial token counts."""
         # --- Preamble Caching ---
@@ -261,6 +290,7 @@ class AIMessenger:
         })
         # Broadcast system message to all hosts
         await self.os.port.broadcast_to_peers({'type': 'system_broadcast', 'message': open_msg})
+        await self._broadcast_room_state_update()
         return True
 
     async def close_room(self, io) -> bool:
@@ -300,6 +330,7 @@ class AIMessenger:
         })
         # Broadcast system message to all hosts
         await self.os.port.broadcast_to_peers({'type': 'system_broadcast', 'message': close_msg})
+        await self._broadcast_room_state_update()
         return True
 
     async def add_to_room(self, target_io) -> bool:
@@ -323,6 +354,7 @@ class AIMessenger:
             if user != target_io.user and user in self.os.users:
                 await self.os.users[user].print(arrival_msg)
 
+        await self._broadcast_room_state_update()
         return True
 
     async def remove_from_room(self, user_name: str):
@@ -338,6 +370,8 @@ class AIMessenger:
             departure_msg = f":: {user_name} has left the room."
             for user in self.local_room_participants:
                 await self.os.users[user].print(departure_msg)
+            
+            await self._broadcast_room_state_update()
 
     async def handle_network_message(self, message: dict):
         msg_type = message.get("type")
@@ -673,4 +707,3 @@ class Engagement:
 
         # Remove the original markdown block from the text that will be processed for chat broadcast.
         return text.replace(original_block, '')
-

@@ -1,4 +1,4 @@
-# src/iosk/kernel.py
+# sk/iosk/kernel.py
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
@@ -17,12 +17,13 @@ import aioconsole
 from datetime import datetime, timedelta
 import os
 import posixpath
-from os.path import isdir, isfile, exists
+from os.path import isdir, isfile, exists, getsize
 import importlib, importlib.util
 import sys
 import shutil
 import traceback
 from io import StringIO
+import random
 
 
 # Added for the process management proposal
@@ -290,6 +291,77 @@ class IOSK:
     ### USER LIFECYCLE
     ###
 
+    async def get_motd(self, io: Context) -> str:
+        """
+        Gets the Message of the Day.
+        If /etc/motd is a file, returns its content.
+        If /etc/motd is a directory, returns the content of a randomly selected file from it.
+        """
+        motd_path_virtual = '/etc/motd'
+        motd_path_host = self.box(motd_path_virtual, io_context=io)
+
+        if not await self.exists(io, motd_path_virtual):
+            return ""  # No MOTD found
+
+        if isdir(motd_path_host):
+            try:
+                # Use kernel's list_dir to get contents
+                dir_contents = await self.list_dir(io, motd_path_virtual)
+
+                # Filter for files only
+                files = [item['name'] for item in dir_contents if item['type'] == 'file']
+
+                if not files:
+                    return ""  # Directory is empty
+
+                random_motd_filename = random.choice(files)
+                random_motd_path_virtual = posixpath.join(motd_path_virtual, random_motd_filename)
+
+                # Now, use self.get() to read the file content.
+                content = await self.get(io, random_motd_path_virtual)
+                return content or ""
+
+            except Exception as e:
+                await self.system.error(f"!! Error reading MOTD from directory {motd_path_virtual}: {e}")
+                traceback.print_exc()
+                return ""
+
+        elif isfile(motd_path_host):
+            # It's a file, use self.get() as before.
+            content = await self.get(io, motd_path_virtual)
+            return content or ""
+
+        else:
+            # It exists but is not a file or directory.
+            return ""
+
+    async def run_post_login_setup(self, io: Context):
+        """Runs startup scripts and other setup after a user is fully logged in."""
+        if not io or not io.user:
+            return
+
+        # Display MOTD if not joining a room.
+        # This mirrors the logic for network clients in port.py.
+        if not (self.chat and self.chat.active_room):
+            motd_content = getattr(io, 'motd_cache', None)
+            if motd_content:
+                await io.print(motd_content)
+
+        # Execute system-wide skrc
+        skrc_global_path = self.SKRC
+        if exists(self.box(skrc_global_path)):
+            await self.exec(io, skrc_global_path)
+
+        # Execute user-specific .skrc
+        # The user's PWD is set to their home directory (e.g., /root, /home/user)
+        # So we can construct the .skrc path relative to PWD.
+        skrc_user_path = posixpath.join(io.pwd, '.skrc')
+        if await self.exists(io, skrc_user_path): # Use self.exists as it handles virtual paths properly
+            await self.exec(io, skrc_user_path)
+
+        if self.chat and self.chat.active_room:
+            await self.chat.add_to_room(io)
+
     async def login(self, user, device=None, interactive:bool=True,
                     connect=None, io_callback=None):
         """Log-in to get a Context."""
@@ -361,24 +433,15 @@ class IOSK:
                     # For now, allow login to proceed but log the error.
             io.pwd = home_dir_virtual # Set the current working directory for the user
 
+        # Determine and cache the MOTD for this session to ensure consistency.
+        io.motd_cache = await self.get_motd(io)
+
         if io_callback:
             await io_callback(io)
 
         if connect:
             if self.chat: await self.chat.send(user, connect, sys=True)
             else: await io.print(connect)
-
-        # Execute system-wide skrc
-        skrc_global_path = self.SKRC
-        if exists(self.box(skrc_global_path)):
-            await self.exec(io, skrc_global_path)
-
-        # Execute user-specific .skrc
-        # The user's PWD is set to their home directory (e.g., /root, /home/user)
-        # So we can construct the .skrc path relative to PWD.
-        skrc_user_path = posixpath.join(io.pwd, '.skrc')
-        if await self.exists(io, skrc_user_path): # Use self.exists as it handles virtual paths properly
-            await self.exec(io, skrc_user_path)
 
         # MODIFIED: Update local network_users and then broadcast
         user_addr = f"{user}.{self.hostname}"
@@ -398,8 +461,8 @@ class IOSK:
                 'message': login_msg
             })
 
-        if self.chat and self.chat.active_room:
-            await self.chat.add_to_room(io)
+        # For local logins, run post-setup immediately.
+        await self.run_post_login_setup(io)
 
         return io
 
@@ -444,11 +507,12 @@ class IOSK:
                             command_line = line
 
                         if is_command:
-                            # Check for built-in exit commands before executing
-                            # This handles 'exit' and 'logout' without a '$' at the shell prompt.
+                            # Check for built-in exit commands before executing.
+                            # This is now the sole place `exit` is handled.
                             first_word = command_line.strip().split(' ', 1)[0]
                             if first_word in ('exit', 'logout'):
-                                raise EOFError
+                                await self.logout(io)
+                                return 'logout' # Return reason for exit
 
                             if command_line:
                                 io.history.append(command_line)
@@ -461,7 +525,7 @@ class IOSK:
 
                 except EOFError: # This handles Ctrl+D to log out
                     await self.logout(io)
-                    return
+                    return 'eof' # Return reason for exit
 
             except KeyboardInterrupt: # This handles Ctrl+C at the prompt
                 # When Ctrl+C is pressed while idle, aioconsole raises KeyboardInterrupt.
@@ -478,6 +542,7 @@ class IOSK:
         await self.system.print(logout_msg)
 
         user_to_logout = io.user
+        user_is_network_client = io.dev.startswith('network:')
         del self.users[user_to_logout]
 
         if disconnect:
@@ -502,6 +567,9 @@ class IOSK:
                 'type': 'system_broadcast',
                 'message': logout_msg
             })
+            # If the user was a network client, close their connection
+            if user_is_network_client:
+                await self.port.disconnect_client(user_to_logout)
 
         return True
 
@@ -558,14 +626,8 @@ class IOSK:
                     await self.system.error(f"!! failed to create home directory {home_dir_virtual} for network user {username}: {e}")
             io.pwd = home_dir_virtual
 
-        skrc_global_path = self.SKRC
-        if exists(self.box(skrc_global_path)):
-            await self.exec(io, skrc_global_path)
-
-        # Use the user's PWD to find their .skrc file
-        skrc_user_path = posixpath.join(io.pwd, '.skrc')
-        if await self.exists(io, skrc_user_path): # Use self.exists for consistency
-            await self.exec(io, skrc_user_path)
+        # Determine and cache the MOTD for this session to ensure consistency.
+        io.motd_cache = await self.get_motd(io)
 
         # MODIFIED: Update local network_users and then broadcast
         user_addr = f"{username}.{self.hostname}"
@@ -583,9 +645,7 @@ class IOSK:
                 'message': login_msg
             })
 
-        if self.chat and self.chat.active_room:
-            await self.chat.add_to_room(io)
-
+        # Do not run post-login setup here. The PortManager will do it.
         asyncio.create_task(self.interactive(io))
 
         return io
@@ -677,6 +737,37 @@ class IOSK:
     ###
     ### FILE OPS
     ###
+
+    async def get_room_list(self, io: Context) -> list:
+        """
+        Lists all created rooms on the local system.
+        Returns a list of dictionaries, each with 'name' and 'topic'.
+        """
+        room_dir_virtual = '/var/room'
+        room_dir_host = self.box(room_dir_virtual, io_context=io)
+
+        if not exists(room_dir_host) or not isdir(room_dir_host):
+            return []
+
+        try:
+            room_names = sorted([
+                name for name in os.listdir(room_dir_host)
+                if isdir(os.path.join(room_dir_host, name))
+            ])
+        except OSError:
+            return []
+
+        room_data = []
+        for name in room_names:
+            topic_path = posixpath.join(room_dir_virtual, name, 'topic')
+            topic = ""
+            if await self.exists(io, topic_path):
+                 topic_content = await self.get(io, topic_path)
+                 if topic_content:
+                     topic = topic_content.strip()
+            room_data.append({'name': name, 'topic': topic})
+
+        return room_data
 
     async def exists(self, io:Context, path:str):
         """Test if path exists, considering both physical files and Python modules."""
@@ -815,6 +906,29 @@ class IOSK:
             await io.error(f"!! failed to remove directory '{path}': {e}")
             return False
 
+    async def list_dir(self, io: Context, path: str) -> list:
+        """Lists the contents of a directory in the sandbox."""
+        host_path = self.box(path, io_context=io)
+        if not exists(host_path):
+            raise FileNotFoundError(f"Path not found: {path}")
+        if not isdir(host_path):
+            raise NotADirectoryError(f"Path is not a directory: {path}")
+
+        listing = []
+        try:
+            for item_name in sorted(os.listdir(host_path)):
+                full_item_path = os.path.join(host_path, item_name)
+                item_type = 'dir' if isdir(full_item_path) else 'file'
+                try:
+                    size = getsize(full_item_path)
+                except OSError:
+                    size = -1
+                listing.append({'name': item_name, 'type': item_type, 'size': size})
+        except OSError as e:
+            await io.error(f"Error reading directory {path}: {e}")
+            raise
+        return listing
+
     ###
     ### FILE I/O
     ###
@@ -836,6 +950,26 @@ class IOSK:
 
         with open(file, 'r', encoding='utf-8') as file:
             return file.read()
+
+    async def get_raw(self, io:Context, path:str):
+        """Get raw file contents as bytes, and determine if it's binary."""
+        file = self.box(path, io_context=io)
+        if not exists(file):
+            error_msg = f'path not found: {path}'
+            return None, False, error_msg
+
+        if not isfile(file):
+            error_msg = f'not a file: {path}'
+            return None, False, error_msg
+        
+        try:
+            is_binary_file = is_binary(file)
+            with open(file, 'rb') as f:
+                content = f.read()
+            return content, is_binary_file, None
+        except Exception as e:
+            error_msg = f'could not read file: {e}'
+            return None, False, error_msg
 
     async def send(self, io:Context, dev:str, data):
         """Send data to device."""
@@ -867,7 +1001,7 @@ class IOSK:
         """Receive data from device."""
         if dev.startswith('network:'):
             if prompt and self.port:
-                await self.port.send_to_client(io.user, prompt)
+                await self.port.send_prompt_to_client(io.user, prompt)
 
             if hasattr(io, 'network_input_queue'):
                 return await io.network_input_queue.get()
@@ -1061,4 +1195,3 @@ class IOSK:
             except ModuleNotFoundError: pass
 
         return py
-

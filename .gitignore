@@ -1,4 +1,6 @@
 *.swp
+*.bak
+*.orig
 *~
 
 *.egg-info/

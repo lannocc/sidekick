@@ -2,7 +2,10 @@ SIDEKICK.egg-info
 build
 dist
 doc
+iosk
 node_modules
 scripts
+#sk
+sphinx
 venv
 

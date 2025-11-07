@@ -1,4 +1,4 @@
-# src/iosk/port.py
+# sk/iosk/port.py
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
@@ -9,6 +9,8 @@ import traceback
 import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, Any, Optional
+import shlex
+import base64
 
 import websockets
 from websockets.server import WebSocketServerProtocol
@@ -270,6 +272,46 @@ class PortManager:
         # The `mesh` command should not block. Run the connection logic in the background.
         asyncio.create_task(_outbound_connect_and_manage())
 
+    async def send_to_client(self, username: str, data: str):
+        """Sends a data payload to a specific connected client."""
+        target_ws: Optional[WebSocketServerProtocol] = None
+        for ws, conn_meta in self.active_connections.items():
+            if conn_meta.type == 'client' and conn_meta.username == username:
+                target_ws = ws
+                break
+
+        if not target_ws:
+            log.warning(f"send_to_client: Could not find active connection for user '{username}'.")
+            return
+
+        payload = {"output": data}
+        message_to_send = f"SK1:{json.dumps(payload)}"
+
+        try:
+            await target_ws.send(message_to_send)
+        except ConnectionClosed:
+            log.info(f"send_to_client: Connection for user '{username}' was already closed.")
+
+    async def send_prompt_to_client(self, username: str, prompt_str: str):
+        """Sends a prompt payload to a specific connected client."""
+        target_ws: Optional[WebSocketServerProtocol] = None
+        for ws, conn_meta in self.active_connections.items():
+            if conn_meta.type == 'client' and conn_meta.username == username:
+                target_ws = ws
+                break
+
+        if not target_ws:
+            log.warning(f"send_prompt_to_client: Could not find active connection for user '{username}'.")
+            return
+
+        payload = {"prompt": prompt_str}
+        message_to_send = f"SK1:{json.dumps(payload)}"
+
+        try:
+            await target_ws.send(message_to_send)
+        except ConnectionClosed:
+            log.info(f"send_prompt_to_client: Connection for user '{username}' was already closed.")
+
     async def broadcast_to_peers(self, message: Dict[str, Any]):
         """Sends a message to all connected IOSK peer systems."""
         if not self.peers:
@@ -277,6 +319,17 @@ class PortManager:
 
         payload = json.dumps(message)
         aws = [ws.send(payload) for ws in self.peers.values()]
+        await asyncio.gather(*aws, return_exceptions=True)
+
+    async def broadcast_to_clients(self, message: Dict[str, Any]):
+        """Sends a message to all connected GUI clients."""
+        clients = [ws for ws, conn in self.active_connections.items() if conn.type == 'client']
+        if not clients:
+            return
+
+        # Use the SK1: protocol wrapper for clients
+        payload = f"SK1:{json.dumps(message)}"
+        aws = [ws.send(payload) for ws in clients]
         await asyncio.gather(*aws, return_exceptions=True)
 
     async def route_message(self, target_host: str, message: Dict[str, Any]):
@@ -360,6 +413,26 @@ class PortManager:
 
         return final_success
 
+    async def disconnect_client(self, username: str):
+        """
+        Finds and closes the connection for a specific client username.
+        Called by the kernel when a network user logs out.
+        """
+        target_ws: Optional[WebSocketServerProtocol] = None
+        for ws, conn_meta in self.active_connections.items():
+            if conn_meta.type == 'client' and conn_meta.username == username:
+                target_ws = ws
+                break
+
+        if target_ws:
+            log.info(f"Programmatically disconnecting client '{username}' on server-side logout.")
+            # Closing the connection will trigger the cleanup logic in the
+            # _connection_handler's finally block.
+            await target_ws.close(1000, "User logged out")
+        else:
+            # This might happen if the connection was already dropped, which is not an error.
+            log.warning(f"disconnect_client: Could not find active connection for user '{username}' to disconnect.")
+
     # --------------------------------------------------------------------------
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
@@ -367,23 +440,23 @@ class PortManager:
     async def _connection_handler(self, websocket: WebSocketServerProtocol): #, path: str):
         """Handles the entire lifecycle of a single network connection."""
         connection_metadata = None
+        io_context = None
         try:
-            connection_metadata = await self._handshake(websocket)
+            connection_metadata, io_context = await self._handshake(websocket)
             if connection_metadata:
                 self.active_connections[websocket] = connection_metadata
                 log.info(f"Handshake successful: {connection_metadata}")
 
-                # --- MESHING PROPAGATION ---
                 if connection_metadata.type == 'peer':
                     new_peer_host = connection_metadata.hostname
-                    # The address is from the incoming websocket connection
                     addr = websocket.remote_address
                     new_peer_addr = f"{addr[0]}:{addr[1]}"
                     await self._broadcast_peer_connect(new_peer_host, new_peer_addr)
-
-                    # Announce connection to local system log
                     await self.kernel.system.print(f":: host '{new_peer_host}' connected to mesh")
-                # --- END MESHING PROPAGATION ---
+                elif connection_metadata.type == 'client':
+                    # Now that the connection is registered, run post-login scripts.
+                    if io_context:
+                        await self.kernel.run_post_login_setup(io_context)
 
                 await self._message_loop(websocket, connection_metadata)
         except ConnectionClosed:
@@ -394,8 +467,8 @@ class PortManager:
         finally:
             await self._cleanup_and_propagate_disconnect(websocket)
 
-    async def _handshake(self, websocket: WebSocketServerProtocol) -> Optional[Connection]:
-        """Performs the initial handshake to identify the connection type."""
+    async def _handshake(self, websocket: WebSocketServerProtocol) -> Optional[tuple[Connection, Optional["Context"]]]:
+        """Performs handshake. Returns (Connection, io_context) or (None, None)."""
         message_str = await websocket.recv()
         message = json.loads(message_str)
 
@@ -413,14 +486,14 @@ class PortManager:
                 await self.kernel.system.error(f"!! Peer handshake rejected: {reason}")
                 await websocket.send(json.dumps({"type": "handshake_ack", "status": "error", "reason": reason}))
                 await websocket.close(1008, reason)  # 1008 is "policy violation"
-                return None
+                return None, None
 
             if hostname in self.peers:
                 reason = f"Hostname '{hostname}' already exists in the mesh."
                 await self.kernel.system.error(f"!! Peer handshake rejected: {reason}")
                 await websocket.send(json.dumps({"type": "handshake_ack", "status": "error", "reason": reason}))
                 await websocket.close(1008, reason)
-                return None
+                return None, None
 
             # Before state update, capture current network state for diffing
             old_network_users = set(self.kernel.network_users.keys())
@@ -477,7 +550,7 @@ class PortManager:
                 newly_learned_users_list=message.get("users", [])
             )
 
-            return Connection(websocket=websocket, type='peer', hostname=hostname)
+            return Connection(websocket=websocket, type='peer', hostname=hostname), None
 
         elif conn_id == "client":
             username = message.get("user")
@@ -490,7 +563,39 @@ class PortManager:
                 raise ValueError(f"Client login failed for user {username}")
 
             await websocket.send(json.dumps({"type": "handshake_ack", "status": "ok", "hostname": self.kernel.hostname}))
-            return Connection(websocket=websocket, type='client', username=username)
+
+            # Send initial state info to the new client
+            initial_state_payload = {'type': 'state_info'}
+            # Get available rooms, using the user's new io_context
+            available_rooms = await self.kernel.get_room_list(io_context)
+            initial_state_payload['availableRooms'] = available_rooms
+            if self.kernel.chat and self.kernel.chat.active_room:
+                # Room is active, send room state
+                room = self.kernel.chat
+
+                # Gather participants
+                all_participants = set(room.local_room_participants)
+                for user_addr, room_name in self.kernel.network_rooms.items():
+                    if room_name == room.active_room:
+                            user_part, host_part = user_addr.split('.', 1)
+                            if host_part == self.kernel.hostname:
+                                all_participants.add(user_part)
+                            else:
+                                all_participants.add(user_addr)
+
+                initial_state_payload.update({
+                    'roomName': room.active_room,
+                    'roomTopic': room.room_topic,
+                    'participants': sorted(list(all_participants))
+                })
+            else:
+                # No room, send MOTD. The MOTD was selected and cached during login.
+                motd_content = getattr(io_context, 'motd_cache', None)
+                initial_state_payload['motd'] = motd_content or ''
+
+            await websocket.send(f"SK1:{json.dumps(initial_state_payload)}")
+
+            return Connection(websocket=websocket, type='client', username=username), io_context
 
         else:
             raise ValueError(f"Invalid handshake: unknown id '{conn_id}'")
@@ -521,7 +626,7 @@ class PortManager:
                 from_peer_hostname = conn_meta.hostname
                 await self._handle_peer_update(message, from_peer=from_peer_hostname)
 
-            elif msg_type in ("user_update", "room_update"):
+            elif msg_type in ("user_update", "room_update", "room_state_update"):
                 # 1. Process locally first
                 await self._process_network_state_update(message)
                 # 2. Forward the update to all other peers
@@ -574,6 +679,40 @@ class PortManager:
                     await self.kernel.handle_client_input(conn_meta.username, message.get("data", ""))
                 else:
                     log.warning("Received client_input from non-client connection.")
+            
+            elif msg_type == "room_action":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    action = message.get("action")
+                    if action == "join":
+                        room_name = message.get("roomName")
+                        if room_name:
+                            command = f"$ room {shlex.quote(room_name)}"
+                            await self.kernel.handle_client_input(conn_meta.username, command + '\n')
+                    elif action == "close":
+                        command = "$ clroom"
+                        await self.kernel.handle_client_input(conn_meta.username, command + '\n')
+                else:
+                    log.warning("Received room_action from non-client connection.")
+
+            elif msg_type == "fs_list":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    path = message.get("path", "/")
+                    io_context = self.kernel.users.get(conn_meta.username)
+                    if io_context:
+                        await self._handle_fs_list(websocket, io_context, path)
+                else:
+                    log.warning("Received fs_list from non-client connection.")
+
+            elif msg_type == "fs_read":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    path = message.get("path")
+                    requesterId = message.get("requesterId")
+                    io_context = self.kernel.users.get(conn_meta.username)
+                    if io_context and path is not None and requesterId is not None:
+                        await self._handle_fs_read(websocket, io_context, path, requesterId)
+                else:
+                    log.warning("Received fs_read from non-client or malformed request.")
+
             else:
                 log.warning(f"Received unknown message type: {msg_type}")
 
@@ -581,6 +720,49 @@ class PortManager:
             log.error("Failed to decode JSON message.")
         except Exception:
             log.error(f"Error dispatching message: {traceback.format_exc()}")
+
+    async def _handle_fs_list(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str):
+        """Handles a file system list request from a client."""
+        response = {"type": "fs_list_response", "path": path}
+        try:
+            listing = await self.kernel.list_dir(io_context, path)
+            response["listing"] = listing
+        except FileNotFoundError as e:
+            response["error"] = str(e)
+        except NotADirectoryError as e:
+            response["error"] = str(e)
+        except Exception as e:
+            log.error(f"Error during fs_list for {io_context.user} at '{path}': {e}")
+            response["error"] = "An internal server error occurred."
+
+        message_to_send = f"SK1:{json.dumps(response)}"
+        try:
+            await websocket.send(message_to_send)
+        except ConnectionClosed:
+            # This is expected if the user closes the window quickly.
+            log.info(f"Could not send fs_list response to {io_context.user}, connection closed.")
+
+    async def _handle_fs_read(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Any):
+        """Handles a file read request from a client."""
+        response = {
+            "type": "fs_read_response",
+            "path": path,
+            "requesterId": requesterId
+        }
+        
+        content_bytes, is_binary, error = await self.kernel.get_raw(io_context, path)
+
+        if error:
+            response["error"] = error
+        else:
+            response["content_b64"] = base64.b64encode(content_bytes).decode('ascii')
+            response["is_binary"] = is_binary
+
+        message_to_send = f"SK1:{json.dumps(response)}"
+        try:
+            await websocket.send(message_to_send)
+        except ConnectionClosed:
+            log.info(f"Could not send fs_read response to {io_context.user}, connection closed.")
 
     async def _handle_remote_exec(self, websocket: WebSocketServerProtocol, message: Dict[str, Any]):
         """Handles a remote execution request and streams output back."""
@@ -718,6 +900,9 @@ class PortManager:
                 users_on_host = [u_addr for u_addr in self.kernel.network_users if u_addr.endswith(f'.{host}')]
                 for user_addr in users_on_host:
                     self.kernel.network_rooms[user_addr] = room_name
+
+        if self.kernel.chat:
+            await self.kernel.chat._broadcast_room_state_update()
 
     # --------------------------------------------------------------------------
     # MESHING-SPECIFIC METHODS
@@ -888,4 +1073,3 @@ class PortManager:
 
             # 3. Propagate the disconnection to remaining peers
             await self._broadcast_peer_disconnect(disconnected_host)
-

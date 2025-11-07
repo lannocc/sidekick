@@ -107,6 +107,8 @@ def get_ignore_set(path):
 def is_ignorable_path(item, ignores=[ ]):
     return item.startswith('.') \
                 or item.endswith('~') \
+                or item.endswith('.bak') \
+                or item.endswith('.orig') \
                 or item == '__pycache__' \
                 or item in ignores
 
@@ -229,34 +231,80 @@ def get_directory_contents_as_text(path):
 
 
 def package_directory(path, label='project'): # path can be a str or list of str
+    def _get_formatted_file_content(full_path):
+        item = os.path.basename(full_path)
+        hint = 'python' if item.endswith('.py') else \
+               'svelte' if item.endswith('.svelte') else \
+               'markdown' if item.endswith('.md') else \
+               'rst' if item.endswith('.rst') else \
+               'html' if item.endswith('.html') else \
+               'css' if item.endswith('.css') else \
+               'javascript' if item.endswith('.js') else \
+               'json' if item.endswith('.json') else \
+               'config' if item.endswith('.conf') or item.endswith('.theme') else \
+               'bat' if item.endswith('.bat') else \
+               'shell' if item.endswith('.sh') or item.endswith('.bash') else \
+               'text' if item.endswith('.txt') else ''
+
+        text = f'\n>>> BEGIN FILE {full_path}:\n'
+        text += f'```{hint}\n'
+        try:
+            with open(full_path, 'r', encoding='utf-8') as file:
+                text += file.read()
+        except Exception:
+            print(f'ERROR READING FILE: {full_path}')
+            raise
+        text += '```\n'
+        text += '<<< END FILE\n\n'
+        return text
+
+    import tiktoken
     fd, name = tempfile.mkstemp(prefix='sidekick-package-', suffix='.txt')
 
     paths = path if isinstance(path, list) else [ path ]
-    counts = [ ]
+    counts = []
+    content_buffer = {} # path -> {'type': 'dir'|'file', 'tree'?: str, 'content': str}
 
+    # First pass: generate content for all paths and store in buffer to calculate counts later
+    for p in paths:
+        if os.path.isdir(p):
+            tree_text = get_directory_tree_as_text(p, count=False)
+            content_text = get_directory_contents_as_text(p)
+            full_data_for_count = tree_text + content_text
+            content_buffer[p] = {'type': 'dir', 'tree': tree_text, 'content': content_text}
+        elif os.path.isfile(p):
+            content_text = _get_formatted_file_content(p)
+            full_data_for_count = content_text
+            content_buffer[p] = {'type': 'file', 'content': content_text}
+
+        data_bytes = full_data_for_count.encode('utf-8')
+        tokens = tiktoken.get_encoding('cl100k_base').encode(full_data_for_count)
+        count_str = f'\nTotal Bytes: {len(data_bytes):,}\nEst. Tokens: {len(tokens):,}'
+        counts.append(count_str)
+
+    # Second pass: write the collected content to the temp file
     with open(name, 'w', encoding='utf-8') as file:
-        file.write(f'Our {label} is laid out as given in the following file '
-                    'hierarchy:\n\n')
+        file.write(f'Our {label} is laid out as given in the following file hierarchy:\n\n')
 
+        # Write tree/file list section
         for p in paths:
-            file.write(f'{p}{os.sep}\n')
-            try: tree = get_directory_tree_as_text(p, count=True)
-            except:
-                print(f'FAILED AT PATH: {p}')
-                raise
-            sep = tree.index(BYTES_SEPARATOR)
-            counts.append(tree[sep+len(BYTES_SEPARATOR):])
-            tree = tree[:sep]
-            file.write(tree)
+            info = content_buffer[p]
+            if info['type'] == 'dir':
+                file.write(f'{p}{os.sep}\n')
+                file.write(info['tree'])
+            else: # 'file'
+                file.write(f'{p}\n')
 
         file.write('\n\n')
-        file.write('The contents of each file are given in succession below...'
-                   '\n\n')
+        file.write('The contents of each file are given in succession below...\n\n')
 
+        # Write content section
         for p in paths:
-            file.write(get_directory_contents_as_text(p))
+            file.write(content_buffer[p]['content'])
 
-    if not isinstance(path, list): counts = counts[0]
+    # Ensure counts return type matches original behavior for single-item calls
+    if not isinstance(path, list) and counts:
+        counts = counts[0]
     return name, counts
 
 
