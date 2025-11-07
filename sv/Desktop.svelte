@@ -57,6 +57,10 @@
         background-position: center;
         transition: background 0.5s ease-in-out;
     }
+    .desktop.dashboard-active .windows-layer {
+        /* Hide windows without unmounting components, preserving their state */
+        visibility: hidden;
+    }
     .desktop::before {
         content: '';
         position: absolute;
@@ -74,14 +78,13 @@
 </style>
 
 <div class="desktop" class:dashboard-active={$dashboardActive} style:background={backgroundStyle}>
-    {#if !$dashboardActive}
+    <div class="windows-layer">
         {#each $windows as win (win.id)}
             <Window {...win} />
         {/each}
-    {/if}
+    </div>
 
     {#if $dashboardActive}
         <Dashboard />
     {/if}
 </div>
-
