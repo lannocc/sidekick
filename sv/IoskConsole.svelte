@@ -78,6 +78,14 @@
         commandInput?.focus();
     }
 
+    function handleClickOnTerminal() {
+        // Only focus the input if the user is not selecting text.
+        // A collapsed selection means the user just clicked, not dragged to select.
+        if (window.getSelection().isCollapsed) {
+            focusInput();
+        }
+    }
+
     function handleGlobalClick(event) {
         if (showRoomsMenu && roomsButton && !roomsButton.contains(event.target)) {
             showRoomsMenu = false;
@@ -609,7 +617,7 @@
 
     <div class="main-flex-area">
         <div class="terminal-wrapper">
-            <div class="terminal" bind:this={terminalEl} on:scroll={() => shouldScroll = (terminalEl.scrollTop + terminalEl.clientHeight >= terminalEl.scrollHeight - 10)} on:click={focusInput}>
+            <div class="terminal" bind:this={terminalEl} on:scroll={() => shouldScroll = (terminalEl.scrollTop + terminalEl.clientHeight >= terminalEl.scrollHeight - 10)} on:click={handleClickOnTerminal}>
                 {#each output as line}
                     <div class="terminal-line" class:prompt={line.type === 'prompt'}>
                         {line.content}
