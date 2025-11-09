@@ -36,11 +36,12 @@
         visible: false,
         x: 0,
         y: 0,
-        layoutId: null
+        layoutId: null,
+        type: 'saved'
     };
 
     function closeContextMenu() {
-        contextMenu = { visible: false, x: 0, y: 0, layoutId: null };
+        contextMenu = { visible: false, x: 0, y: 0, layoutId: null, type: saved };
     }
 
     function handleKeydown(e) {
@@ -70,7 +71,8 @@
             visible: true,
             x: event.clientX,
             y: event.clientY,
-            layoutId: layout.id
+            layoutId: layout.id,
+            type: 'saved'
         };
     }
 
@@ -108,6 +110,46 @@
             }
         }, 0);
     }
+
+    function handleCurrentDesktopRightClick(event) {
+        event.preventDefault();
+        contextMenu = {
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+            layoutId: null,
+            type: 'current'
+        };
+    }
+
+    function handleSaveAs() {
+        closeContextMenu();
+        setTimeout(() => {
+            const defaultName = `Layout ${get(dashLayouts).length + 1}`;
+            const newName = prompt("Enter a name for the new layout:", defaultName);
+
+            if (newName && newName.trim() !== '') {
+                const currentWindows = get(windows);
+                const layoutToSave = generateLayoutObject(
+                    currentWindows,
+                    newName.trim(),
+                    Date.now()
+                );
+
+                dashLayouts.update(layouts => [...layouts, layoutToSave]);
+
+                lastSavedLayoutSnapshot = generateLayoutSnapshot(currentWindows);
+                isLayoutDirty = false;
+            }
+        }, 0);
+    }
+
+    function handleDeleteCurrent() {
+        closeContextMenu();
+        // This function already handles confirmation and closing all windows.
+        handleCancelDash();
+    }
+
     // --- End Context Menu Logic ---
 
 
@@ -394,6 +436,7 @@
         display: flex;
         gap: 40px;
         margin-top: 40px; /* space for header */
+        min-height: 0; /* For robust flex behavior */
     }
 
     .dash-preview {
@@ -515,6 +558,13 @@
         color: white;
     }
 
+    @media (max-width: 900px) {
+        .dash-body {
+            flex-direction: column;
+            gap: 20px;
+        }
+    }
+
 </style>
 
 <div class="dash-dialog">
@@ -566,6 +616,7 @@
                     on:mouseleave={() => manualPreviewedLayout = null}
                     role="button" 
                     tabindex="0"
+                    on:contextmenu|preventDefault={handleCurrentDesktopRightClick}
                     on:keydown={e => e.key === 'Enter' && handleMaximizeDash()}
                 >
                     {currentLayout.name}
@@ -597,7 +648,12 @@
         style="top: {contextMenu.y}px; left: {contextMenu.x}px;"
         on:click|stopPropagation
     >
-        <button on:click={handleRenameLayout}>Rename</button>
-        <button class="delete" on:click={handleDeleteLayout}>Delete</button>
+        {#if contextMenu.type === 'current'}
+            <button on:click={handleSaveAs}>Save As...</button>
+            <button class="delete" on:click={handleDeleteCurrent}>Delete</button>
+        {:else} <!-- Default to saved layout menu -->
+            <button on:click={handleRenameLayout}>Rename</button>
+            <button class="delete" on:click={handleDeleteLayout}>Delete</button>
+        {/if}
     </div>
 {/if}

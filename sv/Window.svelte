@@ -511,7 +511,7 @@
                 title={maximized ? 'Restore' : 'Maximize'}
                 on:click={() => windows.toggleMaximize(id)}
                 on:mousedown|stopPropagation>
-                &#9632;
+                {@html maximized ? '&#128470;' : '&#9632;'}
             </div>
             <div
                 class="window-control options-menu-button"
