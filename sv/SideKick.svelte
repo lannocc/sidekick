@@ -7,6 +7,8 @@
     import Desktop from './Desktop.svelte';
     import Taskbar from './Taskbar.svelte';
     import { windows } from './windows.js';
+    import { dashActive, dashLayouts, dashCycleIndex } from './desktopStore.js';
+    import { get } from 'svelte/store';
 
     function handleKeyDown(e) {
         // Check for Meta/Alt + ` or Meta/Alt + ~ (Shift + `)
@@ -16,6 +18,48 @@
             // e.shiftKey is true for '~', false for '`'
             const forward = !e.shiftKey;
             windows.cycleWindow(forward);
+        }
+
+        // Dash layout cycling
+        if ((e.metaKey || e.altKey) && e.key === 'Escape') {
+            e.preventDefault();
+
+            const layouts = get(dashLayouts);
+            const isDashActive = get(dashActive);
+            const forward = !e.shiftKey;
+
+            if (layouts.length === 0) {
+                dashActive.update(v => !v);
+                dashCycleIndex.set(-1);
+                return;
+            }
+
+            if (!isDashActive) {
+                // Dash is closed, open it and set index to first/last
+                dashActive.set(true);
+                dashCycleIndex.set(forward ? 0 : layouts.length - 1);
+            } else {
+                // Dash is open, cycle to the next/prev layout
+                dashCycleIndex.update(idx => {
+                    let newIndex;
+                    if (idx === -1) {
+                        // Not currently cycling, start from beginning/end
+                        newIndex = forward ? 0 : layouts.length - 1;
+                    } else {
+                        newIndex = idx + (forward ? 1 : -1);
+                    }
+
+                    if (forward && newIndex >= layouts.length) {
+                        dashActive.set(false);
+                        return -1; // Cycled past the end
+                    } else if (!forward && newIndex < 0) {
+                        dashActive.set(false);
+                        return -1; // Cycled past the beginning
+                    } else {
+                        return newIndex;
+                    }
+                });
+            }
         }
     }
 

@@ -3,7 +3,7 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { dashActive, dashLayouts } from './desktopStore.js';
+    import { dashActive, dashLayouts, dashCycleIndex } from './desktopStore.js';
     import { windows, restoreWindow } from './windows.js';
     import { get } from 'svelte/store';
     import { onMount, onDestroy } from 'svelte';
@@ -13,12 +13,18 @@
     import Calculator from './Calculator.svelte';
     import Settings from './Settings.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
+    import IoskFileViewer from './IoskFileViewer.svelte';
 
     let isLayoutDirty = true;
     let lastSavedLayoutSnapshot = '';
 
+    let currentLayout = null;
+
     // --- State for Preview ---
-    let previewedLayout = null;
+    let manualPreviewedLayout = null; // Controlled by mouse hover
+    let cyclePreviewedLayout = null;  // Controlled by keyboard cycle store
+    $: previewedLayout = manualPreviewedLayout || cyclePreviewedLayout;
+
     let previewContainerWidth = 0;
     let previewContainerHeight = 0;
     let previewScale = 1;
@@ -30,20 +36,33 @@
         visible: false,
         x: 0,
         y: 0,
-        layoutId: null
+        layoutId: null,
+        type: 'saved'
     };
 
     function closeContextMenu() {
-        contextMenu = { visible: false, x: 0, y: 0, layoutId: null };
+        contextMenu = { visible: false, x: 0, y: 0, layoutId: null, type: 'saved' };
+    }
+
+    function handleKeydown(e) {
+        // Let SideKick.svelte handle cycling through layouts with modifier keys.
+        if (e.metaKey || e.altKey) return;
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            handleMaximizeDash();
+        }
     }
 
     onMount(() => {
         // Close context menu on any click outside of it
         window.addEventListener('click', closeContextMenu);
+        window.addEventListener('keydown', handleKeydown);
     });
 
     onDestroy(() => {
         window.removeEventListener('click', closeContextMenu);
+        window.removeEventListener('keydown', handleKeydown);
     });
 
     function handleRightClick(event, layout) {
@@ -52,7 +71,8 @@
             visible: true,
             x: event.clientX,
             y: event.clientY,
-            layoutId: layout.id
+            layoutId: layout.id,
+            type: 'saved'
         };
     }
 
@@ -90,7 +110,90 @@
             }
         }, 0);
     }
+
+    function handleCurrentDesktopRightClick(event) {
+        event.preventDefault();
+        contextMenu = {
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+            layoutId: null,
+            type: 'current'
+        };
+    }
+
+    function handleSaveAs() {
+        closeContextMenu();
+        setTimeout(() => {
+            const defaultName = `Layout ${get(dashLayouts).length + 1}`;
+            const newName = prompt("Enter a name for the new layout:", defaultName);
+
+            if (newName && newName.trim() !== '') {
+                const currentWindows = get(windows);
+                const layoutToSave = generateLayoutObject(
+                    currentWindows,
+                    newName.trim(),
+                    Date.now()
+                );
+
+                dashLayouts.update(layouts => [...layouts, layoutToSave]);
+
+                lastSavedLayoutSnapshot = generateLayoutSnapshot(currentWindows);
+                isLayoutDirty = false;
+            }
+        }, 0);
+    }
+
+    function handleDeleteCurrent() {
+        closeContextMenu();
+        // This function already handles confirmation and closing all windows.
+        handleCancelDash();
+    }
+
     // --- End Context Menu Logic ---
+
+
+    function generateLayoutObject(windowsArray, name, id) {
+        // Map current windows to a serializable format
+        const layoutWindows = windowsArray.map(win => {
+            const associatedConsole = windowsArray.find(c => c.id === win.consoleId);
+
+            return {
+                componentType: getComponentType(win.component),
+                title: win.title,
+                x: win.x,
+                y: win.y,
+                width: win.width,
+                height: win.height,
+                maximized: win.maximized,
+
+                // For IoskConsole, save URL and username
+                wsUrl: win.wsUrl,
+                username: win.username,
+
+                // For IoskFileExplorer & IoskFileViewer, save the connection identity
+                // so we can re-associate on restore.
+                consoleConnection: associatedConsole ? associatedConsole.consoleConnection : null,
+
+                // Component-specific state to restore
+                initialPath: win.currentPath, // For IoskFileExplorer. It's saved as `initialPath` for easy restoration.
+                path: win.path,               // For IoskFileViewer
+                mode: win.mode                // For IoskFileViewer
+            };
+        });
+
+        // Create the full layout object, now including desktop dimensions for accurate preview scaling
+        return {
+            id: id,
+            name: name,
+            desktop: {
+                width: window.innerWidth,
+                // The available desktop area height is the viewport height minus the 40px taskbar
+                height: window.innerHeight - 40
+            },
+            windows: layoutWindows
+        };
+    }
 
 
     function getComponentType(component) {
@@ -98,6 +201,7 @@
         if (component === Calculator) return 'Calculator';
         if (component === Settings) return 'Settings';
         if (component === IoskFileExplorer) return 'IoskFileExplorer';
+        if (component === IoskFileViewer) return 'IoskFileViewer';
         return 'Unknown';
     }
 
@@ -118,6 +222,21 @@
         return JSON.stringify(relevantData);
     }
 
+    // Create a representation of the current layout when Dash is active
+    $: {
+        if ($dashActive) {
+            currentLayout = generateLayoutObject(get(windows), 'Current Desktop', 'current');
+            // If nothing is being previewed yet (i.e., on first open), show the current layout
+            if (!manualPreviewedLayout && !cyclePreviewedLayout) {
+                manualPreviewedLayout = currentLayout;
+            }
+        } else {
+            // Reset when dash closes
+            currentLayout = null;
+            manualPreviewedLayout = null;
+        }
+    }
+
     // Watch for window changes to re-enable the save button
     $: {
         if ($windows) {
@@ -128,31 +247,20 @@
         }
     }
 
+    // React to keyboard cycling
+    $: if ($dashCycleIndex > -1 && $dashLayouts[$dashCycleIndex]) {
+        cyclePreviewedLayout = $dashLayouts[$dashCycleIndex];
+    } else {
+        cyclePreviewedLayout = null;
+    }
+
     function handleSaveDash() {
         const currentWindows = get(windows);
-        // Map current windows to a serializable format
-        const layoutWindows = currentWindows.map(win => ({
-            componentType: getComponentType(win.component),
-            title: win.title,
-            x: win.x,
-            y: win.y,
-            width: win.width,
-            height: win.height,
-            maximized: win.maximized,
-            consoleId: win.consoleId, // Specific prop for File Explorer
-        }));
-
-        // Create the full layout object, now including desktop dimensions for accurate preview scaling
-        const layoutToSave = {
-            id: Date.now(),
-            name: `Layout ${get(dashLayouts).length + 1}`,
-            desktop: {
-                width: window.innerWidth,
-                // The available desktop area height is the viewport height minus the 40px taskbar
-                height: window.innerHeight - 40
-            },
-            windows: layoutWindows
-        };
+        const layoutToSave = generateLayoutObject(
+            currentWindows,
+            `Layout ${get(dashLayouts).length + 1}`,
+            Date.now()
+        );
 
         dashLayouts.update(layouts => [...layouts, layoutToSave]);
 
@@ -163,22 +271,57 @@
 
     function handleRestoreLayout(layout) {
         if (!layout || !layout.windows) return;
+
+        // Get the dimensions of the desktop when the layout was saved.
+        // Fallback to current dimensions if not saved (for older layouts).
+        const savedDesktopWidth = layout.desktop?.width || window.innerWidth;
+        const savedDesktopHeight = layout.desktop?.height || (window.innerHeight - 40);
+
+        // Get current desktop dimensions.
+        const currentDesktopWidth = window.innerWidth;
+        const currentDesktopHeight = window.innerHeight - 40;
+
+        // Calculate scaling factors. No need to preserve aspect ratio.
+        const scaleX = currentDesktopWidth / savedDesktopWidth;
+        const scaleY = currentDesktopHeight / savedDesktopHeight;
+
         for (const winData of layout.windows) {
-            restoreWindow(winData);
+            // Create a copy of the window data to avoid modifying the original layout object.
+            const scaledWinData = { ...winData };
+
+            // Scale position and size, but only for non-maximized windows.
+            if (!scaledWinData.maximized) {
+                scaledWinData.x = Math.round(scaledWinData.x * scaleX);
+                scaledWinData.y = Math.round(scaledWinData.y * scaleY);
+                scaledWinData.width = Math.round(scaledWinData.width * scaleX);
+                scaledWinData.height = Math.round(scaledWinData.height * scaleY);
+            }
+
+            restoreWindow(scaledWinData);
         }
+
         // Exit dash mode to see the result
         dashActive.set(false);
     }
 
     function handleMaximizeDash() {
-        // Exits dash mode, returning to previous window arrangement
+        // Exits dash mode, returning to previous window arrangement and restoring any minimized windows.
+        windows.restoreAllWindows();
         dashActive.set(false);
     }
 
     function handleCancelDash() {
-        // Exits dash mode and closes all windows
-        dashActive.set(false);
-        windows.closeAllWindows();
+        // Exits dash mode and closes all windows, with confirmation
+        if (get(windows).length > 0) {
+            setTimeout(() => {
+                if (confirm("Are you sure you want to close all windows?")) {
+                    dashActive.set(false);
+                    windows.closeAllWindows();
+                }
+            }, 0);
+        } else {
+            dashActive.set(false);
+        }
     }
     
     function handleMinimizeDash() {
@@ -293,6 +436,7 @@
         display: flex;
         gap: 40px;
         margin-top: 40px; /* space for header */
+        min-height: 0; /* For robust flex behavior */
     }
 
     .dash-preview {
@@ -343,6 +487,7 @@
         grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
         gap: 15px;
         overflow-y: auto;
+        min-height: 0; /* Fix for flexbox child scrolling */
     }
 
     .layout-tile {
@@ -367,6 +512,16 @@
         border-color: var(--taskbar-button-hover-bg);
     }
     
+    .layout-tile.current {
+        border-color: #27c93f; /* green to stand out */
+        box-shadow: 0 0 8px rgba(39, 201, 63, 0.4);
+    }
+
+    .layout-tile.highlighted {
+        border-color: #3498db; /* A nice blue to indicate selection */
+        box-shadow: 0 0 8px rgba(52, 152, 219, 0.5);
+    }
+
     .context-menu {
         position: fixed; /* Use fixed to position relative to viewport */
         background-color: var(--window-bg);
@@ -403,6 +558,13 @@
         color: white;
     }
 
+    @media (max-width: 900px) {
+        .dash-body {
+            flex-direction: column;
+            gap: 20px;
+        }
+    }
+
 </style>
 
 <div class="dash-dialog">
@@ -414,7 +576,7 @@
         <h1 class="dash-title">Dash</h1>
         <div class="header-controls right">
             <button class="control-button" on:click={handleMaximizeDash} title="Full Dash">&#9632;</button>
-            <button class="control-button save" on:click={handleSaveDash} title="Save Current Layout" disabled={!isLayoutDirty}>&#x2713;</button>
+            <button class="control-button save" on:click={handleSaveDash} title="Save Current Layout" disabled={!isLayoutDirty || $windows.length === 0}>&#x2713;</button>
         </div>
     </div>
 
@@ -445,13 +607,29 @@
             {/if}
         </div>
         <div class="dash-layouts">
+            {#if currentLayout}
+                <div 
+                    class="layout-tile current" 
+                    title={currentLayout.name}
+                    on:click={handleMaximizeDash}
+                    on:mouseenter={() => manualPreviewedLayout = currentLayout}
+                    on:mouseleave={() => manualPreviewedLayout = null}
+                    role="button" 
+                    tabindex="0"
+                    on:contextmenu|preventDefault={handleCurrentDesktopRightClick}
+                    on:keydown={e => e.key === 'Enter' && handleMaximizeDash()}
+                >
+                    {currentLayout.name}
+                </div>
+            {/if}
             {#each $dashLayouts as layout (layout.id)}
                 <div 
                     class="layout-tile" 
+                    class:highlighted={cyclePreviewedLayout && cyclePreviewedLayout.id === layout.id}
                     title={layout.name}
                     on:click={() => handleRestoreLayout(layout)}
-                    on:mouseenter={() => previewedLayout = layout}
-                    on:mouseleave={() => previewedLayout = null}
+                    on:mouseenter={() => manualPreviewedLayout = layout}
+                    on:mouseleave={() => manualPreviewedLayout = null}
                     on:contextmenu|preventDefault={e => handleRightClick(e, layout)}
                     role="button" 
                     tabindex="0"
@@ -470,7 +648,12 @@
         style="top: {contextMenu.y}px; left: {contextMenu.x}px;"
         on:click|stopPropagation
     >
-        <button on:click={handleRenameLayout}>Rename</button>
-        <button class="delete" on:click={handleDeleteLayout}>Delete</button>
+        {#if contextMenu.type === 'current'}
+            <button on:click={handleSaveAs} disabled={$windows.length === 0}>Save As...</button>
+            <button class="delete" on:click={handleDeleteCurrent}>Delete</button>
+        {:else} <!-- Default to saved layout menu -->
+            <button on:click={handleRenameLayout}>Rename</button>
+            <button class="delete" on:click={handleDeleteLayout}>Delete</button>
+        {/if}
     </div>
 {/if}

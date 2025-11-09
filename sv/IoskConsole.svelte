@@ -4,17 +4,22 @@
 -->
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
+    import { get } from 'svelte/store';
     import { windows, newIoskFileExplorer } from './windows.js';
     import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
-    import { desktopSettings } from './desktopStore.js';
+    import { desktopSettings, windowSettings } from './desktopStore.js';
 
     export let id; // Unique ID from the window manager
     export let title;
     export let isActive;
+    export let componentName;
+    export let x, y, width, height; // Current geometry from Window.svelte
+
+    // These will be passed in when restoring a dash layout
+    export let wsUrl = undefined;
+    export let username = undefined;
 
     // --- State for Connection & Room Awareness ---
-    let wsUrl;
-    let username;
     let isConnected = false;
     let roomName = null;
     let roomTopic = '';
@@ -55,6 +60,7 @@
     // --- Settings Modal State ---
     let showSettings = false;
     let settingsUrl, settingsUsername;
+    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
 
     // --- Event bus subscriptions ---
     let requestUnsubscribe;
@@ -74,6 +80,14 @@
         commandInput?.focus();
     }
 
+    function handleClickOnTerminal() {
+        // Only focus the input if the user is not selecting text.
+        // A collapsed selection means the user just clicked, not dragged to select.
+        if (window.getSelection().isCollapsed) {
+            focusInput();
+        }
+    }
+
     function handleGlobalClick(event) {
         if (showRoomsMenu && roomsButton && !roomsButton.contains(event.target)) {
             showRoomsMenu = false;
@@ -86,6 +100,14 @@
     }
 
     onMount(() => {
+        // Initialize from settings if not provided via props (from layout restore)
+        if (wsUrl === undefined) {
+            wsUrl = get(desktopSettings).ioskUrl;
+        }
+        if (username === undefined) {
+            username = get(desktopSettings).ioskUsername;
+        }
+
         // Automatically focus the connection URL input on mount
         if (!isConnected) {
             const urlInput = document.querySelector(`#url-input-${id}`);
@@ -115,17 +137,14 @@
         window.removeEventListener('click', handleGlobalClick);
     });
 
-    desktopSettings.subscribe(settings => {
-        // Only update local details if we are NOT connected.
-        if (!isConnected) {
-            wsUrl = settings.ioskUrl;
-            username = settings.ioskUsername;
-        }
-    });
-
-    // Reactive statement to update the window store with the connection status
+    // Reactive statements to update the window store with component state
     $: if (id !== undefined) {
-        windows.updateWindowProps(id, { isConsoleConnected: isConnected });
+        windows.updateWindowProps(id, {
+            isConsoleConnected: isConnected,
+           consoleConnection: isConnected ? { url: wsUrl, user: username } : null,
+           wsUrl,
+           username
+        });
     }
 
     // Reactive statement to update the window title based on connection and room state
@@ -151,15 +170,35 @@
         if (isConnected) return;
         settingsUrl = wsUrl;
         settingsUsername = username;
+
+        // Populate window settings for the modal
+        const allSettings = get(windowSettings);
+        const currentSettings = allSettings[componentName] || { positioning: 'auto' };
+        windowSettingsForModal = {
+            positioning: currentSettings.positioning || 'auto',
+            x: currentSettings.x ?? x,
+            y: currentSettings.y ?? y,
+            width: currentSettings.width ?? width,
+            height: currentSettings.height ?? height,
+        };
+        
         showSettings = true;
         tick().then(() => settingsUrlInput?.focus());
     }
 
     function handleSaveSettings() {
+        // Save connection settings
         wsUrl = settingsUrl;
         username = settingsUsername;
-        showSettings = false;
         desktopSettings.update(settings => ({ ...settings, ioskUrl: wsUrl, ioskUsername: username }));
+        
+        // Save window settings
+        windowSettings.update(allSettings => ({
+            ...allSettings,
+            [componentName]: windowSettingsForModal
+        }));
+
+        showSettings = false;
     }
 
     function handleCancelSettings() {
@@ -213,7 +252,7 @@
                             if (data.type === 'state_info') {
                                 motd = data.motd || '';
                             }
-                            if (!roomName) motd = '';
+
                         } else if (data.output || data.prompt) {
                             if (data.output) {
                                 const clearScreenCode = "\x1b[H\x1b[2J";
@@ -241,7 +280,12 @@
                                 isLoadingUsers = false;
                             } else {
                                 // This is a response for a File Explorer, not us.
-                                fileSystemResponses.set({ consoleId: id, data: data, timestamp: Date.now() });
+                                fileSystemResponses.set({
+                                    consoleId: id,
+                                    requesterId: data.requesterId, // Pass this through
+                                    data: data,
+                                    timestamp: Date.now()
+                                });
                             }
                         } else if (data.type === 'fs_read_response') {
                             // This is a response for a File Viewer.
@@ -444,7 +488,7 @@
     .user-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
     .user-item { padding: 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
-    .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 400px; display: flex; flex-direction: column; gap: 15px; }
+    .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
     .modal-content h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
     .form-group { display: flex; flex-direction: column; gap: 5px; }
     .modal-content label { font-size: 0.9em; color: var(--title-bar-text); }
@@ -476,6 +520,12 @@
     .attach-footer button:disabled { opacity: 0.5; cursor: not-allowed; }
     .attach-footer button.primary { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .path-header { font-size: 0.9em; color: #95a5a6; padding: 2px 8px; flex-shrink: 0; }
+    fieldset { border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-top: 15px; }
+    legend { color: var(--title-bar-text); padding: 0 5px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-left: 20px; }
+    .form-grid label { display: flex; align-items: center; gap: 5px; }
+    .form-grid input { width: 80px; }
+    .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
 <div class="console-container">
@@ -574,7 +624,7 @@
 
     <div class="main-flex-area">
         <div class="terminal-wrapper">
-            <div class="terminal" bind:this={terminalEl} on:scroll={() => shouldScroll = (terminalEl.scrollTop + terminalEl.clientHeight >= terminalEl.scrollHeight - 10)}>
+            <div class="terminal" bind:this={terminalEl} on:scroll={() => shouldScroll = (terminalEl.scrollTop + terminalEl.clientHeight >= terminalEl.scrollHeight - 10)} on:click={handleClickOnTerminal}>
                 {#each output as line}
                     <div class="terminal-line" class:prompt={line.type === 'prompt'}>
                         {line.content}
@@ -604,18 +654,35 @@
     {#if showSettings}
         <div class="modal-overlay" on:click|self={handleCancelSettings} on:keydown={handleSettingsKeydown}>
             <div class="modal-content">
-                <h3>IOSK Default Connection Settings</h3>
+                <h3>Settings</h3>
                 <div class="form-group">
-                    <label for="url-setting-{id}">URL</label>
+                    <label for="url-setting-{id}">Default URL</label>
                     <input id="url-setting-{id}" type="text" bind:this={settingsUrlInput} bind:value={settingsUrl}>
                 </div>
                 <div class="form-group">
-                    <label for="user-setting-{id}">Username</label>
+                    <label for="user-setting-{id}">Default Username</label>
                     <input id="user-setting-{id}" type="text" bind:value={settingsUsername}>
                 </div>
+
+                <fieldset>
+                    <legend>Default Window Position & Size</legend>
+                    <div class="radio-group">
+                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="auto"> Auto</label>
+                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="manual"> Manual</label>
+                    </div>
+                    {#if windowSettingsForModal.positioning === 'manual'}
+                        <div class="form-grid">
+                            <label>X: <input type="number" bind:value={windowSettingsForModal.x}></label>
+                            <label>Y: <input type="number" bind:value={windowSettingsForModal.y}></label>
+                            <label>Width: <input type="number" bind:value={windowSettingsForModal.width}></label>
+                            <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
+                        </div>
+                    {/if}
+                </fieldset>
+
                 <div class="buttons">
                     <button on:click={handleCancelSettings}>Cancel</button>
-                    <button class="save-button" on:click={handleSaveSettings}>Save</button>
+                    <button class="save-button" on:click={handleSaveSettings}>Save Defaults</button>
                 </div>
             </div>
         </div>

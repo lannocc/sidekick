@@ -4,12 +4,16 @@
 -->
 <script>
     import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
+    import { get } from 'svelte/store';
     import { windows, newIoskFileExplorer } from './windows.js';
-    import { desktopSettings } from './desktopStore.js';
+    import { desktopSettings, windowSettings } from './desktopStore.js';
     import IoskConsole from './IoskConsole.svelte'; // Import for component type checking
+    import IoskFileExplorer from './IoskFileExplorer.svelte';
+    import IoskFileViewer from './IoskFileViewer.svelte';
 
     export let id;
     export let component;
+    export let componentName;
     export let title;
     export let x;
     export let y;
@@ -21,6 +25,7 @@
     export let isActive;
     export let lastFocusedElement; // Received from the store via Desktop.svelte
     export let isConsoleConnected; // For IoskConsole, passed from the store
+    export let canRender; // For IoskFileViewer
 
     const dispatch = createEventDispatcher();
 
@@ -40,6 +45,45 @@
     let componentInstance; // ref for the svelte:component instance
 
     let contentAreaEl;
+
+    // --- Generic Settings Modal ---
+    let showGenericSettingsModal = false;
+    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
+
+    function openSettings() {
+        showOptionsMenu = false; // Close the hamburger menu itself.
+        if (componentName === 'IoskConsole') {
+             if (componentInstance && typeof componentInstance.showSettingsDialog === 'function') {
+                componentInstance.showSettingsDialog();
+            }
+        } else if (componentName === 'IoskFileExplorer') {
+            if (componentInstance && typeof componentInstance.showSettingsDialog === 'function') {
+                componentInstance.showSettingsDialog();
+            }
+        } else {
+            const allSettings = get(windowSettings);
+            const currentSettings = allSettings[componentName] || { positioning: 'auto' };
+
+            // Populate modal state with saved defaults or current geometry
+            windowSettingsForModal = {
+                positioning: currentSettings.positioning || 'auto',
+                x: currentSettings.x ?? x,
+                y: currentSettings.y ?? y,
+                width: currentSettings.width ?? width,
+                height: currentSettings.height ?? height,
+            };
+            showGenericSettingsModal = true;
+        }
+    }
+
+    function saveGenericWindowSettings() {
+        windowSettings.update(allSettings => ({
+            ...allSettings,
+            [componentName]: windowSettingsForModal
+        }));
+        showGenericSettingsModal = false;
+    }
+
 
     function handleWindowClick(event) {
         // If menu is open and click is outside the menu button and the menu itself, close it
@@ -250,6 +294,8 @@
 
         // Check for Alt/Meta key for special actions, but not on maximized windows
         if ((event.altKey || event.metaKey) && !maximized) {
+            event.preventDefault(); // Prevent click-through to window content
+
             if (event.button === 0) { // Left-click for drag
                 onDragStart(event);
             } else if (event.button === 2) { // Right-click for resize
@@ -343,8 +389,9 @@
         border-radius: 50%;
         cursor: pointer;
         border: 1px solid rgba(0,0,0,0.2);
+        line-height: 18px;
     }
-    .close { background-color: #ff5f56; line-height: 18px; }
+    .close { background-color: #ff5f56; }
     .minimize { background-color: #ffbd2e; }
     .maximize { background-color: #27c93f; }
     .options-menu-button {
@@ -421,6 +468,20 @@
         opacity: 0.7;
         padding-left: 10px;
     }
+    .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
+    .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
+    .modal-content h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+    fieldset { border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+    legend { color: var(--title-bar-text); padding: 0 5px; }
+    .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+    .modal-content button { padding: 8px 16px; border-radius: 3px; cursor: pointer; border: 1px solid var(--border-color); color: var(--title-bar-text); background-color: var(--taskbar-button-bg); }
+    .modal-content button:hover { background-color: var(--taskbar-button-hover-bg); }
+    .modal-content .save-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
+    .modal-content .save-button:hover { background-color: #1a9c2a; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-left: 20px; }
+    .form-grid label { display: flex; align-items: center; gap: 5px; }
+    .form-grid input { width: 80px; background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
+    .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
 <div
@@ -441,7 +502,7 @@
     <div class="title-bar" on:mousedown|stopPropagation={onDragStart} on:dblclick={() => windows.toggleMaximize(id)}>
         <div class="window-controls">
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
-            <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation></div>
+            <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>_</div>
         </div>
         <span class="title-text">{title}</span>
         <div class="window-controls">
@@ -450,6 +511,7 @@
                 title={maximized ? 'Restore' : 'Maximize'}
                 on:click={() => windows.toggleMaximize(id)}
                 on:mousedown|stopPropagation>
+                {@html maximized ? '&#128470;' : '&#9632;'}
             </div>
             <div
                 class="window-control options-menu-button"
@@ -462,10 +524,14 @@
     </div>
     {#if showOptionsMenu}
         <div class="options-menu">
+            <button class="menu-item" on:click={() => { windows.toggleMaximize(id); showOptionsMenu = false; }}>
+                {maximized ? 'Restore' : 'Maximize'}
+            </button>
+            <button class="menu-item" on:click={openSettings}>
+                Settings...
+            </button>
+
             {#if component === IoskConsole}
-                <button class="menu-item" on:click={() => { if (componentInstance && typeof componentInstance.showSettingsDialog === 'function') { componentInstance.showSettingsDialog(); } showOptionsMenu = false; }} disabled={isConsoleConnected}>
-                    Settings...
-                </button>
                 <button class="menu-item" on:click={handleConnect} disabled={isConsoleConnected}>
                     Connect
                 </button>
@@ -483,16 +549,52 @@
                 <button class="menu-item" on:click={handleDisconnect} disabled={!isConsoleConnected}>
                     Disconnect
                 </button>
-                <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>
-                    Close
-                </button>
-            {:else}
-                <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>Close</button>
             {/if}
+
+            {#if component === IoskFileViewer}
+                <div class="menu-separator"></div>
+                <button class="menu-item" on:click={() => { if (componentInstance && typeof componentInstance.setMode === 'function') componentInstance.setMode('rendered'); showOptionsMenu = false; }} disabled={!canRender}>
+                    Rendered
+                </button>
+                <button class="menu-item" on:click={() => { if (componentInstance && typeof componentInstance.setMode === 'function') componentInstance.setMode('raw'); showOptionsMenu = false; }}>
+                    Raw
+                </button>
+            {/if}
+
+            <div class="menu-separator"></div>
+            <button class="menu-item" on:click={() => { windows.toggleMinimize(id); showOptionsMenu = false; }}>Minimize</button>
+            <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>Close</button>
         </div>
     {/if}
     <div class="content-area" bind:this={contentAreaEl} on:focusout={handleFocusOut} >
         <svelte:component bind:this={componentInstance} this={component} {id} bind:title={title} {isActive} {...$$restProps} />
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
+
+    {#if showGenericSettingsModal}
+        <div class="modal-overlay" on:click|self={() => showGenericSettingsModal = false}>
+            <div class="modal-content" on:click|stopPropagation>
+                <h3>Window Settings: {title}</h3>
+                <fieldset>
+                    <legend>Default Position & Size</legend>
+                    <div class="radio-group">
+                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="auto"> Auto</label>
+                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="manual"> Manual</label>
+                    </div>
+                    {#if windowSettingsForModal.positioning === 'manual'}
+                        <div class="form-grid">
+                            <label>X: <input type="number" bind:value={windowSettingsForModal.x}></label>
+                            <label>Y: <input type="number" bind:value={windowSettingsForModal.y}></label>
+                            <label>Width: <input type="number" bind:value={windowSettingsForModal.width}></label>
+                            <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
+                        </div>
+                    {/if}
+                </fieldset>
+                <div class="buttons">
+                    <button on:click={() => showGenericSettingsModal = false}>Cancel</button>
+                    <button class="save-button" on:click={saveGenericWindowSettings}>Save Defaults</button>
+                </div>
+            </div>
+        </div>
+    {/if}
 </div>

@@ -4,7 +4,7 @@ import Calculator from './Calculator.svelte';
 import Settings from './Settings.svelte';
 import IoskFileExplorer from './IoskFileExplorer.svelte';
 import IoskFileViewer from './IoskFileViewer.svelte';
-import { desktopSettings } from './desktopStore.js';
+import { desktopSettings, windowSettings } from './desktopStore.js';
 
 let windowIdCounter = 0;
 
@@ -27,13 +27,21 @@ function createWindowManager() {
             height: 600,
         };
 
+        const allWindowSettings = get(windowSettings);
+        const componentName = Object.keys(componentMap).find(key => componentMap[key] === component) || 'Unknown';
+        const savedSettings = allWindowSettings[componentName];
+        const useSavedPosition = savedSettings && savedSettings.positioning === 'manual';
+
         const newWindow = {
             id: ++windowIdCounter,
             component: component,
-            x: 50 + (windowIdCounter % 10) * 20,
-            y: 50 + (windowIdCounter % 10) * 20,
+            componentName: componentName,
+            x: useSavedPosition ? savedSettings.x : 50 + (windowIdCounter % 10) * 20,
+            y: useSavedPosition ? savedSettings.y : 50 + (windowIdCounter % 10) * 20,
             ...defaults,
             ...props,
+            width: useSavedPosition ? savedSettings.width : (props.width ?? defaults.width),
+            height: useSavedPosition ? savedSettings.height : (props.height ?? defaults.height),
             zIndex: 100,
             minimized: false,
             maximized: false,
@@ -179,6 +187,28 @@ function createWindowManager() {
         });
     };
 
+    const restoreAllWindows = () => {
+        update(currentWindows => {
+            const anyMinimized = currentWindows.some(w => w.minimized);
+            if (!anyMinimized) return currentWindows; // No-op if nothing to do
+
+            let updatedWindows = currentWindows.map(w => ({...w, minimized: false}));
+
+            // Check if any window is active after restoration.
+            const isAnyActive = updatedWindows.some(w => w.isActive);
+            if (!isAnyActive && updatedWindows.length > 0) {
+                // If no window is active (e.g., all were minimized), make the top-most one active.
+                const topWindow = updatedWindows.reduce((top, w) => (!top || w.zIndex > top.zIndex) ? w : top, null);
+                if (topWindow) {
+                    updatedWindows = updatedWindows.map(w =>
+                        w.id === topWindow.id ? { ...w, isActive: true } : w
+                    );
+                }
+            }
+            return updatedWindows;
+        });
+    };
+
     const cycleWindow = (forward) => {
         update(currentWindows => {
             const openWindows = currentWindows
@@ -239,6 +269,7 @@ function createWindowManager() {
         toggleMaximize,
         closeAllWindows,
         minimizeAllWindows,
+        restoreAllWindows,
         cycleWindow
     };
 }
@@ -263,9 +294,15 @@ export function newSettings() {
 
 export function newIoskFileExplorer(consoleId, consoleTitle) {
     const title = `Files - ${consoleTitle || `Console ${consoleId}`}`;
+    
+    const allWindowSettings = get(windowSettings);
+    const explorerSettings = allWindowSettings['IoskFileExplorer'];
+    const initialPath = explorerSettings?.initialPath || '.';
+
     windows.addWindow(IoskFileExplorer, {
         title: title,
         consoleId: consoleId,
+        initialPath: initialPath,
         width: 400,
         height: 500,
     });
@@ -282,15 +319,36 @@ export function newIoskFileViewer(consoleId, path) {
     });
 }
 
-export function restoreWindow(winData) {
+export function restoreWindow(winData) {    
     const component = componentMap[winData.componentType];
     if (!component) {
         console.error(`Unknown component type for restore: ${winData.componentType}`);
         return;
     }
 
-    // Prepare props, excluding componentType which is not a direct prop for the window manager
+    // Prepare props, excluding properties used only for restoration logic.
     const { componentType, ...props } = winData;
+
+    // For components that need a console connection, find a compatible one.
+    if ((component === IoskFileExplorer || component === IoskFileViewer) && props.consoleConnection) {
+        const allWindows = get(windows);
+        // Find a suitable console window that is currently connected and matches the saved connection identity.
+        const compatibleConsole = allWindows.find(w => 
+            w.component === IoskConsole && 
+            w.isConsoleConnected &&
+            w.consoleConnection &&
+            w.consoleConnection.url === props.consoleConnection.url &&
+            w.consoleConnection.user === props.consoleConnection.user
+        );
+
+        if (compatibleConsole) {
+            props.consoleId = compatibleConsole.id;
+        } else {
+            // No compatible connection is currently open. The component will
+            // have to handle this state (e.g., show an error).
+            props.consoleId = null;
+        }
+    }
 
     windows.addWindow(component, props);
 }
