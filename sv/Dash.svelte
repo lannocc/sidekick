@@ -163,9 +163,35 @@
 
     function handleRestoreLayout(layout) {
         if (!layout || !layout.windows) return;
+
+        // Get the dimensions of the desktop when the layout was saved.
+        // Fallback to current dimensions if not saved (for older layouts).
+        const savedDesktopWidth = layout.desktop?.width || window.innerWidth;
+        const savedDesktopHeight = layout.desktop?.height || (window.innerHeight - 40);
+
+        // Get current desktop dimensions.
+        const currentDesktopWidth = window.innerWidth;
+        const currentDesktopHeight = window.innerHeight - 40;
+
+        // Calculate scaling factors. No need to preserve aspect ratio.
+        const scaleX = currentDesktopWidth / savedDesktopWidth;
+        const scaleY = currentDesktopHeight / savedDesktopHeight;
+
         for (const winData of layout.windows) {
-            restoreWindow(winData);
+            // Create a copy of the window data to avoid modifying the original layout object.
+            const scaledWinData = { ...winData };
+
+            // Scale position and size, but only for non-maximized windows.
+            if (!scaledWinData.maximized) {
+                scaledWinData.x = Math.round(scaledWinData.x * scaleX);
+                scaledWinData.y = Math.round(scaledWinData.y * scaleY);
+                scaledWinData.width = Math.round(scaledWinData.width * scaleX);
+                scaledWinData.height = Math.round(scaledWinData.height * scaleY);
+            }
+
+            restoreWindow(scaledWinData);
         }
+
         // Exit dash mode to see the result
         dashActive.set(false);
     }
@@ -414,7 +440,7 @@
         <h1 class="dash-title">Dash</h1>
         <div class="header-controls right">
             <button class="control-button" on:click={handleMaximizeDash} title="Full Dash">&#9632;</button>
-            <button class="control-button save" on:click={handleSaveDash} title="Save Current Layout" disabled={!isLayoutDirty}>&#x2713;</button>
+            <button class="control-button save" on:click={handleSaveDash} title="Save Current Layout" disabled={!isLayoutDirty || $windows.length === 0}>&#x2713;</button>
         </div>
     </div>
 
