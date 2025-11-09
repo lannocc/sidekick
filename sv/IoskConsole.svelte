@@ -265,7 +265,12 @@
                                 isLoadingUsers = false;
                             } else {
                                 // This is a response for a File Explorer, not us.
-                                fileSystemResponses.set({ consoleId: id, data: data, timestamp: Date.now() });
+                                fileSystemResponses.set({
+                                    consoleId: id,
+                                    requesterId: data.requesterId, // Pass this through
+                                    data: data,
+                                    timestamp: Date.now()
+                                });
                             }
                         } else if (data.type === 'fs_read_response') {
                             // This is a response for a File Viewer.

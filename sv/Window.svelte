@@ -8,6 +8,7 @@
     import { windows, newIoskFileExplorer } from './windows.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
     import IoskConsole from './IoskConsole.svelte'; // Import for component type checking
+    import IoskFileExplorer from './IoskFileExplorer.svelte';
 
     export let id;
     export let component;
@@ -51,6 +52,10 @@
         showOptionsMenu = false; // Close the hamburger menu itself.
         if (componentName === 'IoskConsole') {
              if (componentInstance && typeof componentInstance.showSettingsDialog === 'function') {
+                componentInstance.showSettingsDialog();
+            }
+        } else if (componentName === 'IoskFileExplorer') {
+            if (componentInstance && typeof componentInstance.showSettingsDialog === 'function') {
                 componentInstance.showSettingsDialog();
             }
         } else {
