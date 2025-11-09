@@ -3,7 +3,8 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { desktopSettings } from './desktopStore.js';
+    import { get } from 'svelte/store';
+    import { desktopSettings, windowSettings } from './desktopStore.js';
 
     let settings;
     const unsubscribe = desktopSettings.subscribe(value => {
@@ -13,6 +14,40 @@
     function handleUpdate() {
         desktopSettings.set(settings);
     }
+    
+    // --- Settings Modal Logic ---
+    export let componentName;
+    export let x, y, width, height;
+
+    let showSettings = false;
+    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
+
+    export function showSettingsDialog() {
+        const allSettings = get(windowSettings);
+        const currentSettings = allSettings[componentName] || { positioning: 'auto' };
+
+        windowSettingsForModal = {
+            positioning: currentSettings.positioning || 'auto',
+            x: currentSettings.x ?? x,
+            y: currentSettings.y ?? y,
+            width: currentSettings.width ?? width,
+            height: currentSettings.height ?? height,
+        };
+        showSettings = true;
+    }
+
+    function handleSaveSettings() {
+        windowSettings.update(allSettings => ({
+            ...allSettings,
+            [componentName]: windowSettingsForModal
+        }));
+        showSettings = false;
+    }
+
+    function handleCancelSettings() {
+        showSettings = false;
+    }
+
 </script>
 
 <style>
@@ -93,6 +128,20 @@
         border: 1px solid var(--border-color);
         border-radius: 4px;
     }
+
+    /* Modal Styles */
+    .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
+    .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
+    .modal-content h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+    .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+    .modal-content button { padding: 8px 16px; border-radius: 3px; cursor: pointer; border: 1px solid var(--border-color); color: var(--title-bar-text); background-color: var(--taskbar-button-bg); }
+    .modal-content button:hover { background-color: var(--taskbar-button-hover-bg); }
+    .modal-content .save-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
+    .modal-content .save-button:hover { background-color: #1a9c2a; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-left: 20px; }
+    .form-grid label { display: flex; align-items: center; gap: 5px; }
+    .form-grid input { width: 80px; background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
+    .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
 <div class="settings-container">
@@ -162,3 +211,30 @@
         {/if}
     </fieldset>
 </div>
+
+{#if showSettings}
+    <div class="modal-overlay" on:click|self={handleCancelSettings}>
+        <div class="modal-content" on:click|stopPropagation>
+            <h3>Settings Window</h3>
+            <fieldset>
+                <legend>Default Window Position & Size</legend>
+                <div class="radio-group">
+                    <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="auto"> Auto</label>
+                    <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="manual"> Manual</label>
+                </div>
+                {#if windowSettingsForModal.positioning === 'manual'}
+                    <div class="form-grid">
+                        <label>X: <input type="number" bind:value={windowSettingsForModal.x}></label>
+                        <label>Y: <input type="number" bind:value={windowSettingsForModal.y}></label>
+                        <label>Width: <input type="number" bind:value={windowSettingsForModal.width}></label>
+                        <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
+                    </div>
+                {/if}
+            </fieldset>
+            <div class="buttons">
+                <button on:click={handleCancelSettings}>Cancel</button>
+                <button class="save-button" on:click={handleSaveSettings}>Save Defaults</button>
+            </div>
+        </div>
+    </div>
+{/if}

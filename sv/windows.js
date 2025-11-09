@@ -324,7 +324,7 @@ export function newIoskFileViewer(consoleId, path) {
 export function newWebBrowser() {
     const allWindowSettings = get(windowSettings);
     const browserSettings = allWindowSettings['WebBrowser'];
-    const initialUrl = browserSettings?.defaultUrl || 'about:blank';
+    const initialUrl = browserSettings?.defaultUrl || (typeof window !== 'undefined' ? window.location.origin : 'about:blank');
 
     windows.addWindow(WebBrowser, {
         title: 'Web Browser',

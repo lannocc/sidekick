@@ -12,6 +12,8 @@
     export let id; // Window ID, passed from Window.svelte
     export let consoleId;
     export let initialPath = '.';
+    export let componentName;
+    export let x, y, width, height;
 
     export let consoleConnection = null; // Passed during Dash restore
 
@@ -24,10 +26,11 @@
     // --- Settings Modal State ---
     let showSettings = false;
     let settingsModel = { usePwd: true, path: '/' };
+    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
 
     export function showSettingsDialog() {
         const allSettings = get(windowSettings);
-        const currentSettings = allSettings['IoskFileExplorer'];
+        const currentSettings = allSettings[componentName];
 
         if (currentSettings && currentSettings.initialPath) {
             settingsModel = {
@@ -38,16 +41,28 @@
             // Default settings if none are saved
             settingsModel = { usePwd: true, path: '/' };
         }
+
+        // Populate window settings for the modal
+        const currentWindowSettings = allSettings[componentName] || { positioning: 'auto' };
+        windowSettingsForModal = {
+            positioning: currentWindowSettings.positioning || 'auto',
+            x: currentWindowSettings.x ?? x,
+            y: currentWindowSettings.y ?? y,
+            width: currentWindowSettings.width ?? width,
+            height: currentWindowSettings.height ?? height,
+        };
+
         showSettings = true;
     }
 
     function handleSaveSettings() {
-        const settingToSave = {
+        const componentSettings = {
             initialPath: settingsModel.usePwd ? '.' : (settingsModel.path || '/')
         };
+
         windowSettings.update(all => ({
             ...all,
-            'IoskFileExplorer': settingToSave
+            [componentName]: { ...componentSettings, ...windowSettingsForModal }
         }));
         showSettings = false;
     }
@@ -239,6 +254,10 @@
     .modal-content button:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-content .save-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .modal-content .save-button:hover { background-color: #1a9c2a; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-left: 20px; }
+    .form-grid label { display: flex; align-items: center; gap: 5px; }
+    .form-grid input { width: 80px; }
+    .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
 <div class="explorer-container">
@@ -283,6 +302,23 @@
                     </div>
                     {/if}
                 </fieldset>
+
+                <fieldset>
+                    <legend>Default Window Position & Size</legend>
+                    <div class="radio-group">
+                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="auto"> Auto</label>
+                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="manual"> Manual</label>
+                    </div>
+                    {#if windowSettingsForModal.positioning === 'manual'}
+                        <div class="form-grid">
+                            <label>X: <input type="number" bind:value={windowSettingsForModal.x}></label>
+                            <label>Y: <input type="number" bind:value={windowSettingsForModal.y}></label>
+                            <label>Width: <input type="number" bind:value={windowSettingsForModal.width}></label>
+                            <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
+                        </div>
+                    {/if}
+                </fieldset>
+
                 <div class="buttons">
                     <button on:click={handleCancelSettings}>Cancel</button>
                     <button class="save-button" on:click={handleSaveSettings}>Save Default</button>

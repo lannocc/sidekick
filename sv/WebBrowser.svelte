@@ -9,6 +9,8 @@
 
     export let id; // Window ID
     export let initialUrl = "about:blank"; // Passed from Dash restore or new window creation
+    export let componentName;
+    export let x, y, width, height;
 
     let currentUrl = initialUrl;
     let inputUrl = initialUrl;
@@ -20,6 +22,7 @@
     // --- Settings Modal State ---
     let showSettings = false;
     let settingsModel = { defaultUrl: '' };
+    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
 
     // Update the central window store for Dash saving
     $: if (id !== undefined) {
@@ -89,23 +92,32 @@
     // --- Settings Logic ---
     export function showSettingsDialog() {
         const allSettings = get(windowSettings);
-        const currentSettings = allSettings['WebBrowser'];
         
-        // Use saved default, or fall back to the current URL.
+        // Use the current URL of this specific browser instance for the settings field
         settingsModel = {
-            defaultUrl: currentSettings?.defaultUrl || currentUrl
+            defaultUrl: currentUrl
+        };
+
+        // Populate window settings for the modal
+        const currentWindowSettings = allSettings[componentName] || { positioning: 'auto' };
+        windowSettingsForModal = {
+            positioning: currentWindowSettings.positioning || 'auto',
+            x: currentWindowSettings.x ?? x,
+            y: currentWindowSettings.y ?? y,
+            width: currentWindowSettings.width ?? width,
+            height: currentWindowSettings.height ?? height,
         };
         
         showSettings = true;
     }
 
     function handleSaveSettings() {
-        const settingToSave = {
+        const componentSettings = {
             defaultUrl: settingsModel.defaultUrl.trim() || "about:blank"
         };
         windowSettings.update(all => ({
             ...all,
-            'WebBrowser': settingToSave
+            [componentName]: { ...componentSettings, ...windowSettingsForModal }
         }));
         showSettings = false;
     }
@@ -201,6 +213,10 @@
     .modal-content button:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-content .save-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .modal-content .save-button:hover { background-color: #1a9c2a; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-left: 20px; }
+    .form-grid label { display: flex; align-items: center; gap: 5px; flex-direction: row; }
+    .form-grid input { width: 80px; }
+    .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; flex-direction: row;}
 </style>
 
 <div class="browser-container">
@@ -236,6 +252,23 @@
                         <input type="text" bind:value={settingsModel.defaultUrl} placeholder="e.g., about:blank">
                     </label>
                 </fieldset>
+
+                <fieldset>
+                    <legend>Default Window Position & Size</legend>
+                    <div class="radio-group">
+                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="auto"> Auto</label>
+                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="manual"> Manual</label>
+                    </div>
+                    {#if windowSettingsForModal.positioning === 'manual'}
+                        <div class="form-grid">
+                            <label>X: <input type="number" bind:value={windowSettingsForModal.x}></label>
+                            <label>Y: <input type="number" bind:value={windowSettingsForModal.y}></label>
+                            <label>Width: <input type="number" bind:value={windowSettingsForModal.width}></label>
+                            <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
+                        </div>
+                    {/if}
+                </fieldset>
+
                 <div class="buttons">
                     <button on:click={handleCancelSettings}>Cancel</button>
                     <button class="save-button" on:click={handleSaveSettings}>Save Default</button>

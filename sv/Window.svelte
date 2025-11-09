@@ -11,6 +11,7 @@
     import IoskFileExplorer from './IoskFileExplorer.svelte';
     import IoskFileViewer from './IoskFileViewer.svelte';
     import WebBrowser from './WebBrowser.svelte';
+    import Settings from './Settings.svelte';
 
     export let id;
     export let component;
@@ -54,7 +55,7 @@
     function openSettings() {
         showOptionsMenu = false; // Close the hamburger menu itself.
         // Components with their own settings dialogs
-        const componentsWithCustomSettings = ['IoskConsole', 'IoskFileExplorer', 'WebBrowser'];
+        const componentsWithCustomSettings = ['IoskConsole', 'IoskFileExplorer', 'WebBrowser', 'Settings'];
 
         if (componentsWithCustomSettings.includes(componentName) && componentInstance && typeof componentInstance.showSettingsDialog === 'function') {
             componentInstance.showSettingsDialog();
