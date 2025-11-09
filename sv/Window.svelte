@@ -250,6 +250,8 @@
 
         // Check for Alt/Meta key for special actions, but not on maximized windows
         if ((event.altKey || event.metaKey) && !maximized) {
+            event.preventDefault(); // Prevent click-through to window content
+
             if (event.button === 0) { // Left-click for drag
                 onDragStart(event);
             } else if (event.button === 2) { // Right-click for resize
