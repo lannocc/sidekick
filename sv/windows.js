@@ -325,7 +325,6 @@ export function restoreWindow(winData) {
             // have to handle this state (e.g., show an error).
             props.consoleId = null;
         }
-        delete props.consoleConnection; // Clean up prop that is not used by the component itself
     }
 
     windows.addWindow(component, props);

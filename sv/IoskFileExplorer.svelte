@@ -13,11 +13,14 @@
     export let consoleId;
     export let initialPath = '.';
 
-    let currentPath = '/';
+    export let consoleConnection = null; // Passed during Dash restore
+
+    let currentPath = (initialPath && initialPath !== '.') ? initialPath : '/';
     let items = []; // { name, type, size }
     let errorMessage = '';
 
     let unsubscribeResponses;
+    let unsubscribeWindows; // For listening to window store changes
 
     // --- Settings Modal State ---
     let showSettings = false;
@@ -56,16 +59,16 @@
 
     // Whenever the current path changes, update the central window store
     // so its state can be saved by the Dash.
-    $: if (id) {
-        windows.updateWindowProps(id, { currentPath });
+    $: if (id !== undefined) {
+        windows.updateWindowProps(id, { currentPath, consoleId });
     }
 
-     function requestPath(path) {
+    function requestPath(path) {
         errorMessage = '';
         if (!consoleId) {
             errorMessage = 'No active IOSK connection available.';
             items = [];
-            return;
+            return false; // Indicate failure
         }
         const request = {
             consoleId,
@@ -77,6 +80,7 @@
         };
         // Use a unique object to ensure svelte store triggers update for same consecutive requests
         fileSystemRequests.set({ ...request, timestamp: Date.now() });
+        return true; // Indicate success
     }
 
     function handleItemClick(item) {
@@ -121,14 +125,33 @@
                 }
             }
         });
-        // Initial request based on the prop
-        requestPath(initialPath || '/');
+
+        // Try to request the path. If it fails due to no connection, start watching.
+        if (!requestPath(currentPath) && consoleConnection) {
+            errorMessage = 'No active IOSK connection available. Waiting for connection...';
+            unsubscribeWindows = windows.subscribe(allWindows => {
+                const compatibleConsole = allWindows.find(w =>
+                    w.componentName === 'IoskConsole' &&
+                    w.isConsoleConnected &&
+                    w.consoleConnection &&
+                    w.consoleConnection.url === consoleConnection.url &&
+                    w.consoleConnection.user === consoleConnection.user
+                );
+                if (compatibleConsole && compatibleConsole.id !== consoleId) {
+                    consoleId = compatibleConsole.id; // Update local state
+                    requestPath(currentPath); // Retry request
+                    if (unsubscribeWindows) {
+                        unsubscribeWindows(); // Stop watching once connection is found
+                        unsubscribeWindows = null;
+                    }
+                }
+            });
+        }
     });
 
     onDestroy(() => {
-        if (unsubscribeResponses) {
-            unsubscribeResponses();
-        }
+        if (unsubscribeResponses) unsubscribeResponses();
+        if (unsubscribeWindows) unsubscribeWindows(); // Unsubscribe on destroy
     });
 </script>
 

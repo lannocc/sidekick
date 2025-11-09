@@ -98,6 +98,7 @@
         if (component === Calculator) return 'Calculator';
         if (component === Settings) return 'Settings';
         if (component === IoskFileExplorer) return 'IoskFileExplorer';
+        if (component === IoskFileViewer) return 'IoskFileViewer';
         return 'Unknown';
     }
 

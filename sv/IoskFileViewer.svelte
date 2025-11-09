@@ -11,37 +11,41 @@
     export let id; // window id
     export let consoleId;
     export let path;
-    
+    export let consoleConnection = null; // Passed during Dash restore
+
     let content_b64 = '';
     let content_text = '';
     let content_bytes = new Uint8Array(0);
     let isBinary = false;
     let isLoading = true;
     let errorMessage = '';
-    let mode = 'rendered'; // 'raw' or 'rendered'
+    export let mode = 'rendered'; // 'raw' or 'rendered', now exported to be settable via props
 
     let unsubscribeResponses;
 
-    onMount(() => {
+    let unsubscribeWindows; // For listening to window store changes
+
+    function requestFile() {
         if (!consoleId) {
             isLoading = false;
             errorMessage = 'No active IOSK connection available.';
-            return;
+            return false;
         }
-
-        // Request file content on mount
+        isLoading = true;
+        errorMessage = '';
         const request = {
             consoleId,
             requesterId: id, // Use window id to identify response
-            command: {
-                type: 'fs_read',
-                path
-            }
+            command: { type: 'fs_read', path }
         };
         fileSystemRequests.set({ ...request, timestamp: Date.now() });
 
+        return true;
+    }
+
+    onMount(() => {
         unsubscribeResponses = fileSystemResponses.subscribe(response => {
-            if (response && response.requesterId === id) {
+            if (response && response.requesterId === id && response.data.type === 'fs_read_response') {
                 isLoading = false;
                 const { data } = response;
                 if (data.error) {
@@ -49,7 +53,7 @@
                 } else {
                     isBinary = data.is_binary;
                     content_b64 = data.content_b64;
-                    
+
                     try {
                         const rawString = atob(content_b64);
                         const bytes = new Uint8Array(rawString.length);
@@ -65,7 +69,7 @@
                         errorMessage = "Error decoding file content.";
                         console.error(e);
                     }
-                    
+
                     // Default to raw view if rendering isn't supported
                     if (!canRender) {
                         mode = 'raw';
@@ -73,10 +77,33 @@
                 }
             }
         });
+
+        if (!requestFile() && consoleConnection) {
+            errorMessage = 'No active IOSK connection available. Waiting for connection...';
+            unsubscribeWindows = windows.subscribe(allWindows => {
+                const compatibleConsole = allWindows.find(w =>
+                    w.componentName === 'IoskConsole' &&
+                    w.isConsoleConnected &&
+                    w.consoleConnection &&
+                    w.consoleConnection.url === consoleConnection.url &&
+                    w.consoleConnection.user === consoleConnection.user
+                );
+                if (compatibleConsole && compatibleConsole.id !== consoleId) {
+                    consoleId = compatibleConsole.id;
+                    requestFile();
+                    if (unsubscribeWindows) {
+                        unsubscribeWindows();
+                        unsubscribeWindows = null;
+                    }
+                }
+            });
+        }
     });
 
     onDestroy(() => {
         if (unsubscribeResponses) unsubscribeResponses();
+        if (unsubscribeWindows) unsubscribeWindows();
+
     });
 
     function formatHex(value) {
@@ -95,20 +122,17 @@
     $: isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(fileExtension);
     $: isMarkdown = ['md', 'markdown'].includes(fileExtension);
     $: canRender = (isImage && isBinary) || (isMarkdown && !isBinary);
-    $: if (id) {
+    $: if (id !== undefined) {
         // Update the window store with properties that need to be saved in a Dash layout
-        windows.updateWindowProps(id, { canRender, mode });
-    }
-    // The code block below is now redundant due to the one above. I will remove it.
-    /* $: if (id) {
-        windows.updateWindowProps(id, { canRender });
+        // Also update consoleId in case it was found dynamically.
+        windows.updateWindowProps(id, { canRender, mode, consoleId });
     }
 
     export function setMode(newMode) {
         if (newMode === 'raw' || newMode === 'rendered') {
             mode = newMode;
         }
-    } */
+    }
 
 </script>
 
