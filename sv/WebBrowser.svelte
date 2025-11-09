@@ -111,21 +111,24 @@
         showSettings = true;
     }
 
+
     function handleSaveSettings() {
         const componentSettings = {
             defaultUrl: settingsModel.defaultUrl.trim() || "about:blank"
         };
         windowSettings.update(all => {
-            const existingComponentSettings = all[componentName] || {};
+            // Get existing settings for this component to avoid overwriting unrelated properties.
+            const existingSettings = all[componentName] || {};
             return {
                 ...all,
                 [componentName]: {
-                    ...existingComponentSettings,
+                    ...existingSettings,
                     ...windowSettingsForModal,
-                    ...componentSettings // Spread component-specific settings last to ensure they take precedence
+                    ...componentSettings
                 }
             };
         });
+        showSettings = false;
     }
 
     function handleCancelSettings() {
