@@ -444,6 +444,7 @@
         grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
         gap: 15px;
         overflow-y: auto;
+        min-height: 0; /* Fix for flexbox child scrolling */
     }
 
     .layout-tile {
@@ -471,6 +472,11 @@
     .layout-tile.current {
         border-color: #27c93f; /* green to stand out */
         box-shadow: 0 0 8px rgba(39, 201, 63, 0.4);
+    }
+
+    .layout-tile.highlighted {
+        border-color: #3498db; /* A nice blue to indicate selection */
+        box-shadow: 0 0 8px rgba(52, 152, 219, 0.5);
     }
 
     .context-menu {
@@ -568,6 +574,7 @@
             {#each $dashLayouts as layout (layout.id)}
                 <div 
                     class="layout-tile" 
+                    class:highlighted={cyclePreviewedLayout && cyclePreviewedLayout.id === layout.id}
                     title={layout.name}
                     on:click={() => handleRestoreLayout(layout)}
                     on:mouseenter={() => manualPreviewedLayout = layout}
