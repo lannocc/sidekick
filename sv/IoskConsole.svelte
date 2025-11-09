@@ -609,7 +609,7 @@
 
     <div class="main-flex-area">
         <div class="terminal-wrapper">
-            <div class="terminal" bind:this={terminalEl} on:scroll={() => shouldScroll = (terminalEl.scrollTop + terminalEl.clientHeight >= terminalEl.scrollHeight - 10)}>
+            <div class="terminal" bind:this={terminalEl} on:scroll={() => shouldScroll = (terminalEl.scrollTop + terminalEl.clientHeight >= terminalEl.scrollHeight - 10)} on:click={focusInput}>
                 {#each output as line}
                     <div class="terminal-line" class:prompt={line.type === 'prompt'}>
                         {line.content}

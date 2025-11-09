@@ -9,6 +9,7 @@
     import { desktopSettings, windowSettings } from './desktopStore.js';
     import IoskConsole from './IoskConsole.svelte'; // Import for component type checking
     import IoskFileExplorer from './IoskFileExplorer.svelte';
+    import IoskFileViewer from './IoskFileViewer.svelte';
 
     export let id;
     export let component;
@@ -24,6 +25,7 @@
     export let isActive;
     export let lastFocusedElement; // Received from the store via Desktop.svelte
     export let isConsoleConnected; // For IoskConsole, passed from the store
+    export let canRender; // For IoskFileViewer
 
     const dispatch = createEventDispatcher();
 
@@ -387,8 +389,9 @@
         border-radius: 50%;
         cursor: pointer;
         border: 1px solid rgba(0,0,0,0.2);
+        line-height: 18px;
     }
-    .close { background-color: #ff5f56; line-height: 18px; }
+    .close { background-color: #ff5f56; }
     .minimize { background-color: #ffbd2e; }
     .maximize { background-color: #27c93f; }
     .options-menu-button {
@@ -499,7 +502,7 @@
     <div class="title-bar" on:mousedown|stopPropagation={onDragStart} on:dblclick={() => windows.toggleMaximize(id)}>
         <div class="window-controls">
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
-            <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation></div>
+            <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>_</div>
         </div>
         <span class="title-text">{title}</span>
         <div class="window-controls">
@@ -508,6 +511,7 @@
                 title={maximized ? 'Restore' : 'Maximize'}
                 on:click={() => windows.toggleMaximize(id)}
                 on:mousedown|stopPropagation>
+                &#9632;
             </div>
             <div
                 class="window-control options-menu-button"
@@ -544,6 +548,16 @@
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={handleDisconnect} disabled={!isConsoleConnected}>
                     Disconnect
+                </button>
+            {/if}
+
+            {#if component === IoskFileViewer}
+                <div class="menu-separator"></div>
+                <button class="menu-item" on:click={() => { if (componentInstance && typeof componentInstance.setMode === 'function') componentInstance.setMode('rendered'); showOptionsMenu = false; }} disabled={!canRender}>
+                    Rendered
+                </button>
+                <button class="menu-item" on:click={() => { if (componentInstance && typeof componentInstance.setMode === 'function') componentInstance.setMode('raw'); showOptionsMenu = false; }}>
+                    Raw
                 </button>
             {/if}
 

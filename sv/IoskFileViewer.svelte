@@ -6,6 +6,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
     import { marked } from 'marked';
+    import { windows } from './windows.js';
 
     export let id; // window id
     export let consoleId;
@@ -88,6 +89,15 @@
     $: isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(fileExtension);
     $: isMarkdown = ['md', 'markdown'].includes(fileExtension);
     $: canRender = (isImage && isBinary) || (isMarkdown && !isBinary);
+    $: if (id) {
+        windows.updateWindowProps(id, { canRender });
+    }
+
+    export function setMode(newMode) {
+        if (newMode === 'raw' || newMode === 'rendered') {
+            mode = newMode;
+        }
+    }
 
 </script>
 
