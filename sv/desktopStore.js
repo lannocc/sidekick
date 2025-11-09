@@ -48,6 +48,22 @@ function loadDashLayouts() {
     return defaults;
 }
 
+// Function to load window settings from localStorage
+function loadWindowSettings() {
+    const defaults = {};
+    try {
+        if (typeof localStorage !== 'undefined') {
+            const saved = localStorage.getItem('sidekickWindowSettings');
+            if (saved) {
+                return JSON.parse(saved);
+            }
+        }
+    } catch (e) {
+        console.error("Could not load window settings from localStorage", e);
+    }
+    return defaults;
+}
+
 
 export const desktopSettings = writable(loadSettings());
 
@@ -76,5 +92,19 @@ dashLayouts.subscribe(value => {
         }
     } catch (e) {
         console.error("Could not save dash layouts to localStorage", e);
+    }
+});
+
+// Store for window default settings
+export const windowSettings = writable(loadWindowSettings());
+
+// Subscribe to changes and save window settings to localStorage
+windowSettings.subscribe(value => {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('sidekickWindowSettings', JSON.stringify(value));
+        }
+    } catch (e) {
+        console.error("Could not save window settings to localStorage", e);
     }
 });

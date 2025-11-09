@@ -4,7 +4,7 @@ import Calculator from './Calculator.svelte';
 import Settings from './Settings.svelte';
 import IoskFileExplorer from './IoskFileExplorer.svelte';
 import IoskFileViewer from './IoskFileViewer.svelte';
-import { desktopSettings } from './desktopStore.js';
+import { desktopSettings, windowSettings } from './desktopStore.js';
 
 let windowIdCounter = 0;
 
@@ -27,13 +27,21 @@ function createWindowManager() {
             height: 600,
         };
 
+        const allWindowSettings = get(windowSettings);
+        const componentName = Object.keys(componentMap).find(key => componentMap[key] === component) || 'Unknown';
+        const savedSettings = allWindowSettings[componentName];
+        const useSavedPosition = savedSettings && savedSettings.positioning === 'manual';
+
         const newWindow = {
             id: ++windowIdCounter,
             component: component,
-            x: 50 + (windowIdCounter % 10) * 20,
-            y: 50 + (windowIdCounter % 10) * 20,
+            componentName: componentName,
+            x: useSavedPosition ? savedSettings.x : 50 + (windowIdCounter % 10) * 20,
+            y: useSavedPosition ? savedSettings.y : 50 + (windowIdCounter % 10) * 20,
             ...defaults,
             ...props,
+            width: useSavedPosition ? savedSettings.width : (props.width ?? defaults.width),
+            height: useSavedPosition ? savedSettings.height : (props.height ?? defaults.height),
             zIndex: 100,
             minimized: false,
             maximized: false,
