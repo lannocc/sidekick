@@ -3,7 +3,7 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { dashActive, dashLayouts } from './desktopStore.js';
+    import { dashActive, dashLayouts, dashCycleIndex } from './desktopStore.js';
     import { windows, restoreWindow } from './windows.js';
     import { get } from 'svelte/store';
     import { onMount, onDestroy } from 'svelte';
@@ -19,7 +19,10 @@
     let lastSavedLayoutSnapshot = '';
 
     // --- State for Preview ---
-    let previewedLayout = null;
+    let manualPreviewedLayout = null; // Controlled by mouse hover
+    let cyclePreviewedLayout = null;  // Controlled by keyboard cycle store
+    $: previewedLayout = manualPreviewedLayout || cyclePreviewedLayout;
+
     let previewContainerWidth = 0;
     let previewContainerHeight = 0;
     let previewScale = 1;
@@ -38,13 +41,22 @@
         contextMenu = { visible: false, x: 0, y: 0, layoutId: null };
     }
 
+    function handleKeydown(e) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            handleCancelDash();
+        }
+    }
+
     onMount(() => {
         // Close context menu on any click outside of it
         window.addEventListener('click', closeContextMenu);
+        window.addEventListener('keydown', handleKeydown);
     });
 
     onDestroy(() => {
         window.removeEventListener('click', closeContextMenu);
+        window.removeEventListener('keydown', handleKeydown);
     });
 
     function handleRightClick(event, layout) {
@@ -128,6 +140,13 @@
                 isLayoutDirty = true;
             }
         }
+    }
+
+    // React to keyboard cycling
+    $: if ($dashCycleIndex > -1 && $dashLayouts[$dashCycleIndex]) {
+        cyclePreviewedLayout = $dashLayouts[$dashCycleIndex];
+    } else {
+        cyclePreviewedLayout = null;
     }
 
     function handleSaveDash() {
@@ -216,9 +235,17 @@
     }
 
     function handleCancelDash() {
-        // Exits dash mode and closes all windows
-        dashActive.set(false);
-        windows.closeAllWindows();
+        // Exits dash mode and closes all windows, with confirmation
+        if (get(windows).length > 0) {
+            setTimeout(() => {
+                if (confirm("Are you sure you want to close all windows?")) {
+                    dashActive.set(false);
+                    windows.closeAllWindows();
+                }
+            }, 0);
+        } else {
+            dashActive.set(false);
+        }
     }
     
     function handleMinimizeDash() {
@@ -490,8 +517,8 @@
                     class="layout-tile" 
                     title={layout.name}
                     on:click={() => handleRestoreLayout(layout)}
-                    on:mouseenter={() => previewedLayout = layout}
-                    on:mouseleave={() => previewedLayout = null}
+                    on:mouseenter={() => manualPreviewedLayout = layout}
+                    on:mouseleave={() => manualPreviewedLayout = null}
                     on:contextmenu|preventDefault={e => handleRightClick(e, layout)}
                     role="button" 
                     tabindex="0"

@@ -95,6 +95,9 @@ dashLayouts.subscribe(value => {
     }
 });
 
+// Store for cycling through dash layouts via keyboard
+export const dashCycleIndex = writable(-1);
+
 // Store for window default settings
 export const windowSettings = writable(loadWindowSettings());
 
