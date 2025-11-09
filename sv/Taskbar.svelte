@@ -428,7 +428,7 @@
         <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>
             W~
         </button>
-        <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Toggle Dash">
+        <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">
             &mdash;
         </button>
         {#if showWindowsMenu}
