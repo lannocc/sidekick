@@ -237,7 +237,7 @@
                             if (data.type === 'state_info') {
                                 motd = data.motd || '';
                             }
-                            if (!roomName) motd = '';
+
                         } else if (data.output || data.prompt) {
                             if (data.output) {
                                 const clearScreenCode = "\x1b[H\x1b[2J";
