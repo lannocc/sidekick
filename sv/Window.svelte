@@ -10,6 +10,7 @@
     import IoskConsole from './IoskConsole.svelte'; // Import for component type checking
     import IoskFileExplorer from './IoskFileExplorer.svelte';
     import IoskFileViewer from './IoskFileViewer.svelte';
+    import WebBrowser from './WebBrowser.svelte';
 
     export let id;
     export let component;
@@ -52,15 +53,13 @@
 
     function openSettings() {
         showOptionsMenu = false; // Close the hamburger menu itself.
-        if (componentName === 'IoskConsole') {
-             if (componentInstance && typeof componentInstance.showSettingsDialog === 'function') {
-                componentInstance.showSettingsDialog();
-            }
-        } else if (componentName === 'IoskFileExplorer') {
-            if (componentInstance && typeof componentInstance.showSettingsDialog === 'function') {
-                componentInstance.showSettingsDialog();
-            }
-        } else {
+        // Components with their own settings dialogs
+        const componentsWithCustomSettings = ['IoskConsole', 'IoskFileExplorer', 'WebBrowser'];
+
+        if (componentsWithCustomSettings.includes(componentName) && componentInstance && typeof componentInstance.showSettingsDialog === 'function') {
+            componentInstance.showSettingsDialog();
+        }
+        else {
             const allSettings = get(windowSettings);
             const currentSettings = allSettings[componentName] || { positioning: 'auto' };
 

@@ -14,6 +14,7 @@
     import Settings from './Settings.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
     import IoskFileViewer from './IoskFileViewer.svelte';
+    import WebBrowser from './WebBrowser.svelte';
 
     let isLayoutDirty = true;
     let lastSavedLayoutSnapshot = '';
@@ -178,7 +179,8 @@
                 // Component-specific state to restore
                 initialPath: win.currentPath, // For IoskFileExplorer. It's saved as `initialPath` for easy restoration.
                 path: win.path,               // For IoskFileViewer
-                mode: win.mode                // For IoskFileViewer
+                mode: win.mode,               // For IoskFileViewer
+                initialUrl: win.currentUrl    // For WebBrowser
             };
         });
 
@@ -202,6 +204,7 @@
         if (component === Settings) return 'Settings';
         if (component === IoskFileExplorer) return 'IoskFileExplorer';
         if (component === IoskFileViewer) return 'IoskFileViewer';
+        if (component === WebBrowser) return 'WebBrowser';
         return 'Unknown';
     }
 

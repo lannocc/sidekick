@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows, newIoskConnection, newCalculator, newSettings } from './windows.js';
+    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser } from './windows.js';
     import { dashActive } from './desktopStore.js';
     import Clock from './Clock.svelte';
 
@@ -489,7 +489,7 @@
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchSettings(); }}>Settings</button>
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchIosk(); }}>IOSK Connection</button>
                 <div class="menu-separator"></div>
-                <button class="menu-item" disabled>Web Browser</button>
+                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); newWebBrowser(); showMenu = false; }}>Web Browser</button>
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchCalculator(); }}>Calculator</button>
             </div>

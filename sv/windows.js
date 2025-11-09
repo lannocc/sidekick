@@ -4,6 +4,7 @@ import Calculator from './Calculator.svelte';
 import Settings from './Settings.svelte';
 import IoskFileExplorer from './IoskFileExplorer.svelte';
 import IoskFileViewer from './IoskFileViewer.svelte';
+import WebBrowser from './WebBrowser.svelte';
 import { desktopSettings, windowSettings } from './desktopStore.js';
 
 let windowIdCounter = 0;
@@ -14,7 +15,8 @@ const componentMap = {
     'Calculator': Calculator,
     'Settings': Settings,
     'IoskFileExplorer': IoskFileExplorer,
-    'IoskFileViewer': IoskFileViewer
+    'IoskFileViewer': IoskFileViewer,
+    'WebBrowser': WebBrowser
 };
 
 function createWindowManager() {
@@ -316,6 +318,19 @@ export function newIoskFileViewer(consoleId, path) {
         path: path,
         width: 700,
         height: 500,
+    });
+}
+
+export function newWebBrowser() {
+    const allWindowSettings = get(windowSettings);
+    const browserSettings = allWindowSettings['WebBrowser'];
+    const initialUrl = browserSettings?.defaultUrl || 'about:blank';
+
+    windows.addWindow(WebBrowser, {
+        title: 'Web Browser',
+        initialUrl: initialUrl,
+        width: 1024,
+        height: 768
     });
 }
 
