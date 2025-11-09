@@ -131,16 +131,28 @@
     function handleSaveDash() {
         const currentWindows = get(windows);
         // Map current windows to a serializable format
-        const layoutWindows = currentWindows.map(win => ({
-            componentType: getComponentType(win.component),
-            title: win.title,
-            x: win.x,
-            y: win.y,
-            width: win.width,
-            height: win.height,
-            maximized: win.maximized,
-            consoleId: win.consoleId, // Specific prop for File Explorer
-        }));
+        const layoutWindows = currentWindows.map(win => {
+            const associatedConsole = currentWindows.find(c => c.id === win.consoleId);
+
+            return {
+                componentType: getComponentType(win.component),
+                title: win.title,
+                x: win.x,
+                y: win.y,
+                width: win.width,
+                height: win.height,
+                maximized: win.maximized,
+
+                // For IoskFileExplorer & IoskFileViewer, save the connection identity
+                // so we can re-associate on restore.
+                consoleConnection: associatedConsole ? associatedConsole.consoleConnection : null,
+
+                // Component-specific state to restore
+                initialPath: win.currentPath, // For IoskFileExplorer. It's saved as `initialPath` for easy restoration.
+                path: win.path,               // For IoskFileViewer
+                mode: win.mode                // For IoskFileViewer
+            };
+        });
 
         // Create the full layout object, now including desktop dimensions for accurate preview scaling
         const layoutToSave = {

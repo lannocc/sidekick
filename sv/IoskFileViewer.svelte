@@ -23,6 +23,12 @@
     let unsubscribeResponses;
 
     onMount(() => {
+        if (!consoleId) {
+            isLoading = false;
+            errorMessage = 'No active IOSK connection available.';
+            return;
+        }
+
         // Request file content on mount
         const request = {
             consoleId,
@@ -90,6 +96,11 @@
     $: isMarkdown = ['md', 'markdown'].includes(fileExtension);
     $: canRender = (isImage && isBinary) || (isMarkdown && !isBinary);
     $: if (id) {
+        // Update the window store with properties that need to be saved in a Dash layout
+        windows.updateWindowProps(id, { canRender, mode });
+    }
+    // The code block below is now redundant due to the one above. I will remove it.
+    /* $: if (id) {
         windows.updateWindowProps(id, { canRender });
     }
 
@@ -97,7 +108,7 @@
         if (newMode === 'raw' || newMode === 'rendered') {
             mode = newMode;
         }
-    }
+    } */
 
 </script>
 

@@ -296,15 +296,37 @@ export function newIoskFileViewer(consoleId, path) {
     });
 }
 
-export function restoreWindow(winData) {
+export function restoreWindow(winData) {    
     const component = componentMap[winData.componentType];
     if (!component) {
         console.error(`Unknown component type for restore: ${winData.componentType}`);
         return;
     }
 
-    // Prepare props, excluding componentType which is not a direct prop for the window manager
+    // Prepare props, excluding properties used only for restoration logic.
     const { componentType, ...props } = winData;
+
+    // For components that need a console connection, find a compatible one.
+    if ((component === IoskFileExplorer || component === IoskFileViewer) && props.consoleConnection) {
+        const allWindows = get(windows);
+        // Find a suitable console window that is currently connected and matches the saved connection identity.
+        const compatibleConsole = allWindows.find(w => 
+            w.component === IoskConsole && 
+            w.isConsoleConnected &&
+            w.consoleConnection &&
+            w.consoleConnection.url === props.consoleConnection.url &&
+            w.consoleConnection.user === props.consoleConnection.user
+        );
+
+        if (compatibleConsole) {
+            props.consoleId = compatibleConsole.id;
+        } else {
+            // No compatible connection is currently open. The component will
+            // have to handle this state (e.g., show an error).
+            props.consoleId = null;
+        }
+        delete props.consoleConnection; // Clean up prop that is not used by the component itself
+    }
 
     windows.addWindow(component, props);
 }

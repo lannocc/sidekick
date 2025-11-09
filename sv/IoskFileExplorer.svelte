@@ -6,7 +6,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
-    import { newIoskFileViewer } from './windows.js';
+    import { newIoskFileViewer, windows } from './windows.js';
     import { windowSettings } from './desktopStore.js';
 
     export let id; // Window ID, passed from Window.svelte
@@ -54,8 +54,19 @@
         showSettings = false;
     }
 
-    function requestPath(path) {
+    // Whenever the current path changes, update the central window store
+    // so its state can be saved by the Dash.
+    $: if (id) {
+        windows.updateWindowProps(id, { currentPath });
+    }
+
+     function requestPath(path) {
         errorMessage = '';
+        if (!consoleId) {
+            errorMessage = 'No active IOSK connection available.';
+            items = [];
+            return;
+        }
         const request = {
             consoleId,
             requesterId: id, // Identify this explorer window

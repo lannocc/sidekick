@@ -135,9 +135,12 @@
         }
     });
 
-    // Reactive statement to update the window store with the connection status
+    // Reactive statements to update the window store with component state
     $: if (id !== undefined) {
-        windows.updateWindowProps(id, { isConsoleConnected: isConnected });
+        windows.updateWindowProps(id, {
+            isConsoleConnected: isConnected,
+            consoleConnection: isConnected ? { url: wsUrl, user: username } : null
+        });
     }
 
     // Reactive statement to update the window title based on connection and room state
