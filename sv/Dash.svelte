@@ -41,7 +41,7 @@
     };
 
     function closeContextMenu() {
-        contextMenu = { visible: false, x: 0, y: 0, layoutId: null, type: saved };
+        contextMenu = { visible: false, x: 0, y: 0, layoutId: null, type: 'saved' };
     }
 
     function handleKeydown(e) {
@@ -649,7 +649,7 @@
         on:click|stopPropagation
     >
         {#if contextMenu.type === 'current'}
-            <button on:click={handleSaveAs}>Save As...</button>
+            <button on:click={handleSaveAs} disabled={$windows.length === 0}>Save As...</button>
             <button class="delete" on:click={handleDeleteCurrent}>Delete</button>
         {:else} <!-- Default to saved layout menu -->
             <button on:click={handleRenameLayout}>Rename</button>
