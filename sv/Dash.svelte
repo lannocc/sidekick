@@ -13,6 +13,7 @@
     import Calculator from './Calculator.svelte';
     import Settings from './Settings.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
+    import IoskFileViewer from './IoskFileViewer.svelte';
 
     let isLayoutDirty = true;
     let lastSavedLayoutSnapshot = '';
