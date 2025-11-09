@@ -2,6 +2,16 @@ Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
 
+v0.4.2
+======
+
+Date: November 7, 2025
+
+    * Introducing the web frontend: SideKick Wins!
+    * Improvements to the `ask` command: added '-w' (--work) option.
+    * Other misc. fixes and improvements.
+
+
 v0.4.1
 ======
 
