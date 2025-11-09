@@ -15,9 +15,11 @@
     export let componentName;
     export let x, y, width, height; // Current geometry from Window.svelte
 
+    // These will be passed in when restoring a dash layout
+    export let wsUrl = undefined;
+    export let username = undefined;
+
     // --- State for Connection & Room Awareness ---
-    let wsUrl;
-    let username;
     let isConnected = false;
     let roomName = null;
     let roomTopic = '';
@@ -98,6 +100,14 @@
     }
 
     onMount(() => {
+        // Initialize from settings if not provided via props (from layout restore)
+        if (wsUrl === undefined) {
+            wsUrl = get(desktopSettings).ioskUrl;
+        }
+        if (username === undefined) {
+            username = get(desktopSettings).ioskUsername;
+        }
+
         // Automatically focus the connection URL input on mount
         if (!isConnected) {
             const urlInput = document.querySelector(`#url-input-${id}`);
@@ -127,19 +137,13 @@
         window.removeEventListener('click', handleGlobalClick);
     });
 
-    desktopSettings.subscribe(settings => {
-        // Only update local details if we are NOT connected.
-        if (!isConnected) {
-            wsUrl = settings.ioskUrl;
-            username = settings.ioskUsername;
-        }
-    });
-
     // Reactive statements to update the window store with component state
     $: if (id !== undefined) {
         windows.updateWindowProps(id, {
             isConsoleConnected: isConnected,
-            consoleConnection: isConnected ? { url: wsUrl, user: username } : null
+           consoleConnection: isConnected ? { url: wsUrl, user: username } : null,
+           wsUrl,
+           username
         });
     }
 
@@ -166,7 +170,7 @@
         if (isConnected) return;
         settingsUrl = wsUrl;
         settingsUsername = username;
-        
+
         // Populate window settings for the modal
         const allSettings = get(windowSettings);
         const currentSettings = allSettings[componentName] || { positioning: 'auto' };

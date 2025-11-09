@@ -167,6 +167,10 @@
                 height: win.height,
                 maximized: win.maximized,
 
+                // For IoskConsole, save URL and username
+                wsUrl: win.wsUrl,
+                username: win.username,
+
                 // For IoskFileExplorer & IoskFileViewer, save the connection identity
                 // so we can re-associate on restore.
                 consoleConnection: associatedConsole ? associatedConsole.consoleConnection : null,
