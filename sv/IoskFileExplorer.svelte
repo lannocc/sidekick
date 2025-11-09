@@ -20,7 +20,6 @@
     let errorMessage = '';
 
     let unsubscribeResponses;
-    let unsubscribeWindows; // For listening to window store changes
 
     // --- Settings Modal State ---
     let showSettings = false;
@@ -63,10 +62,43 @@
         windows.updateWindowProps(id, { currentPath, consoleId });
     }
 
+    $: if (consoleConnection && $windows) {
+        // Check if our current consoleId is still valid
+        const currentConsole = $windows.find(w => w.id === consoleId);
+        if (!currentConsole || !currentConsole.isConsoleConnected) {
+            // If not, clear it.
+            if (consoleId) {
+                consoleId = null;
+                errorMessage = 'Connection lost. Waiting for reconnection...';
+                items = [];
+            }
+        }
+
+        // If we don't have a consoleId, try to find one
+        if (!consoleId) {
+            const compatibleConsole = $windows.find(w =>
+                w.componentName === 'IoskConsole' &&
+                w.isConsoleConnected &&
+                w.consoleConnection &&
+                w.consoleConnection.url === consoleConnection.url &&
+                w.consoleConnection.user === consoleConnection.user
+            );
+
+            if (compatibleConsole) {
+                // Found one!
+                consoleId = compatibleConsole.id;
+                requestPath(currentPath);
+            } else {
+                // Still no connection.
+                errorMessage = 'No active IOSK connection available. Waiting for connection...';
+                items = [];
+            }
+        }
+    }
+
     function requestPath(path) {
         errorMessage = '';
         if (!consoleId) {
-            errorMessage = 'No active IOSK connection available.';
             items = [];
             return false; // Indicate failure
         }
@@ -126,32 +158,15 @@
             }
         });
 
-        // Try to request the path. If it fails due to no connection, start watching.
-        if (!requestPath(currentPath) && consoleConnection) {
-            errorMessage = 'No active IOSK connection available. Waiting for connection...';
-            unsubscribeWindows = windows.subscribe(allWindows => {
-                const compatibleConsole = allWindows.find(w =>
-                    w.componentName === 'IoskConsole' &&
-                    w.isConsoleConnected &&
-                    w.consoleConnection &&
-                    w.consoleConnection.url === consoleConnection.url &&
-                    w.consoleConnection.user === consoleConnection.user
-                );
-                if (compatibleConsole && compatibleConsole.id !== consoleId) {
-                    consoleId = compatibleConsole.id; // Update local state
-                    requestPath(currentPath); // Retry request
-                    if (unsubscribeWindows) {
-                        unsubscribeWindows(); // Stop watching once connection is found
-                        unsubscribeWindows = null;
-                    }
-                }
-            });
+        // If we are created with a consoleId, request the path immediately.
+        // If we are restored (with consoleConnection), the reactive block will handle it.
+        if (consoleId) {
+            requestPath(currentPath);
         }
     });
 
     onDestroy(() => {
         if (unsubscribeResponses) unsubscribeResponses();
-        if (unsubscribeWindows) unsubscribeWindows(); // Unsubscribe on destroy
     });
 </script>
 

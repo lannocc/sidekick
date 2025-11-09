@@ -23,12 +23,45 @@
 
     let unsubscribeResponses;
 
-    let unsubscribeWindows; // For listening to window store changes
+    $: if (consoleConnection && $windows) {
+        // Check if our current consoleId is still valid
+        const currentConsole = $windows.find(w => w.id === consoleId);
+        if (!currentConsole || !currentConsole.isConsoleConnected) {
+            // If not, clear it.
+            if (consoleId) {
+                consoleId = null;
+                isLoading = false;
+                errorMessage = 'Connection lost. Waiting for reconnection...';
+                content_b64 = '';
+            }
+        }
+
+        // If we don't have a consoleId, try to find one
+        if (!consoleId) {
+            const compatibleConsole = $windows.find(w =>
+                w.componentName === 'IoskConsole' &&
+                w.isConsoleConnected &&
+                w.consoleConnection &&
+                w.consoleConnection.url === consoleConnection.url &&
+                w.consoleConnection.user === consoleConnection.user
+            );
+
+            if (compatibleConsole) {
+                // Found one!
+                consoleId = compatibleConsole.id;
+                requestFile(); // This will set isLoading=true
+            } else {
+                // Still no connection.
+                isLoading = false;
+                errorMessage = 'No active IOSK connection available. Waiting for connection...';
+                content_b64 = '';
+            }
+        }
+    }
 
     function requestFile() {
         if (!consoleId) {
             isLoading = false;
-            errorMessage = 'No active IOSK connection available.';
             return false;
         }
         isLoading = true;
@@ -78,31 +111,15 @@
             }
         });
 
-        if (!requestFile() && consoleConnection) {
-            errorMessage = 'No active IOSK connection available. Waiting for connection...';
-            unsubscribeWindows = windows.subscribe(allWindows => {
-                const compatibleConsole = allWindows.find(w =>
-                    w.componentName === 'IoskConsole' &&
-                    w.isConsoleConnected &&
-                    w.consoleConnection &&
-                    w.consoleConnection.url === consoleConnection.url &&
-                    w.consoleConnection.user === consoleConnection.user
-                );
-                if (compatibleConsole && compatibleConsole.id !== consoleId) {
-                    consoleId = compatibleConsole.id;
-                    requestFile();
-                    if (unsubscribeWindows) {
-                        unsubscribeWindows();
-                        unsubscribeWindows = null;
-                    }
-                }
-            });
+        // If we are created with a consoleId, request the file immediately.
+        // If we are restored (with consoleConnection), the reactive block will handle it.
+        if (consoleId) {
+            requestFile();
         }
     });
 
     onDestroy(() => {
         if (unsubscribeResponses) unsubscribeResponses();
-        if (unsubscribeWindows) unsubscribeWindows();
 
     });
 
