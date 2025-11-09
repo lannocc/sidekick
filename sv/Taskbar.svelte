@@ -399,11 +399,11 @@
 
     /* Styles for menu indicators on buttons */
     .start-button,
-    .taskbar-left > .windows-button:first-child {
+    .windows-list-button {
         position: relative; /* Required for pseudo-element positioning */
     }
     .start-button::after,
-    .taskbar-left > .windows-button:first-child::after {
+    .windows-list-button::after {
         content: '';
         position: absolute;
         bottom: 0px;
@@ -416,7 +416,7 @@
     .start-button::after {
         right: 5px;
     }
-    .taskbar-left > .windows-button:first-child::after {
+    .windows-list-button::after {
         left: 5px;
     }
 </style>
@@ -425,11 +425,11 @@
 
 <div class="taskbar">
     <div class="taskbar-left" bind:this={leftSectionEl}>
-        <button class="windows-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>
-            W~
-        </button>
         <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">
             &mdash;
+        </button>
+        <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>
+            W~
         </button>
         {#if showWindowsMenu}
             <div class="windows-menu">
