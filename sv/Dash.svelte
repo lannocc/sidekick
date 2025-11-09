@@ -42,9 +42,12 @@
     }
 
     function handleKeydown(e) {
+        // Let SideKick.svelte handle cycling through layouts with modifier keys.
+        if (e.metaKey || e.altKey) return;
+
         if (e.key === 'Escape') {
             e.preventDefault();
-            handleCancelDash();
+            handleMaximizeDash();
         }
     }
 
