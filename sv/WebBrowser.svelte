@@ -115,11 +115,17 @@
         const componentSettings = {
             defaultUrl: settingsModel.defaultUrl.trim() || "about:blank"
         };
-        windowSettings.update(all => ({
-            ...all,
-            [componentName]: { ...componentSettings, ...windowSettingsForModal }
-        }));
-        showSettings = false;
+        windowSettings.update(all => {
+            const existingComponentSettings = all[componentName] || {};
+            return {
+                ...all,
+                [componentName]: {
+                    ...existingComponentSettings,
+                    ...windowSettingsForModal,
+                    ...componentSettings // Spread component-specific settings last to ensure they take precedence
+                }
+            };
+        });
     }
 
     function handleCancelSettings() {
