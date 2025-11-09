@@ -274,7 +274,7 @@ export function newIoskFileExplorer(consoleId, consoleTitle) {
     
     const allWindowSettings = get(windowSettings);
     const explorerSettings = allWindowSettings['IoskFileExplorer'];
-    const initialPath = explorerSettings?.initialPath || 'pwd';
+    const initialPath = explorerSettings?.initialPath || '.';
 
     windows.addWindow(IoskFileExplorer, {
         title: title,
