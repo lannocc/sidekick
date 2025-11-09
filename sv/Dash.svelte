@@ -18,6 +18,8 @@
     let isLayoutDirty = true;
     let lastSavedLayoutSnapshot = '';
 
+    let currentLayout = null;
+
     // --- State for Preview ---
     let manualPreviewedLayout = null; // Controlled by mouse hover
     let cyclePreviewedLayout = null;  // Controlled by keyboard cycle store
@@ -109,54 +111,10 @@
     // --- End Context Menu Logic ---
 
 
-    function getComponentType(component) {
-        if (component === IoskConsole) return 'IoskConsole';
-        if (component === Calculator) return 'Calculator';
-        if (component === Settings) return 'Settings';
-        if (component === IoskFileExplorer) return 'IoskFileExplorer';
-        if (component === IoskFileViewer) return 'IoskFileViewer';
-        return 'Unknown';
-    }
-
-    // Helper to create a comparable snapshot of the window layout
-    function generateLayoutSnapshot(windowsArray) {
-        if (!windowsArray) return '[]';
-        // Sort by ID to ensure consistent string output for comparison
-        const sortedWindows = [...windowsArray].sort((a, b) => a.id - b.id);
-        const relevantData = sortedWindows.map(win => ({
-            id: win.id, // ID is important for comparison
-            x: win.x,
-            y: win.y,
-            width: win.width,
-            height: win.height,
-            minimized: win.minimized,
-            maximized: win.maximized
-        }));
-        return JSON.stringify(relevantData);
-    }
-
-    // Watch for window changes to re-enable the save button
-    $: {
-        if ($windows) {
-            const currentSnapshot = generateLayoutSnapshot($windows);
-            if (currentSnapshot !== lastSavedLayoutSnapshot) {
-                isLayoutDirty = true;
-            }
-        }
-    }
-
-    // React to keyboard cycling
-    $: if ($dashCycleIndex > -1 && $dashLayouts[$dashCycleIndex]) {
-        cyclePreviewedLayout = $dashLayouts[$dashCycleIndex];
-    } else {
-        cyclePreviewedLayout = null;
-    }
-
-    function handleSaveDash() {
-        const currentWindows = get(windows);
+    function generateLayoutObject(windowsArray, name, id) {
         // Map current windows to a serializable format
-        const layoutWindows = currentWindows.map(win => {
-            const associatedConsole = currentWindows.find(c => c.id === win.consoleId);
+        const layoutWindows = windowsArray.map(win => {
+            const associatedConsole = windowsArray.find(c => c.id === win.consoleId);
 
             return {
                 componentType: getComponentType(win.component),
@@ -183,9 +141,9 @@
         });
 
         // Create the full layout object, now including desktop dimensions for accurate preview scaling
-        const layoutToSave = {
-            id: Date.now(),
-            name: `Layout ${get(dashLayouts).length + 1}`,
+        return {
+            id: id,
+            name: name,
             desktop: {
                 width: window.innerWidth,
                 // The available desktop area height is the viewport height minus the 40px taskbar
@@ -193,6 +151,74 @@
             },
             windows: layoutWindows
         };
+    }
+
+
+    function getComponentType(component) {
+        if (component === IoskConsole) return 'IoskConsole';
+        if (component === Calculator) return 'Calculator';
+        if (component === Settings) return 'Settings';
+        if (component === IoskFileExplorer) return 'IoskFileExplorer';
+        if (component === IoskFileViewer) return 'IoskFileViewer';
+        return 'Unknown';
+    }
+
+    // Helper to create a comparable snapshot of the window layout
+    function generateLayoutSnapshot(windowsArray) {
+        if (!windowsArray) return '[]';
+        // Sort by ID to ensure consistent string output for comparison
+        const sortedWindows = [...windowsArray].sort((a, b) => a.id - b.id);
+        const relevantData = sortedWindows.map(win => ({
+            id: win.id, // ID is important for comparison
+            x: win.x,
+            y: win.y,
+            width: win.width,
+            height: win.height,
+            minimized: win.minimized,
+            maximized: win.maximized
+        }));
+        return JSON.stringify(relevantData);
+    }
+
+    // Create a representation of the current layout when Dash is active
+    $: {
+        if ($dashActive) {
+            currentLayout = generateLayoutObject(get(windows), 'Current Desktop', 'current');
+            // If nothing is being previewed yet (i.e., on first open), show the current layout
+            if (!manualPreviewedLayout && !cyclePreviewedLayout) {
+                manualPreviewedLayout = currentLayout;
+            }
+        } else {
+            // Reset when dash closes
+            currentLayout = null;
+            manualPreviewedLayout = null;
+        }
+    }
+
+    // Watch for window changes to re-enable the save button
+    $: {
+        if ($windows) {
+            const currentSnapshot = generateLayoutSnapshot($windows);
+            if (currentSnapshot !== lastSavedLayoutSnapshot) {
+                isLayoutDirty = true;
+            }
+        }
+    }
+
+    // React to keyboard cycling
+    $: if ($dashCycleIndex > -1 && $dashLayouts[$dashCycleIndex]) {
+        cyclePreviewedLayout = $dashLayouts[$dashCycleIndex];
+    } else {
+        cyclePreviewedLayout = null;
+    }
+
+    function handleSaveDash() {
+        const currentWindows = get(windows);
+        const layoutToSave = generateLayoutObject(
+            currentWindows,
+            `Layout ${get(dashLayouts).length + 1}`,
+            Date.now()
+        );
 
         dashLayouts.update(layouts => [...layouts, layoutToSave]);
 
@@ -237,7 +263,8 @@
     }
 
     function handleMaximizeDash() {
-        // Exits dash mode, returning to previous window arrangement
+        // Exits dash mode, returning to previous window arrangement and restoring any minimized windows.
+        windows.restoreAllWindows();
         dashActive.set(false);
     }
 
@@ -441,6 +468,11 @@
         border-color: var(--taskbar-button-hover-bg);
     }
     
+    .layout-tile.current {
+        border-color: #27c93f; /* green to stand out */
+        box-shadow: 0 0 8px rgba(39, 201, 63, 0.4);
+    }
+
     .context-menu {
         position: fixed; /* Use fixed to position relative to viewport */
         background-color: var(--window-bg);
@@ -519,6 +551,20 @@
             {/if}
         </div>
         <div class="dash-layouts">
+            {#if currentLayout}
+                <div 
+                    class="layout-tile current" 
+                    title={currentLayout.name}
+                    on:click={handleMaximizeDash}
+                    on:mouseenter={() => manualPreviewedLayout = currentLayout}
+                    on:mouseleave={() => manualPreviewedLayout = null}
+                    role="button" 
+                    tabindex="0"
+                    on:keydown={e => e.key === 'Enter' && handleMaximizeDash()}
+                >
+                    {currentLayout.name}
+                </div>
+            {/if}
             {#each $dashLayouts as layout (layout.id)}
                 <div 
                     class="layout-tile" 

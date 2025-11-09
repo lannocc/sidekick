@@ -187,6 +187,28 @@ function createWindowManager() {
         });
     };
 
+    const restoreAllWindows = () => {
+        update(currentWindows => {
+            const anyMinimized = currentWindows.some(w => w.minimized);
+            if (!anyMinimized) return currentWindows; // No-op if nothing to do
+
+            let updatedWindows = currentWindows.map(w => ({...w, minimized: false}));
+
+            // Check if any window is active after restoration.
+            const isAnyActive = updatedWindows.some(w => w.isActive);
+            if (!isAnyActive && updatedWindows.length > 0) {
+                // If no window is active (e.g., all were minimized), make the top-most one active.
+                const topWindow = updatedWindows.reduce((top, w) => (!top || w.zIndex > top.zIndex) ? w : top, null);
+                if (topWindow) {
+                    updatedWindows = updatedWindows.map(w =>
+                        w.id === topWindow.id ? { ...w, isActive: true } : w
+                    );
+                }
+            }
+            return updatedWindows;
+        });
+    };
+
     const cycleWindow = (forward) => {
         update(currentWindows => {
             const openWindows = currentWindows
@@ -247,6 +269,7 @@ function createWindowManager() {
         toggleMaximize,
         closeAllWindows,
         minimizeAllWindows,
+        restoreAllWindows,
         cycleWindow
     };
 }
