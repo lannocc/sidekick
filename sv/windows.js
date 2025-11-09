@@ -280,7 +280,7 @@ export const windows = createWindowManager();
 // Function to be called from other components like the Taskbar
 export function newIoskConnection() {
     windows.addWindow(IoskConsole, {
-        title: 'New IOSK Connection'
+        title: 'IOSK Connection'
     });
 }
 

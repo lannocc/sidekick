@@ -382,6 +382,15 @@
     .menu-item:hover {
         background-color: var(--taskbar-button-hover-bg);
     }
+    .menu-item:disabled {
+        color: #7f8c8d;
+        cursor: not-allowed;
+    }
+    .menu-separator {
+        height: 1px;
+        background-color: var(--border-color);
+        margin: 4px 0;
+    }
     .menu-item-empty {
         padding: 10px 15px;
         color: #7f8c8d; /* Muted color */
@@ -468,7 +477,7 @@
     </div>
 
     <div class="taskbar-right" bind:this={rightSectionEl}>
-        <button class="quick-launch-button" on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); launchIosk(); }} title="New IOSK Connection">
+        <button class="quick-launch-button" on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); launchIosk(); }} title="IOSK Connection">
             $+
         </button>
         <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }}>
@@ -477,9 +486,12 @@
 
         {#if showMenu}
             <div class="start-menu">
-                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchIosk(); }}>New IOSK Connection</button>
-                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchCalculator(); }}>Calculator</button>
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchSettings(); }}>Settings</button>
+                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchIosk(); }}>IOSK Connection</button>
+                <div class="menu-separator"></div>
+                <button class="menu-item" disabled>Web Browser</button>
+                <div class="menu-separator"></div>
+                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchCalculator(); }}>Calculator</button>
             </div>
         {/if}
     </div>
