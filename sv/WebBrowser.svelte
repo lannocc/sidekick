@@ -92,14 +92,14 @@
     // --- Settings Logic ---
     export function showSettingsDialog() {
         const allSettings = get(windowSettings);
-        
-        // Use the current URL of this specific browser instance for the settings field
+        const currentWindowSettings = allSettings[componentName] || { positioning: 'auto' };
+
+        // Use the saved default URL if it exists, otherwise fall back to the current URL of this instance.
         settingsModel = {
-            defaultUrl: currentUrl
+            defaultUrl: currentWindowSettings.defaultUrl || currentUrl
         };
 
         // Populate window settings for the modal
-        const currentWindowSettings = allSettings[componentName] || { positioning: 'auto' };
         windowSettingsForModal = {
             positioning: currentWindowSettings.positioning || 'auto',
             x: currentWindowSettings.x ?? x,
@@ -107,7 +107,7 @@
             width: currentWindowSettings.width ?? width,
             height: currentWindowSettings.height ?? height,
         };
-        
+
         showSettings = true;
     }
 
