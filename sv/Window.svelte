@@ -85,16 +85,10 @@
 
     onMount(() => {
         window.addEventListener('click', handleWindowClick);
-        titleBarEl.addEventListener('mouseenter', handleTitleMouseEnter);
-        titleBarEl.addEventListener('mouseleave', handleTitleMouseLeave);
     });
 
     onDestroy(() => {
         window.removeEventListener('click', handleWindowClick);
-        if (titleBarEl) {
-            titleBarEl.removeEventListener('mouseenter', handleTitleMouseEnter);
-            titleBarEl.removeEventListener('mouseleave', handleTitleMouseLeave);
-        }
     });
 
     function handleConnect() {
@@ -216,6 +210,25 @@
         x = event.clientX - dragOffsetX;
         y = event.clientY - dragOffsetY;
         windows.updateWindowProps(id, { x, y });
+
+        // Drop target detection logic
+        titleBarEl.style.pointerEvents = 'none';
+        const elementUnder = document.elementFromPoint(event.clientX, event.clientY);
+        titleBarEl.style.pointerEvents = 'auto';
+
+        const targetTitleBar = elementUnder?.closest('.title-bar');
+        const targetId = targetTitleBar ? parseInt(targetTitleBar.dataset.groupId, 10) : null;
+        const currentDragState = get(dragState);
+
+        if (targetId && targetId !== id) {
+            if (currentDragState.dropTargetGroupId !== targetId) {
+                dragState.update(s => ({ ...s, dropTargetGroupId: targetId }));
+            }
+        } else {
+            if (currentDragState.dropTargetGroupId !== null) {
+                dragState.update(s => ({ ...s, dropTargetGroupId: null }));
+            }
+        }
     }
 
     function onDragEnd() {
@@ -228,20 +241,6 @@
         }
         dragState.set(null);
         restoreFocus();
-    }
-
-    function handleTitleMouseEnter() {
-        const currentDragState = get(dragState);
-        if (currentDragState && currentDragState.draggingGroupId !== id) {
-            dragState.update(s => ({ ...s, dropTargetGroupId: id }));
-        }
-    }
-
-    function handleTitleMouseLeave() {
-        const currentDragState = get(dragState);
-        if (currentDragState && currentDragState.dropTargetGroupId === id) {
-            dragState.update(s => ({ ...s, dropTargetGroupId: null }));
-        }
     }
 
     function onResizeStart(event) {
@@ -290,7 +289,7 @@
 
     function handleMouseEnter() {
         if (settings?.focusFollowsMouse && !isActive) {
-            focusTimeout = setTimeout(() => windows.setActiveWindow(id), settings.focusDelay);
+            focusTimeout = setTimeout(() => windows.focusWindow(id), settings.focusDelay);
         }
     }
 
@@ -374,8 +373,8 @@
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave}>
-    <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={onDragStart} on:dblclick={() => windows.toggleMaximize(id)}>
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown}>
+    <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={onDragStart} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id}>
         <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
             <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>_</div>

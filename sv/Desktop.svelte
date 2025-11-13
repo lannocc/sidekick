@@ -20,6 +20,26 @@
         x: 0,
         y: 0,
     };
+    
+    // --- Focus Follows Mouse Logic ---
+    let focusTimeoutDesktop = {};
+
+    function handleContentMouseEnter(group) {
+        const settings = get(desktopSettings);
+        if (settings?.focusFollowsMouse && !group.isActive) {
+            focusTimeoutDesktop[group.id] = setTimeout(() => {
+                windows.focusWindow(group.id);
+            }, settings.focusDelay);
+        }
+    }
+
+    function handleContentMouseLeave(group) {
+        if (focusTimeoutDesktop[group.id]) {
+            clearTimeout(focusTimeoutDesktop[group.id]);
+            delete focusTimeoutDesktop[group.id];
+        }
+    }
+
 
     function handleRightClick(event) {
         if (get(dashActive)) return; // Don't show if dash is active
@@ -52,6 +72,7 @@
     });
     onDestroy(() => {
         window.removeEventListener('click', closeContextMenu);
+        Object.values(focusTimeoutDesktop).forEach(clearTimeout);
     });
 
     desktopSettings.subscribe(settings => {
@@ -196,10 +217,14 @@
                 style:top="{group.maximized ? 0 : group.y}px"
                 style:width="{group.maximized ? '100%' : group.width + 'px'}"
                 style:height="{group.maximized ? '100%' : group.height + 'px'}"
-                style:z-index="{group.zIndex}"
+                style:z-index="{group.zIndex - 1}"
                 on:focusout={e => handleFocusOut(e, tab)}
             >
-                <div class="content-area-container">
+                <div
+                    class="content-area-container"
+                    on:mouseenter={() => handleContentMouseEnter(group)}
+                    on:mouseleave={() => handleContentMouseLeave(group)}
+                >
                     <svelte:component
                         bind:this={componentInstances[tab.id]}
                         this={tab.component}
