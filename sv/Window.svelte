@@ -6,263 +6,588 @@
     import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { windows, newIoskFileExplorer } from './windows.js';
-    import { desktopSettings, windowSettings, tabDropTarget } from './desktopStore.js';
-    import IoskConsole from './IoskConsole.svelte';
+    import { desktopSettings, windowSettings } from './desktopStore.js';
+    import IoskConsole from './IoskConsole.svelte'; // Import for component type checking
+    import IoskFileExplorer from './IoskFileExplorer.svelte';
     import IoskFileViewer from './IoskFileViewer.svelte';
+    import WebBrowser from './WebBrowser.svelte';
+    import Settings from './Settings.svelte';
 
-    // --- Group Props ---
-    export let id; // Group ID
-    export let x, y, width, height, zIndex, minimized, maximized, isActive, tabs, activeTabId;
-    
-    // --- Derived State ---
-    $: activeTab = tabs.find(t => t.id === activeTabId);
-    $: isDropTarget = $tabDropTarget === id;
+    export let id;
+    export let component;
+    export let componentName;
+    export let title;
+    export let x;
+    export let y;
+    export let width;
+    export let height;
+    export let zIndex;
+    export let minimized;
+    export let maximized;
+    export let isActive;
+    export let lastFocusedElement; // Received from the store via Desktop.svelte
+    export let isConsoleConnected; // For IoskConsole, passed from the store
+    export let canRender; // For IoskFileViewer
+    export let isFlashing;
 
     const dispatch = createEventDispatcher();
+
     let settings;
     desktopSettings.subscribe(value => settings = value);
 
-    let isDragging = false, isResizing = false;
+    let isDragging = false;
+    let isResizing = false;
     let dragOffsetX, dragOffsetY;
-    let resizeDirection = '', initialResizeState = {};
+
+    let resizeDirection = '';
+    let initialResizeState = {};
     let focusTimeout = null;
+
     let showOptionsMenu = false;
-    let optionsButton;
-    let componentInstance;
+    let optionsButton; // ref for the hamburger button
+    let componentInstance; // ref for the svelte:component instance
+
     let contentAreaEl;
+
+    // --- Generic Settings Modal ---
     let showGenericSettingsModal = false;
     let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
 
     function openSettings() {
-        showOptionsMenu = false;
+        showOptionsMenu = false; // Close the hamburger menu itself.
+        // Components with their own settings dialogs
         const componentsWithCustomSettings = ['IoskConsole', 'IoskFileExplorer', 'WebBrowser', 'Settings'];
-        if (componentsWithCustomSettings.includes(activeTab.componentName) && componentInstance?.showSettingsDialog) {
+
+        if (componentsWithCustomSettings.includes(componentName) && componentInstance && typeof componentInstance.showSettingsDialog === 'function') {
             componentInstance.showSettingsDialog();
-        } else {
-            const currentSettings = get(windowSettings)[activeTab.componentName] || { positioning: 'auto' };
+        }
+        else {
+            const allSettings = get(windowSettings);
+            const currentSettings = allSettings[componentName] || { positioning: 'auto' };
+
+            // Populate modal state with saved defaults or current geometry
             windowSettingsForModal = {
                 positioning: currentSettings.positioning || 'auto',
-                x: currentSettings.x ?? x, y: currentSettings.y ?? y,
-                width: currentSettings.width ?? width, height: currentSettings.height ?? height,
+                x: currentSettings.x ?? x,
+                y: currentSettings.y ?? y,
+                width: currentSettings.width ?? width,
+                height: currentSettings.height ?? height,
             };
             showGenericSettingsModal = true;
         }
     }
 
     function saveGenericWindowSettings() {
-        windowSettings.update(all => ({ ...all, [activeTab.componentName]: windowSettingsForModal }));
+        windowSettings.update(allSettings => ({
+            ...allSettings,
+            [componentName]: windowSettingsForModal
+        }));
         showGenericSettingsModal = false;
     }
 
+
     function handleWindowClick(event) {
+        // If menu is open and click is outside the menu button and the menu itself, close it
         if (showOptionsMenu && optionsButton && !optionsButton.contains(event.target) && !event.target.closest('.options-menu')) {
             showOptionsMenu = false;
         }
     }
 
-    onMount(() => window.addEventListener('click', handleWindowClick));
-    onDestroy(() => window.removeEventListener('click', handleWindowClick));
+    onMount(() => {
+        // Use a single listener for all window instances
+        window.addEventListener('click', handleWindowClick);
+    });
 
-    function handleConnect() { componentInstance?.connect?.(); showOptionsMenu = false; }
-    function handleDisconnect() { componentInstance?.disconnect?.(); showOptionsMenu = false; }
+    onDestroy(() => {
+        window.removeEventListener('click', handleWindowClick);
+    });
+
+    function handleConnect() {
+        if (componentInstance && typeof componentInstance.connect === 'function') {
+            componentInstance.connect();
+        }
+        showOptionsMenu = false;
+    }
+
+    function handleDisconnect() {
+        if (componentInstance && typeof componentInstance.disconnect === 'function') {
+            componentInstance.disconnect();
+        }
+        showOptionsMenu = false;
+    }
 
     async function restoreFocus() {
-        if (activeTab?.lastFocusedElement && document.body.contains(activeTab.lastFocusedElement)) {
-            await tick();
-            activeTab.lastFocusedElement.focus({ preventScroll: true });
+        // Check if the element to focus is still valid and in the DOM
+        if (lastFocusedElement && document.body.contains(lastFocusedElement)) {
+            await tick(); // Wait for any potential re-renders to complete
+            lastFocusedElement.focus({ preventScroll: true });
         }
     }
 
     function handleFocusOut(event) {
-        if (contentAreaEl && !contentAreaEl.contains(event.relatedTarget) && contentAreaEl.contains(event.target)) {
-            windows.updateTabProps(activeTab.id, { lastFocusedElement: event.target });
+        // When focus leaves the content area, save the last focused element.
+        // `relatedTarget` is where focus is going. If it's outside our content
+        // area, we save the element that just lost focus (`event.target`).
+        if (contentAreaEl && !contentAreaEl.contains(event.relatedTarget)) {
+            if (contentAreaEl.contains(event.target)) {
+                windows.updateWindowProps(id, { lastFocusedElement: event.target });
+            }
         }
     }
 
-    $: if (isActive) Promise.resolve().then(restoreFocus);
+    // When the window becomes active, restore focus to its last known element.
+    $: if (isActive) {
+        // Use a microtask to ensure any DOM changes from the activation have completed.
+        Promise.resolve().then(restoreFocus);
+    }
+
+
+    function getResizeDirection(event) {
+        const relativeX = event.clientX - x;
+        const relativeY = event.clientY - y;
+
+        // Define a third of the window as the edge area for resize detection
+        const borderThird = 1 / 3;
+
+        const onTop = relativeY < height * borderThird;
+        const onBottom = relativeY > height * (1 - borderThird);
+        const onLeft = relativeX < width * borderThird;
+        const onRight = relativeX > width * (1 - borderThird);
+
+        let vertical = '';
+        if (onTop) vertical = 'n';
+        else if (onBottom) vertical = 's';
+
+        let horizontal = '';
+        if (onLeft) horizontal = 'w';
+        else if (onRight) horizontal = 'e';
+
+        return vertical + horizontal;
+    }
+
 
     function onDragStart(event) {
-        if (event.target.closest('.window-control, .tab-button') || maximized) return;
+        if (event.target.classList.contains('window-control') || maximized) return;
         isDragging = true;
         dragOffsetX = event.clientX - x;
         dragOffsetY = event.clientY - y;
         window.addEventListener('mousemove', onDrag);
         window.addEventListener('mouseup', onDragEnd);
-        windows.focusGroup(id);
+
+        if (event.altKey || event.metaKey) {
+            windows.setActiveWindow(id);
+        } else {
+            windows.focusWindow(id);
+        }
     }
 
     function onDrag(event) {
         if (!isDragging) return;
-        const newX = event.clientX - dragOffsetX;
-        const newY = event.clientY - dragOffsetY;
-        windows.updateGroupProps(id, { x: newX, y: newY });
-        
-        if (tabs.length === 1) {
-            const elUnderCursor = document.elementFromPoint(event.clientX, event.clientY);
-            const targetTitleBar = elUnderCursor?.closest('.title-bar[data-group-id]');
-            const targetGroupId = targetTitleBar ? parseInt(targetTitleBar.dataset.groupId) : null;
-            if (targetGroupId && targetGroupId !== id) {
-                tabDropTarget.set(targetGroupId);
-            } else {
-                tabDropTarget.set(null);
-            }
-        }
+        x = event.clientX - dragOffsetX;
+        y = event.clientY - dragOffsetY;
+        windows.updateWindowProps(id, { x, y });
     }
 
     function onDragEnd() {
         isDragging = false;
         window.removeEventListener('mousemove', onDrag);
         window.removeEventListener('mouseup', onDragEnd);
-        
-        const targetId = get(tabDropTarget);
-        if (targetId) {
-            windows.mergeTabs(tabs[0].id, targetId);
-        }
-        tabDropTarget.set(null);
-        restoreFocus();
+        restoreFocus(); // Restore focus after move is complete
     }
-    
+
     function onResizeStart(event) {
         if (maximized) return;
-        let direction = event.target.classList.contains('resize-handle') ? 'se' : '';
+
+        let direction;
+        // The dedicated resize handle always resizes from the south-east
+        if (event.target.classList.contains('resize-handle')) {
+            direction = 'se';
+        } else {
+            direction = getResizeDirection(event);
+        }
+
+        // Do not start resize if click is in the central area of the window
         if (!direction) return;
+
         isResizing = true;
         resizeDirection = direction;
-        initialResizeState = { x, y, width, height, mouseX: event.clientX, mouseY: event.clientY };
+
+        initialResizeState = {
+            x, y, width, height,
+            mouseX: event.clientX,
+            mouseY: event.clientY,
+        };
+
         window.addEventListener('mousemove', onResize);
         window.addEventListener('mouseup', onResizeEnd);
-        windows.focusGroup(id);
+
+        if (event.altKey || event.metaKey) {
+            windows.setActiveWindow(id);
+        } else {
+            windows.focusWindow(id);
+        }
     }
 
     function onResize(event) {
         if (!isResizing) return;
+
         const { x: ix, y: iy, width: iw, height: ih, mouseX: startX, mouseY: startY } = initialResizeState;
         const dx = event.clientX - startX;
         const dy = event.clientY - startY;
-        const minWidth = 350, minHeight = 150;
-        let newWidth = Math.max(minWidth, iw + dx);
-        let newHeight = Math.max(minHeight, ih + dy);
-        windows.updateGroupProps(id, { width: newWidth, height: newHeight });
+
+        // Minimum dimensions are set in CSS, we enforce them here to prevent inversion
+        const minWidth = 250;
+        const minHeight = 150;
+
+        let newX = ix;
+        let newY = iy;
+        let newWidth = iw;
+        let newHeight = ih;
+
+        if (resizeDirection.includes('e')) {
+            newWidth = iw + dx;
+        }
+        if (resizeDirection.includes('w')) {
+            newWidth = iw - dx;
+            newX = ix + dx;
+        }
+        if (resizeDirection.includes('s')) {
+            newHeight = ih + dy;
+        }
+        if (resizeDirection.includes('n')) {
+            newHeight = ih - dy;
+            newY = iy + dy;
+        }
+
+        // Clamp to minimum size and adjust position accordingly
+        if (newWidth < minWidth) {
+            if (resizeDirection.includes('w')) {
+                newX = ix + (iw - minWidth);
+            }
+            newWidth = minWidth;
+        }
+        if (newHeight < minHeight) {
+            if (resizeDirection.includes('n')) {
+                newY = iy + (ih - minHeight);
+            }
+            newHeight = minHeight;
+        }
+
+        x = newX;
+        y = newY;
+        width = newWidth;
+        height = newHeight;
+
+        windows.updateWindowProps(id, { x, y, width, height });
     }
 
     function onResizeEnd() {
         isResizing = false;
+        resizeDirection = '';
+        initialResizeState = {};
         window.removeEventListener('mousemove', onResize);
         window.removeEventListener('mouseup', onResizeEnd);
-        restoreFocus();
+        restoreFocus(); // Restore focus after resize is complete
     }
-    
+
     function handleFrameMouseDown(event) {
         clearTimeout(focusTimeout);
-        windows.focusGroup(id);
+
+        // Check for Alt/Meta key for special actions, but not on maximized windows
+        if ((event.altKey || event.metaKey) && !maximized) {
+            event.preventDefault(); // Prevent click-through to window content
+
+            if (event.button === 0) { // Left-click for drag
+                onDragStart(event);
+            } else if (event.button === 2) { // Right-click for resize
+                onResizeStart(event);
+            }
+        } else {
+            // A regular click on the frame should focus and raise the window.
+            windows.focusWindow(id);
+        }
     }
 
     function handleMouseEnter() {
         if (settings?.focusFollowsMouse && !isActive) {
-            focusTimeout = setTimeout(() => windows.focusGroup(id), settings.focusDelay);
+            focusTimeout = setTimeout(() => {
+                windows.setActiveWindow(id);
+            }, settings.focusDelay);
         }
     }
-    function handleMouseLeave() { clearTimeout(focusTimeout); }
+
+    function handleMouseLeave() {
+        clearTimeout(focusTimeout);
+    }
 </script>
 
 <style>
-    .window-frame { position: absolute; border: 1px solid var(--border-color); background-color: var(--window-bg); border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; min-width: 350px; min-height: 150px; transition: border-color 0.2s; }
-    .window-frame:not(.active) { border-color: #7f8c8d; }
-    .window-frame.minimized { display: none; }
-    .window-frame.maximized { border-radius: 0; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; }
-    .window-frame.maximized .resize-handle { display: none; }
-    @keyframes flash-animation { 50% { border-color: #f39c12; box-shadow: 0 0 20px 5px rgba(243, 156, 18, 0.7); } }
-    .window-frame.flashing { animation: flash-animation 0.5s ease-in-out; }
-    
-    .title-bar { height: 30px; background-color: var(--title-bar-bg); color: var(--title-bar-text); display: flex; justify-content: space-between; align-items: stretch; border-top-left-radius: 5px; border-top-right-radius: 5px; user-select: none; transition: background-color 0.2s; flex-shrink: 0; }
-    .window-frame:not(.active) .title-bar { background-color: #7f8c8d; }
-    .title-bar.drop-target { background-color: #27ae60; }
-
-    .tabs-container { display: flex; flex-grow: 1; align-items: stretch; overflow: hidden; }
-    .tab-button { background: transparent; border: none; color: var(--title-bar-text); padding: 0 10px; cursor: pointer; display: flex; align-items: center; gap: 8px; max-width: 180px; border-right: 1px solid var(--border-color); }
-    .tab-button:not(.active) { background-color: rgba(0,0,0,0.2); }
-    .tab-button.active { font-weight: bold; }
-    .tab-button:hover:not(.active) { background-color: rgba(0,0,0,0.3); }
-    .tab-title { flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
-    .tab-close { font-size: 16px; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .tab-close:hover { background-color: #ff5f56; color: white; }
-    .title-drag-area { flex-grow: 1; cursor: move; }
-
-    .window-controls { display: flex; gap: 5px; align-items: center; padding: 0 8px; }
-    .window-control { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: rgba(0,0,0,0.6); font-weight: bold; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.2); line-height: 18px; }
+    @keyframes flash-animation {
+        0% { border-color: var(--border-color); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        50% { border-color: #f39c12; box-shadow: 0 0 20px 5px rgba(243, 156, 18, 0.7); }
+        100% { border-color: var(--border-color); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+    }
+    .window-frame.active.flashing {
+        animation: flash-animation 0.5s ease-in-out;
+    }
+    .window-frame:not(.active).flashing {
+        animation: flash-animation 0.5s ease-in-out;
+    }
+    .window-frame {
+        position: absolute;
+        border: 1px solid var(--border-color);
+        background-color: var(--window-bg);
+        border-radius: 6px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        display: flex;
+        flex-direction: column;
+        min-width: 250px;
+        min-height: 150px;
+        transition: border-color 0.2s ease-in-out;
+    }
+    .window-frame:not(.active) {
+        border-color: #7f8c8d;
+    }
+    .window-frame.minimized {
+        display: none;
+    }
+    .window-frame.maximized {
+        border-radius: 0;
+        /* !important is used to override inline styles */
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+    }
+    .window-frame.maximized .resize-handle {
+        display: none;
+    }
+    .title-bar {
+        height: 30px;
+        background-color: var(--title-bar-bg);
+        color: var(--title-bar-text);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 8px;
+        cursor: move;
+        border-top-left-radius: 5px;
+        border-top-right-radius: 5px;
+        user-select: none;
+        transition: background-color 0.2s ease-in-out;
+    }
+    .window-frame:not(.active) .title-bar {
+        background-color: #7f8c8d; /* Muted color for inactive windows */
+    }
+    .title-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: center;
+    }
+    .window-controls {
+        display: flex;
+        gap: 5px;
+    }
+    .window-control {
+        width: 14px;
+        height: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        color: rgba(0,0,0,0.6);
+        font-weight: bold;
+        border-radius: 50%;
+        cursor: pointer;
+        border: 1px solid rgba(0,0,0,0.2);
+        line-height: 18px;
+    }
     .close { background-color: #ff5f56; }
     .minimize { background-color: #ffbd2e; }
     .maximize { background-color: #27c93f; }
-    .options-menu-button { background-color: #3498db; color: white; line-height: 0.8; }
-
-    .content-area { flex-grow: 1; overflow: auto; padding: 5px; }
-    .resize-handle { position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; cursor: se-resize; }
-    
-    .options-menu { position: absolute; top: 35px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 1000; display: flex; flex-direction: column; min-width: 150px; padding: 4px 0; }
-    .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; font-size: 14px; }
-    .menu-item:hover:not(:disabled) { background-color: var(--taskbar-button-hover-bg); }
-    .menu-item:disabled { color: #7f8c8d; cursor: not-allowed; }
-    .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
-    .menu-item.close-option { color: #e74c3c; }
-    .menu-item.close-option:hover { background-color: #c0392b; color: white; }
-    
-    /* Generic Modal Styles */
+    .options-menu-button {
+        background-color: #3498db;
+        color: white;
+    }
+    .content-area {
+        flex-grow: 1;
+        overflow: auto;
+        padding: 5px;
+    }
+    .resize-handle {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 12px;
+        height: 12px;
+        cursor: se-resize;
+    }
+    .options-menu {
+        position: absolute;
+        top: 35px;
+        right: 8px; /* Positioned under the right-side controls */
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        z-index: 1000; /* Above window content */
+        display: flex;
+        flex-direction: column;
+        min-width: 150px;
+        padding: 4px 0;
+        user-select: none;
+    }
+    .menu-item {
+        background: none;
+        border: none;
+        color: var(--taskbar-text);
+        padding: 8px 12px;
+        text-align: left;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    .menu-item:hover:not(:disabled) {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .menu-item:disabled {
+        color: #7f8c8d;
+        cursor: not-allowed;
+    }
+    .menu-item.close-option {
+        color: #e74c3c;
+    }
+    .menu-item.close-option:hover:not(:disabled) {
+        background-color: #c0392b;
+        color: white;
+    }
+    .menu-separator {
+        height: 1px;
+        background-color: var(--border-color);
+        margin: 4px 0;
+    }
+    .options-menu-button {
+        line-height: 0.8; /* Center the hamburger symbol better */
+    }
+    .menu-item.submenu {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .menu-item.submenu::after {
+        content: '▸';
+        font-size: 0.9em;
+        opacity: 0.7;
+        padding-left: 10px;
+    }
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
-    .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; }
+    .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
+    .modal-content h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+    fieldset { border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+    legend { color: var(--title-bar-text); padding: 0 5px; }
+    .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+    .modal-content button { padding: 8px 16px; border-radius: 3px; cursor: pointer; border: 1px solid var(--border-color); color: var(--title-bar-text); background-color: var(--taskbar-button-bg); }
+    .modal-content button:hover { background-color: var(--taskbar-button-hover-bg); }
+    .modal-content .save-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
+    .modal-content .save-button:hover { background-color: #1a9c2a; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-left: 20px; }
+    .form-grid label { display: flex; align-items: center; gap: 5px; }
+    .form-grid input { width: 80px; background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
+    .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active class:flashing={activeTab?.isFlashing}
-    style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}"
-    style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave}>
-    <div class="title-bar" on:dblclick={() => windows.toggleMaximize(id)} data-group-id={id} class:drop-target={isDropTarget}>
-        <div class="tabs-container">
-            {#each tabs as tab (tab.id)}
-                <button class="tab-button" class:active={tab.id === activeTabId} on:click={() => windows.setActiveTab(id, tab.id)} title={tab.title}>
-                    <span class="tab-title">{tab.title}</span>
-                    <span class="tab-close" on:click|stopPropagation={() => windows.removeTab(tab.id)}>&times;</span>
-                </button>
-            {/each}
-        </div>
-        <div class="title-drag-area" on:mousedown|stopPropagation={onDragStart}></div>
+<div
+    class="window-frame"
+    class:minimized
+    class:maximized
+    class:active={isActive}
+    class:flashing={isFlashing}
+    style:left="{x}px"
+    style:top="{y}px"
+    style:width="{maximized ? null : width + 'px'}"
+    style:height="{maximized ? null : height + 'px'}"
+    style:z-index="{zIndex}"
+    on:mousedown={handleFrameMouseDown}
+    on:contextmenu={e => (e.altKey || e.metaKey) && e.preventDefault()}
+    on:mouseenter={handleMouseEnter}
+    on:mouseleave={handleMouseLeave}
+>
+    <div class="title-bar" on:mousedown|stopPropagation={onDragStart} on:dblclick={() => windows.toggleMaximize(id)}>
         <div class="window-controls">
+            <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
             <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>_</div>
-            <div class="window-control maximize" title={maximized ? 'Restore' : 'Maximize'} on:click={() => windows.toggleMaximize(id)} on:mousedown|stopPropagation>
+        </div>
+        <span class="title-text">{title}</span>
+        <div class="window-controls">
+            <div
+                class="window-control maximize"
+                title={maximized ? 'Restore' : 'Maximize'}
+                on:click={() => windows.toggleMaximize(id)}
+                on:mousedown|stopPropagation>
                 {@html maximized ? '&#128470;' : '&#9632;'}
             </div>
-            <div class="window-control options-menu-button" title="Options" bind:this={optionsButton} on:click|stopPropagation={() => showOptionsMenu = !showOptionsMenu}>≡</div>
+            <div
+                class="window-control options-menu-button"
+                title="Options"
+                bind:this={optionsButton}
+                on:click|stopPropagation={() => showOptionsMenu = !showOptionsMenu}>
+                ≡
+            </div>
         </div>
     </div>
     {#if showOptionsMenu}
         <div class="options-menu">
-            <button class="menu-item" on:click={() => { windows.toggleMaximize(id); showOptionsMenu = false; }}>{maximized ? 'Restore' : 'Maximize'}</button>
-            <button class="menu-item" on:click={openSettings}>Settings...</button>
-            {#if activeTab.component === IoskConsole}
+            <button class="menu-item" on:click={() => { windows.toggleMaximize(id); showOptionsMenu = false; }}>
+                {maximized ? 'Restore' : 'Maximize'}
+            </button>
+            <button class="menu-item" on:click={openSettings}>
+                Settings...
+            </button>
+
+            {#if component === IoskConsole}
+                <button class="menu-item" on:click={handleConnect} disabled={isConsoleConnected}>
+                    Connect
+                </button>
                 <div class="menu-separator"></div>
-                <button class="menu-item" on:click={handleConnect} disabled={activeTab.isConsoleConnected}>Connect</button>
-                <button class="menu-item" on:click={() => { newIoskFileExplorer(activeTab.id, activeTab.title); showOptionsMenu = false; }} disabled={!activeTab.isConsoleConnected}>Files...</button>
-                <button class="menu-item" on:click={handleDisconnect} disabled={!activeTab.isConsoleConnected}>Disconnect</button>
+                <button class="menu-item submenu" on:click|stopPropagation={() => { if (componentInstance && typeof componentInstance.toggleAttachMenu === 'function') { componentInstance.toggleAttachMenu(); } showOptionsMenu = false; }} disabled={!isConsoleConnected}>
+                    Attach
+                </button>
+                <button class="menu-item" on:click={() => { newIoskFileExplorer(id, title); showOptionsMenu = false; }} disabled={!isConsoleConnected}>
+                    Files...
+                </button>
+                <button class="menu-item submenu" on:click|stopPropagation={() => { if (componentInstance && typeof componentInstance.toggleRoomsMenu === 'function') { componentInstance.toggleRoomsMenu(); } showOptionsMenu = false; }} disabled={!isConsoleConnected}>
+                    Rooms
+                </button>
+                <div class="menu-separator"></div>
+                <button class="menu-item" on:click={handleDisconnect} disabled={!isConsoleConnected}>
+                    Disconnect
+                </button>
             {/if}
-            {#if activeTab.component === IoskFileViewer}
-                 <div class="menu-separator"></div>
-                <button class="menu-item" on:click={() => componentInstance?.setMode('rendered')} disabled={!activeTab.canRender}>Rendered</button>
-                <button class="menu-item" on:click={() => componentInstance?.setMode('raw')}>Raw</button>
+
+            {#if component === IoskFileViewer}
+                <div class="menu-separator"></div>
+                <button class="menu-item" on:click={() => { if (componentInstance && typeof componentInstance.setMode === 'function') componentInstance.setMode('rendered'); showOptionsMenu = false; }} disabled={!canRender}>
+                    Rendered
+                </button>
+                <button class="menu-item" on:click={() => { if (componentInstance && typeof componentInstance.setMode === 'function') componentInstance.setMode('raw'); showOptionsMenu = false; }}>
+                    Raw
+                </button>
             {/if}
+
             <div class="menu-separator"></div>
             <button class="menu-item" on:click={() => { windows.toggleMinimize(id); showOptionsMenu = false; }}>Minimize</button>
-            <button class="menu-item close-option" on:click={() => { windows.removeTab(activeTabId); showOptionsMenu = false; }}>Close Tab</button>
+            <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>Close</button>
         </div>
     {/if}
-    <div class="content-area" bind:this={contentAreaEl} on:focusout={handleFocusOut}>
-        {#if activeTab}
-            <svelte:component bind:this={componentInstance} this={activeTab.component} {...activeTab} isActive={isActive && activeTab.id === activeTabId} />
-        {/if}
+    <div class="content-area" bind:this={contentAreaEl} on:focusout={handleFocusOut} >
+        <svelte:component bind:this={componentInstance} this={component} {id} bind:title={title} {isActive} {...$$restProps} />
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
 
     {#if showGenericSettingsModal}
         <div class="modal-overlay" on:click|self={() => showGenericSettingsModal = false}>
             <div class="modal-content" on:click|stopPropagation>
-                <h3>Window Settings: {activeTab.title}</h3>
+                <h3>Window Settings: {title}</h3>
                 <fieldset>
                     <legend>Default Position & Size</legend>
                     <div class="radio-group">

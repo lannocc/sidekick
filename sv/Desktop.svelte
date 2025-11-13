@@ -140,8 +140,8 @@
 
 <div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu={handleRightClick}>
     <div class="windows-layer">
-        {#each $windows as group (group.id)}
-            <Window {...group} />
+        {#each $windows as win (win.id)}
+            <Window {...win} />
         {/each}
     </div>
 

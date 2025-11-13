@@ -25,7 +25,7 @@
 
     // Update window store with props for Dash saving
     $: if (id !== undefined) {
-        windows.updateTabProps(id, { consoleId, localUser, remoteUser });
+        windows.updateWindowProps(id, { consoleId, localUser, remoteUser });
     }
 
     const ansiCodeToCssVar = {
@@ -39,7 +39,7 @@
         if (typeof text !== 'string') return '';
         const ansiRegex = /\u001b\[(\d+)m/g;
         let openSpan = false;
-
+        
         let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         let html = sanitizedText.replace(ansiRegex, (match, code) => {
@@ -214,4 +214,3 @@
         </form>
     </div>
 </div>
-

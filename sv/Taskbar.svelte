@@ -62,83 +62,124 @@
         };
     }
 
-    $: allTabs = $windows.flatMap(group =>
-        group.tabs.map(tab => ({
-            ...tab,
-            groupId: group.id,
-            groupX: group.x,
-            groupY: group.y,
-            groupWidth: group.width,
-            groupHeight: group.height,
-            isGroupActive: group.isActive,
-            isGroupMinimized: group.minimized,
-            isGroupMaximized: group.maximized
-        }))
-    );
-
-    function getIdealButtonLeft(tab, buttonWidth) {
-        if (tab.isGroupMaximized) {
+    // Helper to calculate the ideal alignment for a taskbar button
+    function getIdealButtonLeft(win, buttonWidth) {
+        // A maximized window's task item should be centered
+        if (win.maximized) {
             return screenWidth / 2 - buttonWidth / 2;
         }
-        const windowCenter = tab.groupX + tab.groupWidth / 2;
+
+        const windowCenter = win.x + win.width / 2;
+        // Calculate the window's center position as a fraction of the screen width
         const progress = Math.max(0, Math.min(1, windowCenter / screenWidth));
-        const leftAlignedPos = tab.groupX;
-        const rightAlignedPos = tab.groupX + tab.groupWidth - buttonWidth;
+
+        // The button's ideal left position interpolates.
+        // When window is on the left (progress=0), button is left-aligned with window.
+        // When window is on the right (progress=1), button is right-aligned with window.
+        const leftAlignedPos = win.x;
+        const rightAlignedPos = win.x + win.width - buttonWidth;
+
         let idealLeft = leftAlignedPos * (1 - progress) + rightAlignedPos * progress;
-        idealLeft = Math.max(0, Math.min(idealLeft, screenWidth - buttonWidth));
+
+        // Clamp the ideal position to be within the screen bounds. This prevents
+        // buttons from having an ideal position far off-screen when their
+        // window is dragged out of view, which fixes the layout calculation.
+        idealLeft = Math.max(0, idealLeft);
+        idealLeft = Math.min(idealLeft, screenWidth - buttonWidth);
+
         return idealLeft;
     }
 
-    $: if (screenWidth && leftSectionEl && centerSectionEl && rightSectionEl && allTabs.length > 0) {
-        const allWidthsKnown = allTabs.every(tab => taskItemWidths.has(tab.id));
+    // Reactive calculation for task item layouts
+    $: if (screenWidth && leftSectionEl && centerSectionEl && rightSectionEl && $windows.length > 0) {
+        // Wait until we have widths for all items before calculating the layout
+        const allWidthsKnown = $windows.every(win => taskItemWidths.has(win.id));
+
         if (allWidthsKnown) {
             const leftRect = leftSectionEl.getBoundingClientRect();
             const centerRect = centerSectionEl.getBoundingClientRect();
             const rightRect = rightSectionEl.getBoundingClientRect();
-            const items = allTabs
-                .map(tab => {
-                    const buttonWidth = taskItemWidths.get(tab.id) || 100;
-                    return { id: tab.id, idealLeft: getIdealButtonLeft(tab, buttonWidth), width: buttonWidth };
+
+            // Prepare items with their ideal positions and widths, then sort by ideal position
+            const items = $windows
+                .map(win => {
+                    const buttonWidth = taskItemWidths.get(win.id) || 100; // Fallback width
+                    return {
+                        id: win.id,
+                        idealLeft: getIdealButtonLeft(win, buttonWidth),
+                        width: buttonWidth,
+                    };
                 })
                 .sort((a, b) => a.idealLeft - b.idealLeft);
+
             const newLayouts = {};
             let lastItemRightEdge = leftRect.right + GAP;
+
+            // --- Pass 1: Place items from left to right, avoiding collisions ---
             for (const item of items) {
+                const itemWidth = item.width;
+
+                // Position is either its ideal spot or right after the previous item
                 let left = Math.max(item.idealLeft, lastItemRightEdge);
-                if ((left + item.width + GAP) > centerRect.left && left < (centerRect.right + GAP)) {
+
+                // Check for collision with the center clock area
+                if ((left + itemWidth + GAP) > centerRect.left && left < (centerRect.right + GAP)) {
+                    // It collides. Push it to be after the clock, ensuring it's also after the previous item.
                     left = Math.max(lastItemRightEdge, centerRect.right + GAP);
                 }
+
                 newLayouts[item.id] = { left };
-                lastItemRightEdge = left + item.width + GAP;
+                lastItemRightEdge = left + itemWidth + GAP;
             }
-            if (lastItemRightEdge - (rightRect.left - GAP) > 0) {
+
+            // --- Pass 2: Adjust for overflow, compressing from the right ---
+            let overflow = lastItemRightEdge - (rightRect.left - GAP);
+            if (overflow > 0) {
+                // The group of buttons overflows past the right-side controls.
+                // We must compress the layout by iterating backwards and pulling
+                // items left to fit.
                 let requiredRightEdge = rightRect.left - GAP;
+
                 for (let i = items.length - 1; i >= 0; i--) {
                     const item = items[i];
-                    const finalLeft = Math.min(newLayouts[item.id].left, requiredRightEdge - item.width);
+                    const itemWidth = item.width;
+
+                    // The item's current position from Pass 1.
+                    const currentLeft = newLayouts[item.id].left;
+
+                    // The maximum left position allowed by the boundary.
+                    const maxLeft = requiredRightEdge - itemWidth;
+
+                    // The final position is the lesser of the two.
+                    const finalLeft = Math.min(currentLeft, maxLeft);
                     newLayouts[item.id].left = finalLeft;
+
+                    // The next item to the left must now end before this one begins.
                     requiredRightEdge = finalLeft - GAP;
                 }
             }
+
             taskItemLayouts = newLayouts;
         }
-    } else if (allTabs.length === 0) {
-        taskItemLayouts = {};
+    } else if ($windows.length === 0) {
+        taskItemLayouts = {}; // Clear layouts if no windows are open
     }
 
-    function handleTaskClick(tab) {
-        if (tab.isGroupMinimized) {
-            windows.toggleMinimize(tab.groupId);
-        } else if (tab.isGroupActive) {
-            windows.toggleMinimize(tab.groupId);
+    function handleTaskClick(win) {
+        if (win.minimized) {
+            // This will restore and focus the window.
+            windows.toggleMinimize(win.id);
+        } else if (win.isActive) {
+            // If it's already the active window, minimize it.
+            windows.toggleMinimize(win.id);
         } else {
-            windows.focusGroup(tab.groupId);
+            // If it's not active (but not minimized), just raise and focus it.
+            windows.focusWindow(win.id);
         }
-        windows.setActiveTab(tab.groupId, tab.id);
     }
 
     function handleCloseAllClick() {
-        if (allTabs.length === 0) return;
+        if ($windows.length === 0) return;
         if (confirm("Are you sure you want to close all windows?")) {
             if ($dashActive) dashActive.set(false);
             windows.closeAllWindows();
@@ -401,14 +442,14 @@
         </button>
         {#if showWindowsMenu}
             <div class="windows-menu">
-                {#each allTabs.sort((a, b) => a.id - b.id) as tab (tab.id)}
-                    <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); windows.setActiveTab(tab.groupId, tab.id); showWindowsMenu = false; }}>
-                        {tab.title}
+                {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
+                    <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
+                        {win.title}
                     </button>
                 {:else}
                     <span class="menu-item-empty">No open windows</span>
                 {/each}
-                {#if allTabs.length > 0}
+                {#if $windows.length > 0}
                     <button class="menu-item close-all" on:click={handleCloseAllClick}>
                         Close All
                     </button>
@@ -416,20 +457,6 @@
             </div>
         {/if}
     </div>
-
-    {#each allTabs as tab (tab.id)}
-        <button
-            class="task-item"
-            class:minimized={tab.isGroupMinimized}
-            class:active={tab.isGroupActive}
-            title={tab.title}
-            on:click={() => { if ($dashActive) dashActive.set(false); handleTaskClick(tab); }}
-            use:measure={tab.id}
-            style="left: {taskItemLayouts[tab.id] ? taskItemLayouts[tab.id].left + 'px' : '-9999px'};"
-        >
-            {tab.title}
-        </button>
-    {/each}
 
     {#each $windows as win (win.id)}
         <button
