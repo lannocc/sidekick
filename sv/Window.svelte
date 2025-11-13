@@ -12,6 +12,8 @@
     import IoskFileViewer from './IoskFileViewer.svelte';
     import WebBrowser from './WebBrowser.svelte';
     import Settings from './Settings.svelte';
+    import Calculator from './Calculator.svelte';
+    import IoskPrivateChat from './IoskPrivateChat.svelte';
 
     // Group properties
     export let id;
@@ -34,8 +36,6 @@
     $: isConsoleConnected = activeTab.isConsoleConnected;
     $: canRender = activeTab.canRender; 
 
-    $: componentProps = { ...activeTab, groupId: id, id: activeTab.id, isActive, x, y, width, height };
-
     const dispatch = createEventDispatcher();
     let settings;
     desktopSettings.subscribe(value => settings = value);
@@ -48,7 +48,8 @@
     let focusTimeout = null;
     let showOptionsMenu = false;
     let optionsButton;
-    let componentInstance;
+    let componentInstances = {};
+    $: activeComponentInstance = componentInstances[activeTabId];
     let contentAreaEl;
     let titleBarEl;
 
@@ -58,8 +59,8 @@
     function openSettings() {
         showOptionsMenu = false;
         const componentsWithCustomSettings = ['IoskConsole', 'IoskFileExplorer', 'WebBrowser', 'Settings'];
-        if (componentsWithCustomSettings.includes(componentName) && componentInstance && typeof componentInstance.showSettingsDialog === 'function') {
-            componentInstance.showSettingsDialog();
+        if (componentsWithCustomSettings.includes(componentName) && activeComponentInstance && typeof activeComponentInstance.showSettingsDialog === 'function') {
+            activeComponentInstance.showSettingsDialog();
         } else {
             const allSettings = get(windowSettings);
             const currentSettings = allSettings[componentName] || { positioning: 'auto' };
@@ -98,12 +99,12 @@
     });
 
     function handleConnect() {
-        if (componentInstance && typeof componentInstance.connect === 'function') componentInstance.connect();
+        if (activeComponentInstance && typeof activeComponentInstance.connect === 'function') activeComponentInstance.connect();
         showOptionsMenu = false;
     }
 
     function handleDisconnect() {
-        if (componentInstance && typeof componentInstance.disconnect === 'function') componentInstance.disconnect();
+        if (activeComponentInstance && typeof activeComponentInstance.disconnect === 'function') activeComponentInstance.disconnect();
         showOptionsMenu = false;
     }
 
@@ -241,7 +242,16 @@
     .tabs-container { display: flex; height: 100%; }
 
     .tab { display: flex; align-items: center; background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; padding: 0 5px; margin-right: 2px; height: 26px; margin-top: auto; max-width: 150px; }
-    .tab.active { background-color: var(--window-bg); }
+    .tab.active {
+        background-color: var(--window-bg);
+        z-index: 1; /* Bring active tab forward */
+    }
+    .tab:not(.active) {
+        opacity: 0.8;
+    }
+    .tab:not(.active):hover {
+        opacity: 1;
+    }
     .tab-close-button { background: none; border: none; color: var(--taskbar-text); cursor: pointer; padding: 0 5px; font-size: 1.2em; line-height: 1; opacity: 0.7; }
     .tab-close-button:hover { color: #e74c3c; opacity: 1; }
     .tab-title { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; padding: 0 5px; }
@@ -252,6 +262,9 @@
     .maximize { background-color: #27c93f; }
     .options-menu-button { background-color: #3498db; color: white; line-height: 0.8; }
     .content-area { flex-grow: 1; overflow: auto; padding: 5px; }
+    .tab-content {
+        height: 100%;
+    }
     .resize-handle { position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; cursor: se-resize; }
     .options-menu { position: absolute; top: 35px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 1000; display: flex; flex-direction: column; min-width: 150px; padding: 4px 0; user-select: none; }
     .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; font-size: 14px; }
@@ -312,16 +325,16 @@
             {#if component === IoskConsole}
                 <button class="menu-item" on:click={handleConnect} disabled={isConsoleConnected}>Connect</button>
                 <div class="menu-separator"></div>
-                <button class="menu-item" on:click={() => { if (componentInstance?.toggleAttachMenu) componentInstance.toggleAttachMenu(); showOptionsMenu = false; }} disabled={!isConsoleConnected}>Attach</button>
+                <button class="menu-item" on:click={() => { if (activeComponentInstance?.toggleAttachMenu) activeComponentInstance.toggleAttachMenu(); showOptionsMenu = false; }} disabled={!isConsoleConnected}>Attach</button>
                 <button class="menu-item" on:click={() => { newIoskFileExplorer(activeTab.id, title); showOptionsMenu = false; }} disabled={!isConsoleConnected}>Files...</button>
-                <button class="menu-item" on:click={() => { if (componentInstance?.toggleRoomsMenu) componentInstance.toggleRoomsMenu(); showOptionsMenu = false; }} disabled={!isConsoleConnected}>Rooms</button>
+                <button class="menu-item" on:click={() => { if (activeComponentInstance?.toggleRoomsMenu) activeComponentInstance.toggleRoomsMenu(); showOptionsMenu = false; }} disabled={!isConsoleConnected}>Rooms</button>
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={handleDisconnect} disabled={!isConsoleConnected}>Disconnect</button>
             {/if}
             {#if component === IoskFileViewer}
                 <div class="menu-separator"></div>
-                <button class="menu-item" on:click={() => { if (componentInstance?.setMode) componentInstance.setMode('rendered'); showOptionsMenu = false; }} disabled={!canRender}>Rendered</button>
-                <button class="menu-item" on:click={() => { if (componentInstance?.setMode) componentInstance.setMode('raw'); showOptionsMenu = false; }}>Raw</button>
+                <button class="menu-item" on:click={() => { if (activeComponentInstance?.setMode) activeComponentInstance.setMode('rendered'); showOptionsMenu = false; }} disabled={!canRender}>Rendered</button>
+                <button class="menu-item" on:click={() => { if (activeComponentInstance?.setMode) activeComponentInstance.setMode('raw'); showOptionsMenu = false; }}>Raw</button>
             {/if}
             <div class="menu-separator"></div>
             <button class="menu-item" on:click={() => { windows.toggleMinimize(id); showOptionsMenu = false; }}>Minimize</button>
@@ -329,7 +342,19 @@
         </div>
     {/if}
     <div class="content-area" bind:this={contentAreaEl} on:focusout={handleFocusOut}>
-        <svelte:component bind:this={componentInstance} this={component} {...componentProps} />
+        {#each tabs as tab (tab.id)}
+            <div class="tab-content" style:display={tab.id === activeTabId ? 'block' : 'none'}>
+                <svelte:component 
+                    bind:this={componentInstances[tab.id]}
+                    this={tab.component}
+                    {...tab}
+                    groupId={id}
+                    id={tab.id}
+                    isActive={isActive && tab.id === activeTabId}
+                    x={x} y={y} width={width} height={height}
+                />
+            </div>
+        {/each}
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
 
