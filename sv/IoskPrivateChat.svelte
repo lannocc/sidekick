@@ -4,12 +4,14 @@
 -->
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
+    import { get } from 'svelte/store';
     import { consoleCommands, privateMessages } from './ioskEvents.js';
     import { windows } from './windows.js';
 
     export let id;
     export let groupId;
     export let consoleId;
+    export let consoleConnection = null; // Passed during Dash restore
     export let localUser;
     export let remoteUser;
 
@@ -25,6 +27,23 @@
     // Update window store with props for Dash saving
     $: if (id !== undefined && groupId !== undefined) {
         windows.updateTabProps(groupId, id, { consoleId, localUser, remoteUser });
+    }
+
+    // Reactive logic to find console after a Dash restore
+    $: if (consoleConnection && $windows) {
+        if (!consoleId) {
+            const compatibleConsoleTab = $windows.flatMap(w => w.tabs).find(t =>
+                t.componentName === 'IoskConsole' &&
+                t.isConsoleConnected &&
+                t.consoleConnection &&
+                t.consoleConnection.url === consoleConnection.url &&
+                t.consoleConnection.user === consoleConnection.user
+            );
+
+            if (compatibleConsoleTab) {
+                consoleId = compatibleConsoleTab.id;
+            }
+        }
     }
 
     const ansiCodeToCssVar = {
