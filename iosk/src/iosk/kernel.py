@@ -24,6 +24,7 @@ import shutil
 import traceback
 from io import StringIO
 import random
+import re
 
 
 # Added for the process management proposal
@@ -1038,8 +1039,18 @@ class IOSK:
                         header = lines[0]
                         content = lines[1].strip() if len(lines) > 1 else ""
 
-                        sender_part = header.split('[', 1)[1].split(' -> me', 1)[0]
-                        from_user = sender_part.strip()
+                        # The ' -> ' part is not colored, making it a safe split point.
+                        header_inside_brackets = header.split('[', 1)[1].rsplit(']', 1)[0]
+                        sender_part, rest_of_header = header_inside_brackets.split(' -> ', 1)
+
+                        # To verify, we strip ANSI codes from the part after ' -> '.
+                        ansi_escape_pattern = re.compile(r'\x1b\[\d+m')
+                        cleaned_rest = ansi_escape_pattern.sub('', rest_of_header.strip())
+
+                        if cleaned_rest.startswith('me '):
+                            from_user = sender_part.strip()
+                        else:
+                            raise ValueError("Could not confirm 'me' in DM header")
 
                         # Send structured DM payload to the client
                         await self.port.send_private_message_to_client(
@@ -1057,6 +1068,7 @@ class IOSK:
                         # but log the error to the system log for debugging.
                         await self.system.error(f"!! DM parsing failed in kernel: {e}")
                         await self.port.send_to_client(io.user, data)
+                        return
                 else:
                     await self.port.send_to_client(io.user, data)
             return
