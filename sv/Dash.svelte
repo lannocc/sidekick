@@ -4,7 +4,7 @@
 -->
 <script>
     import { dashActive, dashLayouts, dashCycleIndex } from './desktopStore.js';
-    import { windows, restoreWindow } from './windows.js';
+    import { windows } from './windows.js';
     import { get } from 'svelte/store';
     import { onMount, onDestroy } from 'svelte';
 
@@ -188,6 +188,13 @@
 
     function handleRestoreLayout(layout) {
         if (!layout || !layout.windowGroups) return;
+        if (get(windows).length > 0) {
+            if (!confirm("This will close all current windows and restore the selected layout. Continue?")) {
+                return;
+            }
+        }
+        windows.closeAllWindows(); // This has its own confirmation logic for active consoles.
+
         const savedDesktopWidth = layout.desktop?.width || window.innerWidth;
         const savedDesktopHeight = layout.desktop?.height || (window.innerHeight - 40);
         const currentDesktopWidth = window.innerWidth;
@@ -203,7 +210,7 @@
                 scaledGroupData.width = Math.round(scaledGroupData.width * scaleX);
                 scaledGroupData.height = Math.round(scaledGroupData.height * scaleY);
             }
-            restoreWindow(scaledGroupData);
+            windows.restoreWindow(scaledGroupData);
         }
         dashActive.set(false);
     }

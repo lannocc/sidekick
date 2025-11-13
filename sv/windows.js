@@ -339,6 +339,44 @@ function createWindowManager() {
         });
     };
 
+    const restoreWindow = (groupData) => {
+        const tabs = groupData.tabs.map(tabData => {
+            const component = componentMap[tabData.componentType];
+            if (!component) return null;
+            
+            const { componentType, ...props } = tabData;
+    
+            return {
+                id: ++tabIdCounter,
+                component,
+                componentName: tabData.componentType,
+                ...props,
+            };
+        }).filter(Boolean);
+    
+        if (tabs.length === 0) return;
+    
+        const activeTabInNewGroup = tabs.find(t => t.originalId === groupData.activeTabId);
+        const newActiveTabId = activeTabInNewGroup ? activeTabInNewGroup.id : (tabs[0] ? tabs[0].id : null);
+    
+        // Clean up originalId from tabs
+        tabs.forEach(t => delete t.originalId);
+    
+        const newGroup = {
+            id: ++windowGroupIdCounter,
+            x: groupData.x, y: groupData.y, width: groupData.width, height: groupData.height,
+            minimized: false,
+            maximized: groupData.maximized,
+            isActive: false,
+            zIndex: 100,
+            prevX: groupData.x, prevY: groupData.y, prevWidth: groupData.width, prevHeight: groupData.height,
+            isFlashing: false,
+            tabs: tabs,
+            activeTabId: newActiveTabId,
+        };
+        update(ws => [...ws, newGroup]);
+    };
+
     return {
         subscribe,
         addWindow,
@@ -357,7 +395,8 @@ function createWindowManager() {
         cycleWindow,
         groupWindows,
         reorderTab,
-        detachTabToNewWindow
+        detachTabToNewWindow,
+        restoreWindow,
     };
 }
 
@@ -426,47 +465,4 @@ export function newIoskPrivateChat(consoleTabId, localUser, remoteUser) {
 
     const title = remoteUser.split('.')[0];
     windows.addWindow(IoskPrivateChat, { title: `Chat with ${title}`, consoleId: consoleTabId, localUser, remoteUser, width: 450, height: 400 });
-}
-
-export function restoreWindow(groupData) {
-    const allWindows = get(windows);
-    
-    const tabs = groupData.tabs.map(tabData => {
-        const component = componentMap[tabData.componentType];
-        if (!component) return null;
-        
-        const { componentType, ...props } = tabData;
-
-        if ((component === IoskFileExplorer || component === IoskFileViewer || component === IoskPrivateChat) && props.consoleConnection) {
-            const compatibleConsoleTab = allWindows.flatMap(g => g.tabs).find(t => 
-                t.component === IoskConsole && t.isConsoleConnected && t.consoleConnection &&
-                t.consoleConnection.url === props.consoleConnection.url &&
-                t.consoleConnection.user === props.consoleConnection.user
-            );
-            props.consoleId = compatibleConsoleTab ? compatibleConsoleTab.id : null;
-        }
-        
-        return {
-            id: ++tabIdCounter,
-            component,
-            ...props,
-        };
-    }).filter(Boolean);
-
-    if (tabs.length === 0) return;
-
-    const newGroup = {
-        id: ++windowGroupIdCounter,
-        x: groupData.x, y: groupData.y, width: groupData.width, height: groupData.height,
-        minimized: false,
-        maximized: groupData.maximized,
-        isActive: false,
-        zIndex: 100,
-        prevX: groupData.x, prevY: groupData.y, prevWidth: groupData.width, prevHeight: groupData.height,
-        isFlashing: false,
-        tabs: tabs,
-        activeTabId: groupData.activeTabId ? tabs.find(t => t.originalId === groupData.activeTabId)?.id || tabs[0].id : tabs[0].id
-    };
-
-    update(ws => [...ws, newGroup]);
 }
