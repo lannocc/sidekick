@@ -15,6 +15,7 @@
     import IoskFileExplorer from './IoskFileExplorer.svelte';
     import IoskFileViewer from './IoskFileViewer.svelte';
     import WebBrowser from './WebBrowser.svelte';
+    import IoskPrivateChat from './IoskPrivateChat.svelte';
 
     let isLayoutDirty = true;
     let lastSavedLayoutSnapshot = '';
@@ -172,6 +173,10 @@
                 wsUrl: win.wsUrl,
                 username: win.username,
 
+                // For IoskPrivateChat
+                localUser: win.localUser,
+                remoteUser: win.remoteUser,
+
                 // For IoskFileExplorer & IoskFileViewer, save the connection identity
                 // so we can re-associate on restore.
                 consoleConnection: associatedConsole ? associatedConsole.consoleConnection : null,
@@ -205,6 +210,7 @@
         if (component === IoskFileExplorer) return 'IoskFileExplorer';
         if (component === IoskFileViewer) return 'IoskFileViewer';
         if (component === WebBrowser) return 'WebBrowser';
+        if (component === IoskPrivateChat) return 'IoskPrivateChat';
         return 'Unknown';
     }
 

@@ -5,6 +5,7 @@ import Settings from './Settings.svelte';
 import IoskFileExplorer from './IoskFileExplorer.svelte';
 import IoskFileViewer from './IoskFileViewer.svelte';
 import WebBrowser from './WebBrowser.svelte';
+import IoskPrivateChat from './IoskPrivateChat.svelte';
 import { desktopSettings, windowSettings } from './desktopStore.js';
 
 let windowIdCounter = 0;
@@ -16,7 +17,8 @@ const componentMap = {
     'Settings': Settings,
     'IoskFileExplorer': IoskFileExplorer,
     'IoskFileViewer': IoskFileViewer,
-    'WebBrowser': WebBrowser
+    'WebBrowser': WebBrowser,
+    'IoskPrivateChat': IoskPrivateChat
 };
 
 function createWindowManager() {
@@ -335,6 +337,36 @@ export function newWebBrowser() {
     });
 }
 
+export function newIoskPrivateChat(consoleId, localUser, remoteUser) {
+    const allWindows = get(windows);
+    // Check if a chat window for this pair already exists for this console
+    const existingChat = allWindows.find(w =>
+        w.componentName === 'IoskPrivateChat' &&
+        w.consoleId === consoleId &&
+        w.remoteUser === remoteUser
+    );
+
+    if (existingChat) {
+        // If window is minimized, restore it
+        if (existingChat.minimized) {
+            windows.toggleMinimize(existingChat.id);
+        } else {
+            windows.focusWindow(existingChat.id);
+        }
+        return;
+    }
+
+    const title = remoteUser.includes('.') ? remoteUser : remoteUser.split('.')[0];
+    windows.addWindow(IoskPrivateChat, {
+        title: `Chat with ${title}`,
+        consoleId,
+        localUser,
+        remoteUser,
+        width: 450,
+        height: 400,
+    });
+}
+
 export function restoreWindow(winData) {    
     const component = componentMap[winData.componentType];
     if (!component) {
@@ -346,7 +378,7 @@ export function restoreWindow(winData) {
     const { componentType, ...props } = winData;
 
     // For components that need a console connection, find a compatible one.
-    if ((component === IoskFileExplorer || component === IoskFileViewer) && props.consoleConnection) {
+    if ((component === IoskFileExplorer || component === IoskFileViewer || component === IoskPrivateChat) && props.consoleConnection) {
         const allWindows = get(windows);
         // Find a suitable console window that is currently connected and matches the saved connection identity.
         const compatibleConsole = allWindows.find(w => 

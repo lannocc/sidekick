@@ -5,8 +5,8 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, newIoskFileExplorer } from './windows.js';
-    import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
+    import { windows, newIoskFileExplorer, newIoskPrivateChat } from './windows.js';
+    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages } from './ioskEvents.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
 
     export let id; // Unique ID from the window manager
@@ -77,6 +77,7 @@
 
     // --- Event bus subscriptions ---
     let requestUnsubscribe;
+    let commandsUnsubscribe;
 
     // --- Auto-scrolling logic ---
     let shouldScroll = true;
@@ -180,6 +181,11 @@
                 ws.send(JSON.stringify(payload));
             }
         });
+        commandsUnsubscribe = consoleCommands.subscribe(cmd => {
+            if (cmd && cmd.consoleId === id) {
+                sendSystemCommand(cmd.command);
+            }
+        });
         window.addEventListener('click', handleGlobalClick);
     });
 
@@ -190,6 +196,9 @@
         }
         if (requestUnsubscribe) {
             requestUnsubscribe();
+        }
+        if (commandsUnsubscribe) {
+            commandsUnsubscribe();
         }
         window.removeEventListener('click', handleGlobalClick);
     });
@@ -252,6 +261,17 @@
             output = [...output, {type: 'output', content: `[Error] Not connected.`}];
         }
         shouldScroll = true;
+    }
+    
+    function openPrivateChat(remoteParticipant) {
+        if (!remoteParticipant) return;
+        // Don't open chat with self.
+        const remoteUsername = remoteParticipant.split('.')[0];
+        if (remoteUsername === username) return;
+
+        newIoskPrivateChat(id, username, remoteParticipant);
+        closeUserContextMenu();
+        focusInput();
     }
 
     function setColorForUser(colorName) {
@@ -363,12 +383,40 @@
                         } else if (data.output || data.prompt) {
                             if (data.output) {
                                 const bellCode = "\u0007";
-                                let cleanOutput = data.output;
+                                let outputToProcess = data.output;
+                                let hasRegularBell = false;
 
-                                if (cleanOutput.includes(bellCode)) {
-                                    handleBell();
-                                    cleanOutput = cleanOutput.replace(new RegExp(bellCode, 'g'), '');
+                                if (outputToProcess.includes(bellCode)) {
+                                    const dmRegex = new RegExp(`^${bellCode}\\s*\\n\\[\\s*(.*?)\\s*->\\s*me.*?\\]\\s*<<\\s*([\\s\\S]*)`, 'm');
+                                    let match;
+                                    // Loop in case there are multiple DMs in one output block
+                                    while ((match = dmRegex.exec(outputToProcess)) !== null) {
+                                        const fromUser = match[1].trim();
+                                        const content = match[2].trim();
+                                        
+                                        // A user can receive a DM confirmation from the server they sent, don't open a window for that.
+                                        const remoteUsername = fromUser.split('.')[0];
+                                        if (remoteUsername !== username) {
+                                            newIoskPrivateChat(id, username, fromUser);
+                                            privateMessages.set({
+                                                from: fromUser,
+                                                to: username,
+                                                content: content,
+                                                timestamp: Date.now()
+                                            });
+                                        }
+                                        // Remove the bell from the matched DM so it doesn't trigger a sound, but leave the message for console history.
+                                        outputToProcess = outputToProcess.replace(match[0], match[0].substring(1));
+                                    }
                                 }
+
+                                // Now check if any other, non-DM bells remain.
+                                if (outputToProcess.includes(bellCode)) {
+                                    handleBell();
+                                    outputToProcess = outputToProcess.replace(new RegExp(bellCode, 'g'), '');
+                                }
+
+                                let cleanOutput = outputToProcess;
 
                                 const clearScreenCode = "\x1b[H\x1b[2J";
                                 if (cleanOutput === clearScreenCode) {
@@ -639,7 +687,8 @@
     .users-panel { width: 180px; flex-shrink: 0; border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
     .panel-header { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); font-weight: bold; text-align: center; }
     .user-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
-    .user-item { padding: 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-item { padding: 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; border-radius: 2px; }
+    .user-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
     .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
     .modal-content h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
@@ -835,6 +884,7 @@
                         title={participant}
                         style="color: {colorNameToCss[userColors[userName]] || 'inherit'}"
                         on:contextmenu={(e) => handleUserRightClick(e, participant)}
+                        on:click={() => openPrivateChat(participant)}
                     >
                         {participant}
                     </div>
@@ -903,6 +953,10 @@
                     &larr; Back
                 </button>
             {:else}
+                <button class="menu-item" on:click={() => openPrivateChat(userContextMenu.user)}>
+                    Private Chat
+                </button>
+                <div class="menu-separator"></div>
                 <button class="menu-item" on:click={() => userContextMenu.showColorPicker = true}> Set Color... </button>
                 <div class="menu-separator"></div>
                 <button class="menu-item close-item" on:click={handleDetachUser}>
