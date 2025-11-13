@@ -671,6 +671,38 @@
     .form-grid label { display: flex; align-items: center; gap: 5px; }
     .form-grid input { width: 80px; }
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
+
+    /* User Context Menu Styles */
+    .user-context-menu {
+        position: fixed;
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        z-index: 200; /* Above console content */
+        display: flex;
+        flex-direction: column;
+        padding: 4px;
+        min-width: 120px;
+    }
+    .color-picker-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4px;
+        padding: 4px;
+    }
+    .color-swatch {
+        width: 24px;
+        height: 24px;
+        border: 1px solid var(--border-color);
+        border-radius: 3px;
+        cursor: pointer;
+        background: none; /* remove default button background */
+    }
+    .color-swatch:hover {
+        border-color: var(--taskbar-button-hover-bg);
+        transform: scale(1.1);
+    }
 </style>
 
 <div class="console-container">
@@ -794,6 +826,7 @@
                         class="user-item"
                         title={participant}
                         style="color: {colorNameToCss[userColors[userName]] || 'inherit'}"
+                        on:contextmenu={(e) => handleUserRightClick(e, participant)}
                     >
                         {participant}
                     </div>
@@ -837,6 +870,33 @@
                     <button class="save-button" on:click={handleSaveSettings}>Save Defaults</button>
                 </div>
             </div>
+        </div>
+    {/if}
+
+    {#if userContextMenu.visible}
+        <div
+            class="user-context-menu"
+            style="top: {userContextMenu.y}px; left: {userContextMenu.x}px;"
+            on:click|stopPropagation
+        >
+            {#if userContextMenu.showColorPicker}
+                <div class="color-picker-grid">
+                    {#each Object.entries(colorNameToCss) as [name, cssVar] (name)}
+                        <button
+                            class="color-swatch"
+                            style="background-color: {cssVar}"
+                            title={name.replace(/_/g, ' ')}
+                            on:click={() => setColorForUser(name)}
+                        ></button>
+                    {/each}
+                </div>
+                <div class="menu-separator"></div>
+                <button class="menu-item" on:click={() => userContextMenu.showColorPicker = false}>
+                    &larr; Back
+                </button>
+            {:else}
+                <button class="menu-item" on:click={() => userContextMenu.showColorPicker = true}> Set Color... </button>
+            {/if}
         </div>
     {/if}
 </div>

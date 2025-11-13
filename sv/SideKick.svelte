@@ -81,7 +81,7 @@
     }
 </style>
 
-<div class="sk-container">
+<div class="sk-container" on:contextmenu|preventDefault>
     <Taskbar />
     <Desktop />
 </div>

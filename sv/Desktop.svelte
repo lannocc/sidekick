@@ -3,12 +3,47 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { windows } from './windows.js';
+    import { windows, newSettings } from './windows.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive } from './desktopStore.js';
     import Dash from './Dash.svelte';
+    import { onMount, onDestroy } from 'svelte';
+    import { get } from 'svelte/store';
 
     let backgroundStyle = '';
+
+    // --- Context Menu State ---
+    let contextMenu = {
+        visible: false,
+        x: 0,
+        y: 0,
+    };
+
+    function handleRightClick(event) {
+        if (get(dashActive)) return; // Don't show if dash is active
+
+        contextMenu = {
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+        };
+    }
+
+    function closeContextMenu() {
+        contextMenu.visible = false;
+    }
+
+    function openSettingsMenu() {
+        closeContextMenu();
+        newSettings();
+    }
+
+    onMount(() => {
+        window.addEventListener('click', closeContextMenu);
+    });
+    onDestroy(() => {
+        window.removeEventListener('click', closeContextMenu);
+    });
 
     desktopSettings.subscribe(settings => {
         if (settings.bgType === 'gradient') {
@@ -75,14 +110,46 @@
     .desktop.dash-active::before {
         opacity: 1;
     }
+    .context-menu {
+        position: fixed;
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        z-index: 10001; /* Above Dash */
+        display: flex;
+        flex-direction: column;
+        padding: 4px 0;
+        min-width: 120px;
+    }
+
+    .context-menu button {
+        background: none;
+        border: none;
+        color: var(--taskbar-text);
+        padding: 8px 12px;
+        text-align: left;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+    .context-menu button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
 </style>
 
-<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle}>
+<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu={handleRightClick}>
     <div class="windows-layer">
         {#each $windows as win (win.id)}
             <Window {...win} />
         {/each}
     </div>
+
+    {#if contextMenu.visible}
+        <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
+            <button on:click={openSettingsMenu}>Settings...</button>
+        </div>
+    {/if}
 
     {#if $dashActive}
         <Dash />
