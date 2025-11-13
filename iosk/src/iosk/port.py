@@ -323,7 +323,7 @@ class PortManager:
             return
 
         # Use the SK1: protocol wrapper for clients
-        payload = f"SK1:{json.dumps(message)}"
+        payload = f"SK1:{json.dumps(payload)}"
         aws = [ws.send(payload) for ws in clients]
         await asyncio.gather(*aws, return_exceptions=True)
 
@@ -469,7 +469,7 @@ class PortManager:
         try:
             connection_metadata, io_context = await self._handshake(websocket)
             if connection_metadata:
-                self.active_connections[websocket] = connection_metadata
+                # self.active_connections is now set inside _handshake
                 log.info(f"Handshake successful: {connection_metadata}")
 
                 if connection_metadata.type == 'peer':
@@ -546,6 +546,10 @@ class PortManager:
                 'websocket': websocket
             }
 
+            # Create and register connection metadata BEFORE returning
+            conn_meta = Connection(websocket=websocket, type='peer', hostname=hostname)
+            self.active_connections[websocket] = conn_meta
+
             # Get local room info for the ack
             local_room_info = {}
             if self.kernel.chat and self.kernel.chat.active_room:
@@ -575,7 +579,7 @@ class PortManager:
                 newly_learned_users_list=message.get("users", [])
             )
 
-            return Connection(websocket=websocket, type='peer', hostname=hostname), None
+            return conn_meta, None
 
         elif conn_id == "client":
             username = message.get("user")
@@ -586,6 +590,10 @@ class PortManager:
             if not io_context:
                 await websocket.send(json.dumps({"type": "handshake_ack", "status": "error", "reason": f"Login for user '{username}' failed."}))
                 raise ValueError(f"Client login failed for user {username}")
+            
+            # Create and register the connection metadata BEFORE sending any state
+            conn_meta = Connection(websocket=websocket, type='client', username=username)
+            self.active_connections[websocket] = conn_meta
 
             await websocket.send(json.dumps({"type": "handshake_ack", "status": "ok", "hostname": self.kernel.hostname}))
 
@@ -618,10 +626,11 @@ class PortManager:
                 # No room, send MOTD. The MOTD was selected and cached during login.
                 motd_content = getattr(io_context, 'motd_cache', None)
                 initial_state_payload['motd'] = motd_content or ''
-
+            
+            # This call will now succeed because the connection is registered
             await self.send_payload_to_client(username, initial_state_payload)
 
-            return Connection(websocket=websocket, type='client', username=username), io_context
+            return conn_meta, io_context
 
         else:
             raise ValueError(f"Invalid handshake: unknown id '{conn_id}'")
