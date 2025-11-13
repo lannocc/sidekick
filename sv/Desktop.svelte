@@ -156,11 +156,10 @@
 
     .tab-content-wrapper {
         position: absolute;
-        pointer-events: auto;
+        pointer-events: none;
         display: flex;
         flex-direction: column;
         overflow: hidden;
-        background-color: var(--window-bg);
         border: 1px solid transparent; /* To align with window-frame border */
         border-radius: 6px;
         box-sizing: border-box;
@@ -173,6 +172,8 @@
         flex-grow: 1;
         overflow: auto;
         padding: 5px;
+        pointer-events: auto;
+        background-color: var(--window-bg);
         height: calc(100% - 30px);
     }
 </style>
