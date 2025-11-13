@@ -184,9 +184,9 @@
         {/each}
     </div>
 
-    {@const allTabs = $windows.flatMap(w => w.tabs.map(t => ({...t, group: w})))}
     <div class="tab-contents-layer">
-         {#each allTabs as tab (tab.id)}
+        {#each allTabs as tab (tab.id)}
+          {#each $windows.flatMap(w => w.tabs.map(t => ({...t, group: w}))) as tab (tab.id)}
             {@const group = tab.group}
             <div
                 class="tab-content-wrapper"
