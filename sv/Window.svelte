@@ -28,6 +28,7 @@
     export let lastFocusedElement; // Received from the store via Desktop.svelte
     export let isConsoleConnected; // For IoskConsole, passed from the store
     export let canRender; // For IoskFileViewer
+    export let isFlashing;
 
     const dispatch = createEventDispatcher();
 
@@ -321,6 +322,17 @@
 </script>
 
 <style>
+    @keyframes flash-animation {
+        0% { border-color: var(--border-color); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        50% { border-color: #f39c12; box-shadow: 0 0 20px 5px rgba(243, 156, 18, 0.7); }
+        100% { border-color: var(--border-color); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+    }
+    .window-frame.active.flashing {
+        animation: flash-animation 0.5s ease-in-out;
+    }
+    .window-frame:not(.active).flashing {
+        animation: flash-animation 0.5s ease-in-out;
+    }
     .window-frame {
         position: absolute;
         border: 1px solid var(--border-color);
@@ -489,6 +501,7 @@
     class:minimized
     class:maximized
     class:active={isActive}
+    class:flashing={isFlashing}
     style:left="{x}px"
     style:top="{y}px"
     style:width="{maximized ? null : width + 'px'}"

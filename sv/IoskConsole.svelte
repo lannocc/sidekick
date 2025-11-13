@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, newIoskFileExplorer } from './windows.js';
+    import { windows, newIoskFileExplorer, updateWindowProps } from './windows.js';
     import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
 
@@ -18,6 +18,9 @@
     // These will be passed in when restoring a dash layout
     export let wsUrl = undefined;
     export let username = undefined;
+
+    let settings;
+    desktopSettings.subscribe(value => settings = value);
 
     // --- State for Connection & Room Awareness ---
     let isConnected = false;
@@ -293,11 +296,19 @@
                             userColors = data.colors;
                         } else if (data.output || data.prompt) {
                             if (data.output) {
+                                const bellCode = "\u0007";
+                                let cleanOutput = data.output;
+
+                                if (cleanOutput.includes(bellCode)) {
+                                    handleBell();
+                                    cleanOutput = cleanOutput.replace(new RegExp(bellCode, 'g'), '');
+                                }
+
                                 const clearScreenCode = "\x1b[H\x1b[2J";
-                                if (data.output === clearScreenCode) {
+                                if (cleanOutput === clearScreenCode) {
                                     output = [];
-                                } else {
-                                    const lines = data.output.split('\n');
+                                } else if (cleanOutput) {
+                                    const lines = cleanOutput.split('\n');
                                     output = [...output, ...lines.map(line => ({type: 'output', content: line}))];
                                 }
                             }
@@ -489,6 +500,28 @@
         }
         showAttachMenu = false;
         focusInput();
+    }
+
+    function handleBell() {
+        // 1. Play sound
+        if (settings?.chimeType && settings.chimeType !== 'none') {
+            let src;
+            if (settings.chimeType === 'custom') {
+                src = settings.chimeUrl;
+            } else {
+                src = `/assets/${settings.chimeType}`;
+            }
+
+            if (src) {
+                try {
+                    new Audio(src).play().catch(e => console.warn("Audio bell failed to play:", e));
+                } catch (e) { console.error("Failed to create audio element for bell:", e); }
+            }
+        }
+
+        // 2. Flash window
+        windows.updateWindowProps(id, { isFlashing: true });
+        setTimeout(() => windows.updateWindowProps(id, { isFlashing: false }), 500);
     }
 </script>
 

@@ -11,10 +11,31 @@
         settings = value;
     });
 
+    const chimeSounds = [
+        { value: 'beep.wav', name: 'Beep' },
+        { value: 'ding.wav', name: 'Ding' },
+        { value: 'good_bell.wav', name: 'Good Bell' },
+        { value: 'key.wav', name: 'Key' },
+        { value: 'short_beep.wav', name: 'Short Beep' },
+        { value: 'three_tones.wav', name: 'Three Tones' },
+        { value: 'none', name: 'None' },
+        { value: 'custom', name: 'Custom URL' }
+    ];
+
     function handleUpdate() {
         desktopSettings.set(settings);
     }
-    
+
+    function testChime() {
+        if (!settings.chimeType || settings.chimeType === 'none') return;
+        let src = settings.chimeType === 'custom' ? settings.chimeUrl : `/assets/${settings.chimeType}`;
+        if (src) {
+            try {
+                new Audio(src).play().catch(e => console.error("Audio play failed:", e));
+            } catch (e) { alert("Could not play audio. Check URL or console for errors."); }
+        }
+     }
+
     // --- Settings Modal Logic ---
     export let componentName;
     export let x, y, width, height;
@@ -128,6 +149,18 @@
         border: 1px solid var(--border-color);
         border-radius: 4px;
     }
+    .test-button {
+        background: var(--taskbar-button-bg);
+        border: 1px solid var(--border-color);
+        color: var(--taskbar-text);
+        padding: 5px 10px;
+        border-radius: 3px;
+        cursor: pointer;
+        margin-left: 10px;
+    }
+    .test-button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
 
     /* Modal Styles */
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
@@ -193,6 +226,28 @@
             </div>
             {/if}
         </div>
+    </fieldset>
+
+     <fieldset>
+        <legend>Sound Effects</legend>
+        <label class="color-picker-label">
+            <span>Chime Sound</span>
+            <div>
+                <select class="select-input" bind:value={settings.chimeType} on:change={handleUpdate}>
+                    {#each chimeSounds as sound}
+                        <option value={sound.value}>{sound.name}</option>
+                    {/each}
+                </select>
+                <button class="test-button" on:click={testChime} title="Test Sound" disabled={settings.chimeType === 'none'}>▶</button>
+            </div>
+        </label>
+        {#if settings.chimeType === 'custom'}
+            <div class="options-group">
+                <label>
+                    <input class="text-input" type="text" bind:value={settings.chimeUrl} on:input={handleUpdate} placeholder="Enter Sound URL...">
+                </label>
+            </div>
+        {/if}
     </fieldset>
 
     <fieldset>

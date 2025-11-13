@@ -49,6 +49,7 @@ function createWindowManager() {
             maximized: false,
             isActive: true, // New windows are active by default
             prevX: 0, prevY: 0, prevWidth: 0, prevHeight: 0,
+            isFlashing: false, // For ANSI bell visual feedback
             lastFocusedElement: null, // To store the last focused element within the window
         };
 

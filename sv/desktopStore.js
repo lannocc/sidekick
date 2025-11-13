@@ -11,9 +11,10 @@ function loadSettings() {
         bgImageDisplayMode: 'cover', // 'cover', 'contain', 'stretch', 'tile'
         focusFollowsMouse: false,
         focusDelay: 420,
-        ioskUrl: 'ws://localhost:4209', // Add this line
-        ioskUsername: 'root',           // Add this line
-
+        ioskUrl: 'ws://localhost:4209',
+        ioskUsername: 'root',
+        chimeType: 'beep.wav', // filename from assets, 'none', or 'custom'
+        chimeUrl: '',          // URL for custom chime
     };
 
     try {
