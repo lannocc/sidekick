@@ -263,6 +263,14 @@
         focusInput();
     }
 
+    function handleDetachUser() {
+        if (!userContextMenu.user) return;
+        const commandToRun = `$ detach ${userContextMenu.user}`;
+        sendSystemCommand(commandToRun);
+        closeUserContextMenu();
+        focusInput();
+    }
+
     // --- Functions ---
     export function showSettingsDialog() {
         if (isConnected) return;
@@ -896,6 +904,10 @@
                 </button>
             {:else}
                 <button class="menu-item" on:click={() => userContextMenu.showColorPicker = true}> Set Color... </button>
+                <div class="menu-separator"></div>
+                <button class="menu-item close-item" on:click={handleDetachUser}>
+                    Detach
+                </button>
             {/if}
         </div>
     {/if}
