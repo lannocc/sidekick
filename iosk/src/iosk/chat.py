@@ -201,8 +201,12 @@ class AIMessenger:
                         uio = self.os.users[user]
                         if not uio.paused:
                             # For local recipients, the sender is local, so don't show host.
-                            # ADDED: ASCII BELL character '\a' for terminal ring
                             dm_msg = f'\a\n[{from_user} -> me {now}] << {actual_msg}'
+                            if not uio.bot and uio.user_colors:
+                                color = uio.user_colors.get(from_user, '')
+                                reset = self.os.ANSI_RESET if color else ''
+                                colored_sender = f'{color}{from_user}{reset}'
+                                dm_msg = f'\a\n[{colored_sender} -> me {now}] << {actual_msg}'
                             await uio.print(dm_msg)
 
                 # Send confirmation to sender
@@ -220,11 +224,17 @@ class AIMessenger:
             remote_from_addr = f"{from_user}.{self.os.hostname}"
 
             # Broadcast to local participants
-            # For local participants, the sender is also local, so don't show host.
-            local_msg = f'\n[{from_user} {now}] << {msg}'
             for user in self.local_room_participants:
                 if user in self.os.users:
-                    await self.os.users[user].print(local_msg)
+                    uio = self.os.users[user]
+                    # For local participants, the sender is also local, so don't show host.
+                    local_msg = f'\n[{from_user} {now}] << {msg}'
+                    if not uio.bot and uio.user_colors:
+                        color = uio.user_colors.get(from_user, '')
+                        reset = self.os.ANSI_RESET if color else ''
+                        colored_sender = f'{color}{from_user}{reset}'
+                        local_msg = f'\n[{colored_sender} {now}] << {msg}'
+                    await uio.print(local_msg)
 
             # Broadcast to network peers
             payload = {
@@ -388,11 +398,17 @@ class AIMessenger:
                     if r_host == self.os.hostname:
                         display_addr = r_user
 
-                local_msg = f'\n[{display_addr} {now}] << {content}'
-
                 for user in self.local_room_participants:
                     if user in self.os.users:
-                        await self.os.users[user].print(local_msg)
+                        uio = self.os.users[user]
+                        local_msg = f'\n[{display_addr} {now}] << {content}'
+                        if not uio.bot and uio.user_colors:
+                            sender_username = from_addr.split('.', 1)[0]
+                            color = uio.user_colors.get(sender_username, '')
+                            reset = self.os.ANSI_RESET if color else ''
+                            colored_sender = f'{color}{display_addr}{reset}'
+                            local_msg = f'\n[{colored_sender} {now}] << {content}'
+                        await uio.print(local_msg)
 
         elif msg_type == "direct_message":
             to_users = message.get("to_users", [])
@@ -409,8 +425,13 @@ class AIMessenger:
             for user in to_users:
                 if user in self.os.users:
                     uio = self.os.users[user]
-                    # ADDED: ASCII BELL character '\a' for terminal ring
                     dm_msg = f'\a\n[{display_addr} -> me {now}] << {content}'
+                    if not uio.bot and uio.user_colors:
+                        sender_username = from_addr.split('.', 1)[0]
+                        color = uio.user_colors.get(sender_username, '')
+                        reset = self.os.ANSI_RESET if color else ''
+                        colored_sender = f'{color}{display_addr}{reset}'
+                        dm_msg = f'\a\n[{colored_sender} -> me {now}] << {content}'
                     await uio.print(dm_msg)
 
 class Engagement:

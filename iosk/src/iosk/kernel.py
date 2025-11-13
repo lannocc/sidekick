@@ -40,6 +40,17 @@ class Process:
 class IOSK:
     BOOT = 0 # current boot number
 
+    ANSI_RESET = '\033[0m'
+    BRIGHT_WHITE = '\033[97m'
+    USER_COLORS = [
+        '\033[96m',  # Bright Cyan
+        '\033[92m',  # Bright Green
+        '\033[93m',  # Bright Yellow
+        '\033[94m',  # Bright Blue
+        '\033[95m',  # Bright Magenta
+        '\033[91m',  # Bright Red
+    ]
+
     CONSOLE_DEV = '/dev/console'
     BOOT_COUNT = '/var/cache/boot'
     INIT_SCRIPT = '/sbin/init'
@@ -84,6 +95,12 @@ class IOSK:
         # Added for token_rate proposal
         self.device_tpm_trackers = {}
         self.device_cooldowns = {}
+
+    def _get_next_color(self, io: Context) -> str:
+        """Cycles through the USER_COLORS list to pick a color."""
+        color = self.USER_COLORS[io.color_idx % len(self.USER_COLORS)]
+        io.color_idx += 1
+        return color
 
     ###
     ### SYSTEM LIFECYCLE
@@ -398,6 +415,21 @@ class IOSK:
         io.bot = device != self.CONSOLE_DEV
         self.users[user] = io
 
+        # --- Color Initialization ---
+        if not io.bot:
+            # This user is interactive, set up their color map.
+            io.user_colors[user] = self.BRIGHT_WHITE
+
+            # Assign colors for all other users (including bots) in this new user's map.
+            for other_user in self.users:
+                if other_user != user:
+                    io.user_colors[other_user] = self._get_next_color(io)
+
+            # Update all other interactive users' maps to include this new user.
+            for other_user, other_io in self.users.items():
+                if other_user != user and not other_io.bot:
+                    other_io.user_colors[user] = self._get_next_color(other_io)
+
         # --- CWD and Home Directory Initialization ---
         if user == 'root':
             home_dir_virtual = '/root'
@@ -545,6 +577,11 @@ class IOSK:
         user_is_network_client = io.dev.startswith('network:')
         del self.users[user_to_logout]
 
+        # --- Color Cleanup ---
+        for remaining_io in self.users.values():
+            if user_to_logout in remaining_io.user_colors:
+                del remaining_io.user_colors[user_to_logout]
+
         if disconnect:
             if self.chat: await self.chat.send(user_to_logout, disconnect, sys=True)
             else: await io.print(disconnect)
@@ -598,6 +635,16 @@ class IOSK:
         io.bot = False
         io.network_input_queue = asyncio.Queue()
         self.users[username] = io
+
+        # --- Color Initialization (for network user) ---
+        if not io.bot:
+            io.user_colors[username] = self.BRIGHT_WHITE
+            for other_user in self.users:
+                if other_user != username:
+                    io.user_colors[other_user] = self._get_next_color(io)
+            for other_user, other_io in self.users.items():
+                if other_user != username and not other_io.bot:
+                    other_io.user_colors[username] = self._get_next_color(other_io)
 
         if username == 'root':
             home_dir_virtual = '/root'
