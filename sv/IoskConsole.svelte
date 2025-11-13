@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, newIoskFileExplorer, updateWindowProps } from './windows.js';
+    import { windows, newIoskFileExplorer } from './windows.js';
     import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
 
