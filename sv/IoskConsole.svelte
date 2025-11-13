@@ -126,6 +126,12 @@
         return html;
     }
 
+    function stripAnsi(text) {
+        if (typeof text !== 'string') return '';
+        const ansiRegex = /\u001b\[\d+m/g;
+        return text.replace(ansiRegex, '');
+    }
+
 
     // --- Lifecycle and Reactive Statements ---
     afterUpdate(() => {
@@ -217,7 +223,7 @@
         if (isConnected) {
             const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
             const userAtHost = `${username}@${host}`;
-            newTitle = roomName ? `[${roomName}] ${userAtHost}` : userAtHost;
+            newTitle = roomName ? `[${stripAnsi(roomName)}] ${userAtHost}` : userAtHost;
         } else {
             newTitle = title;
         }
@@ -791,8 +797,8 @@
         {:else}
             <button type="button" class="header-button disconnect-button" on:click={disconnect}>Disconnect</button>
             <button type="button" class="header-button room-button" bind:this={roomsButton} on:click|stopPropagation={toggleRoomsMenu} title="Available Rooms">Rooms</button>
-            <div class="header-info" title={roomTopic || motd}>
-                {roomTopic || motd}
+            <div class="header-info" title={stripAnsi(roomTopic || motd)}>
+                {@html parseAnsi(roomTopic || motd)}
             </div>
             <button type="button" class="header-button files-button" on:click={() => { newIoskFileExplorer(id, title); focusInput(); }}>Files</button>
             <button type="button" class="header-button attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>

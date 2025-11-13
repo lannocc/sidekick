@@ -33,18 +33,12 @@ class AIMessenger:
         """Gathers current room state and broadcasts it to clients."""
         if not self.os.port: return
 
-        # Gather participants from local and network
+        # Gather participants from local and network, ensuring canonical user.host format
         all_participants = set()
         if self.active_room:
-            all_participants.update(self.local_room_participants)
             for user_addr, room_name in self.os.network_rooms.items():
                 if room_name == self.active_room:
-                    user_part, host_part = user_addr.split('.', 1)
-                    # To present a clean list, show local users by name and remote by full address
-                    if host_part == self.os.hostname:
-                        all_participants.add(user_part)
-                    else:
-                        all_participants.add(user_addr)
+                    all_participants.add(user_addr)
 
         # Get available rooms. Need a valid IO context for kernel calls. Use system.
         available_rooms = await self.os.get_room_list(self.os.system)
@@ -200,15 +194,15 @@ class AIMessenger:
                     if user in self.os.users:
                         uio = self.os.users[user]
                         if not uio.paused:
-                            # For local recipients, the sender is local, so don't show host.
-                            dm_msg = f'\a\n[{from_user} -> me {now}] << {actual_msg}'
+                            # Use canonical sender address for consistency
+                            dm_msg = f'\a\n[{remote_from_addr} -> me {now}] << {actual_msg}'
                             if not uio.bot and uio.user_colors:
                                 sender_color = uio.user_colors.get(from_user, '')
                                 if sender_color:
                                     reset = self.os.ANSI_RESET
                                     bold = self.os.ANSI_BOLD
                                     me_color = uio.user_colors.get(uio.user, self.os.BRIGHT_WHITE)
-                                    colored_sender = f'{bold}{sender_color}{from_user}{reset}'
+                                    colored_sender = f'{bold}{sender_color}{remote_from_addr}{reset}'
                                     bold_me = f'{bold}{me_color}me{reset}'
                                     colored_msg = f'{sender_color}{actual_msg}{reset}'
                                     dm_msg = f'\a\n[{colored_sender} -> {bold_me} {now}] << {colored_msg}'
@@ -247,14 +241,14 @@ class AIMessenger:
             for user in self.local_room_participants:
                 if user in self.os.users:
                     uio = self.os.users[user]
-                    # For local participants, the sender is also local, so don't show host.
-                    local_msg = f'\n[{from_user} {now}] << {msg}'
+                    # For local participants, use the full canonical address for consistency
+                    local_msg = f'\n[{remote_from_addr} {now}] << {msg}'
                     if not uio.bot and uio.user_colors:
                         color = uio.user_colors.get(from_user, '')
                         if color:
                             reset = self.os.ANSI_RESET
                             bold = self.os.ANSI_BOLD
-                            colored_sender = f'{bold}{color}{from_user}{reset}'
+                            colored_sender = f'{bold}{color}{remote_from_addr}{reset}'
                             colored_msg = f'{color}{msg}{reset}'
                             local_msg = f'\n[{colored_sender} {now}] << {colored_msg}'
                     await uio.print(local_msg)
@@ -415,23 +409,18 @@ class AIMessenger:
                 content = message.get("content", "")
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-                display_addr = from_addr
-                if '.' in from_addr:
-                    r_user, r_host = from_addr.split('.', 1)
-                    if r_host == self.os.hostname:
-                        display_addr = r_user
-
                 for user in self.local_room_participants:
                     if user in self.os.users:
                         uio = self.os.users[user]
-                        local_msg = f'\n[{display_addr} {now}] << {content}'
+                        # Use the full canonical address for consistency
+                        local_msg = f'\n[{from_addr} {now}] << {content}'
                         if not uio.bot and uio.user_colors:
                             sender_username = from_addr.split('.', 1)[0]
                             color = uio.user_colors.get(sender_username, '')
                             if color:
                                 reset = self.os.ANSI_RESET
                                 bold = self.os.ANSI_BOLD
-                                colored_sender = f'{bold}{color}{display_addr}{reset}'
+                                colored_sender = f'{bold}{color}{from_addr}{reset}'
                                 colored_content = f'{color}{content}{reset}'
                                 local_msg = f'\n[{colored_sender} {now}] << {colored_content}'
                         await uio.print(local_msg)
@@ -442,16 +431,11 @@ class AIMessenger:
             content = message.get("content", "")
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-            display_addr = from_addr
-            if '.' in from_addr:
-                r_user, r_host = from_addr.split('.', 1)
-                if r_host == self.os.hostname:
-                    display_addr = r_user
-
             for user in to_users:
                 if user in self.os.users:
                     uio = self.os.users[user]
-                    dm_msg = f'\a\n[{display_addr} -> me {now}] << {content}'
+                    # Use the full canonical address for consistency
+                    dm_msg = f'\a\n[{from_addr} -> me {now}] << {content}'
                     if not uio.bot and uio.user_colors:
                         sender_username = from_addr.split('.', 1)[0]
                         sender_color = uio.user_colors.get(sender_username, '')
@@ -459,7 +443,7 @@ class AIMessenger:
                             reset = self.os.ANSI_RESET
                             bold = self.os.ANSI_BOLD
                             me_color = uio.user_colors.get(uio.user, self.os.BRIGHT_WHITE)
-                            colored_sender = f'{bold}{sender_color}{display_addr}{reset}'
+                            colored_sender = f'{bold}{sender_color}{from_addr}{reset}'
                             bold_me = f'{bold}{me_color}me{reset}'
                             colored_content = f'{sender_color}{content}{reset}'
                             dm_msg = f'\a\n[{colored_sender} -> {bold_me} {now}] << {colored_content}'

@@ -18,13 +18,48 @@
     let inputEl;
     let shouldScroll = true;
 
-    // The remote user's display name (without device/host info if local)
-    $: remoteUserDisplay = remoteUser.includes('.') ? remoteUser : remoteUser.split('.')[0];
+    // The remote user's display name (just the username part)
+    $: remoteUserDisplay = remoteUser ? remoteUser.split('.')[0] : '';
     $: localUserDisplay = localUser.split('.')[0];
 
     // Update window store with props for Dash saving
     $: if (id !== undefined) {
         windows.updateWindowProps(id, { consoleId, localUser, remoteUser });
+    }
+
+    const ansiCodeToCssVar = {
+        '30': 'var(--ansi-black)', '31': 'var(--ansi-red)', '32': 'var(--ansi-green)', '33': 'var(--ansi-yellow)',
+        '34': 'var(--ansi-blue)', '35': 'var(--ansi-magenta)', '36': 'var(--ansi-cyan)', '37': 'var(--ansi-white)',
+        '90': 'var(--ansi-bright-black)', '91': 'var(--ansi-bright-red)', '92': 'var(--ansi-bright-green)', '93': 'var(--ansi-bright-yellow)',
+        '94': 'var(--ansi-bright-blue)', '95': 'var(--ansi-bright-magenta)', '96': 'var(--ansi-bright-cyan)', '97': 'var(--ansi-bright-white)',
+    };
+
+    function parseAnsi(text) {
+        if (typeof text !== 'string') return '';
+        const ansiRegex = /\u001b\[(\d+)m/g;
+        let openSpan = false;
+        
+        let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        let html = sanitizedText.replace(ansiRegex, (match, code) => {
+            let newHtml = '';
+            if (openSpan) {
+                newHtml += '</span>';
+                openSpan = false;
+            }
+            if (code === '0') {
+                // Reset code, just close the span
+            } else if (ansiCodeToCssVar[code]) {
+                newHtml += `<span style="color: ${ansiCodeToCssVar[code]}">`;
+                openSpan = true;
+            }
+            return newHtml;
+        });
+
+        if (openSpan) {
+            html += '</span>';
+        }
+        return html;
     }
 
     async function focusInput() {
@@ -89,6 +124,25 @@
 </script>
 
 <style>
+    /* Copied from IoskConsole.svelte for color consistency */
+    :global(:root) {
+        --ansi-black: #2c3e50;
+        --ansi-red: #c0392b;
+        --ansi-green: #27ae60;
+        --ansi-yellow: #f1c40f;
+        --ansi-blue: #2980b9;
+        --ansi-magenta: #8e44ad;
+        --ansi-cyan: #16a085;
+        --ansi-white: #bdc3c7;
+        --ansi-bright-black: #95a5a6;
+        --ansi-bright-red: #e74c3c;
+        --ansi-bright-green: #2ecc71;
+        --ansi-bright-yellow: #f39c12;
+        --ansi-bright-blue: #3498db;
+        --ansi-bright-magenta: #9b59b6;
+        --ansi-bright-cyan: #1abc9c;
+        --ansi-bright-white: #ecf0f1;
+    }
     .chat-container {
         display: flex;
         flex-direction: column;
@@ -142,7 +196,7 @@
                 <div class="message-header" style="color: {msg.from === localUser ? 'var(--ansi-bright-white)' : 'var(--ansi-cyan)'}">
                     {msg.from === localUser ? localUserDisplay : remoteUserDisplay}:
                 </div>
-                <div class="message-content">{msg.content}</div>
+                <div class="message-content">{@html parseAnsi(msg.content)}</div>
             </div>
         {/each}
     </div>
