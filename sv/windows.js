@@ -8,7 +8,11 @@ import WebBrowser from './WebBrowser.svelte';
 import IoskPrivateChat from './IoskPrivateChat.svelte';
 import { desktopSettings, windowSettings } from './desktopStore.js';
 
-let windowIdCounter = 0;
+let windowGroupIdCounter = 0;
+let tabIdCounter = 0;
+
+// Store for managing drag-and-drop grouping state
+export const dragState = writable(null);
 
 // Map component type strings to actual components for restoring layouts
 const componentMap = {
@@ -25,89 +29,134 @@ function createWindowManager() {
     const { subscribe, update } = writable([]);
 
     const addWindow = (component, props = {}) => {
-        const defaults = {
-            title: 'New Window',
-            width: 800,
-            height: 600,
-        };
+        const groupProps = { x: props.x, y: props.y, width: props.width, height: props.height };
+        const tabProps = { ...props };
+        ['x', 'y', 'width', 'height'].forEach(p => delete tabProps[p]);
+
+        const defaults = { title: 'New Window', width: 800, height: 600 };
 
         const allWindowSettings = get(windowSettings);
         const componentName = Object.keys(componentMap).find(key => componentMap[key] === component) || 'Unknown';
         const savedSettings = allWindowSettings[componentName];
         const useSavedPosition = savedSettings && savedSettings.positioning === 'manual';
 
-        const newWindow = {
-            id: ++windowIdCounter,
+        const newTab = {
+            id: ++tabIdCounter,
             component: component,
             componentName: componentName,
-            x: useSavedPosition ? savedSettings.x : 50 + (windowIdCounter % 10) * 20,
-            y: useSavedPosition ? savedSettings.y : 50 + (windowIdCounter % 10) * 20,
-            ...defaults,
-            ...props,
-            width: useSavedPosition ? savedSettings.width : (props.width ?? defaults.width),
-            height: useSavedPosition ? savedSettings.height : (props.height ?? defaults.height),
+            ...tabProps,
+            lastFocusedElement: null,
+        };
+
+        const newWindowGroup = {
+            id: ++windowGroupIdCounter,
+            x: useSavedPosition ? savedSettings.x : (groupProps.x ?? 50 + (windowGroupIdCounter % 10) * 20),
+            y: useSavedPosition ? savedSettings.y : (groupProps.y ?? 50 + (windowGroupIdCounter % 10) * 20),
+            width: useSavedPosition ? savedSettings.width : (groupProps.width ?? defaults.width),
+            height: useSavedPosition ? savedSettings.height : (groupProps.height ?? defaults.height),
             zIndex: 100,
             minimized: false,
             maximized: false,
-            isActive: true, // New windows are active by default
+            isActive: true,
             prevX: 0, prevY: 0, prevWidth: 0, prevHeight: 0,
-            isFlashing: false, // For ANSI bell visual feedback
-            lastFocusedElement: null, // To store the last focused element within the window
+            tabs: [newTab],
+            activeTabId: newTab.id,
+            isFlashing: false,
         };
 
         update(windows => {
-            // Set all other windows to inactive and a lower z-index
             const updatedWindows = windows.map(w => ({ ...w, zIndex: w.zIndex - 10, isActive: false }));
-            newWindow.zIndex = updatedWindows.reduce((max, w) => Math.max(max, w.zIndex), 99) + 1;
-            return [...updatedWindows, newWindow];
+            newWindowGroup.zIndex = updatedWindows.reduce((max, w) => Math.max(max, w.zIndex), 99) + 1;
+            return [...updatedWindows, newWindowGroup];
         });
-        return newWindow.id;
+        return newWindowGroup.id;
     };
 
-    const removeWindow = (id) => {
-        const allWindows = get(windows);
-        const winToRemove = allWindows.find(w => w.id === id);
+    const removeTab = (groupId, tabId) => {
+        update(windows => {
+            const groupIndex = windows.findIndex(g => g.id === groupId);
+            if (groupIndex === -1) return windows;
 
-        if (winToRemove) {
-            // Check for connected IoskConsole before closing
-            if (winToRemove.component === IoskConsole && winToRemove.isConsoleConnected) {
+            const group = windows[groupIndex];
+            const tabIndex = group.tabs.findIndex(t => t.id === tabId);
+            if (tabIndex === -1) return windows;
+
+            // Handle IoskConsole confirmation
+            const tabToRemove = group.tabs[tabIndex];
+            if (tabToRemove.component === IoskConsole && tabToRemove.isConsoleConnected) {
                 if (!confirm("This console has an active connection. Are you sure you want to close it?")) {
-                    return; // Abort closing if user cancels
+                    return windows;
                 }
             }
-        }
 
-        update(currentWindows => currentWindows.filter(w => w.id !== id));
+            if (group.tabs.length === 1) {
+                // Last tab, remove the whole group
+                return windows.filter(g => g.id !== groupId);
+            } else {
+                // More tabs remain, just remove one
+                const newTabs = group.tabs.filter(t => t.id !== tabId);
+                let newActiveTabId = group.activeTabId;
+
+                if (group.activeTabId === tabId) {
+                    // If the active tab was closed, activate the previous one or the first one
+                    newActiveTabId = (newTabs[tabIndex] || newTabs[tabIndex - 1] || newTabs[0]).id;
+                }
+
+                const newGroup = { ...group, tabs: newTabs, activeTabId: newActiveTabId };
+                const newWindows = [...windows];
+                newWindows[groupIndex] = newGroup;
+                return newWindows;
+            }
+        });
+    };
+
+    const removeWindow = (groupId) => {
+        const group = get(windows).find(g => g.id === groupId);
+        if (group) {
+            removeTab(groupId, group.activeTabId);
+        }
+    };
+
+    const setActiveTab = (groupId, tabId) => {
+        update(windows => windows.map(g => g.id === groupId ? { ...g, activeTabId: tabId } : g));
+        focusWindow(groupId);
+    };
+
+    const groupWindows = (sourceGroupId, targetGroupId) => {
+        update(windows => {
+            const sourceGroup = windows.find(g => g.id === sourceGroupId);
+            const targetGroup = windows.find(g => g.id === targetGroupId);
+
+            if (!sourceGroup || !targetGroup) return windows;
+
+            const newTabs = [...targetGroup.tabs, ...sourceGroup.tabs];
+            const newActiveTabId = sourceGroup.tabs[0].id;
+
+            // Remove source, update target
+            return windows
+                .filter(g => g.id !== sourceGroupId)
+                .map(g => g.id === targetGroupId ? { ...g, tabs: newTabs, activeTabId: newActiveTabId } : g);
+        });
+        focusWindow(targetGroupId);
     };
 
     const setActiveWindow = (id) => {
         update(windows => {
-            // Avoid re-rendering if the window is already active
             const targetWindow = windows.find(w => w.id === id);
             if (targetWindow && targetWindow.isActive) return windows;
 
-            return windows.map(w => ({
-                ...w,
-                isActive: w.id === id
-            }));
+            return windows.map(w => ({ ...w, isActive: w.id === id }));
         });
     };
 
     const focusWindow = (id) => {
         update(windows => {
             const currentTopWindow = windows.reduce((top, w) => (!top || w.zIndex > top.zIndex) ? w : top, null);
-
-            // If the target window is already the active top window, do nothing.
-            if (currentTopWindow && currentTopWindow.id === id && currentTopWindow.isActive) {
-                return windows;
-            }
+            if (currentTopWindow && currentTopWindow.id === id && currentTopWindow.isActive) return windows;
 
             const maxZ = windows.reduce((max, w) => Math.max(max, w.zIndex), 99);
             return windows.map(w => {
-                if (w.id === id) {
-                    return { ...w, zIndex: maxZ + 1, isActive: true };
-                }
-                // Set others to inactive, but preserve their z-index relative to each other.
+                if (w.id === id) return { ...w, zIndex: maxZ + 1, isActive: true };
                 return { ...w, isActive: false };
             });
         });
@@ -117,24 +166,31 @@ function createWindowManager() {
         update(windows => windows.map(w => w.id === id ? { ...w, ...newProps } : w));
     };
 
+    const updateTabProps = (groupId, tabId, newProps) => {
+        update(windows => windows.map(g => {
+            if (g.id === groupId) {
+                return {
+                    ...g,
+                    tabs: g.tabs.map(t => t.id === tabId ? { ...t, ...newProps } : t)
+                };
+            }
+            return g;
+        }));
+    };
+
     const toggleMinimize = (id) => {
         update(windows => {
             const winToToggle = windows.find(w => w.id === id);
             if (!winToToggle) return windows;
 
-            // If the window is currently minimized, we are restoring it.
             if (winToToggle.minimized) {
                 const maxZ = windows.reduce((max, w) => Math.max(max, w.zIndex), 99);
                 return windows.map(w => {
-                    if (w.id === id) {
-                        return { ...w, minimized: false, zIndex: maxZ + 1, isActive: true };
-                    }
+                    if (w.id === id) return { ...w, minimized: false, zIndex: maxZ + 1, isActive: true };
                     return { ...w, isActive: false };
                 });
-            } else { // Window is being minimized.
-                 // Deactivate window when minimizing
+            } else {
                 const updated = windows.map(w => (w.id === id ? { ...w, minimized: true, isActive: false } : w));
-                // Focus the next highest window if available
                 const nextWindow = updated.filter(w => !w.minimized).reduce((top, w) => (!top || w.zIndex > top.zIndex) ? w : top, null);
                 if(nextWindow) focusWindow(nextWindow.id);
                 return updated;
@@ -148,17 +204,8 @@ function createWindowManager() {
             return windows.map(w => {
                 if (w.id === id) {
                     const newProps = w.maximized
-                        ? { // Restore
-                            maximized: false,
-                            x: w.prevX, y: w.prevY,
-                            width: w.prevWidth, height: w.prevHeight,
-                          }
-                        : { // Maximize
-                            maximized: true,
-                            prevX: w.x, prevY: w.y,
-                            prevWidth: w.width, prevHeight: w.height,
-                            x: 0, y: 0,
-                          };
+                        ? { maximized: false, x: w.prevX, y: w.prevY, width: w.prevWidth, height: w.prevHeight }
+                        : { maximized: true, prevX: w.x, prevY: w.y, prevWidth: w.width, prevHeight: w.height, x: 0, y: 0 };
                     return { ...w, ...newProps, zIndex: maxZ + 1, isActive: true };
                 }
                 return { ...w, isActive: false };
@@ -167,236 +214,166 @@ function createWindowManager() {
     };
 
     const closeAllWindows = () => {
-        update(currentWindows => {
-            const windowsToKeep = [];
-            for (const win of currentWindows) {
-                // For connected consoles, ask for individual confirmation
-                if (win.component === IoskConsole && win.isConsoleConnected) {
-                    if (confirm(`Console "${win.title}" has an active connection. Close it anyway?`)) {
-                        // User confirmed, so we don't add it to the 'keep' list.
-                    } else {
-                        windowsToKeep.push(win); // User cancelled, so we keep this window.
+        let windowsToKeep = [];
+        let windowsToCheck = get(windows);
+
+        for (const group of windowsToCheck) {
+            let tabsToKeep = [];
+            for (const tab of group.tabs) {
+                if (tab.component === IoskConsole && tab.isConsoleConnected) {
+                    if (!confirm(`Console "${tab.title}" has an active connection. Close it anyway?`)) {
+                        tabsToKeep.push(tab);
                     }
                 }
-                // All other windows are implicitly removed as they are not added to `windowsToKeep`.
-                // The initial "Close All?" confirmation covers them.
             }
-            return windowsToKeep;
-        });
+            if (tabsToKeep.length > 0) {
+                windowsToKeep.push({ ...group, tabs: tabsToKeep });
+            }
+        }
+        update(() => windowsToKeep);
     };
 
-    const minimizeAllWindows = () => {
-        update(currentWindows => {
-            if (currentWindows.length === 0) return currentWindows;
-            return currentWindows.map(w => ({...w, minimized: true, isActive: false }));
-        });
-    };
+    const minimizeAllWindows = () => update(ws => ws.map(w => ({...w, minimized: true, isActive: false })));
 
     const restoreAllWindows = () => {
         update(currentWindows => {
-            const anyMinimized = currentWindows.some(w => w.minimized);
-            if (!anyMinimized) return currentWindows; // No-op if nothing to do
-
+            if (!currentWindows.some(w => w.minimized)) return currentWindows;
             let updatedWindows = currentWindows.map(w => ({...w, minimized: false}));
-
-            // Check if any window is active after restoration.
-            const isAnyActive = updatedWindows.some(w => w.isActive);
-            if (!isAnyActive && updatedWindows.length > 0) {
-                // If no window is active (e.g., all were minimized), make the top-most one active.
+            if (!updatedWindows.some(w => w.isActive) && updatedWindows.length > 0) {
                 const topWindow = updatedWindows.reduce((top, w) => (!top || w.zIndex > top.zIndex) ? w : top, null);
                 if (topWindow) {
-                    updatedWindows = updatedWindows.map(w =>
-                        w.id === topWindow.id ? { ...w, isActive: true } : w
-                    );
+                    updatedWindows = updatedWindows.map(w => w.id === topWindow.id ? { ...w, isActive: true } : w);
                 }
             }
             return updatedWindows;
         });
     };
-
+    
     const cycleWindow = (forward) => {
         update(currentWindows => {
-            const openWindows = currentWindows
-                .filter(w => !w.minimized)
-                .sort((a, b) => b.zIndex - a.zIndex);
-
-            if (openWindows.length < 2) {
-                return currentWindows;
-            }
-
-            // The pool of z-indices used by the open windows
+            const openWindows = currentWindows.filter(w => !w.minimized).sort((a, b) => b.zIndex - a.zIndex);
+            if (openWindows.length < 2) return currentWindows;
             const openZIndices = openWindows.map(w => w.zIndex).sort((a,b) => a - b);
-
-            let newOrder;
-            if (forward) {
-                // Forward cycle: Move top window to the bottom of the stack
-                // e.g., [C, B, A] -> [B, A, C]
-                const top = openWindows.shift();
-                openWindows.push(top);
-                newOrder = openWindows;
-            } else {
-                // Backward cycle: Move bottom window to the top of the stack
-                // e.g., [C, B, A] -> [A, C, B]
-                const bottom = openWindows.pop();
-                openWindows.unshift(bottom);
-                newOrder = openWindows;
-            }
-
+            let newOrder = [...openWindows];
+            if (forward) newOrder.push(newOrder.shift());
+            else newOrder.unshift(newOrder.pop());
+            
             const newProps = {};
             const activeId = newOrder[0].id;
-
-            // Re-assign the z-indices to the newly ordered windows
             newOrder.forEach((win, index) => {
-                newProps[win.id] = {
-                    zIndex: openZIndices[openZIndices.length - 1 - index],
-                    isActive: win.id === activeId
-                };
+                newProps[win.id] = { zIndex: openZIndices[openZIndices.length - 1 - index], isActive: win.id === activeId };
             });
 
-            // Map over all windows and apply the new properties to the cycled ones
-            return currentWindows.map(w => {
-                if (newProps[w.id]) {
-                    return { ...w, ...newProps[w.id] };
-                }
-                return w;
-            });
+            return currentWindows.map(w => newProps[w.id] ? { ...w, ...newProps[w.id] } : w);
         });
     };
+
 
     return {
         subscribe,
         addWindow,
         removeWindow,
+        removeTab,
         focusWindow,
         setActiveWindow,
+        setActiveTab,
         updateWindowProps,
+        updateTabProps,
         toggleMinimize,
         toggleMaximize,
         closeAllWindows,
         minimizeAllWindows,
         restoreAllWindows,
-        cycleWindow
+        cycleWindow,
+        groupWindows
     };
 }
 
 export const windows = createWindowManager();
 
 
-// Function to be called from other components like the Taskbar
-export function newIoskConnection() {
-    windows.addWindow(IoskConsole, {
-        title: 'IOSK Connection'
-    });
-}
+// --- Window Creation Functions ---
 
+export function newIoskConnection() {
+    windows.addWindow(IoskConsole, { title: 'IOSK Connection' });
+}
 export function newCalculator() {
     windows.addWindow(Calculator, { title: 'Calculator', width: 320, height: 450 });
 }
-
 export function newSettings() {
     windows.addWindow(Settings, { title: 'Settings', width: 400, height: 550 });
 }
-
-export function newIoskFileExplorer(consoleId, consoleTitle) {
-    const title = `Files - ${consoleTitle || `Console ${consoleId}`}`;
-    
-    const allWindowSettings = get(windowSettings);
-    const explorerSettings = allWindowSettings['IoskFileExplorer'];
-    const initialPath = explorerSettings?.initialPath || '.';
-
-    windows.addWindow(IoskFileExplorer, {
-        title: title,
-        consoleId: consoleId,
-        initialPath: initialPath,
-        width: 400,
-        height: 500,
-    });
+export function newIoskFileExplorer(consoleTabId, consoleTitle) {
+    const title = `Files - ${consoleTitle || `Console ${consoleTabId}`}`;
+    const explorerSettings = get(windowSettings)['IoskFileExplorer'];
+    windows.addWindow(IoskFileExplorer, { title, consoleId: consoleTabId, initialPath: explorerSettings?.initialPath || '.', width: 400, height: 500 });
 }
-
-export function newIoskFileViewer(consoleId, path) {
+export function newIoskFileViewer(consoleTabId, path) {
     const title = path.split('/').pop() || path;
-    windows.addWindow(IoskFileViewer, {
-        title: `View - ${title}`,
-        consoleId: consoleId,
-        path: path,
-        width: 700,
-        height: 500,
-    });
+    windows.addWindow(IoskFileViewer, { title: `View - ${title}`, consoleId: consoleTabId, path: path, width: 700, height: 500 });
 }
-
 export function newWebBrowser() {
-    const allWindowSettings = get(windowSettings);
-    const browserSettings = allWindowSettings['WebBrowser'];
+    const browserSettings = get(windowSettings)['WebBrowser'];
     const initialUrl = browserSettings?.defaultUrl || (typeof window !== 'undefined' ? window.location.origin : 'about:blank');
-
-    windows.addWindow(WebBrowser, {
-        title: 'Web Browser',
-        initialUrl: initialUrl,
-        width: 1024,
-        height: 768
-    });
+    windows.addWindow(WebBrowser, { title: 'Web Browser', initialUrl, width: 1024, height: 768 });
 }
-
-export function newIoskPrivateChat(consoleId, localUser, remoteUser) {
+export function newIoskPrivateChat(consoleTabId, localUser, remoteUser) {
     const allWindows = get(windows);
-    // Check if a chat window for this pair already exists for this console
-    const existingChat = allWindows.find(w =>
-        w.componentName === 'IoskPrivateChat' &&
-        w.consoleId === consoleId &&
-        w.remoteUser === remoteUser
+    const existingChatTab = allWindows.flatMap(g => g.tabs).find(t =>
+        t.componentName === 'IoskPrivateChat' && t.consoleId === consoleTabId && t.remoteUser === remoteUser
     );
 
-    if (existingChat) {
-        // If window is minimized, restore it
-        if (existingChat.minimized) {
-            windows.toggleMinimize(existingChat.id);
-        } else {
-            windows.focusWindow(existingChat.id);
-        }
+    if (existingChatTab) {
+        const group = allWindows.find(g => g.tabs.some(t => t.id === existingChatTab.id));
+        if (group.minimized) windows.toggleMinimize(group.id);
+        else windows.focusWindow(group.id);
+        windows.setActiveTab(group.id, existingChatTab.id);
         return;
     }
 
-    const title = remoteUser.includes('.') ? remoteUser : remoteUser.split('.')[0];
-    windows.addWindow(IoskPrivateChat, {
-        title: `Chat with ${title}`,
-        consoleId,
-        localUser,
-        remoteUser,
-        width: 450,
-        height: 400,
-    });
+    const title = remoteUser.split('.')[0];
+    windows.addWindow(IoskPrivateChat, { title: `Chat with ${title}`, consoleId: consoleTabId, localUser, remoteUser, width: 450, height: 400 });
 }
 
-export function restoreWindow(winData) {    
-    const component = componentMap[winData.componentType];
-    if (!component) {
-        console.error(`Unknown component type for restore: ${winData.componentType}`);
-        return;
-    }
+export function restoreWindow(groupData) {
+    const allWindows = get(windows);
+    
+    const tabs = groupData.tabs.map(tabData => {
+        const component = componentMap[tabData.componentType];
+        if (!component) return null;
+        
+        const { componentType, ...props } = tabData;
 
-    // Prepare props, excluding properties used only for restoration logic.
-    const { componentType, ...props } = winData;
-
-    // For components that need a console connection, find a compatible one.
-    if ((component === IoskFileExplorer || component === IoskFileViewer || component === IoskPrivateChat) && props.consoleConnection) {
-        const allWindows = get(windows);
-        // Find a suitable console window that is currently connected and matches the saved connection identity.
-        const compatibleConsole = allWindows.find(w => 
-            w.component === IoskConsole && 
-            w.isConsoleConnected &&
-            w.consoleConnection &&
-            w.consoleConnection.url === props.consoleConnection.url &&
-            w.consoleConnection.user === props.consoleConnection.user
-        );
-
-        if (compatibleConsole) {
-            props.consoleId = compatibleConsole.id;
-        } else {
-            // No compatible connection is currently open. The component will
-            // have to handle this state (e.g., show an error).
-            props.consoleId = null;
+        if ((component === IoskFileExplorer || component === IoskFileViewer || component === IoskPrivateChat) && props.consoleConnection) {
+            const compatibleConsoleTab = allWindows.flatMap(g => g.tabs).find(t => 
+                t.component === IoskConsole && t.isConsoleConnected && t.consoleConnection &&
+                t.consoleConnection.url === props.consoleConnection.url &&
+                t.consoleConnection.user === props.consoleConnection.user
+            );
+            props.consoleId = compatibleConsoleTab ? compatibleConsoleTab.id : null;
         }
-    }
+        
+        return {
+            id: ++tabIdCounter,
+            component,
+            ...props,
+        };
+    }).filter(Boolean);
 
-    windows.addWindow(component, props);
+    if (tabs.length === 0) return;
+
+    const newGroup = {
+        id: ++windowGroupIdCounter,
+        x: groupData.x, y: groupData.y, width: groupData.width, height: groupData.height,
+        minimized: false,
+        maximized: groupData.maximized,
+        isActive: false,
+        zIndex: 100,
+        prevX: groupData.x, prevY: groupData.y, prevWidth: groupData.width, prevHeight: groupData.height,
+        isFlashing: false,
+        tabs: tabs,
+        activeTabId: groupData.activeTabId ? tabs.find(t => t.originalId === groupData.activeTabId)?.id || tabs[0].id : tabs[0].id
+    };
+
+    update(ws => [...ws, newGroup]);
 }

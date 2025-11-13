@@ -18,14 +18,12 @@
     let inputEl;
     let shouldScroll = true;
 
-    // --- FIX START ---
     // Reactive function to get the display name (username part) from a full address
     const getDisplayName = (fullAddress) => (fullAddress || '').split('.')[0];
-    // --- FIX END ---
 
     // Update window store with props for Dash saving
     $: if (id !== undefined) {
-        windows.updateWindowProps(id, { consoleId, localUser, remoteUser });
+        windows.updateTabProps(id, { consoleId, localUser, remoteUser });
     }
 
     const ansiCodeToCssVar = {
@@ -108,11 +106,9 @@
         const trimmedMessage = inputMessage.trim();
         if (!trimmedMessage) return;
 
-        // Command to be sent via the console
         const command = `@${remoteUser} ${trimmedMessage}`;
         consoleCommands.set({ consoleId, command, timestamp: Date.now() });
 
-        // Post to our own bus for local display
         privateMessages.set({
             from: localUser,
             to: remoteUser,
@@ -125,69 +121,17 @@
 </script>
 
 <style>
-    /* Copied from IoskConsole.svelte for color consistency */
     :global(:root) {
-        --ansi-black: #2c3e50;
-        --ansi-red: #c0392b;
-        --ansi-green: #27ae60;
-        --ansi-yellow: #f1c40f;
-        --ansi-blue: #2980b9;
-        --ansi-magenta: #8e44ad;
-        --ansi-cyan: #16a085;
-        --ansi-white: #bdc3c7;
-        --ansi-bright-black: #95a5a6;
-        --ansi-bright-red: #e74c3c;
-        --ansi-bright-green: #2ecc71;
-        --ansi-bright-yellow: #f39c12;
-        --ansi-bright-blue: #3498db;
-        --ansi-bright-magenta: #9b59b6;
-        --ansi-bright-cyan: #1abc9c;
-        --ansi-bright-white: #ecf0f1;
+        --ansi-black: #2c3e50; --ansi-red: #c0392b; --ansi-green: #27ae60; --ansi-yellow: #f1c40f; --ansi-blue: #2980b9; --ansi-magenta: #8e44ad; --ansi-cyan: #16a085; --ansi-white: #bdc3c7;
+        --ansi-bright-black: #95a5a6; --ansi-bright-red: #e74c3c; --ansi-bright-green: #2ecc71; --ansi-bright-yellow: #f39c12; --ansi-bright-blue: #3498db; --ansi-bright-magenta: #9b59b6; --ansi-bright-cyan: #1abc9c; --ansi-bright-white: #ecf0f1;
     }
-    .chat-container {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        font-family: monospace;
-        background-color: var(--console-bg);
-        color: var(--console-text);
-        font-size: 14px;
-        user-select: text;
-    }
-    .messages {
-        flex-grow: 1;
-        overflow-y: auto;
-        padding: 8px;
-    }
-    .message {
-        margin-bottom: 8px;
-        line-height: 1.4;
-    }
-    .message-header {
-        font-weight: bold;
-        margin-bottom: 2px;
-    }
-    .message-content {
-        white-space: pre-wrap;
-        word-break: break-word;
-    }
-    .input-area {
-        display: flex;
-        padding: 8px;
-        border-top: 1px solid var(--border-color);
-        background-color: var(--title-bar-bg);
-    }
-    .input-area input {
-        flex-grow: 1;
-        background-color: var(--console-bg);
-        border: 1px solid var(--border-color);
-        color: var(--title-bar-text);
-        padding: 5px 8px;
-        border-radius: 3px;
-        font-family: inherit;
-        font-size: inherit;
-        outline: none;
-    }
+    .chat-container { display: flex; flex-direction: column; height: 100%; font-family: monospace; background-color: var(--console-bg); color: var(--console-text); font-size: 14px; user-select: text; }
+    .messages { flex-grow: 1; overflow-y: auto; padding: 8px; }
+    .message { margin-bottom: 8px; line-height: 1.4; }
+    .message-header { font-weight: bold; margin-bottom: 2px; }
+    .message-content { white-space: pre-wrap; word-break: break-word; }
+    .input-area { display: flex; padding: 8px; border-top: 1px solid var(--border-color); background-color: var(--title-bar-bg); }
+    .input-area input { flex-grow: 1; background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px 8px; border-radius: 3px; font-family: inherit; font-size: inherit; outline: none; }
 </style>
 
 <div class="chat-container">
@@ -203,14 +147,7 @@
     </div>
     <div class="input-area" on:click={focusInput}>
         <form on:submit|preventDefault={sendMessage} style="width: 100%; display: flex;">
-            <input
-                type="text"
-                bind:this={inputEl}
-                bind:value={inputMessage}
-                placeholder="Type your message..."
-                spellcheck="false"
-                disabled={!consoleId}
-            />
+            <input type="text" bind:this={inputEl} bind:value={inputMessage} placeholder="Type your message..." spellcheck="false" disabled={!consoleId} />
         </form>
     </div>
 </div>
