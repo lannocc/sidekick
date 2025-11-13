@@ -36,6 +36,15 @@ class PortManager:
     Manages all network communication for an IOSK system, including the
     WebSocket server, connection lifecycle, and message routing.
     """
+    COLOR_MAP = {
+        'black': '\033[30m', 'red': '\033[31m', 'green': '\033[32m', 'yellow': '\033[33m',
+        'blue': '\033[34m', 'magenta': '\033[35m', 'cyan': '\033[36m', 'white': '\033[37m',
+        'bright_black': '\033[90m', 'bright_red': '\033[91m', 'bright_green': '\033[92m',
+        'bright_yellow': '\033[93m', 'bright_blue': '\033[94m', 'bright_magenta': '\033[95m',
+        'bright_cyan': '\033[96m', 'bright_white': '\033[97m',
+    }
+    REVERSE_COLOR_MAP = {v: k for k, v in COLOR_MAP.items()}
+    
     def __init__(self, kernel: "IOSK"):
         self.kernel = kernel
         self.server_task: Optional[asyncio.Task] = None
@@ -274,26 +283,14 @@ class PortManager:
 
     async def send_to_client(self, username: str, data: str):
         """Sends a data payload to a specific connected client."""
-        target_ws: Optional[WebSocketServerProtocol] = None
-        for ws, conn_meta in self.active_connections.items():
-            if conn_meta.type == 'client' and conn_meta.username == username:
-                target_ws = ws
-                break
-
-        if not target_ws:
-            log.warning(f"send_to_client: Could not find active connection for user '{username}'.")
-            return
-
-        payload = {"output": data}
-        message_to_send = f"SK1:{json.dumps(payload)}"
-
-        try:
-            await target_ws.send(message_to_send)
-        except ConnectionClosed:
-            log.info(f"send_to_client: Connection for user '{username}' was already closed.")
+        await self.send_payload_to_client(username, {"output": data})
 
     async def send_prompt_to_client(self, username: str, prompt_str: str):
         """Sends a prompt payload to a specific connected client."""
+        await self.send_payload_to_client(username, {"prompt": prompt_str})
+
+    async def send_payload_to_client(self, username: str, payload: Dict[str, Any]):
+        """Sends a JSON payload to a specific connected client using the SK1 protocol."""
         target_ws: Optional[WebSocketServerProtocol] = None
         for ws, conn_meta in self.active_connections.items():
             if conn_meta.type == 'client' and conn_meta.username == username:
@@ -301,16 +298,14 @@ class PortManager:
                 break
 
         if not target_ws:
-            log.warning(f"send_prompt_to_client: Could not find active connection for user '{username}'.")
+            log.warning(f"send_payload_to_client: Could not find active connection for user '{username}'.")
             return
 
-        payload = {"prompt": prompt_str}
         message_to_send = f"SK1:{json.dumps(payload)}"
-
         try:
             await target_ws.send(message_to_send)
         except ConnectionClosed:
-            log.info(f"send_prompt_to_client: Connection for user '{username}' was already closed.")
+            log.info(f"send_payload_to_client: Connection for user '{username}' was already closed.")
 
     async def broadcast_to_peers(self, message: Dict[str, Any]):
         """Sends a message to all connected IOSK peer systems."""
@@ -331,6 +326,25 @@ class PortManager:
         payload = f"SK1:{json.dumps(message)}"
         aws = [ws.send(payload) for ws in clients]
         await asyncio.gather(*aws, return_exceptions=True)
+
+    async def broadcast_color_updates(self):
+        """Sends each connected client their updated user_colors map."""
+        client_usernames = [
+            conn.username for conn in self.active_connections.values()
+            if conn.type == 'client' and conn.username
+        ]
+
+        for username in client_usernames:
+            io_context = self.kernel.users.get(username)
+            if not io_context:
+                continue
+            
+            color_map = self._get_color_name_map(io_context)
+            payload = {
+                'type': 'user_colors_update',
+                'colors': color_map
+            }
+            await self.send_payload_to_client(username, payload)
 
     async def route_message(self, target_host: str, message: Dict[str, Any]):
         """Sends a targeted message to a specific peer host, forwarding if necessary."""
@@ -436,6 +450,17 @@ class PortManager:
     # --------------------------------------------------------------------------
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
+
+    def _get_color_name_map(self, user_io: "Context") -> dict:
+        """Converts a user's ANSI color map to a map of usernames to color names."""
+        if not user_io or not hasattr(user_io, 'user_colors'):
+            return {}
+        
+        name_map = {}
+        for user, ansi_code in user_io.user_colors.items():
+            color_name = self.REVERSE_COLOR_MAP.get(ansi_code, 'white')
+            name_map[user] = color_name
+        return name_map
 
     async def _connection_handler(self, websocket: WebSocketServerProtocol): #, path: str):
         """Handles the entire lifecycle of a single network connection."""
@@ -566,6 +591,7 @@ class PortManager:
 
             # Send initial state info to the new client
             initial_state_payload = {'type': 'state_info'}
+            initial_state_payload['userColors'] = self._get_color_name_map(io_context)
             # Get available rooms, using the user's new io_context
             available_rooms = await self.kernel.get_room_list(io_context)
             initial_state_payload['availableRooms'] = available_rooms
@@ -593,7 +619,7 @@ class PortManager:
                 motd_content = getattr(io_context, 'motd_cache', None)
                 initial_state_payload['motd'] = motd_content or ''
 
-            await websocket.send(f"SK1:{json.dumps(initial_state_payload)}")
+            await self.send_payload_to_client(username, initial_state_payload)
 
             return Connection(websocket=websocket, type='client', username=username), io_context
 
@@ -608,6 +634,10 @@ class PortManager:
     async def _dispatch_message(self, websocket: WebSocketServerProtocol, conn_meta: Connection, message_str: str):
         """Parses and routes a single incoming message based on its type."""
         try:
+            # Client messages might be wrapped in the SK1 protocol
+            if message_str.startswith("SK1:"):
+                message_str = message_str[4:]
+
             message = json.loads(message_str)
             msg_type = message.get("type")
 
@@ -626,7 +656,7 @@ class PortManager:
                 from_peer_hostname = conn_meta.hostname
                 await self._handle_peer_update(message, from_peer=from_peer_hostname)
 
-            elif msg_type in ("user_update", "room_update", "room_state_update"):
+            elif msg_type in ("user_update", "room_update", "room_state_update", "user_colors_update"):
                 # 1. Process locally first
                 await self._process_network_state_update(message)
                 # 2. Forward the update to all other peers
@@ -737,13 +767,8 @@ class PortManager:
         except Exception as e:
             log.error(f"Error during fs_list for {io_context.user} at '{path}': {e}")
             response["error"] = "An internal server error occurred."
-
-        message_to_send = f"SK1:{json.dumps(response)}"
-        try:
-            await websocket.send(message_to_send)
-        except ConnectionClosed:
-            # This is expected if the user closes the window quickly.
-            log.info(f"Could not send fs_list response to {io_context.user}, connection closed.")
+        
+        await self.send_payload_to_client(io_context.user, response)
 
     async def _handle_fs_read(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Any):
         """Handles a file read request from a client."""
@@ -761,11 +786,7 @@ class PortManager:
             response["content_b64"] = base64.b64encode(content_bytes).decode('ascii')
             response["is_binary"] = is_binary
 
-        message_to_send = f"SK1:{json.dumps(response)}"
-        try:
-            await websocket.send(message_to_send)
-        except ConnectionClosed:
-            log.info(f"Could not send fs_read response to {io_context.user}, connection closed.")
+        await self.send_payload_to_client(io_context.user, response)
 
     async def _handle_remote_exec(self, websocket: WebSocketServerProtocol, message: Dict[str, Any]):
         """Handles a remote execution request and streams output back."""

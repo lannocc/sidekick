@@ -70,6 +70,11 @@ async def iocall(io, argv):
         io.user_colors[target_user] = color_code
         display_target = 'Your color' if target_user == io.user else f"Color for {target_user}"
         await io.print(f":: {display_target} set to {color_code}{new_color_name}{RESET_CODE}")
+        
+        # Broadcast the color change to network clients
+        if io.os.port:
+            await io.os.broadcast_color_updates()
+            
         return True
     else:
         # View the current color

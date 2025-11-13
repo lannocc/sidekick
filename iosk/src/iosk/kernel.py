@@ -481,6 +481,7 @@ class IOSK:
 
         # Announce user login to network peers
         if self.port:
+            await self.port.broadcast_color_updates()
             await self.port.broadcast_to_peers({
                 'type': 'user_update',
                 'action': 'login',
@@ -593,6 +594,7 @@ class IOSK:
 
         # Announce user logout to network peers
         if self.port:
+            await self.port.broadcast_color_updates()
             await self.port.broadcast_to_peers({
                 'type': 'user_update',
                 'action': 'logout',
@@ -609,6 +611,11 @@ class IOSK:
                 await self.port.disconnect_client(user_to_logout)
 
         return True
+
+    async def broadcast_color_updates(self):
+        """Triggers the PortManager to send color map updates to all clients."""
+        if self.port:
+            await self.port.broadcast_color_updates()
 
     async def login_network_user(self, username, websocket):
         """Called by PortManager to log in a user from a network client."""
@@ -681,6 +688,7 @@ class IOSK:
         self.network_users[user_addr] = {}
 
         if self.port:
+            await self.port.broadcast_color_updates()
             await self.port.broadcast_to_peers({
                 'type': 'user_update',
                 'action': 'login',

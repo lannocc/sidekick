@@ -27,6 +27,7 @@
     let roomParticipants = [];
     let availableRooms = [];
     let showRoomsMenu = false;
+    let userColors = {}; // New state for user color mapping
 
     // --- State for Attach Menu ---
     let showAttachMenu = false;
@@ -68,6 +69,51 @@
     // --- Auto-scrolling logic ---
     let shouldScroll = true;
 
+    // --- Color Handling ---
+    const colorNameToCss = {
+        'black': 'var(--ansi-black)', 'red': 'var(--ansi-red)', 'green': 'var(--ansi-green)', 'yellow': 'var(--ansi-yellow)',
+        'blue': 'var(--ansi-blue)', 'magenta': 'var(--ansi-magenta)', 'cyan': 'var(--ansi-cyan)', 'white': 'var(--ansi-white)',
+        'bright_black': 'var(--ansi-bright-black)', 'bright_red': 'var(--ansi-bright-red)', 'bright_green': 'var(--ansi-bright-green)',
+        'bright_yellow': 'var(--ansi-bright-yellow)', 'bright_blue': 'var(--ansi-bright-blue)', 'bright_magenta': 'var(--ansi-bright-magenta)',
+        'bright_cyan': 'var(--ansi-bright-cyan)', 'bright_white': 'var(--ansi-bright-white)',
+    };
+
+    const ansiCodeToCssVar = {
+        '30': 'var(--ansi-black)', '31': 'var(--ansi-red)', '32': 'var(--ansi-green)', '33': 'var(--ansi-yellow)',
+        '34': 'var(--ansi-blue)', '35': 'var(--ansi-magenta)', '36': 'var(--ansi-cyan)', '37': 'var(--ansi-white)',
+        '90': 'var(--ansi-bright-black)', '91': 'var(--ansi-bright-red)', '92': 'var(--ansi-bright-green)', '93': 'var(--ansi-bright-yellow)',
+        '94': 'var(--ansi-bright-blue)', '95': 'var(--ansi-bright-magenta)', '96': 'var(--ansi-bright-cyan)', '97': 'var(--ansi-bright-white)',
+    };
+
+    function parseAnsi(text) {
+        if (typeof text !== 'string') return '';
+        const ansiRegex = /\u001b\[(\d+)m/g;
+        let openSpan = false;
+        
+        let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        let html = sanitizedText.replace(ansiRegex, (match, code) => {
+            let newHtml = '';
+            if (openSpan) {
+                newHtml += '</span>';
+                openSpan = false;
+            }
+            if (code === '0') {
+                // Reset code, just close the span
+            } else if (ansiCodeToCssVar[code]) {
+                newHtml += `<span style="color: ${ansiCodeToCssVar[code]}">`;
+                openSpan = true;
+            }
+            return newHtml;
+        });
+
+        if (openSpan) {
+            html += '</span>';
+        }
+        return html;
+    }
+
+
     // --- Lifecycle and Reactive Statements ---
     afterUpdate(() => {
         if (shouldScroll && terminalEl) {
@@ -81,8 +127,6 @@
     }
 
     function handleClickOnTerminal() {
-        // Only focus the input if the user is not selecting text.
-        // A collapsed selection means the user just clicked, not dragged to select.
         if (window.getSelection().isCollapsed) {
             focusInput();
         }
@@ -100,7 +144,6 @@
     }
 
     onMount(() => {
-        // Initialize from settings if not provided via props (from layout restore)
         if (wsUrl === undefined) {
             wsUrl = get(desktopSettings).ioskUrl;
         }
@@ -108,12 +151,10 @@
             username = get(desktopSettings).ioskUsername;
         }
 
-        // Automatically focus the connection URL input on mount
         if (!isConnected) {
             const urlInput = document.querySelector(`#url-input-${id}`);
             urlInput?.focus();
         }
-        // Listen for file system requests from explorer windows
         requestUnsubscribe = fileSystemRequests.subscribe(request => {
             if (request && request.consoleId === id && ws && ws.readyState === WebSocket.OPEN) {
                 const payload = { ...request.command };
@@ -128,7 +169,7 @@
 
     onDestroy(() => {
         if (ws) {
-            ws.onclose = null; // prevent onclose handler from running on manual close
+            ws.onclose = null; 
             ws.close();
         }
         if (requestUnsubscribe) {
@@ -137,7 +178,6 @@
         window.removeEventListener('click', handleGlobalClick);
     });
 
-    // Reactive statements to update the window store with component state
     $: if (id !== undefined) {
         windows.updateWindowProps(id, {
             isConsoleConnected: isConnected,
@@ -147,7 +187,6 @@
         });
     }
 
-    // Reactive statement to update the window title based on connection and room state
     $: if (id !== undefined && title !== undefined) {
         let newTitle;
         if (isConnected) {
@@ -155,8 +194,6 @@
             const userAtHost = `${username}@${host}`;
             newTitle = roomName ? `[${roomName}] ${userAtHost}` : userAtHost;
         } else {
-            // Let onclose/onerror handlers manage the disconnected title.
-            // This prevents this block from overriding an error state title.
             newTitle = title;
         }
         if (newTitle !== title) {
@@ -171,7 +208,6 @@
         settingsUrl = wsUrl;
         settingsUsername = username;
 
-        // Populate window settings for the modal
         const allSettings = get(windowSettings);
         const currentSettings = allSettings[componentName] || { positioning: 'auto' };
         windowSettingsForModal = {
@@ -187,12 +223,10 @@
     }
 
     function handleSaveSettings() {
-        // Save connection settings
         wsUrl = settingsUrl;
         username = settingsUsername;
         desktopSettings.update(settings => ({ ...settings, ioskUrl: wsUrl, ioskUsername: username }));
         
-        // Save window settings
         windowSettings.update(allSettings => ({
             ...allSettings,
             [componentName]: windowSettingsForModal
@@ -249,10 +283,14 @@
                             roomTopic = data.roomTopic || '';
                             roomParticipants = data.participants || [];
                             availableRooms = data.availableRooms || [];
+                            if (data.userColors) {
+                                userColors = data.userColors;
+                            }
                             if (data.type === 'state_info') {
                                 motd = data.motd || '';
                             }
-
+                        } else if (data.type === 'user_colors_update') {
+                            userColors = data.colors;
                         } else if (data.output || data.prompt) {
                             if (data.output) {
                                 const clearScreenCode = "\x1b[H\x1b[2J";
@@ -279,19 +317,17 @@
                                 attachUsers = (data.listing || []).filter(item => item.type === 'dir');
                                 isLoadingUsers = false;
                             } else {
-                                // This is a response for a File Explorer, not us.
                                 fileSystemResponses.set({
                                     consoleId: id,
-                                    requesterId: data.requesterId, // Pass this through
+                                    requesterId: data.requesterId,
                                     data: data,
                                     timestamp: Date.now()
                                 });
                             }
                         } else if (data.type === 'fs_read_response') {
-                            // This is a response for a File Viewer.
                             fileSystemResponses.set({
                                 consoleId: id,
-                                requesterId: data.requesterId, // Pass this through
+                                requesterId: data.requesterId,
                                 data: data,
                                 timestamp: Date.now()
                             });
@@ -306,7 +342,7 @@
             ws.onclose = async () => {
                 isConnected = false;
                 ws = null;
-                roomName = null; roomTopic = ''; motd = ''; roomParticipants = []; availableRooms = [];
+                roomName = null; roomTopic = ''; motd = ''; roomParticipants = []; availableRooms = []; userColors = {};
                 output = [...output, {type: 'output', content: `Connection closed.`}];
                 const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
                 windows.updateWindowProps(id, { title: `Disconnected - ${username}@${host}` });
@@ -457,6 +493,24 @@
 </script>
 
 <style>
+    :global(:root) { /* Define ANSI colors so they can be themed */
+        --ansi-black: #2c3e50;
+        --ansi-red: #c0392b;
+        --ansi-green: #27ae60;
+        --ansi-yellow: #f1c40f;
+        --ansi-blue: #2980b9;
+        --ansi-magenta: #8e44ad;
+        --ansi-cyan: #16a085;
+        --ansi-white: #bdc3c7;
+        --ansi-bright-black: #95a5a6;
+        --ansi-bright-red: #e74c3c;
+        --ansi-bright-green: #2ecc71;
+        --ansi-bright-yellow: #f39c12;
+        --ansi-bright-blue: #3498db;
+        --ansi-bright-magenta: #9b59b6;
+        --ansi-bright-cyan: #1abc9c;
+        --ansi-bright-white: #ecf0f1;
+    }
     .console-container { display: flex; flex-direction: column; height: 100%; background-color: var(--console-bg); color: var(--console-text); font-family: 'Courier New', Courier, monospace; font-size: 14px; position: relative; }
     .connect-form { display: flex; gap: 8px; padding: 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); flex-shrink: 0; align-items: center; }
     .connect-form input { flex-grow: 1; background-color: var(--window-bg); color: var(--title-bar-text); border: 1px solid var(--border-color); padding: 4px; }
@@ -627,7 +681,7 @@
             <div class="terminal" bind:this={terminalEl} on:scroll={() => shouldScroll = (terminalEl.scrollTop + terminalEl.clientHeight >= terminalEl.scrollHeight - 10)} on:click={handleClickOnTerminal}>
                 {#each output as line}
                     <div class="terminal-line" class:prompt={line.type === 'prompt'}>
-                        {line.content}
+                        {@html parseAnsi(line.content)}
                     </div>
                 {/each}
             </div>
@@ -644,7 +698,14 @@
             <div class="panel-header">Users</div>
             <div class="user-list">
                 {#each roomParticipants as participant (participant)}
-                    <div class="user-item" title={participant}>{participant}</div>
+                    {@const userName = participant.includes('.') ? participant.split('.')[0] : participant}
+                    <div
+                        class="user-item"
+                        title={participant}
+                        style="color: {colorNameToCss[userColors[userName]] || 'inherit'}"
+                    >
+                        {participant}
+                    </div>
                 {/each}
             </div>
         </div>
