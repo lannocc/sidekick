@@ -362,19 +362,24 @@ function createWindowManager() {
         // Clean up originalId from tabs
         tabs.forEach(t => delete t.originalId);
     
-        const newGroup = {
-            id: ++windowGroupIdCounter,
-            x: groupData.x, y: groupData.y, width: groupData.width, height: groupData.height,
-            minimized: false,
-            maximized: groupData.maximized,
-            isActive: false,
-            zIndex: 100,
-            prevX: groupData.x, prevY: groupData.y, prevWidth: groupData.width, prevHeight: groupData.height,
-            isFlashing: false,
-            tabs: tabs,
-            activeTabId: newActiveTabId,
-        };
-        update(ws => [...ws, newGroup]);
+        update(windows => {
+            const updatedWindows = windows.map(w => ({ ...w, isActive: false }));
+            const maxZ = updatedWindows.reduce((max, w) => Math.max(max, w.zIndex), 99);
+    
+            const newGroup = {
+                id: ++windowGroupIdCounter,
+                x: groupData.x, y: groupData.y, width: groupData.width, height: groupData.height,
+                minimized: false,
+                maximized: groupData.maximized,
+                isActive: true,
+                zIndex: maxZ + 1,
+                prevX: groupData.x, prevY: groupData.y, prevWidth: groupData.width, prevHeight: groupData.height,
+                isFlashing: false,
+                tabs: tabs,
+                activeTabId: newActiveTabId,
+            };
+            return [...updatedWindows, newGroup];
+        });
     };
 
     return {
