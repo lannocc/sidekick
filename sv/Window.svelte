@@ -132,6 +132,7 @@
         window.addEventListener('mouseup', onDragEnd, { once: true });
         if (event.altKey || event.metaKey) windows.setActiveWindow(id);
         else windows.focusWindow(id);
+        document.body.style.cursor = 'move';
     }
 
     function onDrag(event) {
@@ -143,6 +144,7 @@
 
     function onDragEnd() {
         isDragging = false;
+        document.body.style.cursor = 'auto';
         window.removeEventListener('mousemove', onDrag);
         const currentDragState = get(dragState);
         if (currentDragState && currentDragState.dropTargetGroupId) {
@@ -234,9 +236,10 @@
     .title-bar { height: 30px; background-color: var(--title-bar-bg); color: var(--title-bar-text); display: flex; justify-content: space-between; align-items: center; padding: 0 8px; cursor: move; border-top-left-radius: 5px; border-top-right-radius: 5px; user-select: none; transition: background-color 0.2s ease-in-out; position: relative; }
     .window-frame:not(.active) .title-bar { background-color: #7f8c8d; }
     .title-bar.drop-target::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(52, 152, 219, 0.4); border: 2px dashed #3498db; z-index: 1; pointer-events: none; border-radius: 5px; }
-    .title-center { flex-grow: 1; text-align: center; overflow: hidden; height: 100%; display: flex; align-items: flex-end; }
+    .title-center { flex-grow: 1; text-align: center; overflow: hidden; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
     .title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 30px; }
-    .tabs-container { display: flex; width: 100%; height: 100%; }
+    .tabs-container { display: flex; height: 100%; }
+
     .tab { display: flex; align-items: center; background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; padding: 0 5px; margin-right: 2px; height: 26px; margin-top: auto; max-width: 150px; }
     .tab.active { background-color: var(--window-bg); }
     .tab-close-button { background: none; border: none; color: var(--taskbar-text); cursor: pointer; padding: 0 5px; font-size: 1.2em; line-height: 1; opacity: 0.7; }
@@ -273,7 +276,7 @@
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave}>
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} style:pointer-events={isDragging ? 'none' : 'auto'}>
     <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={onDragStart} on:dblclick={() => windows.toggleMaximize(id)}>
         <div class="window-controls">
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
