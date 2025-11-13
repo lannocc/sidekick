@@ -42,6 +42,15 @@
     let isLoadingDevices = false;
     let isLoadingUsers = false;
 
+    // --- State for User Context Menu ---
+    let userContextMenu = {
+        visible: false,
+        x: 0,
+        y: 0,
+        user: null,
+        showColorPicker: false
+    };
+
     // --- Internal Component State ---
     let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
     let command = '';
@@ -144,6 +153,10 @@
             showAttachMenu = false;
             focusInput();
         }
+        if (userContextMenu.visible && !event.target.closest('.user-context-menu')) {
+            closeUserContextMenu();
+            focusInput();
+        }
     }
 
     onMount(() => {
@@ -204,6 +217,51 @@
         }
     }
 
+    // --- User Context Menu Functions ---
+    function handleUserRightClick(event, participant) {
+        event.preventDefault();
+        event.stopPropagation();
+        // Close other menus that might be open
+        showRoomsMenu = false;
+        showAttachMenu = false;
+
+        userContextMenu = {
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+            user: participant,
+            showColorPicker: false
+        };
+    }
+
+    function closeUserContextMenu() {
+        userContextMenu = { visible: false, x: 0, y: 0, user: null, showColorPicker: false };
+    }
+
+    function sendSystemCommand(systemCommand) {
+        if (!systemCommand.trim()) return;
+
+        // This command is programmatically sent, but we display it as if typed for user feedback.
+        // It is not added to command history.
+        output = [...output, {type: 'prompt', content: currentPrompt + systemCommand}];
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            const message = { type: 'client_input', data: systemCommand + '\n' };
+            ws.send(JSON.stringify(message));
+        } else {
+            output = [...output, {type: 'output', content: `[Error] Not connected.`}];
+        }
+        shouldScroll = true;
+    }
+
+    function setColorForUser(colorName) {
+        if (!userContextMenu.user) return;
+        const userNameOnly = userContextMenu.user.split('.')[0];
+        const commandToRun = `$ color -u ${userNameOnly} ${colorName}`;
+        sendSystemCommand(commandToRun);
+        closeUserContextMenu();
+        focusInput();
+    }
 
     // --- Functions ---
     export function showSettingsDialog() {
