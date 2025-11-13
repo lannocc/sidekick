@@ -20,7 +20,9 @@
 
     // The remote user's display name (just the username part)
     $: remoteUserDisplay = remoteUser ? remoteUser.split('.')[0] : '';
-    $: localUserDisplay = localUser.split('.')[0];
+    // --- FIX START ---
+    $: localUserDisplay = localUser; // `localUser` is already the correct display name
+    // --- FIX END ---
 
     // Update window store with props for Dash saving
     $: if (id !== undefined) {
