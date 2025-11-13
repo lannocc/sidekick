@@ -268,6 +268,50 @@ function createWindowManager() {
         });
     };
 
+    const reorderTab = (groupId, draggedTabId, targetTabId) => {
+        update(windows => {
+            const groupIndex = windows.findIndex(g => g.id === groupId);
+            if (groupIndex === -1) return windows;
+    
+            const group = windows[groupIndex];
+            const tabs = [...group.tabs];
+            
+            const draggedIndex = tabs.findIndex(t => t.id == draggedTabId);
+            if (draggedIndex === -1) return windows;
+    
+            const [draggedTab] = tabs.splice(draggedIndex, 1);
+            
+            if (targetTabId === null) {
+                tabs.push(draggedTab);
+            } else {
+                const targetIndex = tabs.findIndex(t => t.id == targetTabId);
+                if (targetIndex !== -1) {
+                    tabs.splice(targetIndex, 0, draggedTab);
+                } else {
+                    tabs.push(draggedTab);
+                }
+            }
+    
+            const newGroup = { ...group, tabs };
+            const newWindows = [...windows];
+            newWindows[groupIndex] = newGroup;
+            return newWindows;
+        });
+    };
+
+    const detachTabToNewWindow = (sourceGroupId, tabId, newX, newY) => {
+        const sourceGroup = get(windows).find(g => g.id === sourceGroupId);
+        if (!sourceGroup || sourceGroup.tabs.length <= 1) return;
+
+        const detachedTab = sourceGroup.tabs.find(t => t.id === tabId);
+        if (!detachedTab) return;
+        
+        removeTab(sourceGroupId, tabId);
+        
+        addWindow(detachedTab.component, {
+            ...detachedTab, x: newX, y: newY, width: sourceGroup.width, height: sourceGroup.height,
+        });
+    };
 
     return {
         subscribe,
@@ -285,7 +329,9 @@ function createWindowManager() {
         minimizeAllWindows,
         restoreAllWindows,
         cycleWindow,
-        groupWindows
+        groupWindows,
+        reorderTab,
+        detachTabToNewWindow
     };
 }
 

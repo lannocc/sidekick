@@ -3,9 +3,9 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
+    import { createEventDispatcher, tick, onMount, onDestroy, setContext } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, dragState, newIoskFileExplorer } from './windows.js';
+    import { windows, dragState, reorderTab, detachTabToNewWindow } from './windows.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
     import IoskConsole from './IoskConsole.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
@@ -51,6 +51,7 @@
     let componentInstances = {};
     $: activeComponentInstance = componentInstances[activeTabId];
     let contentAreaEl;
+    let tabsContainerEl;
     let titleBarEl;
 
     let showGenericSettingsModal = false;
@@ -58,7 +59,7 @@
 
     function openSettings() {
         showOptionsMenu = false;
-        const componentsWithCustomSettings = ['IoskConsole', 'IoskFileExplorer', 'WebBrowser', 'Settings'];
+        const componentsWithCustomSettings = ['IoskConsole', 'IoskFileExplorer', 'IoskFileViewer', 'WebBrowser', 'Settings'];
         if (componentsWithCustomSettings.includes(componentName) && activeComponentInstance && typeof activeComponentInstance.showSettingsDialog === 'function') {
             activeComponentInstance.showSettingsDialog();
         } else {
@@ -106,6 +107,88 @@
     function handleDisconnect() {
         if (activeComponentInstance && typeof activeComponentInstance.disconnect === 'function') activeComponentInstance.disconnect();
         showOptionsMenu = false;
+    }
+
+    // --- Tab Dragging Logic ---
+    let isTabDragging = false;
+    let draggedTabInfo = null;
+    let dropIndicator = { visible: false, left: 0 };
+
+    function onTabMouseDown(e, tab) {
+        if (e.button !== 0 || maximized) return; // Only left click, no dragging when maximized
+        e.stopPropagation();
+
+        isTabDragging = true;
+        draggedTabInfo = {
+            groupId: id,
+            tabId: tab.id,
+        };
+
+        window.addEventListener('mousemove', onTabMouseMove);
+        window.addEventListener('mouseup', onTabMouseUp, { once: true });
+    }
+
+    function onTabMouseMove(e) {
+        if (!isTabDragging) return;
+
+        const { top, bottom, left: containerLeft } = tabsContainerEl.getBoundingClientRect();
+        const isOutsideY = e.clientY < top - 20 || e.clientY > bottom + 20;
+
+        if (isOutsideY && tabs.length > 1) {
+            draggedTabInfo.isDetaching = true;
+            dropIndicator.visible = false;
+            document.body.style.cursor = 'copy';
+        } else {
+            draggedTabInfo.isDetaching = false;
+            document.body.style.cursor = 'default';
+
+            dropIndicator.visible = false;
+            let targetTabId = null;
+
+            // Iterate over sibling tabs to find drop position
+            for (const child of tabsContainerEl.children) {
+                if (!child.classList.contains('tab') || child.dataset.tabId == draggedTabInfo.tabId) continue;
+
+                const rect = child.getBoundingClientRect();
+                const midpoint = rect.left + rect.width / 2;
+
+                if (e.clientX < midpoint) {
+                    targetTabId = child.dataset.tabId;
+                    dropIndicator.left = rect.left - containerLeft;
+                    dropIndicator.visible = true;
+                    break;
+                }
+            }
+
+            // If no target found, it means it's at the end
+            if (!dropIndicator.visible) {
+                const lastChild = tabsContainerEl.querySelector('.tab:last-of-type');
+                if (lastChild) {
+                    const rect = lastChild.getBoundingClientRect();
+                    dropIndicator.left = rect.right - containerLeft;
+                    dropIndicator.visible = true;
+                }
+                targetTabId = null; // Signal to append at the end
+            }
+
+            draggedTabInfo.targetTabId = targetTabId;
+        }
+    }
+
+    function onTabMouseUp(e) {
+        window.removeEventListener('mousemove', onTabMouseMove);
+        document.body.style.cursor = 'auto';
+
+        if (isTabDragging) {
+            if (draggedTabInfo.isDetaching) {
+                detachTabToNewWindow(draggedTabInfo.groupId, draggedTabInfo.tabId, e.clientX - 100, e.clientY - 15);
+            } else {
+                reorderTab(draggedTabInfo.groupId, draggedTabInfo.tabId, draggedTabInfo.targetTabId);
+            }
+        }
+        isTabDragging = false;
+        draggedTabInfo = null;
+        dropIndicator.visible = false;
     }
 
     async function restoreFocus() {
@@ -239,12 +322,22 @@
     .title-bar.drop-target::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(52, 152, 219, 0.4); border: 2px dashed #3498db; z-index: 1; pointer-events: none; border-radius: 5px; }
     .title-center { flex-grow: 1; text-align: center; overflow: hidden; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
     .title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 30px; }
-    .tabs-container { display: flex; height: 100%; }
-
-    .tab { display: flex; align-items: center; background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; padding: 0 5px; margin-right: 2px; height: 26px; margin-top: auto; max-width: 150px; }
+    .tabs-container { position: relative; }
+    .tab { display: flex; align-items: center; background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; padding: 0 5px; margin-right: 2px; height: 26px; margin-top: auto; max-width: 150px; transition: opacity 0.2s; }
     .tab.active {
         background-color: var(--window-bg);
         z-index: 1; /* Bring active tab forward */
+    }
+    .tab.dragging {
+        opacity: 0.4;
+    }
+    .drop-indicator {
+        position: absolute;
+        top: 4px;
+        bottom: 0px;
+        width: 2px;
+        background-color: #3498db;
+        pointer-events: none;
     }
     .tab:not(.active) {
         opacity: 0.7;
@@ -301,13 +394,22 @@
 
         <div class="title-center">
             {#if tabs.length > 1}
-                <div class="tabs-container" on:dblclick|stopPropagation>
+                <div class="tabs-container" bind:this={tabsContainerEl} on:dblclick|stopPropagation>
                     {#each tabs as tab (tab.id)}
-                        <div class="tab" class:active={tab.id === activeTabId}>
+                        <div
+                            class="tab"
+                            class:active={tab.id === activeTabId}
+                            class:dragging={isTabDragging && draggedTabInfo.tabId === tab.id}
+                            data-tab-id={tab.id}
+                            on:mousedown={e => onTabMouseDown(e, tab)}
+                        >
                             <button class="tab-close-button" title="Close Tab" on:click|stopPropagation={() => windows.removeTab(id, tab.id)}>&times;</button>
                             <span class="tab-title" title={tab.title} on:click|stopPropagation={() => windows.setActiveTab(id, tab.id)}>{tab.title}</span>
                         </div>
                     {/each}
+                    {#if dropIndicator.visible}
+                        <div class="drop-indicator" style:left="{dropIndicator.left}px"></div>
+                    {/if}
                 </div>
             {:else}
                 <span class="title-text">{title}</span>
