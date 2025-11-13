@@ -10,6 +10,7 @@
     import { windowSettings } from './desktopStore.js';
 
     export let id; // Window ID, passed from Window.svelte
+    export let groupId;
     export let consoleId;
     export let initialPath = '.';
     export let componentName;
@@ -73,8 +74,8 @@
 
     // Whenever the current path changes, update the central window store
     // so its state can be saved by the Dash.
-    $: if (id !== undefined) {
-        windows.updateWindowProps(id, { currentPath, consoleId });
+    $: if (id !== undefined && groupId !== undefined) {
+        windows.updateTabProps(groupId, id, { currentPath, consoleId });
     }
 
     $: if (consoleConnection && $windows) {

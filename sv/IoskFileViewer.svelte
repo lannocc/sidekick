@@ -9,6 +9,7 @@
     import { windows } from './windows.js';
 
     export let id; // window id
+    export let groupId;
     export let consoleId;
     export let path;
     export let consoleConnection = null; // Passed during Dash restore
@@ -139,10 +140,10 @@
     $: isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(fileExtension);
     $: isMarkdown = ['md', 'markdown'].includes(fileExtension);
     $: canRender = (isImage && isBinary) || (isMarkdown && !isBinary);
-    $: if (id !== undefined) {
+    $: if (id !== undefined && groupId !== undefined) {
         // Update the window store with properties that need to be saved in a Dash layout
         // Also update consoleId in case it was found dynamically.
-        windows.updateWindowProps(id, { canRender, mode, consoleId });
+        windows.updateTabProps(groupId, id, { canRender, mode, consoleId });
     }
 
     export function setMode(newMode) {

@@ -8,6 +8,7 @@
     import { windows } from './windows.js';
 
     export let id;
+    export let groupId;
     export let consoleId;
     export let localUser;
     export let remoteUser;
@@ -22,8 +23,8 @@
     const getDisplayName = (fullAddress) => (fullAddress || '').split('.')[0];
 
     // Update window store with props for Dash saving
-    $: if (id !== undefined) {
-        windows.updateTabProps(id, { consoleId, localUser, remoteUser });
+    $: if (id !== undefined && groupId !== undefined) {
+        windows.updateTabProps(groupId, id, { consoleId, localUser, remoteUser });
     }
 
     const ansiCodeToCssVar = {

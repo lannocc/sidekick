@@ -8,6 +8,7 @@
     import { windowSettings } from './desktopStore.js';
 
     export let id; // Window ID
+    export let groupId;
     export let initialUrl = "about:blank"; // Passed from Dash restore or new window creation
     export let componentName;
     export let x, y, width, height;
@@ -25,9 +26,9 @@
     let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
 
     // Update the central window store for Dash saving
-    $: if (id !== undefined) {
+    $: if (id !== undefined && groupId !== undefined) {
         // This property `currentUrl` will be saved by Dash as `initialUrl` for restoration.
-        windows.updateWindowProps(id, { currentUrl: currentUrl });
+        windows.updateTabProps(groupId, id, { currentUrl: currentUrl });
     }
 
     function navigate() {

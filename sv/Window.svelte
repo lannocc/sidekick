@@ -32,9 +32,9 @@
     $: componentName = activeTab.componentName;
     $: title = activeTab.title;
     $: isConsoleConnected = activeTab.isConsoleConnected;
-    $: canRender = activeTab.canRender;
+    $: canRender = activeTab.canRender; 
 
-    $: componentProps = { ...activeTab, id: activeTab.id, isActive, x, y, width, height };
+    $: componentProps = { ...activeTab, groupId: id, id: activeTab.id, isActive, x, y, width, height };
 
     const dispatch = createEventDispatcher();
     let settings;

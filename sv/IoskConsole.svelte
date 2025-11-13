@@ -10,6 +10,7 @@
     import { desktopSettings, windowSettings } from './desktopStore.js';
 
     export let id; // Unique ID from the window manager
+    export let groupId;
     export let title;
     export let isActive;
     export let componentName;
@@ -18,6 +19,9 @@
     // These will be passed in when restoring a dash layout
     export let wsUrl = undefined;
     export let username = undefined;
+
+    // Local values for the connection form inputs to avoid direct prop binding issues
+    let localWsUrl, localUsername;
 
     let settings;
     desktopSettings.subscribe(value => settings = value);
@@ -167,12 +171,9 @@
     }
 
     onMount(() => {
-        if (wsUrl === undefined) {
-            wsUrl = get(desktopSettings).ioskUrl;
-        }
-        if (username === undefined) {
-            username = get(desktopSettings).ioskUsername;
-        }
+        // Initialize local input values from passed-in props
+        localWsUrl = wsUrl;
+        localUsername = username;
 
         if (!isConnected) {
             const urlInput = document.querySelector(`#url-input-${id}`);
@@ -209,8 +210,8 @@
         window.removeEventListener('click', handleGlobalClick);
     });
 
-    $: if (id !== undefined) {
-        windows.updateWindowProps(id, {
+    $: if (id !== undefined && groupId !== undefined) {
+        windows.updateTabProps(groupId, id, {
             isConsoleConnected: isConnected,
            consoleConnection: isConnected ? { url: wsUrl, user: username } : null,
            wsUrl,
@@ -218,7 +219,7 @@
         });
     }
 
-    $: if (id !== undefined && title !== undefined) {
+    $: if (groupId !== undefined && id !== undefined && title !== undefined) {
         let newTitle;
         if (isConnected) {
             const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
@@ -228,7 +229,7 @@
             newTitle = title;
         }
         if (newTitle !== title) {
-            windows.updateWindowProps(id, { title: newTitle });
+            windows.updateTabProps(groupId, id, { title: newTitle });
         }
     }
 
@@ -320,12 +321,22 @@
     function handleSaveSettings() {
         wsUrl = settingsUrl;
         username = settingsUsername;
-        desktopSettings.update(settings => ({ ...settings, ioskUrl: wsUrl, ioskUsername: username }));
-        
-        windowSettings.update(allSettings => ({
-            ...allSettings,
-            [componentName]: windowSettingsForModal
-        }));
+        // Also update the local values for the connection form to keep them in sync
+        localWsUrl = settingsUrl;
+        localUsername = settingsUsername;
+
+        windowSettings.update(allSettings => {
+            const existingSettings = allSettings[componentName] || {};
+            return {
+                ...allSettings,
+                [componentName]: {
+                    ...existingSettings,
+                    ...windowSettingsForModal,
+                    defaultUrl: settingsUrl,
+                    defaultUsername: settingsUsername
+                }
+            };
+        });
 
         showSettings = false;
     }
@@ -350,6 +361,10 @@
     }
 
     export async function connect() {
+        // Sync local input values back to the main props before connecting
+        wsUrl = localWsUrl;
+        username = localUsername;
+
         if (ws) {
             output = [...output, {type: 'output', content: `Already connected or connecting.`}];
             return;
@@ -496,7 +511,7 @@
                 roomName = null; roomTopic = ''; motd = ''; roomParticipants = []; availableRooms = []; userColors = {};
                 output = [...output, {type: 'output', content: `Connection closed.`}];
                 const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
-                windows.updateWindowProps(id, { title: `Disconnected - ${username}@${host}` });
+                windows.updateTabProps(groupId, id, { title: `Disconnected - ${username}@${host}` });
                 if (isActive) {
                     await tick();
                     const urlInput = document.querySelector(`#url-input-${id}`);
@@ -509,7 +524,7 @@
                 if (ws) { ws.close(); ws = null; }
                 output = [...output, {type: 'output', content: `[Error] Could not establish connection to ${wsUrl}.`}];
                 const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
-                windows.updateWindowProps(id, { title: `[Error] ${username}@${host}` });
+                windows.updateTabProps(groupId, id, { title: `[Error] ${username}@${host}` });
             };
 
         } catch (e) {
@@ -791,8 +806,9 @@
 <div class="console-container">
     <form class="connect-form" on:submit|preventDefault={connect}>
         {#if !isConnected}
-            <input id="url-input-{id}" type="text" bind:value={wsUrl} placeholder="ws://host:port">
-            <input type="text" bind:value={username} placeholder="username">
+            <input id="url-input-{id}" type="text" bind:value={localWsUrl} placeholder="ws://host:port">
+            <input type="text" bind:value={localUsername} placeholder="username">
+
             <button class="connect-button" type="submit">Connect</button>
         {:else}
             <button type="button" class="header-button disconnect-button" on:click={disconnect}>Disconnect</button>

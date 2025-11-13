@@ -295,7 +295,15 @@ export const windows = createWindowManager();
 // --- Window Creation Functions ---
 
 export function newIoskConnection() {
-    windows.addWindow(IoskConsole, { title: 'IOSK Connection' });
+    const allWindowSettings = get(windowSettings);
+    const componentSettings = allWindowSettings['IoskConsole'];
+    const globalSettings = get(desktopSettings);
+
+    windows.addWindow(IoskConsole, {
+        title: 'IOSK Connection',
+        wsUrl: componentSettings?.defaultUrl ?? globalSettings.ioskUrl,
+        username: componentSettings?.defaultUsername ?? globalSettings.ioskUsername,
+    });
 }
 export function newCalculator() {
     windows.addWindow(Calculator, { title: 'Calculator', width: 320, height: 450 });
