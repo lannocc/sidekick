@@ -146,10 +146,10 @@
     .taskbar { height: 40px; background-color: var(--taskbar-bg); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 10px; flex-shrink: 0; position: relative; z-index: 20000; }
     .taskbar-left, .taskbar-right { display: flex; align-items: center; gap: 8px; position: relative; z-index: 10; }
     .taskbar-center { position: absolute; left: 50%; transform: translateX(-50%); z-index: 10; }
-    .task-item { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); border: 1px solid var(--border-color); border-radius: 4px; padding: 5px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; position: absolute; top: 50%; transform: translateY(-50%); transition: left 0.3s ease-out; z-index: 1; }
+    .task-item { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; cursor: pointer; max-width: 250px; position: absolute; top: 50%; transform: translateY(-50%); transition: left 0.3s ease-out; z-index: 1; display: flex; align-items: center; justify-content: center; }
     .task-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .task-item.minimized { font-style: italic; opacity: 0.7; }
-    .task-item.active { border-bottom: 2px solid #27c93f; padding-bottom: 4px; z-index: 2; }
+    .task-item.active { border-bottom: 2px solid #27c93f; padding-bottom: 1px; z-index: 2; }
     .taskbar-left > .windows-button:first-child { background-color: #ff5f56; border-color: #e0443e; color: white; }
     .taskbar-left > .windows-button:first-child:hover { background-color: #e0443e; }
     .taskbar-left > .windows-button:nth-child(2) { background-color: #ffbd2e; border-color: #e0a320; color: white; }
@@ -176,6 +176,12 @@
     .start-button::after, .windows-list-button::after { content: ''; position: absolute; bottom: 0px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
     .start-button::after { right: 5px; }
     .windows-list-button::after { left: 5px; }
+
+    /* New styles for tab representation */
+    .task-item-layout { display: flex; align-items: center; gap: 4px; overflow: hidden; width: 100%; justify-content: center; }
+    .active-tab-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+    .inactive-tabs-group { display: flex; gap: 3px; flex-shrink: 1; overflow: hidden; }
+    .inactive-tab { display: inline-block; font-size: 0.65em; line-height: 1.1; max-width: 60px; padding: 2px 3px; background-color: rgba(0,0,0,0.2); border-radius: 3px; white-space: normal; word-break: break-word; text-align: center; opacity: 0.8; }
 </style>
 
 <svelte:window bind:innerWidth={screenWidth} />
@@ -199,9 +205,38 @@
     </div>
 
     {#each $windows as win (win.id)}
-        {@const title = getActiveTabTitle(win)}
-        <button class="task-item" class:minimized={win.minimized} class:active={win.isActive} {title} on:click={() => { if ($dashActive) dashActive.set(false); handleTaskClick(win); }} use:measure={win.id} style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'};">
-            {title}
+        {@const activeTab = win.tabs.find(t => t.id === win.activeTabId) || win.tabs[0]}
+        {@const activeIndex = win.tabs.indexOf(activeTab)}
+        {@const beforeTabs = win.tabs.slice(0, activeIndex)}
+        {@const afterTabs = win.tabs.slice(activeIndex + 1)}
+        <button
+            class="task-item"
+            class:minimized={win.minimized}
+            class:active={win.isActive}
+            title={activeTab?.title}
+            on:click={() => { if ($dashActive) dashActive.set(false); handleTaskClick(win); }}
+            use:measure={win.id}
+            style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'};"
+        >
+            {#if win.tabs.length > 1}
+                <div class="task-item-layout">
+                    <div class="inactive-tabs-group">
+                        {#each beforeTabs as tab (tab.id)}
+                            <span class="inactive-tab" title={tab.title}>{tab.title}</span>
+                        {/each}
+                    </div>
+
+                    <span class="active-tab-title">{activeTab?.title}</span>
+
+                    <div class="inactive-tabs-group">
+                        {#each afterTabs as tab (tab.id)}
+                            <span class="inactive-tab" title={tab.title}>{tab.title}</span>
+                        {/each}
+                    </div>
+                </div>
+            {:else}
+                {activeTab?.title}
+            {/if}
         </button>
     {/each}
 
