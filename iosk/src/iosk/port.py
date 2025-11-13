@@ -44,7 +44,7 @@ class PortManager:
         'bright_cyan': '\033[96m', 'bright_white': '\033[97m',
     }
     REVERSE_COLOR_MAP = {v: k for k, v in COLOR_MAP.items()}
-    
+
     def __init__(self, kernel: "IOSK"):
         self.kernel = kernel
         self.server_task: Optional[asyncio.Task] = None
@@ -323,7 +323,7 @@ class PortManager:
             return
 
         # Use the SK1: protocol wrapper for clients
-        payload = f"SK1:{json.dumps(payload)}"
+        payload = f"SK1:{json.dumps(message)}"
         aws = [ws.send(payload) for ws in clients]
         await asyncio.gather(*aws, return_exceptions=True)
 
@@ -338,7 +338,7 @@ class PortManager:
             io_context = self.kernel.users.get(username)
             if not io_context:
                 continue
-            
+
             color_map = self._get_color_name_map(io_context)
             payload = {
                 'type': 'user_colors_update',
@@ -455,7 +455,7 @@ class PortManager:
         """Converts a user's ANSI color map to a map of usernames to color names."""
         if not user_io or not hasattr(user_io, 'user_colors'):
             return {}
-        
+
         name_map = {}
         for user, ansi_code in user_io.user_colors.items():
             color_name = self.REVERSE_COLOR_MAP.get(ansi_code, 'white')
@@ -590,7 +590,7 @@ class PortManager:
             if not io_context:
                 await websocket.send(json.dumps({"type": "handshake_ack", "status": "error", "reason": f"Login for user '{username}' failed."}))
                 raise ValueError(f"Client login failed for user {username}")
-            
+
             # Create and register the connection metadata BEFORE sending any state
             conn_meta = Connection(websocket=websocket, type='client', username=username)
             self.active_connections[websocket] = conn_meta
@@ -626,7 +626,7 @@ class PortManager:
                 # No room, send MOTD. The MOTD was selected and cached during login.
                 motd_content = getattr(io_context, 'motd_cache', None)
                 initial_state_payload['motd'] = motd_content or ''
-            
+
             # This call will now succeed because the connection is registered
             await self.send_payload_to_client(username, initial_state_payload)
 
@@ -718,7 +718,7 @@ class PortManager:
                     await self.kernel.handle_client_input(conn_meta.username, message.get("data", ""))
                 else:
                     log.warning("Received client_input from non-client connection.")
-            
+
             elif msg_type == "room_action":
                 if conn_meta.type == 'client' and conn_meta.username:
                     action = message.get("action")
@@ -776,7 +776,7 @@ class PortManager:
         except Exception as e:
             log.error(f"Error during fs_list for {io_context.user} at '{path}': {e}")
             response["error"] = "An internal server error occurred."
-        
+
         await self.send_payload_to_client(io_context.user, response)
 
     async def _handle_fs_read(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Any):
@@ -786,7 +786,7 @@ class PortManager:
             "path": path,
             "requesterId": requesterId
         }
-        
+
         content_bytes, is_binary, error = await self.kernel.get_raw(io_context, path)
 
         if error:
@@ -1106,3 +1106,4 @@ class PortManager:
 
             # 3. Propagate the disconnection to remaining peers
             await self._broadcast_peer_disconnect(disconnected_host)
+
