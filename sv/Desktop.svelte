@@ -9,8 +9,10 @@
     import Dash from './Dash.svelte';
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
+    import InstanceRegistrar from './InstanceRegistrar.svelte';
 
     let backgroundStyle = '';
+    let componentInstances = {};
 
     // --- Context Menu State ---
     let contextMenu = {
@@ -36,6 +38,13 @@
     function openSettingsMenu() {
         closeContextMenu();
         newSettings();
+    }
+
+    function handleFocusOut(event, tab) {
+        const contentAreaEl = event.currentTarget;
+        if (contentAreaEl && !contentAreaEl.contains(event.relatedTarget)) {
+            windows.updateTabProps(tab.group.id, tab.id, { lastFocusedElement: event.target });
+        }
     }
 
     onMount(() => {
@@ -92,7 +101,8 @@
         background-position: center;
         transition: background 0.5s ease-in-out;
     }
-    .desktop.dash-active .windows-layer {
+    .desktop.dash-active .windows-layer,
+    .desktop.dash-active .tab-contents-layer {
         /* Hide windows without unmounting components, preserving their state */
         visibility: hidden;
     }
@@ -136,12 +146,74 @@
     .context-menu button:hover {
         background-color: var(--taskbar-button-hover-bg);
     }
+
+    .tab-contents-layer {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        pointer-events: none;
+    }
+
+    .tab-content-wrapper {
+        position: absolute;
+        pointer-events: auto;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background-color: var(--window-bg);
+        border: 1px solid transparent; /* To align with window-frame border */
+        border-radius: 6px;
+        box-sizing: border-box;
+    }
+    .tab-content-wrapper.maximized {
+        border-radius: 0;
+    }
+    .content-area-container {
+        margin-top: 30px; /* title bar height */
+        flex-grow: 1;
+        overflow: auto;
+        padding: 5px;
+        height: calc(100% - 30px);
+    }
 </style>
 
 <div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu={handleRightClick}>
     <div class="windows-layer">
         {#each $windows as win (win.id)}
             <Window {...win} />
+        {/each}
+    </div>
+
+    {@const allTabs = $windows.flatMap(w => w.tabs.map(t => ({...t, group: w})))}
+    <div class="tab-contents-layer">
+         {#each allTabs as tab (tab.id)}
+            {@const group = tab.group}
+            <div
+                class="tab-content-wrapper"
+                class:maximized={group.maximized}
+                style:display={(tab.id === group.activeTabId && !group.minimized) ? 'flex' : 'none'}
+                style:left="{group.maximized ? 0 : group.x}px"
+                style:top="{group.maximized ? 0 : group.y}px"
+                style:width="{group.maximized ? '100%' : group.width + 'px'}"
+                style:height="{group.maximized ? '100%' : group.height + 'px'}"
+                style:z-index="{group.zIndex}"
+                on:focusout={e => handleFocusOut(e, tab)}
+            >
+                <div class="content-area-container">
+                    <svelte:component
+                        bind:this={componentInstances[tab.id]}
+                        this={tab.component}
+                        {...tab}
+                        groupId={group.id}
+                        id={tab.id}
+                        isActive={group.isActive && tab.id === group.activeTabId}
+                        x={group.x} y={group.y} width={group.width} height={group.height}
+                    />
+                    {#if componentInstances[tab.id]}
+                        <InstanceRegistrar tabId={tab.id} instance={componentInstances[tab.id]} />
+                    {/if}
+                </div>
+            </div>
         {/each}
     </div>
 

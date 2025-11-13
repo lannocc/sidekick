@@ -5,7 +5,7 @@
 <script>
     import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, dragState } from './windows.js';
+    import { windows, dragState, instanceRegistry } from './windows.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
     import IoskConsole from './IoskConsole.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
@@ -48,9 +48,7 @@
     let focusTimeout = null;
     let showOptionsMenu = false;
     let optionsButton;
-    let componentInstances = {};
-    $: activeComponentInstance = componentInstances[activeTabId];
-    let contentAreaEl;
+    $: activeComponentInstance = instanceRegistry.get(activeTabId);
     let tabsContainerEl;
     let titleBarEl;
 
@@ -198,12 +196,6 @@
         }
     }
 
-    function handleFocusOut(event) {
-        if (contentAreaEl && !contentAreaEl.contains(event.relatedTarget) && contentAreaEl.contains(event.target)) {
-            windows.updateTabProps(id, activeTabId, { lastFocusedElement: event.target });
-        }
-    }
-
     $: if (isActive) Promise.resolve().then(restoreFocus);
 
     function onDragStart(event) {
@@ -312,12 +304,12 @@
     .window-frame.active.flashing, .window-frame:not(.active).flashing {
         animation: flash-animation 0.5s ease-in-out;
     }
-    .window-frame { position: absolute; border: 1px solid var(--border-color); background-color: var(--window-bg); border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; min-width: 250px; min-height: 150px; transition: border-color 0.2s ease-in-out; }
+    .window-frame { position: absolute; border: 1px solid var(--border-color); background-color: transparent; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; min-width: 250px; min-height: 150px; transition: border-color 0.2s ease-in-out; pointer-events: none; }
     .window-frame:not(.active) { border-color: #7f8c8d; }
     .window-frame.minimized { display: none; }
     .window-frame.maximized { border-radius: 0; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; }
     .window-frame.maximized .resize-handle { display: none; }
-    .title-bar { height: 30px; background-color: var(--title-bar-bg); color: var(--title-bar-text); display: flex; justify-content: space-between; align-items: center; padding: 0 8px; cursor: move; border-top-left-radius: 5px; border-top-right-radius: 5px; user-select: none; transition: background-color 0.2s ease-in-out; position: relative; }
+    .title-bar { height: 30px; background-color: var(--title-bar-bg); color: var(--title-bar-text); display: flex; justify-content: space-between; align-items: center; padding: 0 8px; cursor: move; border-top-left-radius: 5px; border-top-right-radius: 5px; user-select: none; transition: background-color 0.2s ease-in-out; position: relative; pointer-events: auto; }
     .window-frame:not(.active) .title-bar { background-color: #7f8c8d; }
     .title-bar.drop-target::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(52, 152, 219, 0.4); border: 2px dashed #3498db; z-index: 1; pointer-events: none; border-radius: 5px; }
     .title-center { flex-grow: 1; text-align: center; overflow: hidden; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
@@ -357,19 +349,16 @@
     .minimize { background-color: #ffbd2e; }
     .maximize { background-color: #27c93f; }
     .options-menu-button { background-color: #3498db; color: white; line-height: 0.8; }
-    .content-area { flex-grow: 1; overflow: auto; padding: 5px; }
-    .tab-content {
-        height: 100%;
-    }
-    .resize-handle { position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; cursor: se-resize; }
-    .options-menu { position: absolute; top: 35px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 1000; display: flex; flex-direction: column; min-width: 150px; padding: 4px 0; user-select: none; }
+    .content-area { flex-grow: 1; overflow: auto; padding: 5px; pointer-events: none; }
+    .resize-handle { position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; cursor: se-resize; pointer-events: auto; }
+    .options-menu { position: absolute; top: 35px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 1000; display: flex; flex-direction: column; min-width: 150px; padding: 4px 0; user-select: none; pointer-events: auto; }
     .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; font-size: 14px; }
     .menu-item:hover:not(:disabled) { background-color: var(--taskbar-button-hover-bg); }
     .menu-item:disabled { color: #7f8c8d; cursor: not-allowed; }
     .menu-item.close-option { color: #e74c3c; }
     .menu-item.close-option:hover:not(:disabled) { background-color: #c0392b; color: white; }
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
-    .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
+    .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; pointer-events: auto; }
     .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
     .modal-content h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
     fieldset { border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
@@ -385,7 +374,7 @@
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} style:pointer-events={isDragging ? 'none' : 'auto'}>
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave}>
     <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={onDragStart} on:dblclick={() => windows.toggleMaximize(id)}>
         <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
@@ -446,20 +435,8 @@
             <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>Close</button>
         </div>
     {/if}
-    <div class="content-area" bind:this={contentAreaEl} on:focusout={handleFocusOut}>
-        {#each tabs as tab (tab.id)}
-            <div class="tab-content" style:display={tab.id === activeTabId ? 'block' : 'none'}>
-                <svelte:component
-                    bind:this={componentInstances[tab.id]}
-                    this={tab.component}
-                    {...tab}
-                    groupId={id}
-                    id={tab.id}
-                    isActive={isActive && tab.id === activeTabId}
-                    x={x} y={y} width={width} height={height}
-                />
-            </div>
-        {/each}
+    <div class="content-area">
+        <!-- Content is now rendered by Desktop.svelte -->
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
 
@@ -490,4 +467,3 @@
         </div>
     {/if}
 </div>
-

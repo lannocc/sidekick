@@ -300,16 +300,42 @@ function createWindowManager() {
     };
 
     const detachTabToNewWindow = (sourceGroupId, tabId, newX, newY) => {
-        const sourceGroup = get(windows).find(g => g.id === sourceGroupId);
-        if (!sourceGroup || sourceGroup.tabs.length <= 1) return;
+        update(windows => {
+            const sourceGroupIndex = windows.findIndex(g => g.id === sourceGroupId);
+            if (sourceGroupIndex === -1) return windows;
 
-        const detachedTab = sourceGroup.tabs.find(t => t.id === tabId);
-        if (!detachedTab) return;
-        
-        removeTab(sourceGroupId, tabId);
-        
-        addWindow(detachedTab.component, {
-            ...detachedTab, x: newX, y: newY, width: sourceGroup.width, height: sourceGroup.height,
+            const sourceGroup = windows[sourceGroupIndex];
+            const tabToDetach = sourceGroup.tabs.find(t => t.id === tabId);
+            if (!tabToDetach || sourceGroup.tabs.length < 2) return windows;
+
+            // 1. Modify source group
+            const newSourceTabs = sourceGroup.tabs.filter(t => t.id !== tabId);
+            let newWindows = [...windows];
+            
+            let newActiveTabId = sourceGroup.activeTabId;
+            if (newActiveTabId === tabId) {
+                newActiveTabId = newSourceTabs[0].id;
+            }
+            newWindows[sourceGroupIndex] = { ...sourceGroup, tabs: newSourceTabs, activeTabId: newActiveTabId };
+            
+            // 2. Create new group for detached tab
+            const newWindowGroup = {
+                id: ++windowGroupIdCounter,
+                x: newX, y: newY,
+                width: sourceGroup.width, height: sourceGroup.height,
+                zIndex: 100, minimized: false, maximized: false, isActive: true,
+                prevX: 0, prevY: 0, prevWidth: 0, prevHeight: 0,
+                tabs: [tabToDetach],
+                activeTabId: tabToDetach.id,
+                isFlashing: false,
+            };
+            
+            // 3. Add new group and update z-indices/active state
+            newWindows = newWindows.map(w => ({ ...w, isActive: w.id === newWindowGroup.id, zIndex: w.id === sourceGroupId ? w.zIndex : w.zIndex - 1 }));
+            newWindowGroup.zIndex = newWindows.reduce((max, w) => Math.max(max, w.zIndex), 99) + 1;
+            newWindows.push(newWindowGroup);
+            
+            return newWindows;
         });
     };
 
@@ -336,6 +362,19 @@ function createWindowManager() {
 }
 
 export const windows = createWindowManager();
+
+export const instanceRegistry = {
+    instances: new Map(),
+    register(tabId, instance) {
+        this.instances.set(tabId, instance);
+    },
+    unregister(tabId) {
+        this.instances.delete(tabId);
+    },
+    get(tabId) {
+        return this.instances.get(tabId);
+    }
+};
 
 
 // --- Window Creation Functions ---
