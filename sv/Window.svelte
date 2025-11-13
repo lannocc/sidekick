@@ -34,7 +34,7 @@
     $: componentName = activeTab.componentName;
     $: title = activeTab.title;
     $: isConsoleConnected = activeTab.isConsoleConnected;
-    $: canRender = activeTab.canRender; 
+    $: canRender = activeTab.canRender;
 
     const dispatch = createEventDispatcher();
     let settings;
@@ -161,7 +161,7 @@
             dragState.update(s => ({ ...s, dropTargetGroupId: id }));
         }
     }
-    
+
     function handleTitleMouseLeave() {
         const currentDragState = get(dragState);
         if (currentDragState && currentDragState.dropTargetGroupId === id) {
@@ -193,7 +193,7 @@
         let newWidth = iw, newHeight = ih;
         if (resizeDirection.includes('e')) newWidth = Math.max(minWidth, iw + dx);
         if (resizeDirection.includes('s')) newHeight = Math.max(minHeight, ih + dy);
-        
+
         windows.updateWindowProps(id, { width: newWidth, height: newHeight });
     }
 
@@ -202,7 +202,7 @@
         window.removeEventListener('mousemove', onResize);
         restoreFocus();
     }
-    
+
     function handleFrameMouseDown(event) {
         clearTimeout(focusTimeout);
         if ((event.altKey || event.metaKey) && !maximized) {
@@ -247,7 +247,7 @@
         z-index: 1; /* Bring active tab forward */
     }
     .tab:not(.active) {
-        opacity: 0.8;
+        opacity: 0.7;
     }
     .tab:not(.active):hover {
         opacity: 1;
@@ -255,6 +255,9 @@
     .tab-close-button { background: none; border: none; color: var(--taskbar-text); cursor: pointer; padding: 0 5px; font-size: 1.2em; line-height: 1; opacity: 0.7; }
     .tab-close-button:hover { color: #e74c3c; opacity: 1; }
     .tab-title { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; padding: 0 5px; }
+    .tab.active .tab-title {
+        font-weight: bold;
+    }
     .window-controls { display: flex; gap: 5px; z-index: 2; }
     .window-control { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: rgba(0,0,0,0.6); font-weight: bold; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.2); line-height: 18px; }
     .close { background-color: #ff5f56; }
@@ -291,14 +294,14 @@
 
 <div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} style:pointer-events={isDragging ? 'none' : 'auto'}>
     <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={onDragStart} on:dblclick={() => windows.toggleMaximize(id)}>
-        <div class="window-controls">
+        <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
             <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>_</div>
         </div>
-        
+
         <div class="title-center">
             {#if tabs.length > 1}
-                <div class="tabs-container">
+                <div class="tabs-container" on:dblclick|stopPropagation>
                     {#each tabs as tab (tab.id)}
                         <div class="tab" class:active={tab.id === activeTabId}>
                             <button class="tab-close-button" title="Close Tab" on:click|stopPropagation={() => windows.removeTab(id, tab.id)}>&times;</button>
@@ -310,8 +313,8 @@
                 <span class="title-text">{title}</span>
             {/if}
         </div>
-        
-        <div class="window-controls">
+
+        <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control maximize" title={maximized ? 'Restore' : 'Maximize'} on:click={() => windows.toggleMaximize(id)} on:mousedown|stopPropagation>
                 {@html maximized ? '&#128470;' : '&#9632;'}
             </div>
@@ -344,7 +347,7 @@
     <div class="content-area" bind:this={contentAreaEl} on:focusout={handleFocusOut}>
         {#each tabs as tab (tab.id)}
             <div class="tab-content" style:display={tab.id === activeTabId ? 'block' : 'none'}>
-                <svelte:component 
+                <svelte:component
                     bind:this={componentInstances[tab.id]}
                     this={tab.component}
                     {...tab}
@@ -385,3 +388,4 @@
         </div>
     {/if}
 </div>
+
