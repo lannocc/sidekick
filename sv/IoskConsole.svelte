@@ -379,16 +379,16 @@
                             // for console history, so we just process this for the chat window
                             // and play the bell, but don't add to the console `output` array here.
                             privateMessages.set({
-                                from: data.from,
+                                from: stripAnsi(data.from),
                                 to: data.to,
                                 content: data.content,
                                 timestamp: Date.now()
                             });
 
                             // A user can receive a DM confirmation they sent. Don't open a window for that.
-                            const remoteUsername = data.from.split('.')[0];
+                            const remoteUsername = stripAnsi(data.from).split('.')[0];
                             if (remoteUsername !== username) {
-                                newIoskPrivateChat(id, username, data.from);
+                                newIoskPrivateChat(id, username, stripAnsi(data.from));
                             }
 
                             // Trigger a bell sound/flash.
@@ -421,11 +421,11 @@
                                         const content = match[2].trim();
                                         
                                         // A user can receive a DM confirmation from the server they sent, don't open a window for that.
-                                        const remoteUsername = fromUser.split('.')[0];
+                                        const remoteUsername = stripAnsi(fromUser).split('.')[0];
                                         if (remoteUsername !== username) {
-                                            newIoskPrivateChat(id, username, fromUser);
+                                            newIoskPrivateChat(id, username, stripAnsi(fromUser));
                                             privateMessages.set({
-                                                from: fromUser,
+                                                from: stripAnsi(fromUser),
                                                 to: username,
                                                 content: content,
                                                 timestamp: Date.now()

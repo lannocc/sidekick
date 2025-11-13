@@ -18,10 +18,9 @@
     let inputEl;
     let shouldScroll = true;
 
-    // The remote user's display name (just the username part)
-    $: remoteUserDisplay = remoteUser ? remoteUser.split('.')[0] : '';
     // --- FIX START ---
-    $: localUserDisplay = localUser; // `localUser` is already the correct display name
+    // Reactive function to get the display name (username part) from a full address
+    const getDisplayName = (fullAddress) => (fullAddress || '').split('.')[0];
     // --- FIX END ---
 
     // Update window store with props for Dash saving
@@ -196,7 +195,7 @@
         {#each messages as msg (msg.timestamp)}
             <div class="message">
                 <div class="message-header" style="color: {msg.from === localUser ? 'var(--ansi-bright-white)' : 'var(--ansi-cyan)'}">
-                    {msg.from === localUser ? localUserDisplay : remoteUserDisplay}:
+                    {getDisplayName(msg.from)}:
                 </div>
                 <div class="message-content">{@html parseAnsi(msg.content)}</div>
             </div>

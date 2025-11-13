@@ -172,9 +172,12 @@ class AIMessenger:
                 for r_addr in recipients:
                     if '.' in r_addr:
                         r_user, r_host = r_addr.split('.', 1)
-                        if r_host not in remote_recipients:
-                            remote_recipients[r_host] = []
-                        remote_recipients[r_host].append(r_user)
+                        if r_host == self.os.hostname:
+                            local_recipients.append(r_user)
+                        else:
+                            if r_host not in remote_recipients:
+                                remote_recipients[r_host] = []
+                            remote_recipients[r_host].append(r_user)
                     else:
                         local_recipients.append(r_addr)
 
