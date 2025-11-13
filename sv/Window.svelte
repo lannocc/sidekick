@@ -3,9 +3,9 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { createEventDispatcher, tick, onMount, onDestroy, setContext } from 'svelte';
+    import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, dragState, reorderTab, detachTabToNewWindow } from './windows.js';
+    import { windows, dragState } from './windows.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
     import IoskConsole from './IoskConsole.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
@@ -181,9 +181,9 @@
 
         if (isTabDragging) {
             if (draggedTabInfo.isDetaching) {
-                detachTabToNewWindow(draggedTabInfo.groupId, draggedTabInfo.tabId, e.clientX - 100, e.clientY - 15);
+                windows.detachTabToNewWindow(draggedTabInfo.groupId, draggedTabInfo.tabId, e.clientX - 100, e.clientY - 15);
             } else {
-                reorderTab(draggedTabInfo.groupId, draggedTabInfo.tabId, draggedTabInfo.targetTabId);
+                windows.reorderTab(draggedTabInfo.groupId, draggedTabInfo.tabId, draggedTabInfo.targetTabId);
             }
         }
         isTabDragging = false;
