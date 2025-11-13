@@ -322,7 +322,7 @@
     .title-bar.drop-target::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(52, 152, 219, 0.4); border: 2px dashed #3498db; z-index: 1; pointer-events: none; border-radius: 5px; }
     .title-center { flex-grow: 1; text-align: center; overflow: hidden; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
     .title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 30px; }
-    .tabs-container { position: relative; }
+    .tabs-container { position: relative; display: flex; }
     .tab { display: flex; align-items: center; background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; padding: 0 5px; margin-right: 2px; height: 26px; margin-top: auto; max-width: 150px; transition: opacity 0.2s; }
     .tab.active {
         background-color: var(--window-bg);
