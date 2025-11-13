@@ -142,7 +142,7 @@
     $: if (id !== undefined) {
         // Update the window store with properties that need to be saved in a Dash layout
         // Also update consoleId in case it was found dynamically.
-        windows.updateWindowProps(id, { canRender, mode, consoleId });
+        windows.updateTabProps(id, { canRender, mode, consoleId });
     }
 
     export function setMode(newMode) {

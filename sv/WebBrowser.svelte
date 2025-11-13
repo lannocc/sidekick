@@ -27,7 +27,7 @@
     // Update the central window store for Dash saving
     $: if (id !== undefined) {
         // This property `currentUrl` will be saved by Dash as `initialUrl` for restoration.
-        windows.updateWindowProps(id, { currentUrl: currentUrl });
+        windows.updateTabProps(id, { currentUrl: currentUrl });
     }
 
     function navigate() {

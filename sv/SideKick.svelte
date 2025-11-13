@@ -17,7 +17,7 @@
 
             // e.shiftKey is true for '~', false for '`'
             const forward = !e.shiftKey;
-            windows.cycleWindow(forward);
+            windows.cycleGroup(forward);
         }
 
         // Dash layout cycling
@@ -85,3 +85,4 @@
     <Taskbar />
     <Desktop />
 </div>
+

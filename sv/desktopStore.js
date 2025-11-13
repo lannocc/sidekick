@@ -112,3 +112,6 @@ windowSettings.subscribe(value => {
         console.error("Could not save window settings to localStorage", e);
     }
 });
+
+// Store for drag-to-tab functionality
+export const tabDropTarget = writable(null);
