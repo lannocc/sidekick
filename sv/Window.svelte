@@ -123,7 +123,7 @@
     $: if (isActive) Promise.resolve().then(restoreFocus);
 
     function onDragStart(event) {
-        if (event.target.closest('button') || event.target.closest('.window-control') || maximized) return;
+        if (event.target.closest('button') || event.target.closest('.window-control') || event.target.closest('.tab') || maximized) return;
         isDragging = true;
         dragState.set({ draggingGroupId: id, dropTargetGroupId: null });
         dragOffsetX = event.clientX - x;
