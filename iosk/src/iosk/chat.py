@@ -203,10 +203,15 @@ class AIMessenger:
                             # For local recipients, the sender is local, so don't show host.
                             dm_msg = f'\a\n[{from_user} -> me {now}] << {actual_msg}'
                             if not uio.bot and uio.user_colors:
-                                color = uio.user_colors.get(from_user, '')
-                                reset = self.os.ANSI_RESET if color else ''
-                                colored_sender = f'{color}{from_user}{reset}'
-                                dm_msg = f'\a\n[{colored_sender} -> me {now}] << {actual_msg}'
+                                sender_color = uio.user_colors.get(from_user, '')
+                                if sender_color:
+                                    reset = self.os.ANSI_RESET
+                                    bold = self.os.ANSI_BOLD
+                                    me_color = uio.user_colors.get(uio.user, self.os.BRIGHT_WHITE)
+                                    colored_sender = f'{bold}{sender_color}{from_user}{reset}'
+                                    bold_me = f'{bold}{me_color}me{reset}'
+                                    colored_msg = f'{sender_color}{actual_msg}{reset}'
+                                    dm_msg = f'\a\n[{colored_sender} -> {bold_me} {now}] << {colored_msg}'
                             await uio.print(dm_msg)
 
                 # Send confirmation to sender
@@ -214,6 +219,21 @@ class AIMessenger:
                 if sender_io:
                     recipient_str = ', '.join(recipients)
                     dm_conf = f'\n[me -> {recipient_str} {now}] << {actual_msg}'
+                    if not sender_io.bot and sender_io.user_colors:
+                        reset = self.os.ANSI_RESET
+                        bold = self.os.ANSI_BOLD
+                        me_color = sender_io.user_colors.get(from_user, self.os.BRIGHT_WHITE)
+                        bold_me = f'{bold}{me_color}me{reset}'
+                        colored_recipients = []
+                        for r_addr in recipients:
+                            r_user = r_addr.split('.', 1)[0]
+                            r_color = sender_io.user_colors.get(r_user, '')
+                            colored_recipients.append(
+                                f'{bold}{r_color}{r_addr}{reset}' if r_color else r_addr
+                            )
+                        recipient_str = ', '.join(colored_recipients)
+                        colored_msg = f'{me_color}{actual_msg}{reset}'
+                        dm_conf = f'\n[{bold_me} -> {recipient_str} {now}] << {colored_msg}'
                     await sender_io.print(dm_conf)
 
                 return # End of DM handling
@@ -231,9 +251,12 @@ class AIMessenger:
                     local_msg = f'\n[{from_user} {now}] << {msg}'
                     if not uio.bot and uio.user_colors:
                         color = uio.user_colors.get(from_user, '')
-                        reset = self.os.ANSI_RESET if color else ''
-                        colored_sender = f'{color}{from_user}{reset}'
-                        local_msg = f'\n[{colored_sender} {now}] << {msg}'
+                        if color:
+                            reset = self.os.ANSI_RESET
+                            bold = self.os.ANSI_BOLD
+                            colored_sender = f'{bold}{color}{from_user}{reset}'
+                            colored_msg = f'{color}{msg}{reset}'
+                            local_msg = f'\n[{colored_sender} {now}] << {colored_msg}'
                     await uio.print(local_msg)
 
             # Broadcast to network peers
@@ -405,9 +428,12 @@ class AIMessenger:
                         if not uio.bot and uio.user_colors:
                             sender_username = from_addr.split('.', 1)[0]
                             color = uio.user_colors.get(sender_username, '')
-                            reset = self.os.ANSI_RESET if color else ''
-                            colored_sender = f'{color}{display_addr}{reset}'
-                            local_msg = f'\n[{colored_sender} {now}] << {content}'
+                            if color:
+                                reset = self.os.ANSI_RESET
+                                bold = self.os.ANSI_BOLD
+                                colored_sender = f'{bold}{color}{display_addr}{reset}'
+                                colored_content = f'{color}{content}{reset}'
+                                local_msg = f'\n[{colored_sender} {now}] << {colored_content}'
                         await uio.print(local_msg)
 
         elif msg_type == "direct_message":
@@ -428,10 +454,15 @@ class AIMessenger:
                     dm_msg = f'\a\n[{display_addr} -> me {now}] << {content}'
                     if not uio.bot and uio.user_colors:
                         sender_username = from_addr.split('.', 1)[0]
-                        color = uio.user_colors.get(sender_username, '')
-                        reset = self.os.ANSI_RESET if color else ''
-                        colored_sender = f'{color}{display_addr}{reset}'
-                        dm_msg = f'\a\n[{colored_sender} -> me {now}] << {content}'
+                        sender_color = uio.user_colors.get(sender_username, '')
+                        if sender_color:
+                            reset = self.os.ANSI_RESET
+                            bold = self.os.ANSI_BOLD
+                            me_color = uio.user_colors.get(uio.user, self.os.BRIGHT_WHITE)
+                            colored_sender = f'{bold}{sender_color}{display_addr}{reset}'
+                            bold_me = f'{bold}{me_color}me{reset}'
+                            colored_content = f'{sender_color}{content}{reset}'
+                            dm_msg = f'\a\n[{colored_sender} -> {bold_me} {now}] << {colored_content}'
                     await uio.print(dm_msg)
 
 class Engagement:

@@ -41,6 +41,7 @@ class IOSK:
     BOOT = 0 # current boot number
 
     ANSI_RESET = '\033[0m'
+    ANSI_BOLD = '\033[1m'
     BRIGHT_WHITE = '\033[97m'
     USER_COLORS = [
         '\033[96m',  # Bright Cyan
