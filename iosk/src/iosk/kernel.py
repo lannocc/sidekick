@@ -1031,7 +1031,34 @@ class IOSK:
         """Send data to device."""
         if dev.startswith('network:'):
             if self.port:
-                await self.port.send_to_client(io.user, data)
+                if data.startswith('\a'):
+                    try:
+                        # DM format: \a\n[SENDER -> me TIMESTAMP] << CONTENT
+                        lines = data.split('<<', 1)
+                        header = lines[0]
+                        content = lines[1].strip() if len(lines) > 1 else ""
+
+                        sender_part = header.split('[', 1)[1].split(' -> me', 1)[0]
+                        from_user = sender_part.strip()
+
+                        # Send structured DM payload to the client
+                        await self.port.send_private_message_to_client(
+                            to_user=io.user,
+                            from_user=from_user,
+                            content=content
+                        )
+                        # Also send the formatted message to the console for history,
+                        # but without the bell character that triggers special handling.
+                        await self.port.send_to_client(io.user, data[1:])
+                        return # We are done with this data.
+
+                    except Exception as e:
+                        # If parsing fails for any reason, fall back to old behavior
+                        # but log the error to the system log for debugging.
+                        await self.system.error(f"!! DM parsing failed in kernel: {e}")
+                        await self.port.send_to_client(io.user, data)
+                else:
+                    await self.port.send_to_client(io.user, data)
             return
 
         if not dev.startswith('/dev/'):

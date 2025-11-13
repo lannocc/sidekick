@@ -367,7 +367,27 @@
                         const jsonData = event.data.substring(PREAMBLE.length);
                         const data = JSON.parse(jsonData);
 
-                        if (data.type === 'state_info' || data.type === 'room_state_update') {
+                        if (data.type === 'private_message') {
+                            // This is a new dedicated DM message.
+                            // The backend sends this *in addition* to the regular output
+                            // for console history, so we just process this for the chat window
+                            // and play the bell, but don't add to the console `output` array here.
+                            privateMessages.set({
+                                from: data.from,
+                                to: data.to,
+                                content: data.content,
+                                timestamp: Date.now()
+                            });
+
+                            // A user can receive a DM confirmation they sent. Don't open a window for that.
+                            const remoteUsername = data.from.split('.')[0];
+                            if (remoteUsername !== username) {
+                                newIoskPrivateChat(id, username, data.from);
+                            }
+
+                            // Trigger a bell sound/flash.
+                            handleBell();
+                        } else if (data.type === 'state_info' || data.type === 'room_state_update') {
                             roomName = data.roomName || null;
                             roomTopic = data.roomTopic || '';
                             roomParticipants = data.participants || [];

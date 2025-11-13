@@ -447,6 +447,16 @@ class PortManager:
             # This might happen if the connection was already dropped, which is not an error.
             log.warning(f"disconnect_client: Could not find active connection for user '{username}' to disconnect.")
 
+    async def send_private_message_to_client(self, to_user: str, from_user: str, content: str):
+        """Sends a structured private message to a specific connected client."""
+        payload = {
+            "type": "private_message",
+            "from": from_user,
+            "to": to_user,
+            "content": content
+        }
+        await self.send_payload_to_client(to_user, payload)
+
     # --------------------------------------------------------------------------
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------

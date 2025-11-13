@@ -3,7 +3,7 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { onMount, onDestroy, afterUpdate } from 'svelte';
+    import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { consoleCommands, privateMessages } from './ioskEvents.js';
     import { windows } from './windows.js';
 
@@ -15,6 +15,7 @@
     let messages = [];
     let inputMessage = '';
     let messageContainer;
+    let inputEl;
     let shouldScroll = true;
 
     // The remote user's display name (without device/host info if local)
@@ -26,9 +27,20 @@
         windows.updateWindowProps(id, { consoleId, localUser, remoteUser });
     }
 
+    async function focusInput() {
+        await tick();
+        inputEl?.focus();
+    }
+
+    function handleClickOnMessages() {
+        if (window.getSelection().isCollapsed) {
+            focusInput();
+        }
+    }
+
     function handleMessage(message) {
         if (!message) return;
-        
+
         const isForThisWindow =
             (message.from === remoteUser && message.to === localUser) ||
             (message.from === localUser && message.to === remoteUser);
@@ -42,6 +54,7 @@
     let unsubscribe;
     onMount(() => {
         unsubscribe = privateMessages.subscribe(handleMessage);
+        focusInput();
     });
 
     onDestroy(() => {
@@ -123,7 +136,7 @@
 </style>
 
 <div class="chat-container">
-    <div class="messages" bind:this={messageContainer}>
+    <div class="messages" bind:this={messageContainer} on:click={handleClickOnMessages}>
         {#each messages as msg (msg.timestamp)}
             <div class="message">
                 <div class="message-header" style="color: {msg.from === localUser ? 'var(--ansi-bright-white)' : 'var(--ansi-cyan)'}">
@@ -133,10 +146,11 @@
             </div>
         {/each}
     </div>
-    <div class="input-area">
-        <form on:submit|preventDefault={sendMessage} style="width: 100%;">
+    <div class="input-area" on:click={focusInput}>
+        <form on:submit|preventDefault={sendMessage} style="width: 100%; display: flex;">
             <input
                 type="text"
+                bind:this={inputEl}
                 bind:value={inputMessage}
                 placeholder="Type your message..."
                 spellcheck="false"
