@@ -6,18 +6,9 @@
     import { onMount, onDestroy } from 'svelte';
     import { connect, sendMessage, terminalData, connectionStatus } from './localAgentStore.js';
 
-    // Mocking xterm.js for this implementation, as it's an external dependency.
-    // A real implementation would `import { Terminal } from 'xterm';` etc.
-    class MockTerminal {
-        constructor(options) { this.options = options; this.rows = 24; this.cols = 80; this._onData = () => {}; }
-        open(element) { element.innerHTML = '<pre>xterm.js mock terminal. Requires installation.</pre><div class="mock-cursor">_</div>'; }
-        loadAddon(addon) {}
-        onData(callback) { this._onData = callback; }
-        write(data) { console.log(`MockTerminal Write: ${data}`); }
-        focus() {}
-        dispose() {}
-    }
-    class MockFitAddon { fit() {} }
+    import { Terminal } from '@xterm/xterm';
+    import { FitAddon } from '@xterm/addon-fit';
+    import 'xterm/css/xterm.css';
 
     export let isActive;
 
@@ -41,9 +32,6 @@
     }
 
     onMount(() => {
-        const Terminal = MockTerminal;
-        const FitAddon = MockFitAddon;
-
         term = new Terminal({
             cursorBlink: true,
             theme: {
@@ -106,20 +94,6 @@
         padding: 5px;
         box-sizing: border-box;
     }
-    .terminal-container :global(pre) {
-        margin: 0;
-    }
-    @keyframes blink {
-        50% { opacity: 0; }
-    }
-    .terminal-container :global(.mock-cursor) {
-        display: inline-block;
-        animation: blink 1s step-end infinite;
-        background: var(--console-text);
-        width: 8px; /* Approx width of a char */
-        height: 1em;
-    }
 </style>
 
 <div class="terminal-container" bind:this={terminalEl}></div>
-
