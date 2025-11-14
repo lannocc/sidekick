@@ -13,6 +13,8 @@ let tabIdCounter = 0;
 
 // Store for managing drag-and-drop grouping state
 export const dragState = writable(null);
+// Store for requesting a drag/resize action from another component
+export const dragRequest = writable(null);
 
 // Map component type strings to actual components for restoring layouts
 const componentMap = {

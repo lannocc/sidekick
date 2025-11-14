@@ -5,7 +5,7 @@
 <script>
     import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, dragState, instanceRegistry } from './windows.js';
+    import { windows, dragState, instanceRegistry, dragRequest } from './windows.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
     import IoskConsole from './IoskConsole.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
@@ -54,6 +54,27 @@
 
     let showGenericSettingsModal = false;
     let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
+
+    // React to drag/resize requests from other components (like Desktop's content area)
+    $: if ($dragRequest && $dragRequest.id === id) {
+        const request = $dragRequest;
+        dragRequest.set(null); // Consume the request
+
+        // Create a mock event to pass to the existing drag/resize handlers
+        const mockEvent = {
+            clientX: request.clientX,
+            clientY: request.clientY,
+            target: titleBarEl, // Use titleBar as a plausible target
+            preventDefault: () => {},
+            button: request.type === 'move' ? 0 : 2,
+        };
+
+        if (request.type === 'move') {
+            onDragStart(mockEvent);
+        } else if (request.type === 'resize') {
+            onResizeStart(mockEvent, request.direction);
+        }
+    }
 
     function openSettings() {
         showOptionsMenu = false;
@@ -198,7 +219,6 @@
     $: if (isActive) Promise.resolve().then(restoreFocus);
 
     function onDragStart(event) {
-        if (event.target.closest('button') || event.target.closest('.window-control') || event.target.closest('.tab') || maximized) return;
         isDragging = true;
         dragState.set({ draggingGroupId: id, dropTargetGroupId: null });
         dragOffsetX = event.clientX - x;
@@ -291,6 +311,33 @@
         }
     }
 
+    function handleTitleBarMouseDown(event) {
+        // Prevent action if clicking on controls, tabs, etc.
+        if (event.target.closest('button') || event.target.closest('.window-control') || event.target.closest('.tab')) {
+            if (!isActive) windows.focusWindow(id);
+            return;
+        }
+        if (maximized) {
+             if (!isActive) windows.focusWindow(id);
+            return;
+        }
+
+        clearTimeout(focusTimeout);
+
+        // Alt/Meta key combinations for move/resize
+        if (event.altKey || event.metaKey) {
+            event.preventDefault();
+            if (event.button === 0) { // Left click: Move
+                onDragStart(event);
+            } else if (event.button === 2) { // Right click: Resize
+                onResizeStart(event, 'se');
+            }
+        } else {
+            // Standard left click: Move
+            onDragStart(event);
+        }
+    }
+
     function handleMouseEnter() {
         if (settings?.focusFollowsMouse && !isActive) {
             focusTimeout = setTimeout(() => windows.setActiveWindow(id), settings.focusDelay);
@@ -377,8 +424,8 @@
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown} on:contextmenu|stopPropagation>
-    <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={onDragStart} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id}>
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
+    <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id}>
         <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
             <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>_</div>

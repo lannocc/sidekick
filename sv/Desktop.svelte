@@ -3,7 +3,7 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { windows, newSettings } from './windows.js';
+    import { windows, newSettings, dragRequest } from './windows.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive } from './desktopStore.js';
     import Dash from './Dash.svelte';
@@ -37,6 +37,35 @@
         if (focusTimeoutDesktop[group.id]) {
             clearTimeout(focusTimeoutDesktop[group.id]);
             delete focusTimeoutDesktop[group.id];
+        }
+    }
+
+    function handleContentMouseDown(event, group) {
+        if ((event.altKey || event.metaKey) && !group.maximized) {
+            event.preventDefault();
+            
+            let type;
+            let direction = null;
+            if (event.button === 0) { // Left click
+                type = 'move';
+            } else if (event.button === 2) { // Right click
+                type = 'resize';
+                direction = 'se';
+            } else {
+                return;
+            }
+
+            // Publish a request for the Window component to start a drag/resize
+            dragRequest.set({
+                id: group.id,
+                type: type,
+                direction: direction,
+                clientX: event.clientX,
+                clientY: event.clientY,
+            });
+
+        } else if (!group.isActive) {
+            windows.focusWindow(group.id);
         }
     }
 
@@ -219,12 +248,13 @@
                 style:height="{group.maximized ? '100%' : group.height + 'px'}"
                 style:z-index="{group.zIndex - 1}"
                 on:focusout={e => handleFocusOut(e, tab)}
-                on:contextmenu|stopPropagation
+                on:contextmenu|preventDefault|stopPropagation
             >
                 <div
                     class="content-area-container"
                     on:mouseenter={() => handleContentMouseEnter(group)}
                     on:mouseleave={() => handleContentMouseLeave(group)}
+                    on:mousedown={e => handleContentMouseDown(e, group)}
                 >
                     <svelte:component
                         bind:this={componentInstances[tab.id]}
