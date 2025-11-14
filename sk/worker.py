@@ -97,9 +97,9 @@ def apply_patch(target_file, diff_content):
             with open(target_file, 'w', encoding='utf-8') as f:
                 pass # Create an empty file.
 
-        # Execute the system's `patch` command.
+        # Execute the system's `patch` command with a fuzz factor of 3.
         result = subprocess.run(
-            ['patch', target_file, diff_filename],
+            ['patch', '-F', '3', target_file, diff_filename],
             capture_output=True, text=True, check=False
         )
 
