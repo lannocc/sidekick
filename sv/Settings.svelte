@@ -53,6 +53,7 @@
             y: currentSettings.y ?? y,
             width: currentSettings.width ?? width,
             height: currentSettings.height ?? height,
+            defaultZoom: currentSettings.defaultZoom ?? 1.0,
         };
         showSettings = true;
     }
@@ -265,14 +266,6 @@
         </div>
         {/if}
     </fieldset>
-
-    <fieldset>
-        <legend>Appearance</legend>
-        <label class="color-picker-label">
-            <span>Default Zoom</span>
-            <input class="text-input" type="number" bind:value={settings.defaultZoom} on:input={handleUpdate} min="0.5" max="3" step="0.1" style="width: 80px;">
-        </label>
-    </fieldset>
 </div>
 
 {#if showSettings}
@@ -293,6 +286,15 @@
                         <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
                     </div>
                 {/if}
+            </fieldset>
+            <fieldset>
+                <legend>Appearance</legend>
+                <div class="form-grid">
+                     <label style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;">
+                        <span>Default Zoom</span>
+                        <input type="number" bind:value={windowSettingsForModal.defaultZoom} min="0.5" max="3" step="0.1" style="width: 80px;">
+                    </label>
+                </div>
             </fieldset>
             <div class="buttons">
                 <button on:click={handleCancelSettings}>Cancel</button>

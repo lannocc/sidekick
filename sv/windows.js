@@ -44,7 +44,6 @@ function createWindowManager() {
         const defaults = { title: 'New Window', width: 800, height: 600 };
 
         const allWindowSettings = get(windowSettings);
-        const globalSettings = get(desktopSettings);
         const componentName = Object.keys(componentMap).find(key => componentMap[key] === component) || 'Unknown';
         const savedSettings = allWindowSettings[componentName];
         const useSavedPosition = savedSettings && savedSettings.positioning === 'manual';
@@ -54,7 +53,7 @@ function createWindowManager() {
             component: component,
             componentName: componentName,
             ...tabProps,
-            zoom: globalSettings.defaultZoom || 1.0,
+            zoom: savedSettings?.defaultZoom ?? 1.0,
             lastFocusedElement: null,
         };
 
@@ -208,8 +207,15 @@ function createWindowManager() {
     };
 
     const resetTabZoom = (groupId, tabId) => {
-        const globalSettings = get(desktopSettings);
-        const defaultZoom = globalSettings.defaultZoom || 1.0;
+        const group = get(windows).find(g => g.id === groupId);
+        if (!group) return;
+        const tab = group.tabs.find(t => t.id === tabId);
+        if (!tab) return;
+    
+        const allWindowSettings = get(windowSettings);
+        const componentSettings = allWindowSettings[tab.componentName];
+        const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
+    
         updateTabProps(groupId, tabId, { zoom: defaultZoom });
     };
 
@@ -381,11 +387,16 @@ function createWindowManager() {
             
             const { componentType, ...props } = tabData;
     
+            const allWindowSettings = get(windowSettings);
+            const componentSettings = allWindowSettings[tabData.componentType];
+            const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
+
             return {
                 id: ++tabIdCounter,
                 component,
                 componentName: tabData.componentType,
                 ...props,
+                zoom: props.zoom ?? defaultZoom,
             };
         }).filter(Boolean);
     

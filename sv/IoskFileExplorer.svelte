@@ -55,6 +55,7 @@
             y: currentWindowSettings.y ?? y,
             width: currentWindowSettings.width ?? width,
             height: currentWindowSettings.height ?? height,
+            defaultZoom: currentWindowSettings.defaultZoom ?? 1.0,
         };
 
         showSettings = true;
@@ -383,6 +384,16 @@
                             <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
                         </div>
                     {/if}
+                </fieldset>
+
+                <fieldset>
+                    <legend>Appearance</legend>
+                    <div class="form-grid">
+                         <label style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;">
+                            <span>Default Zoom</span>
+                            <input type="number" bind:value={windowSettingsForModal.defaultZoom} min="0.5" max="3" step="0.1" style="width: 80px;">
+                        </label>
+                    </div>
                 </fieldset>
 
                 <div class="buttons">

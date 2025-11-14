@@ -117,6 +117,7 @@
                     consoleConnection: associatedConsole ? associatedConsole.consoleConnection : null,
                     initialPath: tab.currentPath, path: tab.path,
                     mode: tab.mode, initialUrl: tab.currentUrl,
+                    zoom: tab.zoom,
                 };
             });
             return {
