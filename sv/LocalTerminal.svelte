@@ -114,4 +114,4 @@
     }
 </style>
 
-<div class="terminal-container" bind:this={terminalEl} on:mousedown={handleMouseDown}></div>
+<div class="terminal-container" bind:this={terminalEl} on:mousedown|capture={handleMouseDown}></div>
