@@ -265,6 +265,14 @@
         </div>
         {/if}
     </fieldset>
+
+    <fieldset>
+        <legend>Appearance</legend>
+        <label class="color-picker-label">
+            <span>Default Zoom</span>
+            <input class="text-input" type="number" bind:value={settings.defaultZoom} on:input={handleUpdate} min="0.5" max="3" step="0.1" style="width: 80px;">
+        </label>
+    </fieldset>
 </div>
 
 {#if showSettings}

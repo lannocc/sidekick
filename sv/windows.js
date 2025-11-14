@@ -44,6 +44,7 @@ function createWindowManager() {
         const defaults = { title: 'New Window', width: 800, height: 600 };
 
         const allWindowSettings = get(windowSettings);
+        const globalSettings = get(desktopSettings);
         const componentName = Object.keys(componentMap).find(key => componentMap[key] === component) || 'Unknown';
         const savedSettings = allWindowSettings[componentName];
         const useSavedPosition = savedSettings && savedSettings.positioning === 'manual';
@@ -53,6 +54,7 @@ function createWindowManager() {
             component: component,
             componentName: componentName,
             ...tabProps,
+            zoom: globalSettings.defaultZoom || 1.0,
             lastFocusedElement: null,
         };
 
@@ -184,6 +186,31 @@ function createWindowManager() {
             }
             return g;
         }));
+    };
+
+    const changeTabZoom = (groupId, tabId, delta) => {
+        update(windows => {
+            const group = windows.find(g => g.id === groupId);
+            if (!group) return windows;
+            const tab = group.tabs.find(t => t.id === tabId);
+            if (!tab) return windows;
+
+            const currentZoom = tab.zoom || 1.0;
+            const newZoom = currentZoom + delta;
+            const clampedZoom = Math.max(0.5, Math.min(3.0, newZoom));
+
+            if (clampedZoom !== currentZoom) {
+                const newTabs = group.tabs.map(t => t.id === tabId ? { ...t, zoom: clampedZoom } : t);
+                return windows.map(g => g.id === groupId ? { ...g, tabs: newTabs } : g);
+            }
+            return windows;
+        });
+    };
+
+    const resetTabZoom = (groupId, tabId) => {
+        const globalSettings = get(desktopSettings);
+        const defaultZoom = globalSettings.defaultZoom || 1.0;
+        updateTabProps(groupId, tabId, { zoom: defaultZoom });
     };
 
     const toggleMinimize = (id) => {
@@ -400,6 +427,8 @@ function createWindowManager() {
         setActiveTab,
         updateWindowProps,
         updateTabProps,
+        changeTabZoom,
+        resetTabZoom,
         toggleMinimize,
         toggleMaximize,
         closeAllWindows,

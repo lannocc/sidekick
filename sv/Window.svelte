@@ -513,6 +513,10 @@
                 <button class="menu-item" on:click={() => { if (activeComponentInstance?.setMode) activeComponentInstance.setMode('raw'); showOptionsMenu = false; }}>Raw</button>
             {/if}
             <div class="menu-separator"></div>
+            <button class="menu-item" on:click={() => { windows.changeTabZoom(id, activeTabId, 0.1); showOptionsMenu = false; }}>Zoom In</button>
+            <button class="menu-item" on:click={() => { windows.changeTabZoom(id, activeTabId, -0.1); showOptionsMenu = false; }}>Zoom Out</button>
+            <button class="menu-item" on:click={() => { windows.resetTabZoom(id, activeTabId); showOptionsMenu = false; }}>Reset Zoom</button>
+            <div class="menu-separator"></div>
             <button class="menu-item" on:click={() => { windows.toggleMinimize(id); showOptionsMenu = false; }}>Minimize</button>
             <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>Close</button>
         </div>

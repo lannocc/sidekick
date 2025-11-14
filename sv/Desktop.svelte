@@ -82,6 +82,15 @@
         }
     }
 
+    function handleContentWheel(event, tab) {
+        if (event.ctrlKey || event.altKey) {
+            event.preventDefault();
+            const zoomStep = 0.1;
+            const delta = event.deltaY < 0 ? zoomStep : -zoomStep;
+            windows.changeTabZoom(tab.group.id, tab.id, delta);
+        }
+    }
+
 
     function handleRightClick(event) {
         if (get(dashActive)) return; // Don't show if dash is active
@@ -265,9 +274,11 @@
             >
                 <div
                     class="content-area-container"
+                    style:zoom={tab.zoom || 1.0}
                     on:mouseenter={() => handleContentMouseEnter(group)}
                     on:mouseleave={() => handleContentMouseLeave(group)}
                     on:mousedown={e => handleContentMouseDown(e, group)}
+                    on:wheel={e => handleContentWheel(e, tab)}
                 >
                     <svelte:component
                         bind:this={componentInstances[tab.id]}

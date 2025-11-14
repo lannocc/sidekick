@@ -15,6 +15,7 @@ function loadSettings() {
         ioskUsername: 'root',
         chimeType: 'beep.wav', // filename from assets, 'none', or 'custom'
         chimeUrl: '',          // URL for custom chime
+        defaultZoom: 1.0,
     };
 
     try {
