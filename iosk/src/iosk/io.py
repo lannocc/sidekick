@@ -48,6 +48,10 @@ class Context:
         self.aliases = {} # Aliases for the current user/session
         self.history = [] # Command history for the current session
 
+        # Add color tracking
+        self.user_colors = {} # How this user sees other users' colors
+        self.color_idx = 0    # Index for assigning next default color
+
         self.caching_token_total = 0
         self.full_token_total = 0
         self.initial_static_tokens = 0
@@ -237,4 +241,3 @@ class Capture:
             file = open(file_path, 'a')
             cls.logs[file_path] = file
             return file
-

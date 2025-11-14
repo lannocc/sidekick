@@ -5,11 +5,12 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, newIoskFileExplorer } from './windows.js';
-    import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
+    import { windows, newIoskFileExplorer, newIoskPrivateChat } from './windows.js';
+    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages } from './ioskEvents.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
 
     export let id; // Unique ID from the window manager
+    export let groupId;
     export let title;
     export let isActive;
     export let componentName;
@@ -19,6 +20,12 @@
     export let wsUrl = undefined;
     export let username = undefined;
 
+    // Local values for the connection form inputs to avoid direct prop binding issues
+    let localWsUrl, localUsername;
+
+    let settings;
+    desktopSettings.subscribe(value => settings = value);
+
     // --- State for Connection & Room Awareness ---
     let isConnected = false;
     let roomName = null;
@@ -27,6 +34,7 @@
     let roomParticipants = [];
     let availableRooms = [];
     let showRoomsMenu = false;
+    let userColors = {}; // New state for user color mapping
 
     // --- State for Attach Menu ---
     let showAttachMenu = false;
@@ -37,6 +45,15 @@
     let deviceBrowsePath = '/dev';
     let isLoadingDevices = false;
     let isLoadingUsers = false;
+
+    // --- State for User Context Menu ---
+    let userContextMenu = {
+        visible: false,
+        x: 0,
+        y: 0,
+        user: null,
+        showColorPicker: false
+    };
 
     // --- Internal Component State ---
     let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
@@ -64,9 +81,61 @@
 
     // --- Event bus subscriptions ---
     let requestUnsubscribe;
+    let commandsUnsubscribe;
 
     // --- Auto-scrolling logic ---
     let shouldScroll = true;
+
+    // --- Color Handling ---
+    const colorNameToCss = {
+        'black': 'var(--ansi-black)', 'red': 'var(--ansi-red)', 'green': 'var(--ansi-green)', 'yellow': 'var(--ansi-yellow)',
+        'blue': 'var(--ansi-blue)', 'magenta': 'var(--ansi-magenta)', 'cyan': 'var(--ansi-cyan)', 'white': 'var(--ansi-white)',
+        'bright_black': 'var(--ansi-bright-black)', 'bright_red': 'var(--ansi-bright-red)', 'bright_green': 'var(--ansi-bright-green)',
+        'bright_yellow': 'var(--ansi-bright-yellow)', 'bright_blue': 'var(--ansi-bright-blue)', 'bright_magenta': 'var(--ansi-bright-magenta)',
+        'bright_cyan': 'var(--ansi-bright-cyan)', 'bright_white': 'var(--ansi-bright-white)',
+    };
+
+    const ansiCodeToCssVar = {
+        '30': 'var(--ansi-black)', '31': 'var(--ansi-red)', '32': 'var(--ansi-green)', '33': 'var(--ansi-yellow)',
+        '34': 'var(--ansi-blue)', '35': 'var(--ansi-magenta)', '36': 'var(--ansi-cyan)', '37': 'var(--ansi-white)',
+        '90': 'var(--ansi-bright-black)', '91': 'var(--ansi-bright-red)', '92': 'var(--ansi-bright-green)', '93': 'var(--ansi-bright-yellow)',
+        '94': 'var(--ansi-bright-blue)', '95': 'var(--ansi-bright-magenta)', '96': 'var(--ansi-bright-cyan)', '97': 'var(--ansi-bright-white)',
+    };
+
+    function parseAnsi(text) {
+        if (typeof text !== 'string') return '';
+        const ansiRegex = /\u001b\[(\d+)m/g;
+        let openSpan = false;
+        
+        let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        let html = sanitizedText.replace(ansiRegex, (match, code) => {
+            let newHtml = '';
+            if (openSpan) {
+                newHtml += '</span>';
+                openSpan = false;
+            }
+            if (code === '0') {
+                // Reset code, just close the span
+            } else if (ansiCodeToCssVar[code]) {
+                newHtml += `<span style="color: ${ansiCodeToCssVar[code]}">`;
+                openSpan = true;
+            }
+            return newHtml;
+        });
+
+        if (openSpan) {
+            html += '</span>';
+        }
+        return html;
+    }
+
+    function stripAnsi(text) {
+        if (typeof text !== 'string') return '';
+        const ansiRegex = /\u001b\[\d+m/g;
+        return text.replace(ansiRegex, '');
+    }
+
 
     // --- Lifecycle and Reactive Statements ---
     afterUpdate(() => {
@@ -81,8 +150,6 @@
     }
 
     function handleClickOnTerminal() {
-        // Only focus the input if the user is not selecting text.
-        // A collapsed selection means the user just clicked, not dragged to select.
         if (window.getSelection().isCollapsed) {
             focusInput();
         }
@@ -97,23 +164,21 @@
             showAttachMenu = false;
             focusInput();
         }
+        if (userContextMenu.visible && !event.target.closest('.user-context-menu')) {
+            closeUserContextMenu();
+            focusInput();
+        }
     }
 
     onMount(() => {
-        // Initialize from settings if not provided via props (from layout restore)
-        if (wsUrl === undefined) {
-            wsUrl = get(desktopSettings).ioskUrl;
-        }
-        if (username === undefined) {
-            username = get(desktopSettings).ioskUsername;
-        }
+        // Initialize local input values from passed-in props
+        localWsUrl = wsUrl;
+        localUsername = username;
 
-        // Automatically focus the connection URL input on mount
         if (!isConnected) {
             const urlInput = document.querySelector(`#url-input-${id}`);
             urlInput?.focus();
         }
-        // Listen for file system requests from explorer windows
         requestUnsubscribe = fileSystemRequests.subscribe(request => {
             if (request && request.consoleId === id && ws && ws.readyState === WebSocket.OPEN) {
                 const payload = { ...request.command };
@@ -123,23 +188,30 @@
                 ws.send(JSON.stringify(payload));
             }
         });
+        commandsUnsubscribe = consoleCommands.subscribe(cmd => {
+            if (cmd && cmd.consoleId === id) {
+                sendSystemCommand(cmd.command);
+            }
+        });
         window.addEventListener('click', handleGlobalClick);
     });
 
     onDestroy(() => {
         if (ws) {
-            ws.onclose = null; // prevent onclose handler from running on manual close
+            ws.onclose = null; 
             ws.close();
         }
         if (requestUnsubscribe) {
             requestUnsubscribe();
         }
+        if (commandsUnsubscribe) {
+            commandsUnsubscribe();
+        }
         window.removeEventListener('click', handleGlobalClick);
     });
 
-    // Reactive statements to update the window store with component state
-    $: if (id !== undefined) {
-        windows.updateWindowProps(id, {
+    $: if (id !== undefined && groupId !== undefined) {
+        windows.updateTabProps(groupId, id, {
             isConsoleConnected: isConnected,
            consoleConnection: isConnected ? { url: wsUrl, user: username } : null,
            wsUrl,
@@ -147,23 +219,84 @@
         });
     }
 
-    // Reactive statement to update the window title based on connection and room state
-    $: if (id !== undefined && title !== undefined) {
+    $: if (groupId !== undefined && id !== undefined && title !== undefined) {
         let newTitle;
         if (isConnected) {
             const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
             const userAtHost = `${username}@${host}`;
-            newTitle = roomName ? `[${roomName}] ${userAtHost}` : userAtHost;
+            newTitle = roomName ? `[${stripAnsi(roomName)}] ${userAtHost}` : userAtHost;
         } else {
-            // Let onclose/onerror handlers manage the disconnected title.
-            // This prevents this block from overriding an error state title.
             newTitle = title;
         }
         if (newTitle !== title) {
-            windows.updateWindowProps(id, { title: newTitle });
+            windows.updateTabProps(groupId, id, { title: newTitle });
         }
     }
 
+    // --- User Context Menu Functions ---
+    function handleUserRightClick(event, participant) {
+        event.preventDefault();
+        event.stopPropagation();
+        // Close other menus that might be open
+        showRoomsMenu = false;
+        showAttachMenu = false;
+
+        userContextMenu = {
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+            user: participant,
+            showColorPicker: false
+        };
+    }
+
+    function closeUserContextMenu() {
+        userContextMenu = { visible: false, x: 0, y: 0, user: null, showColorPicker: false };
+    }
+
+    function sendSystemCommand(systemCommand) {
+        if (!systemCommand.trim()) return;
+
+        // This command is programmatically sent, but we display it as if typed for user feedback.
+        // It is not added to command history.
+        output = [...output, {type: 'prompt', content: currentPrompt + systemCommand}];
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            const message = { type: 'client_input', data: systemCommand + '\n' };
+            ws.send(JSON.stringify(message));
+        } else {
+            output = [...output, {type: 'output', content: `[Error] Not connected.`}];
+        }
+        shouldScroll = true;
+    }
+    
+    function openPrivateChat(remoteParticipant) {
+        if (!remoteParticipant) return;
+        // Don't open chat with self.
+        const remoteUsername = remoteParticipant.split('.')[0];
+        if (remoteUsername === username) return;
+
+        newIoskPrivateChat(id, username, remoteParticipant);
+        closeUserContextMenu();
+        focusInput();
+    }
+
+    function setColorForUser(colorName) {
+        if (!userContextMenu.user) return;
+        const userNameOnly = userContextMenu.user.split('.')[0];
+        const commandToRun = `$ color -u ${userNameOnly} ${colorName}`;
+        sendSystemCommand(commandToRun);
+        closeUserContextMenu();
+        focusInput();
+    }
+
+    function handleDetachUser() {
+        if (!userContextMenu.user) return;
+        const commandToRun = `$ detach ${userContextMenu.user}`;
+        sendSystemCommand(commandToRun);
+        closeUserContextMenu();
+        focusInput();
+    }
 
     // --- Functions ---
     export function showSettingsDialog() {
@@ -171,7 +304,6 @@
         settingsUrl = wsUrl;
         settingsUsername = username;
 
-        // Populate window settings for the modal
         const allSettings = get(windowSettings);
         const currentSettings = allSettings[componentName] || { positioning: 'auto' };
         windowSettingsForModal = {
@@ -187,16 +319,24 @@
     }
 
     function handleSaveSettings() {
-        // Save connection settings
         wsUrl = settingsUrl;
         username = settingsUsername;
-        desktopSettings.update(settings => ({ ...settings, ioskUrl: wsUrl, ioskUsername: username }));
-        
-        // Save window settings
-        windowSettings.update(allSettings => ({
-            ...allSettings,
-            [componentName]: windowSettingsForModal
-        }));
+        // Also update the local values for the connection form to keep them in sync
+        localWsUrl = settingsUrl;
+        localUsername = settingsUsername;
+
+        windowSettings.update(allSettings => {
+            const existingSettings = allSettings[componentName] || {};
+            return {
+                ...allSettings,
+                [componentName]: {
+                    ...existingSettings,
+                    ...windowSettingsForModal,
+                    defaultUrl: settingsUrl,
+                    defaultUsername: settingsUsername
+                }
+            };
+        });
 
         showSettings = false;
     }
@@ -221,6 +361,10 @@
     }
 
     export async function connect() {
+        // Sync local input values back to the main props before connecting
+        wsUrl = localWsUrl;
+        username = localUsername;
+
         if (ws) {
             output = [...output, {type: 'output', content: `Already connected or connecting.`}];
             return;
@@ -244,22 +388,82 @@
                         const jsonData = event.data.substring(PREAMBLE.length);
                         const data = JSON.parse(jsonData);
 
-                        if (data.type === 'state_info' || data.type === 'room_state_update') {
+                        if (data.type === 'private_message') {
+                            // This is a new dedicated DM message.
+                            // The backend sends this *in addition* to the regular output
+                            // for console history, so we just process this for the chat window
+                            // and play the bell, but don't add to the console `output` array here.
+                            privateMessages.set({
+                                from: stripAnsi(data.from),
+                                to: data.to,
+                                content: data.content,
+                                timestamp: Date.now()
+                            });
+
+                            // A user can receive a DM confirmation they sent. Don't open a window for that.
+                            const remoteUsername = stripAnsi(data.from).split('.')[0];
+                            if (remoteUsername !== username) {
+                                newIoskPrivateChat(id, username, stripAnsi(data.from));
+                            }
+
+                            // Trigger a bell sound/flash.
+                            handleBell();
+                        } else if (data.type === 'state_info' || data.type === 'room_state_update') {
                             roomName = data.roomName || null;
                             roomTopic = data.roomTopic || '';
                             roomParticipants = data.participants || [];
                             availableRooms = data.availableRooms || [];
+                            if (data.userColors) {
+                                userColors = data.userColors;
+                            }
                             if (data.type === 'state_info') {
                                 motd = data.motd || '';
                             }
-
+                        } else if (data.type === 'user_colors_update') {
+                            userColors = data.colors;
                         } else if (data.output || data.prompt) {
                             if (data.output) {
+                                const bellCode = "\u0007";
+                                let outputToProcess = data.output;
+                                let hasRegularBell = false;
+
+                                if (outputToProcess.includes(bellCode)) {
+                                    const dmRegex = new RegExp(`^${bellCode}\\s*\\n\\[\\s*(.*?)\\s*->\\s*me.*?\\]\\s*<<\\s*([\\s\\S]*)`, 'm');
+                                    let match;
+                                    // Loop in case there are multiple DMs in one output block
+                                    while ((match = dmRegex.exec(outputToProcess)) !== null) {
+                                        const fromUser = match[1].trim();
+                                        const content = match[2].trim();
+                                        
+                                        // A user can receive a DM confirmation from the server they sent, don't open a window for that.
+                                        const remoteUsername = stripAnsi(fromUser).split('.')[0];
+                                        if (remoteUsername !== username) {
+                                            newIoskPrivateChat(id, username, stripAnsi(fromUser));
+                                            privateMessages.set({
+                                                from: stripAnsi(fromUser),
+                                                to: username,
+                                                content: content,
+                                                timestamp: Date.now()
+                                            });
+                                        }
+                                        // Remove the bell from the matched DM so it doesn't trigger a sound, but leave the message for console history.
+                                        outputToProcess = outputToProcess.replace(match[0], match[0].substring(1));
+                                    }
+                                }
+
+                                // Now check if any other, non-DM bells remain.
+                                if (outputToProcess.includes(bellCode)) {
+                                    handleBell();
+                                    outputToProcess = outputToProcess.replace(new RegExp(bellCode, 'g'), '');
+                                }
+
+                                let cleanOutput = outputToProcess;
+
                                 const clearScreenCode = "\x1b[H\x1b[2J";
-                                if (data.output === clearScreenCode) {
+                                if (cleanOutput === clearScreenCode) {
                                     output = [];
-                                } else {
-                                    const lines = data.output.split('\n');
+                                } else if (cleanOutput) {
+                                    const lines = cleanOutput.split('\n');
                                     output = [...output, ...lines.map(line => ({type: 'output', content: line}))];
                                 }
                             }
@@ -279,19 +483,17 @@
                                 attachUsers = (data.listing || []).filter(item => item.type === 'dir');
                                 isLoadingUsers = false;
                             } else {
-                                // This is a response for a File Explorer, not us.
                                 fileSystemResponses.set({
                                     consoleId: id,
-                                    requesterId: data.requesterId, // Pass this through
+                                    requesterId: data.requesterId,
                                     data: data,
                                     timestamp: Date.now()
                                 });
                             }
                         } else if (data.type === 'fs_read_response') {
-                            // This is a response for a File Viewer.
                             fileSystemResponses.set({
                                 consoleId: id,
-                                requesterId: data.requesterId, // Pass this through
+                                requesterId: data.requesterId,
                                 data: data,
                                 timestamp: Date.now()
                             });
@@ -306,10 +508,10 @@
             ws.onclose = async () => {
                 isConnected = false;
                 ws = null;
-                roomName = null; roomTopic = ''; motd = ''; roomParticipants = []; availableRooms = [];
+                roomName = null; roomTopic = ''; motd = ''; roomParticipants = []; availableRooms = []; userColors = {};
                 output = [...output, {type: 'output', content: `Connection closed.`}];
                 const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
-                windows.updateWindowProps(id, { title: `Disconnected - ${username}@${host}` });
+                windows.updateTabProps(groupId, id, { title: `Disconnected - ${username}@${host}` });
                 if (isActive) {
                     await tick();
                     const urlInput = document.querySelector(`#url-input-${id}`);
@@ -322,7 +524,7 @@
                 if (ws) { ws.close(); ws = null; }
                 output = [...output, {type: 'output', content: `[Error] Could not establish connection to ${wsUrl}.`}];
                 const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
-                windows.updateWindowProps(id, { title: `[Error] ${username}@${host}` });
+                windows.updateTabProps(groupId, id, { title: `[Error] ${username}@${host}` });
             };
 
         } catch (e) {
@@ -454,9 +656,49 @@
         showAttachMenu = false;
         focusInput();
     }
+
+    function handleBell() {
+        // 1. Play sound
+        if (settings?.chimeType && settings.chimeType !== 'none') {
+            let src;
+            if (settings.chimeType === 'custom') {
+                src = settings.chimeUrl;
+            } else {
+                src = `/assets/${settings.chimeType}`;
+            }
+
+            if (src) {
+                try {
+                    new Audio(src).play().catch(e => console.warn("Audio bell failed to play:", e));
+                } catch (e) { console.error("Failed to create audio element for bell:", e); }
+            }
+        }
+
+        // 2. Flash window
+        windows.updateWindowProps(id, { isFlashing: true });
+        setTimeout(() => windows.updateWindowProps(id, { isFlashing: false }), 500);
+    }
 </script>
 
 <style>
+    :global(:root) { /* Define ANSI colors so they can be themed */
+        --ansi-black: #2c3e50;
+        --ansi-red: #c0392b;
+        --ansi-green: #27ae60;
+        --ansi-yellow: #f1c40f;
+        --ansi-blue: #2980b9;
+        --ansi-magenta: #8e44ad;
+        --ansi-cyan: #16a085;
+        --ansi-white: #bdc3c7;
+        --ansi-bright-black: #95a5a6;
+        --ansi-bright-red: #e74c3c;
+        --ansi-bright-green: #2ecc71;
+        --ansi-bright-yellow: #f39c12;
+        --ansi-bright-blue: #3498db;
+        --ansi-bright-magenta: #9b59b6;
+        --ansi-bright-cyan: #1abc9c;
+        --ansi-bright-white: #ecf0f1;
+    }
     .console-container { display: flex; flex-direction: column; height: 100%; background-color: var(--console-bg); color: var(--console-text); font-family: 'Courier New', Courier, monospace; font-size: 14px; position: relative; }
     .connect-form { display: flex; gap: 8px; padding: 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); flex-shrink: 0; align-items: center; }
     .connect-form input { flex-grow: 1; background-color: var(--window-bg); color: var(--title-bar-text); border: 1px solid var(--border-color); padding: 4px; }
@@ -486,7 +728,8 @@
     .users-panel { width: 180px; flex-shrink: 0; border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
     .panel-header { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); font-weight: bold; text-align: center; }
     .user-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
-    .user-item { padding: 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-item { padding: 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; border-radius: 2px; }
+    .user-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
     .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
     .modal-content h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
@@ -526,19 +769,52 @@
     .form-grid label { display: flex; align-items: center; gap: 5px; }
     .form-grid input { width: 80px; }
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
+
+    /* User Context Menu Styles */
+    .user-context-menu {
+        position: fixed;
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        z-index: 200; /* Above console content */
+        display: flex;
+        flex-direction: column;
+        padding: 4px;
+        min-width: 120px;
+    }
+    .color-picker-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4px;
+        padding: 4px;
+    }
+    .color-swatch {
+        width: 24px;
+        height: 24px;
+        border: 1px solid var(--border-color);
+        border-radius: 3px;
+        cursor: pointer;
+        background: none; /* remove default button background */
+    }
+    .color-swatch:hover {
+        border-color: var(--taskbar-button-hover-bg);
+        transform: scale(1.1);
+    }
 </style>
 
 <div class="console-container">
     <form class="connect-form" on:submit|preventDefault={connect}>
         {#if !isConnected}
-            <input id="url-input-{id}" type="text" bind:value={wsUrl} placeholder="ws://host:port">
-            <input type="text" bind:value={username} placeholder="username">
+            <input id="url-input-{id}" type="text" bind:value={localWsUrl} placeholder="ws://host:port">
+            <input type="text" bind:value={localUsername} placeholder="username">
+
             <button class="connect-button" type="submit">Connect</button>
         {:else}
             <button type="button" class="header-button disconnect-button" on:click={disconnect}>Disconnect</button>
             <button type="button" class="header-button room-button" bind:this={roomsButton} on:click|stopPropagation={toggleRoomsMenu} title="Available Rooms">Rooms</button>
-            <div class="header-info" title={roomTopic || motd}>
-                {roomTopic || motd}
+            <div class="header-info" title={stripAnsi(roomTopic || motd)}>
+                {@html parseAnsi(roomTopic || motd)}
             </div>
             <button type="button" class="header-button files-button" on:click={() => { newIoskFileExplorer(id, title); focusInput(); }}>Files</button>
             <button type="button" class="header-button attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
@@ -627,7 +903,7 @@
             <div class="terminal" bind:this={terminalEl} on:scroll={() => shouldScroll = (terminalEl.scrollTop + terminalEl.clientHeight >= terminalEl.scrollHeight - 10)} on:click={handleClickOnTerminal}>
                 {#each output as line}
                     <div class="terminal-line" class:prompt={line.type === 'prompt'}>
-                        {line.content}
+                        {@html parseAnsi(line.content)}
                     </div>
                 {/each}
             </div>
@@ -644,7 +920,16 @@
             <div class="panel-header">Users</div>
             <div class="user-list">
                 {#each roomParticipants as participant (participant)}
-                    <div class="user-item" title={participant}>{participant}</div>
+                    {@const userName = participant.includes('.') ? participant.split('.')[0] : participant}
+                    <div
+                        class="user-item"
+                        title={participant}
+                        style="color: {colorNameToCss[userColors[userName]] || 'inherit'}"
+                        on:contextmenu={(e) => handleUserRightClick(e, participant)}
+                        on:click={() => openPrivateChat(participant)}
+                    >
+                        {participant}
+                    </div>
                 {/each}
             </div>
         </div>
@@ -685,6 +970,41 @@
                     <button class="save-button" on:click={handleSaveSettings}>Save Defaults</button>
                 </div>
             </div>
+        </div>
+    {/if}
+
+    {#if userContextMenu.visible}
+        <div
+            class="user-context-menu"
+            style="top: {userContextMenu.y}px; left: {userContextMenu.x}px;"
+            on:click|stopPropagation
+        >
+            {#if userContextMenu.showColorPicker}
+                <div class="color-picker-grid">
+                    {#each Object.entries(colorNameToCss) as [name, cssVar] (name)}
+                        <button
+                            class="color-swatch"
+                            style="background-color: {cssVar}"
+                            title={name.replace(/_/g, ' ')}
+                            on:click={() => setColorForUser(name)}
+                        ></button>
+                    {/each}
+                </div>
+                <div class="menu-separator"></div>
+                <button class="menu-item" on:click={() => userContextMenu.showColorPicker = false}>
+                    &larr; Back
+                </button>
+            {:else}
+                <button class="menu-item" on:click={() => openPrivateChat(userContextMenu.user)}>
+                    Private Chat
+                </button>
+                <div class="menu-separator"></div>
+                <button class="menu-item" on:click={() => userContextMenu.showColorPicker = true}> Set Color... </button>
+                <div class="menu-separator"></div>
+                <button class="menu-item close-item" on:click={handleDetachUser}>
+                    Detach
+                </button>
+            {/if}
         </div>
     {/if}
 </div>

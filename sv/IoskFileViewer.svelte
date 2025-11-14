@@ -9,6 +9,7 @@
     import { windows } from './windows.js';
 
     export let id; // window id
+    export let groupId;
     export let consoleId;
     export let path;
     export let consoleConnection = null; // Passed during Dash restore
@@ -38,17 +39,17 @@
 
         // If we don't have a consoleId, try to find one
         if (!consoleId) {
-            const compatibleConsole = $windows.find(w =>
-                w.componentName === 'IoskConsole' &&
-                w.isConsoleConnected &&
-                w.consoleConnection &&
-                w.consoleConnection.url === consoleConnection.url &&
-                w.consoleConnection.user === consoleConnection.user
+            const compatibleConsoleTab = $windows.flatMap(w => w.tabs).find(t =>
+                t.componentName === 'IoskConsole' &&
+                t.isConsoleConnected &&
+                t.consoleConnection &&
+                t.consoleConnection.url === consoleConnection.url &&
+                t.consoleConnection.user === consoleConnection.user
             );
 
-            if (compatibleConsole) {
+            if (compatibleConsoleTab) {
                 // Found one!
-                consoleId = compatibleConsole.id;
+                consoleId = compatibleConsoleTab.id;
                 requestFile(); // This will set isLoading=true
             } else {
                 // Still no connection.
@@ -139,10 +140,10 @@
     $: isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(fileExtension);
     $: isMarkdown = ['md', 'markdown'].includes(fileExtension);
     $: canRender = (isImage && isBinary) || (isMarkdown && !isBinary);
-    $: if (id !== undefined) {
+    $: if (id !== undefined && groupId !== undefined) {
         // Update the window store with properties that need to be saved in a Dash layout
         // Also update consoleId in case it was found dynamically.
-        windows.updateWindowProps(id, { canRender, mode, consoleId });
+        windows.updateTabProps(groupId, id, { canRender, mode, consoleId });
     }
 
     export function setMode(newMode) {

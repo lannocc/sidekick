@@ -24,6 +24,7 @@ import shutil
 import traceback
 from io import StringIO
 import random
+import re
 
 
 # Added for the process management proposal
@@ -39,6 +40,18 @@ class Process:
 
 class IOSK:
     BOOT = 0 # current boot number
+
+    ANSI_RESET = '\033[0m'
+    ANSI_BOLD = '\033[1m'
+    BRIGHT_WHITE = '\033[97m'
+    USER_COLORS = [
+        '\033[96m',  # Bright Cyan
+        '\033[92m',  # Bright Green
+        '\033[93m',  # Bright Yellow
+        '\033[94m',  # Bright Blue
+        '\033[95m',  # Bright Magenta
+        '\033[91m',  # Bright Red
+    ]
 
     CONSOLE_DEV = '/dev/console'
     BOOT_COUNT = '/var/cache/boot'
@@ -84,6 +97,12 @@ class IOSK:
         # Added for token_rate proposal
         self.device_tpm_trackers = {}
         self.device_cooldowns = {}
+
+    def _get_next_color(self, io: Context) -> str:
+        """Cycles through the USER_COLORS list to pick a color."""
+        color = self.USER_COLORS[io.color_idx % len(self.USER_COLORS)]
+        io.color_idx += 1
+        return color
 
     ###
     ### SYSTEM LIFECYCLE
@@ -398,6 +417,21 @@ class IOSK:
         io.bot = device != self.CONSOLE_DEV
         self.users[user] = io
 
+        # --- Color Initialization ---
+        if not io.bot:
+            # This user is interactive, set up their color map.
+            io.user_colors[user] = self.BRIGHT_WHITE
+
+            # Assign colors for all other users (including bots) in this new user's map.
+            for other_user in self.users:
+                if other_user != user:
+                    io.user_colors[other_user] = self._get_next_color(io)
+
+            # Update all other interactive users' maps to include this new user.
+            for other_user, other_io in self.users.items():
+                if other_user != user and not other_io.bot:
+                    other_io.user_colors[user] = self._get_next_color(other_io)
+
         # --- CWD and Home Directory Initialization ---
         if user == 'root':
             home_dir_virtual = '/root'
@@ -449,6 +483,7 @@ class IOSK:
 
         # Announce user login to network peers
         if self.port:
+            await self.port.broadcast_color_updates()
             await self.port.broadcast_to_peers({
                 'type': 'user_update',
                 'action': 'login',
@@ -545,6 +580,11 @@ class IOSK:
         user_is_network_client = io.dev.startswith('network:')
         del self.users[user_to_logout]
 
+        # --- Color Cleanup ---
+        for remaining_io in self.users.values():
+            if user_to_logout in remaining_io.user_colors:
+                del remaining_io.user_colors[user_to_logout]
+
         if disconnect:
             if self.chat: await self.chat.send(user_to_logout, disconnect, sys=True)
             else: await io.print(disconnect)
@@ -556,6 +596,7 @@ class IOSK:
 
         # Announce user logout to network peers
         if self.port:
+            await self.port.broadcast_color_updates()
             await self.port.broadcast_to_peers({
                 'type': 'user_update',
                 'action': 'logout',
@@ -572,6 +613,11 @@ class IOSK:
                 await self.port.disconnect_client(user_to_logout)
 
         return True
+
+    async def broadcast_color_updates(self):
+        """Triggers the PortManager to send color map updates to all clients."""
+        if self.port:
+            await self.port.broadcast_color_updates()
 
     async def login_network_user(self, username, websocket):
         """Called by PortManager to log in a user from a network client."""
@@ -598,6 +644,16 @@ class IOSK:
         io.bot = False
         io.network_input_queue = asyncio.Queue()
         self.users[username] = io
+
+        # --- Color Initialization (for network user) ---
+        if not io.bot:
+            io.user_colors[username] = self.BRIGHT_WHITE
+            for other_user in self.users:
+                if other_user != username:
+                    io.user_colors[other_user] = self._get_next_color(io)
+            for other_user, other_io in self.users.items():
+                if other_user != username and not other_io.bot:
+                    other_io.user_colors[username] = self._get_next_color(other_io)
 
         if username == 'root':
             home_dir_virtual = '/root'
@@ -634,6 +690,7 @@ class IOSK:
         self.network_users[user_addr] = {}
 
         if self.port:
+            await self.port.broadcast_color_updates()
             await self.port.broadcast_to_peers({
                 'type': 'user_update',
                 'action': 'login',
@@ -975,7 +1032,45 @@ class IOSK:
         """Send data to device."""
         if dev.startswith('network:'):
             if self.port:
-                await self.port.send_to_client(io.user, data)
+                if data.startswith('\a'):
+                    try:
+                        # DM format: \a\n[SENDER -> me TIMESTAMP] << CONTENT
+                        lines = data.split('<<', 1)
+                        header = lines[0]
+                        content = lines[1].strip() if len(lines) > 1 else ""
+
+                        # The ' -> ' part is not colored, making it a safe split point.
+                        header_inside_brackets = header.split('[', 1)[1].rsplit(']', 1)[0]
+                        sender_part, rest_of_header = header_inside_brackets.split(' -> ', 1)
+
+                        # To verify, we strip ANSI codes from the part after ' -> '.
+                        ansi_escape_pattern = re.compile(r'\x1b\[\d+m')
+                        cleaned_rest = ansi_escape_pattern.sub('', rest_of_header.strip())
+
+                        if cleaned_rest.startswith('me '):
+                            from_user = sender_part.strip()
+                        else:
+                            raise ValueError("Could not confirm 'me' in DM header")
+
+                        # Send structured DM payload to the client
+                        await self.port.send_private_message_to_client(
+                            to_user=io.user,
+                            from_user=from_user,
+                            content=content
+                        )
+                        # Also send the formatted message to the console for history,
+                        # but without the bell character that triggers special handling.
+                        await self.port.send_to_client(io.user, data[1:])
+                        return # We are done with this data.
+
+                    except Exception as e:
+                        # If parsing fails for any reason, fall back to old behavior
+                        # but log the error to the system log for debugging.
+                        await self.system.error(f"!! DM parsing failed in kernel: {e}")
+                        await self.port.send_to_client(io.user, data)
+                        return
+                else:
+                    await self.port.send_to_client(io.user, data)
             return
 
         if not dev.startswith('/dev/'):

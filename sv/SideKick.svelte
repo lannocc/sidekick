@@ -11,6 +11,26 @@
     import { get } from 'svelte/store';
 
     function handleKeyDown(e) {
+        // Tab switching with Alt/Ctrl + Number
+        const numericKey = parseInt(e.key, 10);
+        if ((e.altKey || e.ctrlKey) && !e.metaKey && !isNaN(numericKey) && numericKey >= 1 && numericKey <= 9) {
+            e.preventDefault();
+
+            const allWindows = get(windows);
+            const activeWindow = allWindows.find(w => w.isActive && !w.minimized);
+
+            if (activeWindow && activeWindow.tabs.length > 1) {
+                const tabIndex = numericKey - 1; // '1' corresponds to index 0
+
+                // Check if the tab index is valid
+                if (tabIndex < activeWindow.tabs.length) {
+                    const tabToActivate = activeWindow.tabs[tabIndex];
+                    windows.setActiveTab(activeWindow.id, tabToActivate.id);
+                }
+            }
+        }
+
+
         // Check for Meta/Alt + ` or Meta/Alt + ~ (Shift + `)
         if ((e.metaKey || e.altKey) && (e.key === '`' || e.key === '~')) {
             e.preventDefault();
@@ -81,7 +101,7 @@
     }
 </style>
 
-<div class="sk-container">
+<div class="sk-container" on:contextmenu|preventDefault>
     <Taskbar />
     <Desktop />
 </div>

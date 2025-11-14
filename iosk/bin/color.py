@@ -1,0 +1,85 @@
+import argparse
+
+COLOR_MAP = {
+    'black': '\033[30m', 'red': '\033[31m', 'green': '\033[32m', 'yellow': '\033[33m',
+    'blue': '\033[34m', 'magenta': '\033[35m', 'cyan': '\033[36m', 'white': '\033[37m',
+    'bright_black': '\033[90m', 'bright_red': '\033[91m', 'bright_green': '\033[92m',
+    'bright_yellow': '\033[93m', 'bright_blue': '\033[94m', 'bright_magenta': '\033[95m',
+    'bright_cyan': '\033[96m', 'bright_white': '\033[97m',
+}
+REVERSE_COLOR_MAP = {v: k for k, v in COLOR_MAP.items()}
+RESET_CODE = '\033[0m'
+
+async def iocall(io, argv):
+    """View or set user colors for chat messages.
+
+    Usage: color [--help] [-u USER] [COLOR]
+
+    This command manages the colors you see for users in chat.
+    AI agents do not use colors.
+
+    Arguments:
+      COLOR        The name of the color to set. If omitted, shows the
+                   current color. See available colors below.
+
+    Options:
+      -u, --user USER  Target another user. If specified, you will view or
+                       set the color for that specific user.
+      --help           Displays this help message.
+
+    Available Colors:
+    black, red, green, yellow, blue, magenta, cyan, white
+    bright_black, bright_red, bright_green, bright_yellow,
+    bright_blue, bright_magenta, bright_cyan, bright_white
+    """
+    if io.bot:
+        await io.error("!! color: this command is not available for your device.")
+        return False
+
+    parser = argparse.ArgumentParser(prog='color', description='View or set user colors.', add_help=False)
+    parser.add_argument('-u', '--user', help='The target user.')
+    parser.add_argument('color', nargs='?', help='The color to set.')
+    parser.add_argument('--help', action='store_true', help='Show help message.')
+
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit:
+        # argparse tries to exit on error, catch it
+        await io.error("!! color: invalid arguments. See `color --help`.")
+        return False
+
+    if args.help:
+        await io.print(iocall.__doc__)
+        return True
+
+    target_user = args.user if args.user else io.user
+    new_color_name = args.color
+
+    # Check if the target user is known
+    if target_user not in io.user_colors:
+        await io.error(f"!! color: user '{target_user}' not found or is not a color-enabled user.")
+        return False
+
+    if new_color_name:
+        # Set a new color
+        if new_color_name not in COLOR_MAP:
+            await io.error(f"!! color: invalid color '{new_color_name}'. See `color --help` for available colors.")
+            return False
+        
+        color_code = COLOR_MAP[new_color_name]
+        io.user_colors[target_user] = color_code
+        display_target = 'Your color' if target_user == io.user else f"Color for {target_user}"
+        await io.print(f":: {display_target} set to {color_code}{new_color_name}{RESET_CODE}")
+        
+        # Broadcast the color change to network clients
+        if io.os.port:
+            await io.os.broadcast_color_updates()
+            
+        return True
+    else:
+        # View the current color
+        current_code = io.user_colors.get(target_user, '')
+        current_name = REVERSE_COLOR_MAP.get(current_code, 'none')
+        display_target = 'Your color is' if target_user == io.user else f"Color for {target_user} is"
+        await io.print(f":: {display_target} {current_code}{current_name}{RESET_CODE}")
+        return True
