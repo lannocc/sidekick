@@ -48,7 +48,6 @@
     let focusTimeout = null;
     let showOptionsMenu = false;
     let optionsButton;
-    $: activeComponentInstance = instanceRegistry.get(activeTabId);
     let tabsContainerEl;
     let titleBarEl;
 
@@ -78,9 +77,10 @@
 
     function openSettings() {
         showOptionsMenu = false;
-        const componentsWithCustomSettings = ['IoskConsole', 'IoskFileExplorer', 'IoskFileViewer', 'WebBrowser', 'Settings'];
-        if (componentsWithCustomSettings.includes(componentName) && activeComponentInstance && typeof activeComponentInstance.showSettingsDialog === 'function') {
-            activeComponentInstance.showSettingsDialog();
+        const instance = instanceRegistry.get(activeTabId);
+        const componentsWithCustomSettings = ['IoskConsole', 'IoskFileExplorer', 'WebBrowser', 'Settings'];
+        if (componentsWithCustomSettings.includes(componentName) && instance && typeof instance.showSettingsDialog === 'function') {
+            instance.showSettingsDialog();
         } else {
             const allSettings = get(windowSettings);
             const currentSettings = allSettings[componentName] || { positioning: 'auto' };
@@ -114,12 +114,14 @@
     });
 
     function handleConnect() {
-        if (activeComponentInstance && typeof activeComponentInstance.connect === 'function') activeComponentInstance.connect();
+        const instance = instanceRegistry.get(activeTabId);
+        if (instance && typeof instance.connect === 'function') instance.connect();
         showOptionsMenu = false;
     }
 
     function handleDisconnect() {
-        if (activeComponentInstance && typeof activeComponentInstance.disconnect === 'function') activeComponentInstance.disconnect();
+        const instance = instanceRegistry.get(activeTabId);
+        if (instance && typeof instance.disconnect === 'function') instance.disconnect();
         showOptionsMenu = false;
     }
 
@@ -502,16 +504,16 @@
             {#if component === IoskConsole}
                 <button class="menu-item" on:click={handleConnect} disabled={isConsoleConnected}>Connect</button>
                 <div class="menu-separator"></div>
-                <button class="menu-item" on:click={() => { if (activeComponentInstance?.toggleAttachMenu) activeComponentInstance.toggleAttachMenu(); showOptionsMenu = false; }} disabled={!isConsoleConnected}>Attach</button>
+                <button class="menu-item" on:click={() => { const i = instanceRegistry.get(activeTabId); if (i?.toggleAttachMenu) i.toggleAttachMenu(); showOptionsMenu = false; }} disabled={!isConsoleConnected}>Attach</button>
                 <button class="menu-item" on:click={() => { newIoskFileExplorer(activeTab.id, title); showOptionsMenu = false; }} disabled={!isConsoleConnected}>Files...</button>
-                <button class="menu-item" on:click={() => { if (activeComponentInstance?.toggleRoomsMenu) activeComponentInstance.toggleRoomsMenu(); showOptionsMenu = false; }} disabled={!isConsoleConnected}>Rooms</button>
+                <button class="menu-item" on:click={() => { const i = instanceRegistry.get(activeTabId); if (i?.toggleRoomsMenu) i.toggleRoomsMenu(); showOptionsMenu = false; }} disabled={!isConsoleConnected}>Rooms</button>
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={handleDisconnect} disabled={!isConsoleConnected}>Disconnect</button>
             {/if}
             {#if component === IoskFileViewer}
                 <div class="menu-separator"></div>
-                <button class="menu-item" on:click={() => { if (activeComponentInstance?.setMode) activeComponentInstance.setMode('rendered'); showOptionsMenu = false; }} disabled={!canRender}>Rendered</button>
-                <button class="menu-item" on:click={() => { if (activeComponentInstance?.setMode) activeComponentInstance.setMode('raw'); showOptionsMenu = false; }}>Raw</button>
+                <button class="menu-item" on:click={() => { const i = instanceRegistry.get(activeTabId); if (i?.setMode) i.setMode('rendered'); showOptionsMenu = false; }} disabled={!canRender}>Rendered</button>
+                <button class="menu-item" on:click={() => { const i = instanceRegistry.get(activeTabId); if (i?.setMode) i.setMode('raw'); showOptionsMenu = false; }}>Raw</button>
             {/if}
             <div class="menu-separator"></div>
             <button class="menu-item" on:click={() => { windows.changeTabZoom(id, activeTabId, 0.1); showOptionsMenu = false; }}>Zoom In</button>
