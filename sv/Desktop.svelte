@@ -28,7 +28,7 @@
         const settings = get(desktopSettings);
         if (settings?.focusFollowsMouse && !group.isActive) {
             focusTimeoutDesktop[group.id] = setTimeout(() => {
-                windows.focusWindow(group.id);
+                windows.setActiveWindow(group.id);
             }, settings.focusDelay);
         }
     }
@@ -199,7 +199,7 @@
     }
 </style>
 
-<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu={handleRightClick}>
+<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick}>
     <div class="windows-layer">
         {#each $windows as win (win.id)}
             <Window {...win} />
@@ -219,6 +219,7 @@
                 style:height="{group.maximized ? '100%' : group.height + 'px'}"
                 style:z-index="{group.zIndex - 1}"
                 on:focusout={e => handleFocusOut(e, tab)}
+                on:contextmenu|stopPropagation
             >
                 <div
                     class="content-area-container"

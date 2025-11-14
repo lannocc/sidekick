@@ -205,8 +205,7 @@
         dragOffsetY = event.clientY - y;
         window.addEventListener('mousemove', onDrag);
         window.addEventListener('mouseup', onDragEnd, { once: true });
-        if (event.altKey || event.metaKey) windows.setActiveWindow(id);
-        else windows.focusWindow(id);
+        windows.focusWindow(id);
         document.body.style.cursor = 'move';
     }
 
@@ -248,9 +247,9 @@
         restoreFocus();
     }
 
-    function onResizeStart(event) {
+    function onResizeStart(event, directionOverride = '') {
         if (maximized) return;
-        let direction = event.target.classList.contains('resize-handle') ? 'se' : '';
+        let direction = directionOverride || (event.target.classList.contains('resize-handle') ? 'se' : '');
         if (!direction) return;
 
         isResizing = true;
@@ -258,8 +257,7 @@
         initialResizeState = { x, y, width, height, mouseX: event.clientX, mouseY: event.clientY };
         window.addEventListener('mousemove', onResize);
         window.addEventListener('mouseup', onResizeEnd, { once: true });
-        if (event.altKey || event.metaKey) windows.setActiveWindow(id);
-        else windows.focusWindow(id);
+        windows.focusWindow(id);
     }
 
     function onResize(event) {
@@ -287,6 +285,7 @@
         if ((event.altKey || event.metaKey) && !maximized) {
             event.preventDefault();
             if (event.button === 0) onDragStart(event);
+            else if (event.button === 2) onResizeStart(event, 'se');
         } else {
             windows.focusWindow(id);
         }
@@ -294,7 +293,7 @@
 
     function handleMouseEnter() {
         if (settings?.focusFollowsMouse && !isActive) {
-            focusTimeout = setTimeout(() => windows.focusWindow(id), settings.focusDelay);
+            focusTimeout = setTimeout(() => windows.setActiveWindow(id), settings.focusDelay);
         }
     }
 
@@ -378,7 +377,7 @@
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown}>
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown} on:contextmenu|stopPropagation>
     <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={onDragStart} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id}>
         <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
