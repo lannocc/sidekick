@@ -273,25 +273,26 @@
             >
                 <div
                     class="content-area-container"
-                    style:zoom={tab.zoom || 1.0}
                     on:mouseenter={() => handleContentMouseEnter(group)}
                     on:mouseleave={() => handleContentMouseLeave(group)}
                     on:mousedown={e => handleContentMouseDown(e, group)}
                     on:wheel={e => handleContentWheel(e, tab)}
                 >
-                    <svelte:component
-                        bind:this={componentInstances[tab.id]}
-                        this={tab.component}
-                        {...tab}
-                        groupId={group.id}
-                        id={tab.id}
-                        isActive={group.isActive && tab.id === group.activeTabId}
-                        x={group.x} y={group.y} width={group.width} height={group.height}
-                        maximized={group.maximized}
-                    />
-                    {#if componentInstances[tab.id]}
-                        <InstanceRegistrar tabId={tab.id} instance={componentInstances[tab.id]} />
-                    {/if}
+                    <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
+                        <svelte:component
+                            bind:this={componentInstances[tab.id]}
+                            this={tab.component}
+                            {...tab}
+                            groupId={group.id}
+                            id={tab.id}
+                            isActive={group.isActive && tab.id === group.activeTabId}
+                            x={group.x} y={group.y} width={group.width} height={group.height}
+                            maximized={group.maximized}
+                        />
+                        {#if componentInstances[tab.id]}
+                            <InstanceRegistrar tabId={tab.id} instance={componentInstances[tab.id]} />
+                        {/if}
+                    </div>
                 </div>
             </div>
         {/each}
