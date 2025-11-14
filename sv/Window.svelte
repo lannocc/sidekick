@@ -105,12 +105,14 @@
     let isTabDragging = false;
     let draggedTabInfo = null;
     let dropIndicator = { visible: false, left: 0 };
+    let tabDragHasMoved = false;
 
     function onTabMouseDown(e, tab) {
         if (e.button !== 0 || maximized) return; // Only left click, no dragging when maximized
         e.stopPropagation();
 
         isTabDragging = true;
+        tabDragHasMoved = false;
         draggedTabInfo = {
             groupId: id,
             tabId: tab.id,
@@ -122,6 +124,8 @@
 
     function onTabMouseMove(e) {
         if (!isTabDragging) return;
+
+        tabDragHasMoved = true;
 
         const { top, bottom, left: containerLeft } = tabsContainerEl.getBoundingClientRect();
         const isOutsideY = e.clientY < top - 20 || e.clientY > bottom + 20;
@@ -174,13 +178,14 @@
         if (isTabDragging) {
             if (draggedTabInfo.isDetaching) {
                 windows.detachTabToNewWindow(draggedTabInfo.groupId, draggedTabInfo.tabId, e.clientX - 100, e.clientY - 15);
-            } else {
+            } else if (tabDragHasMoved) {
                 windows.reorderTab(draggedTabInfo.groupId, draggedTabInfo.tabId, draggedTabInfo.targetTabId);
             }
         }
         isTabDragging = false;
         draggedTabInfo = null;
         dropIndicator.visible = false;
+        tabDragHasMoved = false;
     }
 
     async function restoreFocus() {
