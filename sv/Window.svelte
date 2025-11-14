@@ -287,11 +287,43 @@
         const dy = event.clientY - startY;
         const minWidth = 250, minHeight = 150;
 
-        let newWidth = iw, newHeight = ih;
-        if (resizeDirection.includes('e')) newWidth = Math.max(minWidth, iw + dx);
-        if (resizeDirection.includes('s')) newHeight = Math.max(minHeight, ih + dy);
+        let newX = ix;
+        let newY = iy;
+        let newWidth = iw;
+        let newHeight = ih;
 
-        windows.updateWindowProps(id, { width: newWidth, height: newHeight });
+        // Handle horizontal resizing
+        if (resizeDirection.includes('e')) {
+            newWidth = iw + dx;
+        } else if (resizeDirection.includes('w')) {
+            newWidth = iw - dx;
+            newX = ix + dx;
+        }
+
+        // Handle vertical resizing
+        if (resizeDirection.includes('s')) {
+            newHeight = ih + dy;
+        } else if (resizeDirection.includes('n')) {
+            newHeight = ih - dy;
+            newY = iy + dy;
+        }
+
+        // Enforce minimum size and adjust position accordingly
+        if (newWidth < minWidth) {
+            if (resizeDirection.includes('w')) {
+                newX -= minWidth - newWidth;
+            }
+            newWidth = minWidth;
+        }
+
+        if (newHeight < minHeight) {
+            if (resizeDirection.includes('n')) {
+                newY -= minHeight - newHeight;
+            }
+            newHeight = minHeight;
+        }
+
+        windows.updateWindowProps(id, { x: newX, y: newY, width: newWidth, height: newHeight });
     }
 
     function onResizeEnd() {

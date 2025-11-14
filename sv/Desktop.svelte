@@ -44,25 +44,38 @@
         if ((event.altKey || event.metaKey) && !group.maximized) {
             event.preventDefault();
             
-            let type;
-            let direction = null;
-            if (event.button === 0) { // Left click
-                type = 'move';
-            } else if (event.button === 2) { // Right click
-                type = 'resize';
-                direction = 'se';
-            } else {
-                return;
-            }
+            if (event.button === 0) { // Left click for move
+                dragRequest.set({
+                    id: group.id,
+                    type: 'move',
+                    direction: null,
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                });
+            } else if (event.button === 2) { // Right click for resize
+                const relX = event.clientX - group.x;
+                const relY = event.clientY - group.y;
 
-            // Publish a request for the Window component to start a drag/resize
-            dragRequest.set({
-                id: group.id,
-                type: type,
-                direction: direction,
-                clientX: event.clientX,
-                clientY: event.clientY,
-            });
+                let yDir = '';
+                if (relY < group.height / 3) yDir = 'n';
+                else if (relY > (group.height * 2) / 3) yDir = 's';
+                
+                let xDir = '';
+                if (relX < group.width / 3) xDir = 'w';
+                else if (relX > (group.width * 2) / 3) xDir = 'e';
+
+                const direction = yDir + xDir;
+                
+                if (direction) { // Only trigger resize if not in the center
+                    dragRequest.set({
+                        id: group.id,
+                        type: 'resize',
+                        direction: direction,
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                    });
+                }
+            }
 
         } else if (!group.isActive) {
             windows.focusWindow(group.id);
