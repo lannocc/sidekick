@@ -60,6 +60,26 @@ def extract_target_from_code(code_content):
     return None
 
 
+def is_plausible_filename(candidate: str) -> bool:
+    """
+    Determines if a candidate string is a plausible filename.
+    Rejects common placeholders and requires some structural characteristics.
+    """
+    candidate = candidate.strip()
+    if not candidate or candidate in ('...', '....', '…'):
+        return False
+
+    # A plausible filename has a path separator, an extension, or is a single word
+    # (like Makefile, Dockerfile) without spaces. This helps avoid capturing
+    # random backticked words that aren't filenames.
+    return (
+        '/' in candidate or
+        '\\' in candidate or
+        '.' in candidate or
+        ' ' not in candidate
+    )
+
+
 def apply_patch(target_file, diff_content):
     """Applies a diff to a target file using the system's patch command."""
     try:
@@ -124,13 +144,7 @@ def do_work(prompt, answer, transcript_path):
         if ':' in language_info:
             parts = language_info.split(':', 1)
             candidate = parts[1].strip()
-            # A simple plausibility check to avoid matching random text after a colon.
-            is_plausible = (
-                '/' in candidate or
-                '\\' in candidate or
-                ('.' in candidate and ' ' not in candidate)
-            )
-            if is_plausible:
+            if is_plausible_filename(candidate):
                 filename = candidate
 
         # --- Fallback to existing methods if filename not found in language line ---
@@ -151,12 +165,7 @@ def do_work(prompt, answer, transcript_path):
             heading_matches = HEADING_FILENAME_REGEX.findall(search_window)
             if heading_matches:
                 candidate = heading_matches[-1].strip()
-                is_plausible = (
-                    '/' in candidate or
-                    '\\' in candidate or
-                    ('.' in candidate and ' ' not in candidate)
-                )
-                if is_plausible:
+                if is_plausible_filename(candidate):
                     filename = candidate
 
         # 4. Look for a line ending in `filename`:
@@ -165,12 +174,7 @@ def do_work(prompt, answer, transcript_path):
             if line_ending_matches:
                 # Take the last one found before the code block.
                 candidate = line_ending_matches[-1].strip()
-                is_plausible = (
-                    '/' in candidate or
-                    '\\' in candidate or
-                    ('.' in candidate and ' ' not in candidate)
-                )
-                if is_plausible:
+                if is_plausible_filename(candidate):
                     filename = candidate
 
         # 5. If no heading match, infer from general context (backticked text).
@@ -180,12 +184,7 @@ def do_work(prompt, answer, transcript_path):
                 # Iterate in reverse to find the most recent plausible filename.
                 for candidate in reversed(context_filenames):
                     candidate = candidate.strip()
-                    is_plausible = (
-                        '/' in candidate or
-                        '\\' in candidate or
-                        ('.' in candidate and ' ' not in candidate)
-                    )
-                    if is_plausible:
+                    if is_plausible_filename(candidate):
                         filename = candidate
                         break # Stop after finding the first plausible one from the end.
 
