@@ -493,7 +493,11 @@
                                     attachDevices = items
                                         .filter(item => {
                                             const basename = item.path.split('/').pop();
-                                            return basename && !basename.startsWith('.') && !basename.startsWith('_');
+                                            if (basename && basename.startsWith('.')) {
+                                                return false; // Always ignore dotfiles/dotdirs
+                                            }
+                                            // Ignore if any path segment starts with '_'
+                                            return !item.path.split('/').some(segment => segment.startsWith('_'));
                                         })
                                         .map(item => {
                                             let displayPath = item.path.startsWith('/dev/') ? item.path.substring(5) : item.path;
@@ -767,9 +771,10 @@
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 0; }
     .close-item { color: #e74c3c; }
     .close-item:hover { background-color: #c0392b; color: white; }
-    .attach-menu { position: absolute; top: 45px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 100; display: flex; width: 450px; height: 300px; flex-direction: column; }
+    .attach-menu { position: absolute; top: 45px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 100; display: flex; width: 600px; height: 300px; flex-direction: column; }
     .attach-panels { display: flex; flex-grow: 1; overflow: hidden; }
-    .attach-panel { width: 50%; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
+    .attach-panel { width: 35%; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
+    .attach-panel:first-child { width: 65%; }
     .attach-panel:last-child { border-right: none; }
     .panel-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
     .list-item { padding: 4px 8px; cursor: pointer; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
