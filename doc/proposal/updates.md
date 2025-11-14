@@ -105,7 +105,7 @@ The frontend will require UI additions and logic to manage the state of these ne
 +-------------------------------------------------------------+
 | [^] [/var/log] [Watch 👀]                                   |  <-- New "Watch" button
 | ----------------------------------------------------------- |
-| 🗂️ ..                                                      |
+| 🗂️ ..                                                       |
 | 📄 system-2025-11-13.log                                    |
 | 📄 user/root/2025-11-13.log                                 |
 |                                                             |
@@ -115,7 +115,7 @@ The frontend will require UI additions and logic to manage the state of these ne
 |                                                             |
 | << Component re-requests /var/log >>                        |
 |                                                             |
-| 🗂️ ..                                                      |  <-- View updates automatically
+| 🗂️ ..                                                       |  <-- View updates automatically
 | 📄 agent-alpha.log (new)                                    |
 | 📄 system-2025-11-13.log                                    |
 | 📄 user/root/2025-11-13.log                                 |

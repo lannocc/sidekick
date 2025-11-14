@@ -51,7 +51,7 @@ This architecture is illustrated below:
 
 ```
 +-------------------------------------------------------------+
-|                     SKYBOARD (Web Browser)                    |
+|                     SKYBOARD (Web Browser)                  |
 | +---------------------+      +----------------------------+ |
 | | LocalTerminal.svelte|      | IoskConsole.svelte         | |
 | +---------|-----------+      +-------------|--------------+ |
