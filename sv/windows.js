@@ -8,6 +8,7 @@ import WebBrowser from './WebBrowser.svelte';
 import IoskPrivateChat from './IoskPrivateChat.svelte';
 import LocalTerminal from './LocalTerminal.svelte';
 import LocalFileExplorer from './LocalFileExplorer.svelte';
+import Ask from './Ask.svelte';
 import { desktopSettings, windowSettings } from './desktopStore.js';
 
 let windowGroupIdCounter = 0;
@@ -29,6 +30,7 @@ const componentMap = {
     'IoskPrivateChat': IoskPrivateChat,
     'LocalTerminal': LocalTerminal,
     'LocalFileExplorer': LocalFileExplorer,
+    'Ask': Ask,
 };
 
 function createWindowManager() {
@@ -486,3 +488,6 @@ export function newLocalFileExplorer() {
     windows.addWindow(LocalFileExplorer, { title: 'Local Files', width: 500, height: 600 });
 }
 
+export function newAskWindow(initialFiles = []) {
+    windows.addWindow(Ask, { title: 'Ask...', initialFiles, width: 900, height: 600 });
+}

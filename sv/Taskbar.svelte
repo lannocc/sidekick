@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer } from './windows.js';
+    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow } from './windows.js';
     import { dashActive } from './desktopStore.js';
     import Clock from './Clock.svelte';
 
@@ -139,6 +139,7 @@
     function launchSettings() { newSettings(); showMenu = false; }
     function launchLocalTerminal() { newLocalTerminal(); showMenu = false; }
     function launchLocalFileExplorer() { newLocalFileExplorer(); showMenu = false; }
+    function launchAsk() { newAskWindow(); showMenu = false; }
 
     onMount(() => window.addEventListener('click', handleWindowClick));
     onDestroy(() => window.removeEventListener('click', handleWindowClick));
@@ -249,6 +250,7 @@
         {#if showMenu}
             <div class="start-menu">
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchSettings(); }}>Settings</button>
+                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchAsk(); }}>Ask</button>
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchIosk(); }}>IOSK Connection</button>
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); newWebBrowser(); showMenu = false; }}>Web Browser</button>
                 <div class="menu-separator"></div>

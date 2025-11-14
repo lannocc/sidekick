@@ -12,6 +12,9 @@ export const terminalData = writable(null);
 export const fsListResponse = writable(null);
 export const fsReadResponse = writable(null);
 export const fsError = writable(null);
+export const askOutput = writable(null);
+export const askError = writable(null);
+export const askExit = writable(null);
 
 let messageQueue = [];
 
@@ -57,6 +60,15 @@ export function connect() {
                     break;
                 case 'fs_error':
                     fsError.set(msg);
+                    break;
+                case 'ask_output':
+                    askOutput.set({ ...msg, timestamp: Date.now() });
+                    break;
+                case 'ask_error':
+                    askError.set({ ...msg, timestamp: Date.now() });
+                    break;
+                case 'ask_exit':
+                    askExit.set({ ...msg, timestamp: Date.now() });
                     break;
                 default:
                     console.warn('Unknown message type from local backend:', msg.type);

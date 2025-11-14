@@ -5,6 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { connect, sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus } from './localBackendStore.js';
+    import { newAskWindow } from './windows.js';
 
     let currentPath = '/'; // A reasonable default
     let items = [];
@@ -18,7 +19,33 @@
         error: ''
     };
 
+    let contextMenu = {
+        visible: false,
+        x: 0,
+        y: 0,
+        item: null
+    };
+
     let unsubscribeList, unsubscribeRead, unsubscribeError, unsubscribeStatus;
+
+    function handleRightClick(event, item) {
+        event.preventDefault();
+        contextMenu = { visible: true, x: event.clientX, y: event.clientY, item };
+    }
+
+    function closeContextMenu() {
+        contextMenu = { visible: false, x: 0, y: 0, item: null };
+    }
+
+    function onAsk() {
+        if (!contextMenu.item) return;
+        const itemPath = contextMenu.item.name === '..'
+            ? (currentPath.substring(0, currentPath.lastIndexOf('/')) || '/')
+            : (currentPath === '/' ? `/${contextMenu.item.name}` : `${currentPath}/${contextMenu.item.name}`);
+        
+        newAskWindow([itemPath]);
+        closeContextMenu();
+    }
 
     function requestPath(path) {
         errorMessage = '';
@@ -44,6 +71,7 @@
 
     onMount(() => {
         connect();
+        window.addEventListener('click', closeContextMenu);
 
         unsubscribeStatus = connectionStatus.subscribe(s => {
             status = s;
@@ -91,6 +119,7 @@
             if(unsubscribeRead) unsubscribeRead();
             if(unsubscribeError) unsubscribeError();
             if(unsubscribeStatus) unsubscribeStatus();
+            window.removeEventListener('click', closeContextMenu);
         };
     });
 
@@ -113,6 +142,9 @@
     .modal-header h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; }
     .modal-header button { background: none; border: none; font-size: 1.5em; cursor: pointer; color: var(--title-bar-text); }
     .modal-body { flex-grow: 1; overflow: auto; white-space: pre-wrap; font-family: monospace; }
+    .context-menu { position: fixed; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 10001; display: flex; flex-direction: column; padding: 4px 0; min-width: 120px; }
+    .context-menu button { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; font-size: 14px; }
+    .context-menu button:hover { background-color: var(--taskbar-button-hover-bg); }
 </style>
 
 <div class="explorer-container">
@@ -126,7 +158,7 @@
     {/if}
     <div class="item-list">
         {#each items as item (item.name)}
-            <div class="item" on:click={() => handleItemClick(item)} title={item.name}>
+            <div class="item" on:click={() => handleItemClick(item)} on:contextmenu={e => handleRightClick(e, item)} title={item.name}>
                 <span class="item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
                 <span class="item-name">{item.name}</span>
                 <span class="item-size">
@@ -155,5 +187,10 @@
         </div>
     </div>
     {/if}
-</div>
 
+    {#if contextMenu.visible}
+        <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
+            <button on:click={onAsk}>Ask...</button>
+        </div>
+    {/if}
+</div>

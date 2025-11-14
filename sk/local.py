@@ -6,6 +6,7 @@ import json
 import os
 import logging
 import platform
+import sys
 
 # pty is not available on Windows
 if platform.system() != 'Windows':
@@ -24,6 +25,91 @@ log = logging.getLogger(__name__)
 
 PORT = 4210
 HOST = '127.0.0.1'
+
+running_asks = {}
+
+
+async def read_stream(stream, websocket, ask_id, stream_name):
+    """Read from a subprocess stream and forward to websocket."""
+    while not stream.at_eof():
+        line = await stream.readline()
+        if line:
+            await websocket.send(json.dumps({
+                'type': 'ask_output',
+                'askId': ask_id,
+                'stream': stream_name,
+                'data': line.decode('utf-8', errors='ignore')
+            }))
+
+
+async def handle_sk_ask(websocket, msg):
+    """Handles the sk_ask request to run the 'ask' command."""
+    ask_id = msg.get('askId')
+    if not ask_id:
+        log.error("sk_ask message missing askId")
+        return
+
+    # Find the path to the 'ask' executable. Assumes it's in the same
+    # directory as the script running this server (e.g., venv/bin).
+    sk_dir = os.path.dirname(sys.executable)
+    ask_executable = os.path.join(sk_dir, 'ask')
+    if platform.system() == 'Windows' and not os.path.exists(ask_executable):
+        ask_executable += '.exe'
+
+    if not os.path.exists(ask_executable):
+        log.warning(f"'ask' not found at {ask_executable}, trying PATH.")
+        ask_executable = 'ask'
+
+    try:
+        cmd = [ask_executable]
+        options = msg.get('options', {})
+        if options.get('use_openai'): cmd.append('--openai')
+        if options.get('work'): cmd.append('-w')
+        if options.get('screenshot'): cmd.append('-s')
+        if options.get('model'): cmd.append(options['model'])
+
+        for f in msg.get('files', []):
+            abs_path = os.path.abspath(f)
+            if os.path.exists(abs_path):
+                cmd.append(abs_path)
+            else:
+                log.warning(f"File not found for 'ask', skipping: {abs_path}")
+
+        log.info(f"Executing ask command for {ask_id}: {cmd}")
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        running_asks[ask_id] = process
+
+        prompt_text = msg.get('prompt', '')
+        if prompt_text:
+            process.stdin.write(prompt_text.encode('utf-8'))
+        await process.stdin.drain()
+        process.stdin.close()
+
+        await asyncio.gather(
+            read_stream(process.stdout, websocket, ask_id, 'stdout'),
+            read_stream(process.stderr, websocket, ask_id, 'stderr')
+        )
+
+        exit_code = await process.wait()
+        await websocket.send(json.dumps({
+            'type': 'ask_exit', 'askId': ask_id, 'code': exit_code
+        }))
+
+    except Exception as e:
+        log.error(f"Error executing 'ask' for {ask_id}: {e}", exc_info=True)
+        if websocket.open:
+            await websocket.send(json.dumps({
+                'type': 'ask_error', 'askId': ask_id, 'data': str(e)
+            }))
+    finally:
+        if ask_id in running_asks:
+            del running_asks[ask_id]
 
 
 async def handle_fs_list(path):
@@ -108,6 +194,8 @@ async def websocket_handler(websocket):
                 elif msg_type == 'fs_read':
                     response = await handle_fs_read(msg.get('path'))
                     await websocket.send(json.dumps(response))
+                elif msg_type == 'sk_ask':
+                    asyncio.create_task(handle_sk_ask(websocket, msg))
 
                 elif pty and msg_type == 'term_open':
                     if pty_child_pid:
