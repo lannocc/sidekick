@@ -246,7 +246,6 @@
         padding: 5px;
         pointer-events: auto;
         background-color: var(--window-bg);
-        height: calc(100% - 30px);
     }
 </style>
 

@@ -317,7 +317,6 @@
 
     // --- Functions ---
     export function showSettingsDialog() {
-        if (isConnected) return;
         settingsUrl = wsUrl;
         settingsUsername = username;
 

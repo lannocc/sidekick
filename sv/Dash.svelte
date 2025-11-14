@@ -15,6 +15,9 @@
     import IoskFileViewer from './IoskFileViewer.svelte';
     import WebBrowser from './WebBrowser.svelte';
     import IoskPrivateChat from './IoskPrivateChat.svelte';
+    import LocalTerminal from './LocalTerminal.svelte';
+    import LocalFileExplorer from './LocalFileExplorer.svelte';
+    import Ask from './Ask.svelte';
 
     let isLayoutDirty = true;
     let lastSavedLayoutSnapshot = '';
@@ -143,6 +146,9 @@
         if (component === IoskFileViewer) return 'IoskFileViewer';
         if (component === WebBrowser) return 'WebBrowser';
         if (component === IoskPrivateChat) return 'IoskPrivateChat';
+        if (component === LocalTerminal) return 'LocalTerminal';
+        if (component === LocalFileExplorer) return 'LocalFileExplorer';
+        if (component === Ask) return 'Ask';
         return 'Unknown';
     }
 
