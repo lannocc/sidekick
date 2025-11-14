@@ -117,6 +117,113 @@ def apply_patch(target_file, diff_content):
         return False, f"An exception occurred while applying patch to {target_file}: {e}"
 
 
+def do_work_on_block(language_info, code_content, context_before_block, transcript_path):
+    """
+    Processes a single code block, applies changes, and returns a summary.
+    Also appends a summary of the action to the transcript.
+    """
+    filename = None
+    lang = language_info.split(':', 1)[0].lower().strip()
+
+    if ':' in language_info:
+        parts = language_info.split(':', 1)
+        candidate = parts[1].strip()
+        if is_plausible_filename(candidate):
+            filename = candidate
+
+    search_window = context_before_block[-512:]
+
+    if not filename:
+        begin_file_matches = BEGIN_FILE_REGEX.findall(search_window)
+        if begin_file_matches:
+            candidate = begin_file_matches[-1].strip()
+            if candidate: filename = candidate
+
+    if not filename:
+        heading_matches = HEADING_FILENAME_REGEX.findall(search_window)
+        if heading_matches:
+            candidate = heading_matches[-1].strip()
+            if is_plausible_filename(candidate): filename = candidate
+
+    if not filename:
+        line_ending_matches = LINE_ENDING_IN_FILENAME_REGEX.findall(search_window)
+        if line_ending_matches:
+            candidate = line_ending_matches[-1].strip()
+            if is_plausible_filename(candidate): filename = candidate
+
+    if not filename:
+        context_filenames = FILENAME_REGEX.findall(search_window)
+        if context_filenames:
+            for candidate in reversed(context_filenames):
+                if is_plausible_filename(candidate.strip()):
+                    filename = candidate.strip()
+                    break
+
+    if not filename:
+        filename = extract_target_from_code(code_content)
+
+    summary_line = ""
+
+    if lang in ('diff', 'patch'):
+        target_file = extract_target_from_diff(code_content) or filename
+        if not target_file:
+            summary_line = f"SKIPPED: Could not determine target file for a diff block."
+        else:
+            backup_info = ""
+            if os.path.exists(target_file):
+                backup_filename = f"{target_file}.bak"
+                try:
+                    shutil.copy2(target_file, backup_filename)
+                    backup_info = f" (original saved to {backup_filename})"
+                except Exception as e:
+                    summary_line = f"FAILED TO BACK UP: {target_file}\n   {e}"
+
+            if not summary_line:
+                success, message = apply_patch(target_file, code_content)
+                if success:
+                    summary_line = f"PATCHED: {target_file}{backup_info}"
+                else:
+                    summary_line = f"FAILED TO PATCH: {target_file}\n   {message}"
+    else:
+        target_file = filename
+        if not target_file:
+            display_lang = language_info or 'unspecified'
+            summary_line = f"SKIPPED: Could not determine filename for a '{display_lang}' code block."
+        else:
+            try:
+                directory = os.path.dirname(target_file)
+                if directory:
+                    os.makedirs(directory, exist_ok=True)
+
+                backup_info = ""
+                if os.path.exists(target_file):
+                    backup_filename = f"{target_file}.bak"
+                    try:
+                        shutil.copy2(target_file, backup_filename)
+                        backup_info = f" (original saved to {backup_filename})"
+                    except Exception as e:
+                        summary_line = f"FAILED TO BACK UP: {target_file}\n   {e}"
+
+                if not summary_line:
+                    with open(target_file, 'w', encoding='utf-8') as f:
+                        f.write(code_content)
+                    summary_line = f"WROTE: {target_file}{backup_info}"
+
+            except Exception as e:
+                summary_line = f"FAILED TO WRITE: {target_file}\n   {e}"
+
+    if summary_line and transcript_path:
+        summary_to_log = f"--- WORK ACTION ---\n{summary_line}\n"
+        try:
+            with open(transcript_path, 'a', encoding='utf-8') as f:
+                f.write("\n")
+                f.write(summary_to_log)
+        except Exception:
+            pass
+
+    return summary_line
+
+
 def do_work(prompt, answer, transcript_path):
     """
     Processes an AI's answer to extract code, apply changes to the filesystem,
