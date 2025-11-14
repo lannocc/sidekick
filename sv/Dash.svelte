@@ -263,7 +263,10 @@
     .dash-body { flex-grow: 1; display: flex; gap: 40px; margin-top: 40px; min-height: 0; }
     .dash-preview { flex: 3; background-color: rgba(0,0,0,0.1); border: 1px solid var(--border-color); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: rgba(255, 255, 255, 0.3); position: relative; overflow: hidden; padding: 10px; box-sizing: border-box; }
     .preview-screen { position: absolute; background-color: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 4px; transition: all 0.2s ease-in-out; }
-    .preview-window { position: absolute; background-color: rgba(52, 152, 219, 0.5); border: 1px solid rgba(41, 128, 185, 0.8); border-radius: 2px; box-sizing: border-box; color: rgba(255, 255, 255, 0.9); font-size: 10px; padding: 1px 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 0 2px rgba(0,0,0,0.6); }
+    .preview-window { position: absolute; background-color: rgba(52, 152, 219, 0.5); border: 1px solid rgba(41, 128, 185, 0.8); border-radius: 2px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; }
+    .preview-title-bar { display: flex; flex-shrink: 0; background-color: rgba(0,0,0,0.2); overflow: hidden; align-items: center; height: 14px; }
+    .preview-tab { padding: 0 3px; font-size: 9px; line-height: 14px; color: rgba(255, 255, 255, 0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70px; border-right: 1px solid rgba(41, 128, 185, 0.4); text-shadow: 0 0 2px rgba(0,0,0,0.6); }
+    .preview-tab.active { font-weight: bold; color: white; background-color: rgba(255,255,255,0.1); }
     .dash-layouts { flex: 1; background-color: rgba(0,0,0,0.1); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px; overflow-y: auto; min-height: 0; }
     .layout-tile { aspect-ratio: 16 / 10; background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-direction: column; padding: 5px; text-align: center; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
     .layout-tile:hover { transform: translateY(-3px); box-shadow: 0 4px 10px rgba(0,0,0,0.3); border-color: var(--taskbar-button-hover-bg); }
@@ -295,8 +298,14 @@
                 <div class="preview-screen" style:width="{previewDesktop.width}px" style:height="{previewDesktop.height}px" style:top="{previewDesktop.top}px" style:left="{previewDesktop.left}px">
                     {#each (previewedLayout.windowGroups || []) as group}
                         {@const isMaximized = group.maximized}
-                        <div class="preview-window" title={group.tabs[0]?.title || 'Window'} style:left="{isMaximized ? 0 : (group.x * previewScale)}px" style:top="{isMaximized ? 0 : (group.y * previewScale)}px" style:width="{isMaximized ? '100%' : Math.max(2, group.width * previewScale)}px" style:height="{isMaximized ? '100%' : Math.max(2, group.height * previewScale)}px">
-                            {group.tabs.find(t=>t.originalId === group.activeTabId)?.title || group.tabs[0]?.title || 'Window'}
+                        <div class="preview-window" title={group.tabs.map(t => t.title).join(' | ')} style:left="{isMaximized ? 0 : (group.x * previewScale)}px" style:top="{isMaximized ? 0 : (group.y * previewScale)}px" style:width="{isMaximized ? '100%' : Math.max(20, group.width * previewScale)}px" style:height="{isMaximized ? '100%' : Math.max(16, group.height * previewScale)}px">
+                            <div class="preview-title-bar">
+                                {#each group.tabs as tab (tab.originalId)}
+                                    <div class="preview-tab" class:active={tab.originalId === group.activeTabId} title={tab.title}>
+                                        {tab.title}
+                                    </div>
+                                {/each}
+                            </div>
                         </div>
                     {/each}
                 </div>
