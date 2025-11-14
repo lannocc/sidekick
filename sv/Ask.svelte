@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { connect, sendMessage, askOutput, askError, askExit, connectionStatus } from './localBackendStore.js';
+    import { connect, sendMessage, askOutput, askError, askExit, connectionStatus, askStatsResponse } from './localBackendStore.js';
     import { newLocalFileExplorer } from './windows.js';
     import { fileSelection } from './ioskEvents.js';
 
@@ -26,12 +26,50 @@
     let exitCode = null;
     let connectionState = 'disconnected';
 
-    let unsubscribeOutput, unsubscribeError, unsubscribeExit, unsubscribeStatus, unsubscribeSelection;
+    // New state for stats
+    let totalBytes = 0;
+    let totalTokens = 0;
+    let isCalculating = false;
+    let calculationRequestNonce = 0;
+
+    let unsubscribeOutput, unsubscribeError, unsubscribeExit, unsubscribeStatus, unsubscribeSelection, unsubscribeStats;
     let outputEl;
+    let debounceTimeout;
 
     function scrollToBottom() {
         if (outputEl) {
             outputEl.scrollTop = outputEl.scrollHeight;
+        }
+    }
+    
+    function calculateStats() {
+        if (connectionState !== 'connected') {
+            totalBytes = 0;
+            totalTokens = 0;
+            isCalculating = false;
+            return;
+        }
+        isCalculating = true;
+        calculationRequestNonce = Date.now();
+        sendMessage({
+            type: 'ask_stats',
+            prompt: promptText,
+            files,
+            nonce: calculationRequestNonce,
+        });
+    }
+
+    // Reactive block for stats calculation
+    $: {
+        if (connectionState === 'connected' && (promptText || files.length > 0)) {
+            clearTimeout(debounceTimeout);
+            isCalculating = true; // Show "calculating" immediately
+            debounceTimeout = setTimeout(calculateStats, 500); // 500ms debounce
+        } else {
+            clearTimeout(debounceTimeout);
+            totalBytes = 0;
+            totalTokens = 0;
+            isCalculating = false;
         }
     }
 
@@ -40,6 +78,9 @@
 
         unsubscribeStatus = connectionStatus.subscribe(s => {
             connectionState = s;
+            if (s === 'connected') {
+                calculateStats(); // Calculate on connect if there's initial data
+            }
         });
 
         unsubscribeOutput = askOutput.subscribe(msg => {
@@ -62,6 +103,15 @@
                 setTimeout(scrollToBottom, 0);
             }
         });
+        
+        unsubscribeStats = askStatsResponse.subscribe(msg => {
+            if (msg && msg.nonce === calculationRequestNonce) {
+                totalBytes = msg.bytes;
+                totalTokens = msg.tokens;
+                isCalculating = false;
+            }
+        });
+
         unsubscribeSelection = fileSelection.subscribe(selection => {
             if (selection && selection.targetId === askId) {
                 const newFile = selection.path;
@@ -79,6 +129,8 @@
         if (unsubscribeExit) unsubscribeExit();
         if (unsubscribeStatus) unsubscribeStatus();
         if (unsubscribeSelection) unsubscribeSelection();
+        if (unsubscribeStats) unsubscribeStats();
+        clearTimeout(debounceTimeout);
     });
 
     function runAsk() {
@@ -125,6 +177,9 @@
     .file-controls button { font-size: 0.8em; padding: 2px 5px; }
     .run-button { width: 100%; padding: 10px; font-size: 1.2em; background-color: #27c93f; color: white; border: 1px solid #1a9c2a; border-radius: 4px; cursor: pointer; margin-top: auto; }
     .run-button:disabled { background-color: #95a5a6; cursor: not-allowed; }
+    .stats-container { display: flex; flex-direction: column; gap: 5px; font-size: 0.9em; }
+    .stat-item { display: flex; justify-content: space-between; align-items: center; }
+    .calculating-text { font-style: italic; color: #7f8c8d; }
 </style>
 
 <div class="ask-container">
@@ -155,6 +210,24 @@
             </ul>
             <div class="file-controls">
                 <button on:click={addFile}>Add Path...</button>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Totals</legend>
+            <div class="stats-container">
+                {#if isCalculating}
+                    <span class="calculating-text">Calculating...</span>
+                {:else}
+                    <div class="stat-item">
+                        <span>Bytes:</span>
+                        <span>{totalBytes.toLocaleString()}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Tokens:</span>
+                        <span>{totalTokens.toLocaleString()}</span>
+                    </div>
+                {/if}
             </div>
         </fieldset>
 

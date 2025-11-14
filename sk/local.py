@@ -7,6 +7,9 @@ import os
 import logging
 import platform
 import sys
+import tiktoken
+from .util import get_directory_tree_as_text, get_directory_contents_as_text
+from binaryornot.check import is_binary
 
 # pty is not available on Windows
 if platform.system() != 'Windows':
@@ -26,6 +29,7 @@ log = logging.getLogger(__name__)
 PORT = 4210
 HOST = '127.0.0.1'
 
+ENCODING = tiktoken.get_encoding('cl100k_base')
 running_asks = {}
 
 
@@ -151,6 +155,68 @@ async def handle_fs_read(path):
         return {'type': 'fs_error', 'path': path, 'error': str(e)}
 
 
+def _get_formatted_file_content(full_path):
+    item = os.path.basename(full_path)
+    hint = 'python' if item.endswith('.py') else \
+           'svelte' if item.endswith('.svelte') else \
+           'markdown' if item.endswith('.md') else \
+           'rst' if item.endswith('.rst') else \
+           'html' if item.endswith('.html') else \
+           'css' if item.endswith('.css') else \
+           'javascript' if item.endswith('.js') else \
+           'json' if item.endswith('.json') else \
+           'config' if item.endswith('.conf') or item.endswith('.theme') else \
+           'bat' if item.endswith('.bat') else \
+           'shell' if item.endswith('.sh') or item.endswith('.bash') else \
+           'text' if item.endswith('.txt') else ''
+
+    text = f'\n>>> BEGIN FILE {full_path}:\n'
+    text += f'```{hint}\n'
+    try:
+        with open(full_path, 'r', encoding='utf-8', errors='ignore') as file:
+            text += file.read()
+    except Exception as e:
+        log.error(f"Error reading file for stats: {full_path}: {e}")
+        raise
+    text += '```\n'
+    text += '<<< END FILE\n\n'
+    return text
+
+
+async def handle_ask_stats(msg):
+    """Calculates stats for a potential 'ask' command."""
+    try:
+        prompt_text = msg.get('prompt', '')
+        paths = msg.get('files', [])
+
+        full_content = prompt_text
+
+        for path in paths:
+            abs_path = os.path.abspath(path)
+            if not os.path.exists(abs_path):
+                continue
+
+            if os.path.isdir(abs_path):
+                full_content += get_directory_tree_as_text(abs_path, count=False)
+                full_content += get_directory_contents_as_text(abs_path)
+            elif os.path.isfile(abs_path):
+                if not is_binary(abs_path):
+                    full_content += _get_formatted_file_content(abs_path)
+
+        byte_count = len(full_content.encode('utf-8'))
+        token_count = len(ENCODING.encode(full_content))
+
+        return {
+            'type': 'ask_stats_response',
+            'bytes': byte_count,
+            'tokens': token_count,
+            'nonce': msg.get('nonce')
+        }
+    except Exception as e:
+        log.error(f"Error calculating ask stats: {e}", exc_info=True)
+        return {'type': 'fs_error', 'error': 'Failed to calculate stats.', 'nonce': msg.get('nonce')}
+
+
 async def pty_reader(pty_master_fd, websocket):
     """Reads from the pty and sends data to the websocket."""
     try:
@@ -196,6 +262,9 @@ async def websocket_handler(websocket):
                     await websocket.send(json.dumps(response))
                 elif msg_type == 'sk_ask':
                     asyncio.create_task(handle_sk_ask(websocket, msg))
+                elif msg_type == 'ask_stats':
+                    response = await handle_ask_stats(msg)
+                    await websocket.send(json.dumps(response))
 
                 elif pty and msg_type == 'term_open':
                     if pty_child_pid:

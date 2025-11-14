@@ -15,6 +15,7 @@ export const fsError = writable(null);
 export const askOutput = writable(null);
 export const askError = writable(null);
 export const askExit = writable(null);
+export const askStatsResponse = writable(null);
 
 let messageQueue = [];
 
@@ -69,6 +70,9 @@ export function connect() {
                     break;
                 case 'ask_exit':
                     askExit.set({ ...msg, timestamp: Date.now() });
+                    break;
+                case 'ask_stats_response':
+                    askStatsResponse.set({ ...msg, timestamp: Date.now() });
                     break;
                 default:
                     console.warn('Unknown message type from local backend:', msg.type);
