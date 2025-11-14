@@ -11,10 +11,17 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, Any, Optional
 import shlex
 import base64
+import os
+import posixpath
 
 import websockets
 from websockets.server import WebSocketServerProtocol
 from websockets.exceptions import ConnectionClosed
+
+from binaryornot.check import is_binary
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
 
 if TYPE_CHECKING:
     from .kernel import IOSK
@@ -57,6 +64,9 @@ class PortManager:
         self.remote_exec_sessions: Dict[str, Dict[str, Any]] = {}
         self.seen_message_ids: set = set()
         self.MESSAGE_ID_CACHE_SIZE = 500
+        # --- ADDED for Filesystem Events Proposal ---
+        self.active_watchers: Dict[tuple, Observer] = {}
+        self.active_tailers: Dict[tuple, asyncio.Task] = {}
 
     # --------------------------------------------------------------------------
     # Public API (Kernel-Facing)
@@ -461,6 +471,29 @@ class PortManager:
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
 
+    class _ClientUpdateEventHandler(FileSystemEventHandler):
+        """Helper class to dispatch watchdog events back to the client."""
+        def __init__(self, port_manager, user, watched_path, loop):
+            self.pm = port_manager
+            self.user = user
+            self.watched_path = watched_path
+            self.loop = loop
+
+        def on_any_event(self, event):
+            # We are in a separate thread. Use thread-safe call.
+            affected_filename = os.path.basename(event.src_path)
+            affected_virtual_path = posixpath.join(self.watched_path, affected_filename)
+
+            payload = {
+                "type": "fs_watch_update",
+                "path": self.watched_path,
+                "event_type": event.event_type, # 'created', 'deleted', 'modified', 'moved'
+                "affected_path": affected_virtual_path,
+                "is_dir": event.is_directory
+            }
+            coro = self.pm.send_payload_to_client(self.user, payload)
+            asyncio.run_coroutine_threadsafe(coro, self.loop)
+
     def _get_color_name_map(self, user_io: "Context") -> dict:
         """Converts a user's ANSI color map to a map of usernames to color names."""
         if not user_io or not hasattr(user_io, 'user_colors'):
@@ -756,13 +789,37 @@ class PortManager:
 
             elif msg_type == "fs_read":
                 if conn_meta.type == 'client' and conn_meta.username:
-                    path = message.get("path")
-                    requesterId = message.get("requesterId")
                     io_context = self.kernel.users.get(conn_meta.username)
-                    if io_context and path is not None and requesterId is not None:
-                        await self._handle_fs_read(websocket, io_context, path, requesterId)
+                    if io_context:
+                        await self._handle_fs_read(websocket, io_context, message)
                 else:
                     log.warning("Received fs_read from non-client or malformed request.")
+
+            elif msg_type == "fs_watch_start":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    path = message.get("path")
+                    io_context = self.kernel.users.get(conn_meta.username)
+                    if io_context and path:
+                        await self._handle_fs_watch_start(websocket, io_context, path)
+
+            elif msg_type == "fs_watch_stop":
+                if conn_meta.type == 'client':
+                    path = message.get("path")
+                    if path:
+                        await self._handle_fs_watch_stop(websocket, path)
+
+            elif msg_type == "fs_tail_start":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    path = message.get("path")
+                    io_context = self.kernel.users.get(conn_meta.username)
+                    if io_context and path:
+                        await self._handle_fs_tail_start(websocket, io_context, path)
+
+            elif msg_type == "fs_tail_stop":
+                if conn_meta.type == 'client':
+                    path = message.get("path")
+                    if path:
+                        await self._handle_fs_tail_stop(websocket, path)
 
             else:
                 log.warning(f"Received unknown message type: {msg_type}")
@@ -790,23 +847,127 @@ class PortManager:
 
         await self.send_payload_to_client(io_context.user, response)
 
-    async def _handle_fs_read(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Any):
-        """Handles a file read request from a client."""
+    async def _handle_fs_read(self, websocket: WebSocketServerProtocol, io_context: "Context", message: Dict[str, Any]):
+        """Handles a file read request from a client, now supporting chunking."""
+        path = message.get("path")
+        requesterId = message.get("requesterId")
+        offset = message.get("offset", 0)
+        length = message.get("length", -1)
+
+        if path is None or requesterId is None:
+            log.warning("Malformed fs_read request received.")
+            return
+
         response = {
             "type": "fs_read_response",
             "path": path,
-            "requesterId": requesterId
+            "requesterId": requesterId,
+            "offset": offset,
+            "length": length,
         }
 
-        content_bytes, is_binary, error = await self.kernel.get_raw(io_context, path)
+        try:
+            host_path = self.kernel.box(path, io_context=io_context)
 
-        if error:
-            response["error"] = error
-        else:
-            response["content_b64"] = base64.b64encode(content_bytes).decode('ascii')
-            response["is_binary"] = is_binary
+            if not os.path.exists(host_path):
+                response["error"] = f"path not found: {path}"
+            elif not os.path.isfile(host_path):
+                response["error"] = f"not a file: {path}"
+            else:
+                total_size = os.path.getsize(host_path)
+                response["total_size"] = total_size
+
+                with open(host_path, 'rb') as f:
+                    f.seek(offset)
+                    content_bytes = f.read(length)
+
+                is_binary_file = is_binary(host_path)
+                response["content_b64"] = base64.b64encode(content_bytes).decode('ascii')
+                response["is_binary"] = is_binary_file
+        except Exception as e:
+            log.error(f"Error during fs_read for {io_context.user} at '{path}': {e}")
+            response["error"] = "An internal server error occurred."
 
         await self.send_payload_to_client(io_context.user, response)
+
+    async def _handle_fs_watch_start(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str):
+        key = (websocket, path)
+        if key in self.active_watchers:
+            log.warning(f"Watcher already active for {io_context.user} on '{path}'.")
+            return
+
+        host_path = self.kernel.box(path, io_context=io_context)
+        if not os.path.isdir(host_path):
+            log.error(f"Cannot watch '{path}': not a valid directory for user '{io_context.user}'.")
+            return
+
+        loop = asyncio.get_running_loop()
+        event_handler = self._ClientUpdateEventHandler(self, io_context.user, path, loop)
+        
+        observer = Observer()
+        observer.schedule(event_handler, host_path, recursive=False)
+        observer.start()
+        
+        self.active_watchers[key] = observer
+        log.info(f"Started watching '{path}' for user '{io_context.user}'.")
+
+    async def _handle_fs_watch_stop(self, websocket: WebSocketServerProtocol, path: str):
+        key = (websocket, path)
+        observer = self.active_watchers.pop(key, None)
+        if observer:
+            observer.stop()
+            observer.join()
+            log.info(f"Stopped watching '{path}' for connection.")
+        else:
+            log.warning(f"Could not find active watcher for '{path}' to stop.")
+
+    async def _handle_fs_tail_start(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str):
+        key = (websocket, path)
+        if key in self.active_tailers:
+            log.warning(f"Tailing already active for {io_context.user} on '{path}'.")
+            return
+
+        host_path = self.kernel.box(path, io_context=io_context)
+        if not os.path.isfile(host_path):
+            log.error(f"Cannot tail '{path}': not a valid file for user '{io_context.user}'.")
+            return
+
+        task = asyncio.create_task(self._tail_file_task(websocket, io_context, path))
+        self.active_tailers[key] = task
+        log.info(f"Started tailing '{path}' for user '{io_context.user}'.")
+
+    async def _handle_fs_tail_stop(self, websocket: WebSocketServerProtocol, path: str):
+        key = (websocket, path)
+        task = self.active_tailers.pop(key, None)
+        if task:
+            task.cancel()
+            log.info(f"Stopped tailing '{path}' for connection.")
+        else:
+            log.warning(f"Could not find active tailing task for '{path}' to stop.")
+
+    async def _tail_file_task(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str):
+        try:
+            host_path = self.kernel.box(path, io_context=io_context)
+            with open(host_path, 'r', encoding='utf-8', errors='ignore') as f:
+                f.seek(0, 2)
+                while True:
+                    line = f.readline()
+                    if not line:
+                        await asyncio.sleep(0.5)
+                        continue
+                    
+                    payload = {
+                        "type": "fs_tail_update",
+                        "path": path,
+                        "data": line
+                    }
+                    await self.send_payload_to_client(io_context.user, payload)
+        except asyncio.CancelledError:
+            pass # Task cancellation is the normal way to stop tailing.
+        except Exception as e:
+            log.error(f"Error in tailing task for '{path}': {e}")
+        finally:
+            log.info(f"Tailing task for '{path}' for user '{io_context.user}' has ended.")
 
     async def _handle_remote_exec(self, websocket: WebSocketServerProtocol, message: Dict[str, Any]):
         """Handles a remote execution request and streams output back."""
@@ -1088,6 +1249,22 @@ class PortManager:
         if websocket not in self.active_connections:
             return
 
+        # --- ADDED for Filesystem Events Proposal ---
+        # Clean up any watchers associated with this websocket
+        for (ws, path), observer in list(self.active_watchers.items()):
+            if ws == websocket:
+                observer.stop()
+                observer.join()
+                del self.active_watchers[(ws, path)]
+                log.info(f"Cleaned up watcher for '{path}' on disconnect.")
+
+        # Clean up any tailers associated with this websocket
+        for (ws, path), task in list(self.active_tailers.items()):
+            if ws == websocket:
+                task.cancel()
+                del self.active_tailers[(ws, path)]
+                log.info(f"Cleaned up tailer for '{path}' on disconnect.")
+        
         conn_data = self.active_connections.pop(websocket)
 
         if conn_data.type == 'client' and conn_data.username:
