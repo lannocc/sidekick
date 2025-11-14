@@ -606,6 +606,12 @@ def iosk(args):
     iosk_run(args)
 
 
+def local(args):
+    from .local import main as local_main
+
+    local_main(args)
+
+
 OPTIONS = {
     '-h': (help,
         'general help for sidekick (also --help)'),
@@ -653,4 +659,7 @@ COMMANDS = {
     #    'ask commands'),
     'iosk': (iosk,
         'run iosk system'),
+    'local': (local,
+        'run local service for SKYBOARD'),
 }
+
