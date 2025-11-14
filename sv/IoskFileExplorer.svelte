@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
+    import { fileSystemRequests, fileSystemResponses, fileSystemWatchEvents } from './ioskEvents.js';
     import { newIoskFileViewer, windows } from './windows.js';
     import { windowSettings } from './desktopStore.js';
 
@@ -23,6 +23,10 @@
     let errorMessage = '';
 
     let unsubscribeResponses;
+
+    // --- State for Watch feature ---
+    let isWatching = false;
+    let unsubscribeWatchEvents;
 
     // --- Settings Modal State ---
     let showSettings = false;
@@ -112,6 +116,24 @@
         }
     }
 
+    function sendWatchRequest(type, path) {
+        if (!consoleId) return;
+        const request = {
+            consoleId,
+            command: { type, path }
+        };
+        fileSystemRequests.set({ ...request, timestamp: Date.now() });
+    }
+
+    function toggleWatch() {
+        isWatching = !isWatching;
+        if (isWatching) {
+            sendWatchRequest('fs_watch_start', currentPath);
+        } else {
+            sendWatchRequest('fs_watch_stop', currentPath);
+        }
+    }
+
     function requestPath(path) {
         errorMessage = '';
         if (!consoleId) {
@@ -133,6 +155,10 @@
 
     function handleItemClick(item) {
         if (item.type === 'dir') {
+            if (isWatching) {
+                sendWatchRequest('fs_watch_stop', currentPath);
+                isWatching = false;
+            }
             let newPath;
             if (item.name === '..') {
                 // Navigate up
@@ -174,6 +200,12 @@
             }
         });
 
+        unsubscribeWatchEvents = fileSystemWatchEvents.subscribe(event => {
+            if (event && event.consoleId === consoleId && isWatching && event.data.path === currentPath) {
+                requestPath(currentPath);
+            }
+        });
+
         // If we are created with a consoleId, request the path immediately.
         // If we are restored (with consoleConnection), the reactive block will handle it.
         if (consoleId) {
@@ -182,7 +214,11 @@
     });
 
     onDestroy(() => {
+        if (isWatching) {
+            sendWatchRequest('fs_watch_stop', currentPath);
+        }
         if (unsubscribeResponses) unsubscribeResponses();
+        if (unsubscribeWatchEvents) unsubscribeWatchEvents();
     });
 </script>
 
@@ -204,6 +240,32 @@
         white-space: nowrap;
         overflow-x: auto;
         flex-shrink: 0; /* Prevents the path bar from shrinking */
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .path-bar span {
+        flex-grow: 1;
+        overflow-x: hidden;
+        text-overflow: ellipsis;
+    }
+    .watch-button {
+        background: var(--taskbar-button-bg);
+        border: 1px solid var(--border-color);
+        color: var(--taskbar-text);
+        padding: 2px 8px;
+        border-radius: 3px;
+        cursor: pointer;
+        margin-left: 10px;
+        flex-shrink: 0;
+    }
+    .watch-button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .watch-button.active {
+        background-color: var(--taskbar-button-hover-bg);
+        border-color: #2980b9;
+        color: #3498db;
     }
     .error-message {
         color: #e74c3c;
@@ -264,6 +326,9 @@
 <div class="explorer-container">
     <div class="path-bar">
         <span>{currentPath}</span>
+        <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates">
+            {isWatching ? 'Watching' : 'Watch'} 👀
+        </button>
     </div>
     {#if errorMessage}
         <div class="error-message">{errorMessage}</div>

@@ -6,7 +6,7 @@
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
     import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat } from './windows.js';
-    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages } from './ioskEvents.js';
+    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents } from './ioskEvents.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
 
     export let id; // Unique ID from the window manager
@@ -445,6 +445,18 @@
                             }
                         } else if (data.type === 'user_colors_update') {
                             userColors = data.colors;
+                        } else if (data.type === 'fs_watch_update') {
+                            fileSystemWatchEvents.set({
+                                consoleId: id,
+                                data: data,
+                                timestamp: Date.now()
+                            });
+                        } else if (data.type === 'fs_tail_update') {
+                            fileSystemTailEvents.set({
+                                consoleId: id,
+                                data: data,
+                                timestamp: Date.now()
+                            });
                         } else if (data.output || data.prompt) {
                             if (data.output) {
                                 const bellCode = "\u0007";
