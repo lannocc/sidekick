@@ -747,9 +747,10 @@ class PortManager:
                 if conn_meta.type == 'client' and conn_meta.username:
                     path = message.get("path", "/")
                     requesterId = message.get("requesterId")
+                    recursive = message.get("recursive", False)
                     io_context = self.kernel.users.get(conn_meta.username)
                     if io_context:
-                        await self._handle_fs_list(websocket, io_context, path, requesterId)
+                        await self._handle_fs_list(websocket, io_context, path, requesterId, recursive)
                 else:
                     log.warning("Received fs_list from non-client connection.")
 
@@ -771,13 +772,13 @@ class PortManager:
         except Exception:
             log.error(f"Error dispatching message: {traceback.format_exc()}")
 
-    async def _handle_fs_list(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Optional[Any]):
+    async def _handle_fs_list(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Optional[Any], recursive: bool = False):
         """Handles a file system list request from a client."""
         response = {"type": "fs_list_response", "path": path}
         if requesterId is not None:
             response["requesterId"] = requesterId
         try:
-            listing = await self.kernel.list_dir(io_context, path)
+            listing = await self.kernel.list_dir(io_context, path, recursive=recursive)
             response["listing"] = listing
         except FileNotFoundError as e:
             response["error"] = str(e)
@@ -1116,4 +1117,3 @@ class PortManager:
 
             # 3. Propagate the disconnection to remaining peers
             await self._broadcast_peer_disconnect(disconnected_host)
-

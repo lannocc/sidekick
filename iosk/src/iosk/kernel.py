@@ -963,8 +963,8 @@ class IOSK:
             await io.error(f"!! failed to remove directory '{path}': {e}")
             return False
 
-    async def list_dir(self, io: Context, path: str) -> list:
-        """Lists the contents of a directory in the sandbox."""
+    async def list_dir(self, io: Context, path: str, recursive: bool = False) -> list:
+        """Lists the contents of a directory in the sandbox, optionally recursively."""
         host_path = self.box(path, io_context=io)
         if not exists(host_path):
             raise FileNotFoundError(f"Path not found: {path}")
@@ -973,14 +973,53 @@ class IOSK:
 
         listing = []
         try:
-            for item_name in sorted(os.listdir(host_path)):
-                full_item_path = os.path.join(host_path, item_name)
-                item_type = 'dir' if isdir(full_item_path) else 'file'
-                try:
-                    size = getsize(full_item_path)
-                except OSError:
-                    size = -1
-                listing.append({'name': item_name, 'type': item_type, 'size': size})
+            if recursive:
+                for root, dirs, files in os.walk(host_path, topdown=True):
+                    # Sort dirs and files to ensure consistent output
+                    dirs.sort()
+                    files.sort()
+                    # Convert host root path back to virtual path for this level
+                    relative_path_from_start = os.path.relpath(root, host_path)
+                    if relative_path_from_start == '.':
+                        virtual_root = path
+                    else:
+                        # Ensure we use POSIX separators for the virtual path
+                        virtual_root = posixpath.join(path, *relative_path_from_start.split(os.sep))
+
+                    # Process all files at the current level
+                    for item_name in files:
+                        item_host_path = os.path.join(root, item_name)
+                        item_virtual_path = posixpath.join(virtual_root, item_name)
+                        try:
+                            size = getsize(item_host_path)
+                        except OSError:
+                            size = -1
+                        listing.append({'name': item_name, 'path': item_virtual_path, 'type': 'file', 'size': size})
+
+                    # Process all subdirectories at the current level
+                    for item_name in dirs:
+                        item_host_path = os.path.join(root, item_name)
+                        item_virtual_path = posixpath.join(virtual_root, item_name)
+                        try:
+                            size = getsize(item_host_path)
+                        except OSError:
+                            size = -1
+                        listing.append({'name': item_name, 'path': item_virtual_path, 'type': 'dir', 'size': size})
+            else:
+                for item_name in sorted(os.listdir(host_path)):
+                    full_item_path_host = os.path.join(host_path, item_name)
+                    full_item_path_virtual = posixpath.join(path, item_name)
+                    item_type = 'dir' if isdir(full_item_path_host) else 'file'
+                    try:
+                        size = getsize(full_item_path_host)
+                    except OSError:
+                        size = -1
+                    listing.append({
+                        'name': item_name,
+                        'path': full_item_path_virtual,
+                        'type': item_type,
+                        'size': size
+                    })
         except OSError as e:
             await io.error(f"Error reading directory {path}: {e}")
             raise
