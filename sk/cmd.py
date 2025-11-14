@@ -197,7 +197,6 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
                  model=config.GEMINI_MODEL_QUICK_2, use_openai=False):
     from .ai import google, openai
     from .util import get_md_code_block
-    from . import worker
     import sys
     import time
 
@@ -241,7 +240,7 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         print('!!! need either both mdlang and mdsave, or neither')
         return
 
-    # Get prompt from multi-line interactive input or pipe
+    # Changed: Get prompt from multi-line interactive input or pipe
     if sys.stdin.isatty():
         # Interactive mode
         if not quiet:
@@ -270,6 +269,8 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
                 f.write(f"Tokens: {total_tokens:,}\n")
         except Exception as e:
             print(f"!!! Error writing prompt to transcript file {work_file}: {e}")
+            # Decide if we should continue without the work file.
+            # For now, we'll disable it and proceed.
             work_file = None
 
     if not quiet:
@@ -280,130 +281,39 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         print("...waiting for reply...")
 
     ai_provider = openai if use_openai else google
+
     start_time = time.monotonic()
-
     if file:
-        stream = ai_provider.stream_prompt_with_file_for_text(prompt, file, chatter=chatter, model=model)
-    else:
-        stream = ai_provider.stream_prompt_for_text(prompt, chatter=chatter, model=model)
+        answer = ai_provider.prompt_with_file_for_text(prompt, file, chatter=chatter,
+                                              model=model)
 
-    full_answer = ""
-    transcript_handle = None
+    else:
+        answer = ai_provider.prompt_for_text(prompt, chatter=chatter, model=model)
+    end_time = time.monotonic()
+    turnaround_time = end_time - start_time
+
+    output_bytes = len(answer.encode('utf-8'))
+    output_tokens = len(ENCODING.encode(answer))
+
     if work_file:
         try:
             with open(work_file, 'a', encoding='utf-8') as f:
                 f.write("\n\n--- ANSWER ---\n")
-            transcript_handle = open(work_file, 'a', encoding='utf-8')
+                f.write(answer)
+                f.write("\n\n--- OUTPUT TOTALS ---\n")
+                f.write(f"Bytes: {output_bytes:,}\n")
+                f.write(f"Tokens: {output_tokens:,}\n")
         except Exception as e:
-            print(f"!!! Error preparing transcript file {work_file}: {e}")
-            work_file = None
+            print(f"!!! Error writing answer to transcript file {work_file}: {e}")
+            work_file = None # Disable further work operations on this file
 
-    state = 'NORMAL'
-    code_block_buffer = ""
-    code_block_lang_info = ""
-    code_block_lines = 0
-    stream_buffer = ""
-
-    print() # Start response on a new line.
-
-    for token in stream:
-        if not token: continue
-
-        stream_buffer += token
-        if transcript_handle:
-            transcript_handle.write(token)
-            transcript_handle.flush()
-        full_answer += token
-
-        while True:
-            can_continue_processing = False
-            if state == 'NORMAL':
-                start_pos = stream_buffer.find('```')
-                if start_pos == -1:
-                    sys.stdout.write(stream_buffer)
-                    sys.stdout.flush()
-                    stream_buffer = ""
-                    break
-
-                text_before = stream_buffer[:start_pos]
-                sys.stdout.write(text_before)
-                sys.stdout.flush()
-                rest_of_buffer = stream_buffer[start_pos:]
-
-                line_end_pos = rest_of_buffer.find('\n')
-                if line_end_pos == -1:
-                    stream_buffer = rest_of_buffer
-                    break
-
-                lang_line = rest_of_buffer[:line_end_pos + 1]
-                sys.stdout.write(lang_line)
-                sys.stdout.flush()
-
-                code_block_lang_info = lang_line[3:-1].strip()
-                state = 'IN_CODE_BLOCK'
-                code_block_buffer = ""
-                code_block_lines = lang_line.count('\n')
-                stream_buffer = rest_of_buffer[line_end_pos + 1:]
-                can_continue_processing = True
-
-            elif state == 'IN_CODE_BLOCK':
-                end_pos = stream_buffer.find('```')
-                if end_pos == -1:
-                    sys.stdout.write(stream_buffer)
-                    sys.stdout.flush()
-                    code_block_buffer += stream_buffer
-                    code_block_lines += stream_buffer.count('\n')
-                    stream_buffer = ""
-                    break
-
-                code_chunk = stream_buffer[:end_pos]
-                sys.stdout.write(code_chunk)
-                sys.stdout.flush()
-                code_block_buffer += code_chunk
-                code_block_lines += code_chunk.count('\n')
-
-                sys.stdout.write('```')
-                sys.stdout.flush()
-
-                if work_file:
-                    context_before_block = full_answer[:-(len(stream_buffer) - start_pos)]
-                    summary = worker.do_work_on_block(
-                        code_block_lang_info, code_block_buffer,
-                        context_before_block, work_file
-                    )
-                    lines_to_erase = code_block_lines + 1
-                    sys.stdout.write(f'\x1b[{lines_to_erase}A')
-                    sys.stdout.write(f'\x1b[J')
-                    print(f'-> {summary}')
-                else:
-                    print()
-
-                state = 'NORMAL'
-                stream_buffer = stream_buffer[end_pos + 3:]
-                code_block_lang_info = ""
-                code_block_buffer = ""
-                code_block_lines = 0
-                can_continue_processing = True
-
-            if not can_continue_processing:
-                break
-    
-    # Process any final text left in the buffer
-    if stream_buffer:
-        sys.stdout.write(stream_buffer)
-        sys.stdout.flush()
-
-    if transcript_handle:
-        transcript_handle.close()
-
-    end_time = time.monotonic()
-    turnaround_time = end_time - start_time
-    output_bytes = len(full_answer.encode('utf-8'))
-    output_tokens = len(ENCODING.encode(full_answer))
-
+    summary = None
+    answer_for_display = answer
     turnaround_summary_line = f"Turn-around time: {turnaround_time:.2f} seconds"
 
     if work_file:
+        from . import worker
+        answer_for_display, summary = worker.do_work(prompt, answer, work_file) # worker will append summary
         try:
             with open(work_file, 'a', encoding='utf-8') as f:
                 f.write("\n\n--- PERFORMANCE ---\n")
@@ -411,10 +321,14 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
         except Exception as e:
             print(f"!!! Error writing performance to transcript file {work_file}: {e}")
 
+
     md = None
     if mdlang:
-        md = get_md_code_block(mdlang, full_answer)
+        md = get_md_code_block(mdlang or None, answer)
+        if md: answer_for_display = answer.replace(md, '$$$ CODE EXTRACTED $$$')
 
+    print()
+    print(f' << {answer_for_display}')
     print()
 
     if mdsave:
@@ -423,8 +337,13 @@ def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
                 fout.write(md)
                 fout.write('\n')
             print(f':: SAVED {mdlang} TO {mdsave}')
+
         else:
             print(f'!! NO CODE TO SAVE')
+
+    if summary:
+        print(summary)
+        print()
 
     if work_file:
         print(f':: Transcript saved to: {work_file}')
@@ -743,3 +662,4 @@ COMMANDS = {
     'local': (local,
         'run local service for SKYBOARD'),
 }
+

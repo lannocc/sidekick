@@ -129,60 +129,6 @@ def prompt_with_file_for_json(prompt, file, retries=0, quiet=False,
     raise last_exception
 
 
-def stream_prompt_for_text(prompt, chatter=False, model=config.OPENAI_MODEL_QUICK_2):
-    if chatter: print(f'  ai >> {prompt}')
-    client = openai.OpenAI(api_key=config.OPENAI_API_KEY,
-                           timeout=config.OPENAI_TIMEOUT_HTTP)
-    resp = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            stream=True
-            )
-    for chunk in resp:
-        content = chunk.choices[0].delta.content
-        if content:
-            if chatter: print(f'  ai << (chunk) {content}')
-            yield content
-
-
-def stream_prompt_with_file_for_text(prompt, file, chatter=False,
-                                     model=config.OPENAI_MODEL_SMART):
-    if chatter: print(f'  ai >> {prompt}')
-    client = openai.OpenAI(api_key=config.OPENAI_API_KEY,
-                           timeout=config.OPENAI_TIMEOUT_HTTP)
-
-    mime_type = _get_mime_type(file)
-    messages = []
-
-    if mime_type and mime_type.startswith('image/'):
-        base64_image = _encode_image(file)
-        messages.append({
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url",
-                 "image_url": {"url": f"data:{mime_type};base64,{base64_image}"}},
-            ]
-        })
-    else:  # Assume text file
-        with open(file, 'r', encoding='utf-8') as f:
-            file_content = f.read()
-        full_prompt = f"File content:\n\n---\n{file_content}\n---\n\nPrompt:\n{prompt}"
-        messages.append({"role": "user", "content": full_prompt})
-
-    resp = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True
-            )
-
-    for chunk in resp:
-        content = chunk.choices[0].delta.content
-        if content:
-            if chatter: print(f'  ai << (chunk) {content}')
-            yield content
-
-
 async def async_prompt_for_text(prompt, chatter=False,
                                 model=config.OPENAI_MODEL_QUICK_2):
     if chatter: print(f'  ai >> {prompt}')
