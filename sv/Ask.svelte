@@ -159,7 +159,7 @@
 
 <style>
     .ask-container { display: flex; height: 100%; font-family: monospace; background-color: var(--console-bg); color: var(--console-text); }
-    .sidebar { width: 280px; padding: 10px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 15px; overflow-y: auto; flex-shrink: 0; }
+    .sidebar { width: 280px; padding: 10px; border-left: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 15px; overflow-y: auto; flex-shrink: 0; }
     .main-content { flex-grow: 1; display: flex; flex-direction: column; }
     .prompt-area { flex-shrink: 0; padding: 10px; border-bottom: 1px solid var(--border-color); }
     .prompt-area textarea { width: 100%; height: 120px; background-color: var(--window-bg); color: var(--title-bar-text); border: 1px solid var(--border-color); resize: vertical; padding: 5px; }
@@ -183,6 +183,16 @@
 </style>
 
 <div class="ask-container">
+    <div class="main-content">
+        <div class="prompt-area">
+            <textarea placeholder="Enter your prompt here... (this will be piped to the command's stdin)" bind:value={promptText}></textarea>
+        </div>
+        <div class="output-area" bind:this={outputEl}>
+            {#each output as line}
+                <div class="output-line" class:stderr={line.stream === 'stderr'} class:system={line.stream === 'system'}>{line.data}</div>
+            {/each}
+        </div>
+    </div>
     <div class="sidebar">
         <fieldset>
             <legend>Model</legend>
@@ -240,15 +250,5 @@
                 Ask
             {/if}
         </button>
-    </div>
-    <div class="main-content">
-        <div class="prompt-area">
-            <textarea placeholder="Enter your prompt here... (this will be piped to the command's stdin)" bind:value={promptText}></textarea>
-        </div>
-        <div class="output-area" bind:this={outputEl}>
-            {#each output as line}
-                <div class="output-line" class:stderr={line.stream === 'stderr'} class:system={line.stream === 'system'}>{line.data}</div>
-            {/each}
-        </div>
     </div>
 </div>
