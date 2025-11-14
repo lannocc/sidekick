@@ -42,7 +42,6 @@
     let attachUsers = [];
     let selectedDevice = null;
     let selectedUser = null;
-    let deviceBrowsePath = '/dev';
     let isLoadingDevices = false;
     let isLoadingUsers = false;
 
@@ -360,6 +359,13 @@
         }
     }
 
+    function requestAllDevices() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            const message = { type: 'fs_list', path: '/dev', recursive: true };
+            ws.send(JSON.stringify(message));
+        }
+    }
+
     export async function connect() {
         // Sync local input values back to the main props before connecting
         wsUrl = localWsUrl;
@@ -471,24 +477,47 @@
                                 currentPrompt = data.prompt;
                             }
                         } else if (data.type === 'fs_list_response') {
-                            if (data.path.startsWith('/dev')) {
-                                deviceBrowsePath = data.path;
-                                let items = data.listing || [];
-                                if (data.path !== '/dev') {
-                                    items.unshift({ name: '..', type: 'dir' });
-                                }
-                                attachDevices = items;
-                                isLoadingDevices = false;
-                            } else if (data.path === '/home') {
-                                attachUsers = (data.listing || []).filter(item => item.type === 'dir');
-                                isLoadingUsers = false;
-                            } else {
+                            if (data.requesterId) {
+                                // It's for an external component like File Explorer
                                 fileSystemResponses.set({
                                     consoleId: id,
                                     requesterId: data.requesterId,
                                     data: data,
                                     timestamp: Date.now()
                                 });
+                            } else {
+                                // It's for this console's internal UI (attach menu)
+                                if (data.path === '/dev') {
+                                    // This is the recursive device listing
+                                    let items = data.listing || [];
+                                    attachDevices = items
+                                        .filter(item => {
+                                            const basename = item.path.split('/').pop();
+                                            return basename && !basename.startsWith('.') && !basename.startsWith('_');
+                                        })
+                                        .map(item => {
+                                            let displayPath = item.path.startsWith('/dev/') ? item.path.substring(5) : item.path;
+
+                                            if (item.type === 'file' && displayPath.endsWith('.py')) {
+                                                displayPath = displayPath.slice(0, -3);
+                                            }
+                                            if (displayPath.endsWith('/')) {
+                                                displayPath = displayPath.slice(0, -1);
+                                            }
+
+                                            return {
+                                                displayName: displayPath || '/', // Handle root case
+                                                fullPath: item.path,
+                                                type: item.type
+                                            };
+                                        })
+                                        .sort((a, b) => a.displayName.localeCompare(b.displayName));
+                                    isLoadingDevices = false;
+                                } else if (data.path === '/home') {
+                                    // This is the user listing
+                                    attachUsers = (data.listing || []).filter(item => item.type === 'dir');
+                                    isLoadingUsers = false;
+                                }
                             }
                         } else if (data.type === 'fs_read_response') {
                             fileSystemResponses.set({
@@ -615,7 +644,7 @@
             selectedUser = null;
             if (attachDevices.length === 0) {
                 isLoadingDevices = true;
-                requestFsList('/dev');
+                requestAllDevices();
             }
             if (attachUsers.length === 0) {
                 isLoadingUsers = true;
@@ -625,21 +654,7 @@
     }
 
     function handleDeviceClick(item) {
-        const newPath = deviceBrowsePath === '/' ? `/${item.name}` : `${deviceBrowsePath}/${item.name}`;
-        if (item.type === 'dir') {
-            if (item.name === '..') {
-                const parentPath = deviceBrowsePath.substring(0, deviceBrowsePath.lastIndexOf('/')) || '/';
-                if (parentPath.startsWith('/dev')) {
-                     isLoadingDevices = true;
-                     requestFsList(parentPath);
-                }
-            } else {
-                isLoadingDevices = true;
-                requestFsList(newPath);
-            }
-        } else {
-            selectedDevice = newPath.substring('/dev/'.length);
-        }
+        selectedDevice = item.displayName;
     }
 
     function handleUserClick(item) {
@@ -647,8 +662,10 @@
     }
 
     function performAttach() {
-        if (!selectedDevice || !selectedUser) return;
-        const commandToRun = `$ attach ${selectedDevice} ${selectedUser}`;
+        if (!selectedDevice) return;
+        const commandToRun = selectedUser
+            ? `$ attach ${selectedDevice} ${selectedUser}`
+            : `$ attach ${selectedDevice}`;
         output = [...output, {type: 'prompt', content: currentPrompt + commandToRun}];
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
@@ -844,19 +861,18 @@
             <div class="attach-panels">
                 <div class="attach-panel">
                     <div class="panel-header">Device</div>
-                    <div class="path-header">{deviceBrowsePath}</div>
                     <div class="panel-list">
                         {#if isLoadingDevices}
                             <div class="list-item">Loading...</div>
                         {:else}
-                            {#each attachDevices as item (item.name)}
+                            {#each attachDevices as item (item.fullPath)}
                                 <div
                                     class="list-item"
-                                    class:selected={selectedDevice === (deviceBrowsePath === '/' ? item.name : deviceBrowsePath.substring('/dev/'.length) + '/' + item.name)}
+                                    class:selected={selectedDevice === item.displayName}
                                     on:click={() => handleDeviceClick(item)}
-                                    title={item.name}
+                                    title={item.displayName}
                                 >
-                                    {item.type === 'dir' ? '🗂️' : '🔌'} {item.name}
+                                    {item.type === 'dir' ? '🗂️' : '🔌'} {item.displayName}
                                 </div>
                             {:else}
                                 <div class="list-item">(empty)</div>
@@ -865,7 +881,7 @@
                     </div>
                 </div>
                 <div class="attach-panel">
-                    <div class="panel-header">User</div>
+                    <div class="panel-header">User (Optional)</div>
                     <div class="path-header">/home</div>
                      <div class="panel-list">
                         {#if isLoadingUsers}
@@ -890,7 +906,7 @@
             <div class="attach-footer">
                 <button
                     class="primary"
-                    disabled={!selectedDevice || !selectedUser}
+                    disabled={!selectedDevice}
                     on:click={performAttach}>
                     Attach
                 </button>
