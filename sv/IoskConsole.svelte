@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, newIoskFileExplorer, newIoskPrivateChat } from './windows.js';
+    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat } from './windows.js';
     import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages } from './ioskEvents.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
 
@@ -276,6 +276,24 @@
         if (remoteUsername === username) return;
 
         newIoskPrivateChat(id, username, remoteParticipant);
+        closeUserContextMenu();
+        focusInput();
+    }
+
+    function viewUserLog() {
+        if (!userContextMenu.user) return;
+
+        const usernameOnly = userContextMenu.user.split('.')[0];
+        
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
+
+        const logPath = `/var/log/user/${usernameOnly}/${dateString}.log`;
+
+        newIoskFileViewer(id, logPath);
         closeUserContextMenu();
         focusInput();
     }
@@ -1018,6 +1036,9 @@
             {:else}
                 <button class="menu-item" on:click={() => openPrivateChat(userContextMenu.user)}>
                     Private Chat
+                </button>
+                <button class="menu-item" on:click={viewUserLog}>
+                    View Log...
                 </button>
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={() => userContextMenu.showColorPicker = true}> Set Color... </button>
