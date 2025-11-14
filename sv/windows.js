@@ -484,8 +484,9 @@ export function newLocalTerminal() {
     windows.addWindow(LocalTerminal, { title: 'Local Terminal', width: 800, height: 500 });
 }
 
-export function newLocalFileExplorer() {
-    windows.addWindow(LocalFileExplorer, { title: 'Local Files', width: 500, height: 600 });
+export function newLocalFileExplorer(props = {}) {
+    const defaultProps = { title: 'Local Files', width: 500, height: 600 };
+    windows.addWindow(LocalFileExplorer, { ...defaultProps, ...props });
 }
 
 export function newAskWindow(initialFiles = []) {

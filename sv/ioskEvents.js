@@ -11,3 +11,6 @@ export const consoleCommands = writable(null);
 
 // Used for Console -> Private Chat to deliver a received message
 export const privateMessages = writable(null);
+
+// Used for file picker communication
+export const fileSelection = writable(null);

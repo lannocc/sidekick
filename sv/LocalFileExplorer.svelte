@@ -5,7 +5,12 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { connect, sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus } from './localBackendStore.js';
-    import { newAskWindow } from './windows.js';
+    import { newAskWindow, windows } from './windows.js';
+    import { fileSelection } from './ioskEvents.js';
+
+    export let id;
+    export let groupId;
+    export let pickerTargetId = null;
 
     let currentPath = '/'; // A reasonable default
     let items = [];
@@ -52,6 +57,13 @@
         sendMessage({ type: 'fs_list', path });
     }
 
+    function selectCurrentPath() {
+        if (pickerTargetId) {
+            fileSelection.set({ targetId: pickerTargetId, path: currentPath });
+            windows.removeWindow(groupId);
+        }
+    }
+
     function handleItemClick(item) {
         if (item.type === 'dir') {
             let newPath;
@@ -64,8 +76,13 @@
             requestPath(newPath);
         } else if (item.type === 'file') {
             const filePath = currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`;
-            viewer = { visible: true, path: filePath, content: 'Loading...', error: '' };
-            sendMessage({ type: 'fs_read', path: filePath });
+            if (pickerTargetId) {
+                fileSelection.set({ targetId: pickerTargetId, path: filePath });
+                windows.removeWindow(groupId);
+            } else {
+                viewer = { visible: true, path: filePath, content: 'Loading...', error: '' };
+                sendMessage({ type: 'fs_read', path: filePath });
+            }
         }
     }
 
@@ -127,7 +144,9 @@
 
 <style>
     .explorer-container { display: flex; flex-direction: column; height: 100%; font-family: monospace; background-color: var(--console-bg); color: var(--console-text); font-size: 14px; user-select: none; }
-    .path-bar { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); white-space: nowrap; overflow-x: auto; flex-shrink: 0; }
+    .path-bar { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); white-space: nowrap; overflow-x: auto; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
+    .path-bar button { background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--taskbar-text); padding: 2px 8px; border-radius: 3px; cursor: pointer; margin-left: 10px; flex-shrink: 0; }
+    .path-bar button:hover { background-color: var(--taskbar-button-hover-bg); }
     .status-bar { padding: 4px 8px; font-size: 0.9em; color: #7f8c8d; }
     .status-bar.error { color: #e74c3c; }
     .item-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
@@ -150,6 +169,9 @@
 <div class="explorer-container">
     <div class="path-bar">
         <span>{currentPath}</span>
+        {#if pickerTargetId}
+            <button on:click={selectCurrentPath}>Select Current Folder</button>
+        {/if}
     </div>
     {#if errorMessage}
         <div class="status-bar error">{errorMessage}</div>

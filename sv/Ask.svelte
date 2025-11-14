@@ -4,8 +4,9 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { sendMessage, askOutput, askError, askExit, connectionStatus } from './localBackendStore.js';
-    import { windows } from './windows.js';
+    import { connect, sendMessage, askOutput, askError, askExit, connectionStatus } from './localBackendStore.js';
+    import { newLocalFileExplorer } from './windows.js';
+    import { fileSelection } from './ioskEvents.js';
 
     export let id; // tab id
     export let groupId;
@@ -25,7 +26,7 @@
     let exitCode = null;
     let connectionState = 'disconnected';
 
-    let unsubscribeOutput, unsubscribeError, unsubscribeExit, unsubscribeStatus;
+    let unsubscribeOutput, unsubscribeError, unsubscribeExit, unsubscribeStatus, unsubscribeSelection;
     let outputEl;
 
     function scrollToBottom() {
@@ -35,6 +36,8 @@
     }
 
     onMount(() => {
+        connect(); // Connect to local backend on mount
+
         unsubscribeStatus = connectionStatus.subscribe(s => {
             connectionState = s;
         });
@@ -59,6 +62,15 @@
                 setTimeout(scrollToBottom, 0);
             }
         });
+        unsubscribeSelection = fileSelection.subscribe(selection => {
+            if (selection && selection.targetId === askId) {
+                const newFile = selection.path;
+                if (newFile && !files.includes(newFile)) {
+                    files = [...files, newFile];
+                }
+                fileSelection.set(null); // Reset store to avoid re-triggering
+            }
+        });
     });
 
     onDestroy(() => {
@@ -66,6 +78,7 @@
         if (unsubscribeError) unsubscribeError();
         if (unsubscribeExit) unsubscribeExit();
         if (unsubscribeStatus) unsubscribeStatus();
+        if (unsubscribeSelection) unsubscribeSelection();
     });
 
     function runAsk() {
@@ -84,11 +97,7 @@
     }
 
     function addFile() {
-        // A simple prompt for now. A real implementation might use a file picker window.
-        const newFile = prompt("Enter full path to add a file/directory:");
-        if (newFile && !files.includes(newFile)) {
-            files = [...files, newFile];
-        }
+        newLocalFileExplorer({ title: 'Select Path for Ask', pickerTargetId: askId });
     }
 
     function removeFile(fileToRemove) {
