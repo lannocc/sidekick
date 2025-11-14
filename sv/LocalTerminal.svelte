@@ -5,12 +5,15 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { connect, sendMessage, terminalData, connectionStatus } from './localAgentStore.js';
+    import { dragRequest } from './windows.js';
 
     import { Terminal } from '@xterm/xterm';
     import { FitAddon } from '@xterm/addon-fit';
     import 'xterm/css/xterm.css';
 
     export let isActive;
+    export let groupId;
+    export let maximized;
 
     let terminalEl;
     let term;
@@ -19,6 +22,21 @@
 
     let unsubscribeTerminalData;
     let unsubscribeStatus;
+
+    function handleMouseDown(event) {
+        if ((event.altKey || event.metaKey) && event.button === 0 && !maximized) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            dragRequest.set({
+                id: groupId,
+                type: 'move',
+                direction: null,
+                clientX: event.clientX,
+                clientY: event.clientY,
+            });
+        }
+    }
 
     function resizeTerminal() {
         if (fitAddon && term) {
@@ -96,4 +114,4 @@
     }
 </style>
 
-<div class="terminal-container" bind:this={terminalEl}></div>
+<div class="terminal-container" bind:this={terminalEl} on:mousedown={handleMouseDown}></div>

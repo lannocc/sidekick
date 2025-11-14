@@ -277,6 +277,7 @@
                         id={tab.id}
                         isActive={group.isActive && tab.id === group.activeTabId}
                         x={group.x} y={group.y} width={group.width} height={group.height}
+                        maximized={group.maximized}
                     />
                     {#if componentInstances[tab.id]}
                         <InstanceRegistrar tabId={tab.id} instance={componentInstances[tab.id]} />
