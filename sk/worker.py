@@ -10,8 +10,8 @@ import shutil
 # string line after the backticks (e.g., "python:path/to/file.py").
 CODEBLOCK_REGEX = re.compile(r'```(?P<language>[^\n]*)\n(?P<code>.*?)\n```', re.DOTALL)
 
-# Regex to find ">>> BEGIN FILE <path>:" markers before code blocks.
-BEGIN_FILE_REGEX = re.compile(r'>>> BEGIN FILE\s+([^:\n]+):')
+# Regex to find ">>> BEGIN ... <path>:" markers before code blocks (e.g., BEGIN FILE, BEGIN NEW FILE, BEGIN PATCH).
+BEGIN_FILE_REGEX = re.compile(r'>>> BEGIN .*\s+([^:\n]+):')
 
 # Regex to find file paths in backticks, updated to allow spaces in the path.
 FILENAME_REGEX = re.compile(r'`([^`]+)`')
@@ -136,7 +136,7 @@ def do_work(prompt, answer, transcript_path):
         # --- Fallback to existing methods if filename not found in language line ---
         search_window = answer[max(0, match.start() - 512):match.start()]
 
-        # 2. Look for ">>> BEGIN FILE <path>:" marker, another strong signal.
+        # 2. Look for ">>> BEGIN ... <path>:" marker, another strong signal.
         if not filename:
             begin_file_matches = BEGIN_FILE_REGEX.findall(search_window)
             if begin_file_matches:
