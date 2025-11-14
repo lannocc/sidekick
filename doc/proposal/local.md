@@ -2,7 +2,7 @@
 
 **Author:** LANNOCC
 **Date:** November 13, 2025
-**Status:** Draft
+**Status:** Implemented
 
 ## 1. Introduction & Motivation
 

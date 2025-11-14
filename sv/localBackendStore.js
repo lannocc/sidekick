@@ -59,10 +59,10 @@ export function connect() {
                     fsError.set(msg);
                     break;
                 default:
-                    console.warn('Unknown message type from local agent:', msg.type);
+                    console.warn('Unknown message type from local backend:', msg.type);
             }
         } catch (e) {
-            console.error('Error parsing message from local agent:', e);
+            console.error('Error parsing message from local backend:', e);
         }
     };
 

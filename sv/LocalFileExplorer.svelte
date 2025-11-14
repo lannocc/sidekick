@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { connect, sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus } from './localAgentStore.js';
+    import { connect, sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus } from './localBackendStore.js';
 
     let currentPath = '/'; // A reasonable default
     let items = [];
@@ -50,7 +50,7 @@
             if (s === 'connected') {
                 requestPath('.');
             } else if (s === 'disconnected' || s === 'error') {
-                errorMessage = "Not connected to local agent. Run 'sk local'.";
+                errorMessage = "Not connected to local backend. Run 'sk local'.";
                 items = [];
             }
         });

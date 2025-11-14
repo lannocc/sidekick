@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { connect, sendMessage, terminalData, connectionStatus } from './localAgentStore.js';
+    import { connect, sendMessage, terminalData, connectionStatus } from './localBackendStore.js';
     import { dragRequest } from './windows.js';
 
     import { Terminal } from '@xterm/xterm';
