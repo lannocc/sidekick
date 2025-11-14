@@ -6,6 +6,8 @@ import IoskFileExplorer from './IoskFileExplorer.svelte';
 import IoskFileViewer from './IoskFileViewer.svelte';
 import WebBrowser from './WebBrowser.svelte';
 import IoskPrivateChat from './IoskPrivateChat.svelte';
+import LocalTerminal from './LocalTerminal.svelte';
+import LocalFileExplorer from './LocalFileExplorer.svelte';
 import { desktopSettings, windowSettings } from './desktopStore.js';
 
 let windowGroupIdCounter = 0;
@@ -24,7 +26,9 @@ const componentMap = {
     'IoskFileExplorer': IoskFileExplorer,
     'IoskFileViewer': IoskFileViewer,
     'WebBrowser': WebBrowser,
-    'IoskPrivateChat': IoskPrivateChat
+    'IoskPrivateChat': IoskPrivateChat,
+    'LocalTerminal': LocalTerminal,
+    'LocalFileExplorer': LocalFileExplorer,
 };
 
 function createWindowManager() {
@@ -473,3 +477,12 @@ export function newIoskPrivateChat(consoleTabId, localUser, remoteUser) {
     const title = remoteUser.split('.')[0];
     windows.addWindow(IoskPrivateChat, { title: `Chat with ${title}`, consoleId: consoleTabId, localUser, remoteUser, width: 450, height: 400 });
 }
+
+export function newLocalTerminal() {
+    windows.addWindow(LocalTerminal, { title: 'Local Terminal', width: 800, height: 500 });
+}
+
+export function newLocalFileExplorer() {
+    windows.addWindow(LocalFileExplorer, { title: 'Local Files', width: 500, height: 600 });
+}
+

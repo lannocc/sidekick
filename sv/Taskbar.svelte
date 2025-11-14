@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser } from './windows.js';
+    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer } from './windows.js';
     import { dashActive } from './desktopStore.js';
     import Clock from './Clock.svelte';
 
@@ -137,6 +137,8 @@
     function launchIosk() { newIoskConnection(); showMenu = false; }
     function launchCalculator() { newCalculator(); showMenu = false; }
     function launchSettings() { newSettings(); showMenu = false; }
+    function launchLocalTerminal() { newLocalTerminal(); showMenu = false; }
+    function launchLocalFileExplorer() { newLocalFileExplorer(); showMenu = false; }
 
     onMount(() => window.addEventListener('click', handleWindowClick));
     onDestroy(() => window.removeEventListener('click', handleWindowClick));
@@ -248,8 +250,10 @@
             <div class="start-menu">
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchSettings(); }}>Settings</button>
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchIosk(); }}>IOSK Connection</button>
-                <div class="menu-separator"></div>
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); newWebBrowser(); showMenu = false; }}>Web Browser</button>
+                <div class="menu-separator"></div>
+                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchLocalTerminal(); }}>Local Terminal</button>
+                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer(); }}>Local Files</button>
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchCalculator(); }}>Calculator</button>
             </div>
