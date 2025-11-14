@@ -490,5 +490,5 @@ export function newLocalFileExplorer(props = {}) {
 }
 
 export function newAskWindow(initialFiles = []) {
-    windows.addWindow(Ask, { title: 'Ask...', initialFiles, width: 900, height: 600 });
+    windows.addWindow(Ask, { title: 'Ask', initialFiles, width: 900, height: 600 });
 }
