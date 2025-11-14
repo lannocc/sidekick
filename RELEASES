@@ -2,6 +2,17 @@ Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
 
+v0.4.3
+======
+
+Date: November 13, 2025
+
+    * Windows can be grouped together as tabs.
+    * Improvements to chat including color and private messages in the web UI.
+    * Add a Web Browser window.
+    * Misc. windowing and other improvements.
+
+
 v0.4.2
 ======
 
