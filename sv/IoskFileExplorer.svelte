@@ -191,19 +191,18 @@
     function toggleNestedView() {
         nestedView = !nestedView;
 
-        // For list view, changing nesting requires a refetch.
-        // For tiles view, it is just a visual change and no refetch is needed.
+        // Changing nesting mode requires a refetch to get recursive vs. non-recursive data.
+        // Also, disable watch mode as it's complex with nested views.
+        if (isWatching) {
+            toggleWatch();
+        }
+        items = [];
+        treeItems = [];
         if (viewMode === 'list') {
-            // Disable watch mode when entering nested view, as it's not compatible
-            if (isWatching) {
-                toggleWatch();
-            }
-            items = [];
-            treeItems = [];
             expandedNodes.clear();
             expandedNodes = expandedNodes;
-            requestPath(currentPath);
         }
+        requestPath(currentPath);
     }
 
     function toggleNode(path) {
@@ -253,7 +252,7 @@
         return roots;
     }
 
-    $: if (nestedView && viewMode === 'list') {
+    $: if (nestedView) {
         treeItems = buildTree(items, currentPath);
     }
 
@@ -291,8 +290,8 @@
             command: {
                 type: 'fs_list',
                 path,
-                // Request recursive listing only if in nested LIST view
-                recursive: nestedView && viewMode === 'list'
+                // Request recursive listing if in any nested view
+                recursive: nestedView
             }
         };
         fileSystemRequests.set({ ...request, timestamp: Date.now() });
@@ -302,8 +301,8 @@
     function handleItemClick(item) {
         if (itemChangeStatus[item.name] === 'removed' && !nestedView) return;
 
-        // Navigate on directory click, unless in nested list view where it expands/collapses
-        if (item.type === 'dir' && !(nestedView && viewMode === 'list')) {
+        // Navigate on directory click ONLY when NOT in a nested view
+        if (item.type === 'dir' && !nestedView) {
             if (isWatching) {
                 sendWatchRequest('fs_watch_stop', currentPath);
                 isWatching = false;
@@ -367,7 +366,7 @@
                     previousItemsMap = new Map(listing.map(item => [item.name, item]));
                     currentPath = path;
 
-                    if (!(nestedView && viewMode === 'list')) {
+                    if (!nestedView) {
                         const parentDir = { name: '..', type: 'dir', size: -1, mtime: -1 };
                         const sortedItems = finalListing.sort((a, b) => {
                             if (a.type === b.type) return a.name.localeCompare(b.name);
@@ -583,6 +582,53 @@
         -webkit-box-orient: vertical;
     }
 
+    /* --- Styles for Nested Tile View --- */
+    .nested-dir-container {
+        display: flex;
+        flex-direction: column;
+        border: 2px solid; /* color is set inline */
+        border-radius: 4px;
+        background: rgba(0,0,0,0.1);
+        min-height: 0; /* Prevents flexbox overflow issues */
+        overflow: hidden;
+    }
+    .nested-dir-name {
+        padding: 2px 4px;
+        text-align: center;
+        color: white;
+        font-size: 12px;
+        font-weight: bold;
+        flex-shrink: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .nested-dir-content-grid {
+        flex-grow: 1;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+        gap: 3px;
+        padding: 3px;
+        overflow: hidden;
+        min-height: 0;
+    }
+    .nested-tile {
+        padding: 4px 2px;
+        aspect-ratio: unset;
+        min-height: 50px;
+    }
+    .nested-tile .tile-icon {
+        font-size: 1.5em;
+        min-height: 0;
+    }
+    .nested-tile .tile-name {
+        font-size: 10px;
+        margin-top: 2px;
+        -webkit-line-clamp: 1;
+        max-height: 1.4em;
+    }
+
+
     /* --- Animation styles for Watch updates --- */
     @keyframes green-pop-tile {
         0% { transform: scale(0.5); opacity: 0; box-shadow: 0 0 30px 10px rgba(39, 174, 96, 0.9); }
@@ -668,7 +714,7 @@
                 <button class="view-button" class:active={viewMode === 'tiles'} on:click={() => switchViewMode('tiles')} title="Tiles View">⊞</button>
             </div>
              <button class="watch-button" class:active={nestedView} on:click={toggleNestedView} title="Toggle Nested View">Nested</button>
-            <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates" disabled={nestedView && viewMode === 'list'}>
+            <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates" disabled={nestedView}>
                 {isWatching ? 'Watching' : 'Watch'} 👀
             </button>
         </div>
@@ -704,24 +750,51 @@
         </div>
     {:else if viewMode === 'tiles'}
         <div class="tile-grid">
-            {#each items as item (item.name)}
-                <div class="tile-item"
-                     on:click={() => handleItemClick(item)}
-                     title={item.name}
-                     style:background-color={getTileColor(item, colorMode)}
-                     class:new={itemChangeStatus[item.name] === 'new'}
-                     class:modified={itemChangeStatus[item.name] === 'modified'}
-                     class:removed={itemChangeStatus[item.name] === 'removed'}>
-                    <div class="tile-icon">
-                        {#if item.type === 'file'}
-                            📄
-                        {:else if item.type === 'dir' && !nestedView}
-                            🗂️
-                        {/if}
+            {#if nestedView}
+                 {#each treeItems as item (item.path)}
+                    {#if item.type === 'file'}
+                         <div class="tile-item"
+                             on:click={() => handleItemClick(item)}
+                             title={item.name}
+                             style:background-color={getTileColor(item, colorMode)}>
+                            <div class="tile-icon">📄</div>
+                            <div class="tile-name">{item.name}</div>
+                        </div>
+                    {:else if item.type === 'dir'}
+                        <div class="nested-dir-container"
+                            title={item.name}
+                            style:border-color={getTileColor(item, colorMode)}>
+                            <div class="nested-dir-name" style:background-color={getTileColor(item, colorMode)}>{item.name}</div>
+                            <div class="nested-dir-content-grid">
+                                {#if item.children && item.children.length > 0}
+                                    {#each item.children as child (child.path)}
+                                        <svelte:self treeNode={child} treeLevel={treeLevel + 1} />
+                                    {/each}
+                                {/if}
+                            </div>
+                        </div>
+                    {/if}
+                 {/each}
+            {:else}
+                {#each items as item (item.name)}
+                    <div class="tile-item"
+                         on:click={() => handleItemClick(item)}
+                         title={item.name}
+                         style:background-color={getTileColor(item, colorMode)}
+                         class:new={itemChangeStatus[item.name] === 'new'}
+                         class:modified={itemChangeStatus[item.name] === 'modified'}
+                         class:removed={itemChangeStatus[item.name] === 'removed'}>
+                        <div class="tile-icon">
+                            {#if item.type === 'file'}
+                                📄
+                            {:else if item.type === 'dir'}
+                                🗂️
+                            {/if}
+                        </div>
+                        <div class="tile-name">{item.name}</div>
                     </div>
-                    <div class="tile-name">{item.name}</div>
-                </div>
-      {/each}
+                {/each}
+            {/if}
         </div>
     {/if}
 
@@ -805,6 +878,28 @@
                 {/each}
             {/if}
         </div>
+    {:else if viewMode === 'tiles'}
+        {#if treeNode.type === 'file'}
+            <div class="tile-item nested-tile"
+                on:click={() => handleItemClick(treeNode)}
+                title={treeNode.name}
+                style:background-color={getTileColor(treeNode, colorMode)}>
+                <div class="tile-icon">📄</div>
+                <div class="tile-name">{treeNode.name}</div>
+            </div>
+        {:else if treeNode.type === 'dir'}
+            <div class="nested-dir-container"
+                title={treeNode.name}
+                style:border-color={getTileColor(treeNode, colorMode)}>
+                <div class="nested-dir-name" style:background-color={getTileColor(treeNode, colorMode)}>{treeNode.name}</div>
+                <div class="nested-dir-content-grid">
+                    {#if treeNode.children && treeNode.children.length > 0}
+                        {#each treeNode.children as child (child.path)}
+                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} />
+                        {/each}
+                    {/if}
+                </div>
+            </div>
+        {/if}
     {/if}
 {/if}
-
