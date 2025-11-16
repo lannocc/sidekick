@@ -14,7 +14,7 @@
 
     function parseAnsi(text) {
         if (typeof text !== 'string') return '';
-        const ansiRegex = /\u001b\[(\d+)m/g;
+        const ansiRegex = /\u001b\[(\d*)m/g; // Use * to also match ESC[m (empty code)
         let openSpan = false;
         
         let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -25,8 +25,9 @@
                 newHtml += '</span>';
                 openSpan = false;
             }
-            if (code === '0') {
-                // Reset code, just close the span
+            // An empty code or a '0' are both reset codes
+            if (code === '0' || code === '') {
+                // This is a reset code, we just closed the span.
             } else if (ansiCodeToCssVar[code]) {
                 newHtml += `<span style="color: ${ansiCodeToCssVar[code]}">`;
                 openSpan = true;
