@@ -8,6 +8,24 @@
     import { marked } from 'marked';
     import { windows } from './windows.js';
 
+    // Highlight.js for syntax highlighting
+    import hljs from 'highlight.js/lib/core';
+    import javascript from 'highlight.js/lib/languages/javascript';
+    import python from 'highlight.js/lib/languages/python';
+    import css from 'highlight.js/lib/languages/css';
+    import xml from 'highlight.js/lib/languages/xml'; // For HTML & Svelte
+    import 'highlight.js/styles/atom-one-dark.css'; // Theme
+
+    // Register languages with common aliases
+    hljs.registerLanguage('javascript', javascript);
+    hljs.registerLanguage('js', javascript);
+    hljs.registerLanguage('python', python);
+    hljs.registerLanguage('py', python);
+    hljs.registerLanguage('css', css);
+    hljs.registerLanguage('xml', xml);
+    hljs.registerLanguage('html', xml);
+    hljs.registerLanguage('svelte', xml);
+
     export let id; // window id
     export let groupId;
     export let consoleId;
@@ -21,6 +39,9 @@
     let isLoading = true;
     let errorMessage = '';
     export let mode = 'rendered'; // 'raw' or 'rendered', now exported to be settable via props
+
+    // --- State for Syntax Highlighting ---
+    let highlighted_html = '';
 
     // --- State for Chunking & Tailing ---
     const CHUNK_SIZE = 16384; // 16KB
@@ -223,9 +244,23 @@
     $: fileExtension = getFileExtension(path);
     $: isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(fileExtension);
     $: isMarkdown = ['md', 'markdown'].includes(fileExtension);
-    $: canRender = (isImage && isBinary) || (isMarkdown && !isBinary);
+    $: isSourceCode = ['py', 'html', 'js', 'css', 'svelte'].includes(fileExtension);
+    $: canRender = (isImage && isBinary) || (isMarkdown && !isBinary) || (isSourceCode && !isBinary);
+
     $: if (id !== undefined && groupId !== undefined) {
         windows.updateTabProps(groupId, id, { canRender, mode, consoleId });
+    }
+
+    $: if (mode === 'rendered' && isSourceCode && content_text) {
+        try {
+            // highlight.js will use the registered language for the file extension.
+            const language = hljs.getLanguage(fileExtension) ? fileExtension : 'plaintext';
+            highlighted_html = hljs.highlight(content_text, { language, ignoreIllegals: true }).value;
+        } catch(e) {
+            console.error("Highlighting error:", e);
+            // Fallback to plain text if highlighting fails
+            highlighted_html = content_text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
     }
 
     export function setMode(newMode) {
@@ -330,6 +365,16 @@
         color: var(--title-bar-text);
         border-radius: 4px;
     }
+    .rendered-code {
+        /* The hljs theme will provide its own background.
+           Use a negative margin to fill the parent's padding area. */
+        margin: -8px;
+    }
+    .rendered-code .hljs {
+        padding: 8px;
+        font-size: 14px;
+        border-radius: 0; /* No radius when filling the container */
+    }
     .loading-more {
         text-align: center;
         color: #7f8c8d;
@@ -341,7 +386,7 @@
     <div class="toolbar">
         <span class="toolbar-path" title={path}>{path}</span>
         <div class="toolbar-controls">
-            <button on:click={toggleFollow} class:active={isFollowing} disabled={isBinary || isImage}>Follow</button>
+            <button on:click={toggleFollow} class:active={isFollowing} disabled={isBinary || isImage || isSourceCode}>Follow</button>
             <button on:click={() => mode = 'raw'} class:active={mode === 'raw'}>Raw</button>
             <button on:click={() => mode = 'rendered'} class:active={mode === 'rendered'} disabled={!canRender}>
                 Rendered
@@ -386,6 +431,8 @@
                     </div>
                 {:else if isMarkdown}
                     <div class="rendered-markdown">{@html marked(content_text)}</div>
+                {:else if isSourceCode}
+                    <pre class="rendered-code"><code class="language-{fileExtension} hljs">{@html highlighted_html}</code></pre>
                 {/if}
             {:else}
                 <!-- Fallback to raw view if mode is 'rendered' but not possible -->
