@@ -761,13 +761,15 @@
     .connect-form .disconnect-button:hover { background-color: #c0392b; }
     .connect-form .room-button { background-color: #ffbd2e; border-color: #e0a320; color: white; position: relative; padding-left: 15px; }
     .connect-form .room-button:hover { background-color: #e0a320; }
-    .connect-form .files-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
-    .connect-form .files-button:hover { background-color: #1a9c2a; }
-    .connect-form .attach-button { background-color: #3498db; border-color: #2980b9; color: white; position: relative; padding-right: 15px; }
-    .connect-form .attach-button:hover { background-color: #2980b9; }
-    .connect-form .room-button::before, .connect-form .attach-button::after { content: ''; position: absolute; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
+    /* Watch button gets green color */
+    .connect-form .watch-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
+    .connect-form .watch-button:hover { background-color: #1a9c2a; }
+    /* Files button gets blue color */
+    .connect-form .files-button { background-color: #3498db; border-color: #2980b9; color: white; }
+    .connect-form .files-button:hover { background-color: #2980b9; }
+
+    .connect-form .room-button::before { content: ''; position: absolute; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
     .connect-form .room-button::before { left: 5px; }
-    .connect-form .attach-button::after { right: 5px; }
     .header-info { flex-grow: 1; text-align: center; color: #bdc3c7; font-style: italic; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 10px; }
     .main-flex-area { flex-grow: 1; display: flex; overflow: hidden; }
     .terminal-wrapper { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
@@ -777,7 +779,33 @@
     .input-area span { color: var(--console-prompt); padding-right: 5px; white-space: pre; }
     .input-area input { flex-grow: 1; background: transparent; border: none; outline: none; color: var(--console-input); font-family: inherit; font-size: inherit; }
     .users-panel { width: 180px; flex-shrink: 0; border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
-    .panel-header { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); font-weight: bold; text-align: center; }
+    .panel-header { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    .panel-header .attach-button {
+        background-color: #9b59b6;
+        border: 1px solid #8e44ad;
+        color: white;
+        padding: 2px 6px;
+        font-size: 0.9em;
+        cursor: pointer;
+        border-radius: 3px;
+        position: relative;
+        padding-right: 15px;
+    }
+    .panel-header .attach-button:hover {
+        background-color: #8e44ad;
+    }
+    .panel-header .attach-button::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 4px solid rgba(255, 255, 255, 0.7);
+        right: 5px;
+    }
     .user-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
     .user-item { padding: 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; border-radius: 2px; }
     .user-item:hover { background-color: var(--taskbar-button-hover-bg); }
@@ -868,8 +896,8 @@
             <div class="header-info" title={stripAnsi(roomTopic || motd)}>
                 {@html parseAnsi(roomTopic || motd)}
             </div>
+            <button type="button" class="header-button watch-button" on:click={() => { focusInput(); }} title="Watch a command">Watch</button>
             <button type="button" class="header-button files-button" on:click={() => { newIoskFileExplorer(id, title); focusInput(); }}>Files</button>
-            <button type="button" class="header-button attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
         {/if}
     </form>
 
@@ -968,7 +996,10 @@
 
         {#if roomName}
         <div class="users-panel">
-            <div class="panel-header">Users</div>
+            <div class="panel-header">
+                <span>Users</span>
+                <button class="attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
+            </div>
             <div class="user-list">
                 {#each roomParticipants as participant (participant)}
                     {@const userName = participant.includes('.') ? participant.split('.')[0] : participant}
