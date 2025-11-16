@@ -377,21 +377,6 @@ function createWindowManager() {
             newWindows = newWindows.map(w => ({ ...w, isActive: w.id === newWindowGroup.id, zIndex: w.id === sourceGroupId ? w.zIndex : w.zIndex - 1 }));
             newWindowGroup.zIndex = newWindows.reduce((max, w) => Math.max(max, w.zIndex), 99) + 1;
             newWindows.push(newWindowGroup);
-
-export function newIoskWatch(consoleTabId, pwd) {
-    const allWindows = get(windows);
-    const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
-    if (!consoleTab || !consoleTab.isConsoleConnected) {
-        alert("Cannot open Watch window. The selected console is not connected.");
-        return;
-    };
-
-    windows.addWindow(IoskWatch, {
-        title: 'Watch',
-        consoleId: consoleTabId,
-        consoleConnection: consoleTab.consoleConnection, // Pass this for Dash restore
-        initialPwd: pwd,
-        width: 700,
             
             return newWindows;
         });
@@ -548,4 +533,22 @@ export function newLocalFileExplorer(props = {}) {
 
 export function newAskWindow(initialFiles = []) {
     windows.addWindow(Ask, { title: 'Ask', initialFiles, width: 900, height: 600 });
+}
+
+export function newIoskWatch(consoleTabId, pwd) {
+    const allWindows = get(windows);
+    const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
+    if (!consoleTab || !consoleTab.isConsoleConnected) {
+        alert("Cannot open Watch window. The selected console is not connected.");
+        return;
+    }
+
+    windows.addWindow(IoskWatch, {
+        title: 'Watch',
+        consoleId: consoleTabId,
+        consoleConnection: consoleTab.consoleConnection, // Pass this for Dash restore
+        initialPwd: pwd,
+        width: 700,
+        height: 400
+    });
 }
