@@ -18,6 +18,7 @@
     import LocalTerminal from './LocalTerminal.svelte';
     import LocalFileExplorer from './LocalFileExplorer.svelte';
     import Ask from './Ask.svelte';
+    import IoskWatch from './IoskWatch.svelte';
 
     let isLayoutDirty = true;
     let lastSavedLayoutSnapshot = '';
@@ -116,11 +117,16 @@
                     title: tab.title,
                     maximized: group.maximized, // This is a group property but convenient here
                     wsUrl: tab.wsUrl, username: tab.username,
-                    localUser: tab.localUser, remoteUser: tab.remoteUser,
-                    consoleConnection: associatedConsole ? associatedConsole.consoleConnection : null,
+                    localUser: tab.localUser, remoteUser: tab.remoteUser, 
+                    consoleConnection: tab.consoleConnection || (associatedConsole ? associatedConsole.consoleConnection : null),
                     initialPath: tab.currentPath, path: tab.path,
                     mode: tab.mode, initialUrl: tab.currentUrl,
                     zoom: tab.zoom,
+                    // IoskWatch props
+                    initialCommand: tab.initialCommand,
+                    initialPwd: tab.initialPwd,
+                    initialInterval: tab.initialInterval,
+                    initialState: tab.initialState,
                 };
             });
             return {
@@ -149,6 +155,7 @@
         if (component === LocalTerminal) return 'LocalTerminal';
         if (component === LocalFileExplorer) return 'LocalFileExplorer';
         if (component === Ask) return 'Ask';
+        if (component === IoskWatch) return 'IoskWatch';
         return 'Unknown';
     }
 

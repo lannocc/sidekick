@@ -4,8 +4,8 @@
 -->
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
-    import { get } from 'svelte/store';
-    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat } from './windows.js';
+    import { get } from 'svelte/store'; 
+    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch } from './windows.js';
     import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents } from './ioskEvents.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
 
@@ -68,7 +68,6 @@
     let settingsUrlInput;
     let roomsButton;
     let attachButton;
-    let watchCommandInput;
 
     // --- WebSocket instance for this specific console window ---
     let ws = null;
@@ -78,16 +77,6 @@
     let showSettings = false;
     let settingsUrl, settingsUsername;
     let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
-
-    // --- Watch Modal State ---
-    let showWatchModal = false;
-    let watchState = 'setup'; // 'setup', 'watching', 'stopped'
-    let watchCommand = '';
-    let watchPwd = '';
-    let watchInterval = 1;
-    let watchOutput = '';
-    let watchTimer = null;
-    const watchRequesterId = `watch-${id}`; // Unique requester ID for this console's watcher
 
     // --- Event bus subscriptions ---
     let requestUnsubscribe;
@@ -211,7 +200,6 @@
             ws.onclose = null; 
             ws.close();
         }
-        if (watchTimer) clearInterval(watchTimer);
         if (requestUnsubscribe) {
             requestUnsubscribe();
         }
@@ -470,23 +458,13 @@
                                 timestamp: Date.now()
                             });
                         } else if (data.type === 'exec_command_response') {
-                            if (data.requesterId === watchRequesterId) {
-                                // This is for our internal watch modal
-                                if (data.error) {
-                                    watchOutput = data.error;
-                                    stopWatching();
-                                } else {
-                                    watchOutput = data.output;
-                                }
-                            } else {
-                                // This is for another component, pass it on
-                                fileSystemResponses.set({
-                                    consoleId: id,
-                                    requesterId: data.requesterId,
-                                    data: data,
-                                    timestamp: Date.now()
-                                });
-                            }
+                            // Pass all exec responses to the event bus for other components (like IoskWatch)
+                            fileSystemResponses.set({
+                                consoleId: id,
+                                requesterId: data.requesterId,
+                                data: data,
+                                timestamp: Date.now()
+                            });
                         } else if (data.output || data.prompt) {
                             if (data.output) {
                                 const bellCode = "\u0007";
@@ -760,63 +738,13 @@
         setTimeout(() => windows.updateWindowProps(id, { isFlashing: false }), 500);
     }
 
-    // --- Watch Modal Functions ---
-    function openWatchModal() {
+    // --- Watch Window Function ---
+    function launchWatchWindow() {
         const match = currentPrompt.match(/\[\S+\s+([^\]]+)\]/);
-        watchPwd = match ? match[1] : '/';
-        watchCommand = '';
-        watchInterval = 1;
-        watchState = 'setup';
-        watchOutput = '';
-        showWatchModal = true;
-        tick().then(() => watchCommandInput?.focus());
-    }
-
-    function closeWatchModal() {
-        stopWatching();
-        showWatchModal = false;
+        const pwd = match ? match[1] : '/';
+        newIoskWatch(id, pwd);
         focusInput();
     }
-
-    function sendWatchRequest() {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-            watchOutput = '[Error] Not connected.';
-            stopWatching();
-            return;
-        }
-        const request = {
-            type: 'exec_command',
-            requesterId: watchRequesterId,
-            command_str: watchCommand,
-            pwd: watchPwd
-        };
-        ws.send(JSON.stringify(request));
-    }
-
-    function startWatching() {
-        if (watchState === 'watching' || !watchCommand.trim()) return;
-        watchOutput = 'Executing...';
-        watchState = 'watching';
-        sendWatchRequest(); // Initial immediate request
-        if (watchTimer) clearInterval(watchTimer);
-        watchTimer = setInterval(sendWatchRequest, watchInterval * 1000);
-    }
-
-    function stopWatching() {
-        if (watchTimer) {
-            clearInterval(watchTimer);
-            watchTimer = null;
-        }
-        watchState = 'stopped';
-    }
-
-    function handleWatchKeydown(e) {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            closeWatchModal();
-        }
-    }
-
 </script>
 
 <style>
@@ -899,7 +827,6 @@
     .user-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
     .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
-    .modal-content.watch-modal { max-width: 700px; height: 80%; } /* Watch modal can be larger */
     .modal-content h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
     .form-group { display: flex; flex-direction: column; gap: 5px; }
     .modal-content label { font-size: 0.9em; color: var(--title-bar-text); }
@@ -970,18 +897,6 @@
         border-color: var(--taskbar-button-hover-bg);
         transform: scale(1.1);
     }
-    /* Watch Modal Specific Styles */
-    .watch-output-area {
-        flex-grow: 1;
-        overflow: auto;
-        padding: 8px;
-        white-space: pre;
-        font-family: monospace;
-        background-color: var(--console-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 3px;
-        margin-top: 10px;
-    }
 </style>
 
 <div class="console-container">
@@ -997,7 +912,7 @@
             <div class="header-info" title={stripAnsi(roomTopic || motd)}>
                 {@html parseAnsi(roomTopic || motd)}
             </div>
-            <button type="button" class="header-button watch-button" on:click={openWatchModal} title="Watch a command">Watch</button>
+            <button type="button" class="header-button watch-button" on:click={launchWatchWindow} title="Watch a command">Watch</button>
             <button type="button" class="header-button files-button" on:click={() => { newIoskFileExplorer(id, title); focusInput(); }}>Files</button>
         {/if}
     </form>
@@ -1201,43 +1116,6 @@
                     Detach
                 </button>
             {/if}
-        </div>
-    {/if}
-
-    {#if showWatchModal}
-        <div class="modal-overlay" on:click|self={closeWatchModal} on:keydown={handleWatchKeydown}>
-            <div class="modal-content watch-modal">
-                {#if watchState === 'setup'}
-                    <h3>Watch Command</h3>
-                    <div class="form-group">
-                        <label for="watch-cmd-{id}">Command</label>
-                        <input id="watch-cmd-{id}" type="text" bind:this={watchCommandInput} bind:value={watchCommand} required placeholder="e.g., ls -l /var/log">
-                    </div>
-                    <div class="form-group">
-                        <label for="watch-pwd-{id}">Working Directory</label>
-                        <input id="watch-pwd-{id}" type="text" bind:value={watchPwd}>
-                    </div>
-                    <div class="form-group">
-                        <label for="watch-interval-{id}">Interval (seconds)</label>
-                        <input id="watch-interval-{id}" type="number" bind:value={watchInterval} min="1">
-                    </div>
-                    <div class="buttons">
-                        <button on:click={closeWatchModal}>Cancel</button>
-                        <button class="save-button" on:click={startWatching} disabled={!watchCommand.trim()}>Start Watching</button>
-                    </div>
-                {:else}
-                    <h3>Watching: <code>{watchCommand}</code></h3>
-                    <div class="watch-output-area">{watchOutput}</div>
-                    <div class="buttons">
-                        <button on:click={closeWatchModal}>Close</button>
-                        {#if watchState === 'watching'}
-                            <button class="disconnect-button" on:click={stopWatching}>Stop</button>
-                        {:else if watchState === 'stopped'}
-                            <button class="save-button" on:click={startWatching}>Restart</button>
-                        {/if}
-                    </div>
-                {/if}
-            </div>
         </div>
     {/if}
 </div>

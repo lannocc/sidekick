@@ -26,7 +26,7 @@
 
     // Update window store with props for Dash saving
     $: if (id !== undefined && groupId !== undefined) {
-        windows.updateTabProps(groupId, id, { consoleId, localUser, remoteUser });
+        windows.updateTabProps(groupId, id, { consoleId, localUser, remoteUser, consoleConnection });
     }
 
     // Reactive logic to find console after a Dash restore

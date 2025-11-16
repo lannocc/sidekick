@@ -138,7 +138,7 @@
     // Whenever the current path changes, update the central window store
     // so its state can be saved by the Dash.
     $: if (id !== undefined && groupId !== undefined) {
-        windows.updateTabProps(groupId, id, { currentPath, consoleId });
+        windows.updateTabProps(groupId, id, { currentPath, consoleId, consoleConnection });
     }
 
     $: if (consoleConnection && $windows) {
