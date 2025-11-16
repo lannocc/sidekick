@@ -42,13 +42,13 @@
     let colorMode = 'type'; // 'type' or 'age'
     let nestedView = false; // 'nested' or 'flat'
     let treeItems = []; // Hierarchical data for nested views
-    let expandedNodes = new Set(); // Stores paths of expanded dirs in nested view
+    let expandedNodes = new Set(); // Stores paths of expanded dirs in nested LIST view
 
     // --- Settings Modal State ---
     let showSettings = false;
     let settingsModel = { usePwd: true, path: '/' };
     let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
-    
+
     const dispatch = createEventDispatcher();
 
     function getFileExtension(name) {
@@ -175,18 +175,35 @@
         }
     }
 
+    // --- View Mode Logic ---
+    function switchViewMode(newMode) {
+        if (viewMode === newMode) return;
+        const wasNestedList = viewMode === 'list' && nestedView;
+        viewMode = newMode;
+        // If switching away from nested list view, its recursive data is incompatible
+        // with other views. We must refetch a flat list.
+        if (wasNestedList) {
+            requestPath(currentPath);
+        }
+    }
+
     // --- Nested View Logic ---
     function toggleNestedView() {
-        // Disable watch mode when entering nested view, as it's not compatible
-        if (isWatching) {
-            toggleWatch();
-        }
         nestedView = !nestedView;
-        items = [];
-        treeItems = [];
-        expandedNodes.clear();
-        expandedNodes = expandedNodes;
-        requestPath(currentPath);
+
+        // For list view, changing nesting requires a refetch.
+        // For tiles view, it is just a visual change and no refetch is needed.
+        if (viewMode === 'list') {
+            // Disable watch mode when entering nested view, as it's not compatible
+            if (isWatching) {
+                toggleWatch();
+            }
+            items = [];
+            treeItems = [];
+            expandedNodes.clear();
+            expandedNodes = expandedNodes;
+            requestPath(currentPath);
+        }
     }
 
     function toggleNode(path) {
@@ -200,7 +217,7 @@
 
     function buildTree(flatList, basePath) {
         if (!flatList || flatList.length === 0) return [];
-        
+
         const map = new Map();
         flatList.forEach(item => map.set(item.path, { ...item, children: [] }));
 
@@ -236,10 +253,10 @@
         return roots;
     }
 
-    $: if (nestedView) {
+    $: if (nestedView && viewMode === 'list') {
         treeItems = buildTree(items, currentPath);
     }
-    
+
     // --- Data Fetching & Watch ---
     function sendWatchRequest(type, path) {
         if (!consoleId) return;
@@ -274,7 +291,8 @@
             command: {
                 type: 'fs_list',
                 path,
-                recursive: nestedView // Request recursive listing if in nested view
+                // Request recursive listing only if in nested LIST view
+                recursive: nestedView && viewMode === 'list'
             }
         };
         fileSystemRequests.set({ ...request, timestamp: Date.now() });
@@ -284,7 +302,8 @@
     function handleItemClick(item) {
         if (itemChangeStatus[item.name] === 'removed' && !nestedView) return;
 
-        if (item.type === 'dir' && !nestedView) {
+        // Navigate on directory click, unless in nested list view where it expands/collapses
+        if (item.type === 'dir' && !(nestedView && viewMode === 'list')) {
             if (isWatching) {
                 sendWatchRequest('fs_watch_stop', currentPath);
                 isWatching = false;
@@ -348,7 +367,7 @@
                     previousItemsMap = new Map(listing.map(item => [item.name, item]));
                     currentPath = path;
 
-                    if (!nestedView) {
+                    if (!(nestedView && viewMode === 'list')) {
                         const parentDir = { name: '..', type: 'dir', size: -1, mtime: -1 };
                         const sortedItems = finalListing.sort((a, b) => {
                             if (a.type === b.type) return a.name.localeCompare(b.name);
@@ -551,6 +570,7 @@
     .tile-icon {
         font-size: 2.5em;
         line-height: 1;
+        min-height: 1em; /* Ensure layout doesn't jump when icon is hidden */
     }
     .tile-name {
         font-size: 12px;
@@ -561,28 +581,6 @@
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
-    }
-
-    /* Nested Tile View Styles */
-    .nested-tile {
-        justify-content: flex-start;
-        font-size: calc(1em - var(--level, 0) * 0.08em);
-        overflow: hidden;
-    }
-    .nested-tile .tile-icon {
-        font-size: calc(2.5em - var(--level, 0) * 0.5em);
-    }
-    .nested-tile-children {
-        width: 100%;
-        flex-grow: 1;
-        margin-top: 5px;
-        padding: 5px;
-        background-color: rgba(0,0,0,0.15);
-        border-radius: 4px;
-        display: grid;
-        gap: 4px;
-        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-        overflow-y: auto;
     }
 
     /* --- Animation styles for Watch updates --- */
@@ -666,11 +664,11 @@
                 </div>
             {/if}
             <div class="view-mode-selector">
-                <button class="view-button" class:active={viewMode === 'list'} on:click={() => viewMode = 'list'} title="List View">☰</button>
-                <button class="view-button" class:active={viewMode === 'tiles'} on:click={() => viewMode = 'tiles'} title="Tiles View">⊞</button>
+                <button class="view-button" class:active={viewMode === 'list'} on:click={() => switchViewMode('list')} title="List View">☰</button>
+                <button class="view-button" class:active={viewMode === 'tiles'} on:click={() => switchViewMode('tiles')} title="Tiles View">⊞</button>
             </div>
              <button class="watch-button" class:active={nestedView} on:click={toggleNestedView} title="Toggle Nested View">Nested</button>
-            <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates" disabled={nestedView}>
+            <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates" disabled={nestedView && viewMode === 'list'}>
                 {isWatching ? 'Watching' : 'Watch'} 👀
             </button>
         </div>
@@ -687,8 +685,8 @@
                 {/each}
             {:else}
                 {#each items as item (item.name)}
-                    <div class="item" 
-                         on:click={() => handleItemClick(item)} 
+                    <div class="item"
+                         on:click={() => handleItemClick(item)}
                          title={item.name}
                          class:new={itemChangeStatus[item.name] === 'new'}
                          class:modified={itemChangeStatus[item.name] === 'modified'}
@@ -706,24 +704,24 @@
         </div>
     {:else if viewMode === 'tiles'}
         <div class="tile-grid">
-             {#if nestedView}
-                {#each treeItems as item (item.path)}
-                    <svelte:self {item} treeNode={item} treeLevel={0} bind:expandedNodes />
-                {/each}
-             {:else}
-                 {#each items as item (item.name)}
-                    <div class="tile-item"
-                         on:click={() => handleItemClick(item)}
-                         title={item.name}
-                         style:background-color={getTileColor(item, colorMode)}
-                         class:new={itemChangeStatus[item.name] === 'new'}
-                         class:modified={itemChangeStatus[item.name] === 'modified'}
-                         class:removed={itemChangeStatus[item.name] === 'removed'}>
-                        <div class="tile-icon">{item.type === 'dir' ? '🗂️' : '📄'}</div>
-                        <div class="tile-name">{item.name}</div>
+            {#each items as item (item.name)}
+                <div class="tile-item"
+                     on:click={() => handleItemClick(item)}
+                     title={item.name}
+                     style:background-color={getTileColor(item, colorMode)}
+                     class:new={itemChangeStatus[item.name] === 'new'}
+                     class:modified={itemChangeStatus[item.name] === 'modified'}
+                     class:removed={itemChangeStatus[item.name] === 'removed'}>
+                    <div class="tile-icon">
+                        {#if item.type === 'file'}
+                            📄
+                        {:else if item.type === 'dir' && !nestedView}
+                            🗂️
+                        {/if}
                     </div>
-                {/each}
-             {/if}
+                    <div class="tile-name">{item.name}</div>
+                </div>
+      {/each}
         </div>
     {/if}
 
@@ -802,28 +800,11 @@
                 </span>
             </div>
             {#if treeNode.children && treeNode.children.length > 0 && expandedNodes.has(treeNode.path)}
-                {#each treeNode.children as child (child.path)}
+                {#each treeNode.children as child}
                     <svelte:self item={child} treeNode={child} treeLevel={treeLevel + 1} bind:expandedNodes />
                 {/each}
             {/if}
         </div>
-    {:else} <!-- Nested Tile View -->
-        <div class="tile-item nested-tile"
-             style:background-color={getTileColor(treeNode, colorMode)}
-             style="--level: {treeLevel}"
-             on:click={() => treeNode.type === 'dir' ? toggleNode(treeNode.path) : handleItemClick(treeNode)}
-             title={treeNode.name}>
-             
-            <div class="tile-icon">{treeNode.type === 'dir' ? '🗂️' : '📄'}</div>
-            <div class="tile-name">{treeNode.name}</div>
-            
-            {#if treeNode.children && treeNode.children.length > 0 && expandedNodes.has(treeNode.path)}
-                <div class="nested-tile-children">
-                     {#each treeNode.children as child (child.path)}
-                        <svelte:self item={child} treeNode={child} treeLevel={treeLevel + 1} bind:expandedNodes />
-                    {/each}
-                </div>
-            {/if}
-        </div>
     {/if}
 {/if}
+
