@@ -613,7 +613,7 @@
     .nested-dir-content-grid {
         flex-grow: 1;
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
         gap: 3px;
         padding: 3px;
         overflow: hidden;
@@ -622,7 +622,7 @@
     .nested-tile {
         padding: 4px 2px;
         aspect-ratio: unset;
-        min-height: 50px;
+        min-height: 45px;
     }
     .nested-tile .tile-icon {
         font-size: 1.5em;
