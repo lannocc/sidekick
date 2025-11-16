@@ -27,6 +27,9 @@
     // --- State for Watch feature ---
     let isWatching = false;
     let unsubscribeWatchEvents;
+    let previousItemsMap = new Map();
+    let itemChangeStatus = {}; // { [itemName]: 'new' | 'modified' | 'removed' }
+    let changeClearTimeout;
 
     // --- View State ---
     let viewMode = 'list'; // 'list' or 'tiles'
@@ -176,6 +179,10 @@
             sendWatchRequest('fs_watch_start', currentPath);
         } else {
             sendWatchRequest('fs_watch_stop', currentPath);
+            // Clear change detection state when stopping watch
+            previousItemsMap.clear();
+            itemChangeStatus = {};
+            clearTimeout(changeClearTimeout);
         }
     }
 
@@ -199,11 +206,18 @@
     }
 
     function handleItemClick(item) {
+        if (itemChangeStatus[item.name] === 'removed') return; // Prevent action on a disappearing item
+
         if (item.type === 'dir') {
             if (isWatching) {
                 sendWatchRequest('fs_watch_stop', currentPath);
                 isWatching = false;
             }
+            // Clear change detection state on manual navigation
+            previousItemsMap.clear();
+            itemChangeStatus = {};
+            clearTimeout(changeClearTimeout);
+
             let newPath;
             if (item.name === '..') {
                 // Navigate up
@@ -232,11 +246,57 @@
                 if (error) {
                     errorMessage = error;
                     items = [];
+                    previousItemsMap.clear();
                 } else if (listing) {
+                    let finalListing = [...listing];
+
+                    // --- Change detection for Watch mode ---
+                    if (isWatching && previousItemsMap.size > 0) {
+                        const newItemsMap = new Map(listing.map(item => [item.name, item]));
+                        const newChangeStatus = {};
+
+                        // Check for new and modified items
+                        newItemsMap.forEach((newItem, name) => {
+                            if (!previousItemsMap.has(name)) {
+                                newChangeStatus[name] = 'new';
+                            } else {
+                                const oldItem = previousItemsMap.get(name);
+                                if (newItem.mtime !== oldItem.mtime || newItem.size !== oldItem.size) {
+                                    newChangeStatus[name] = 'modified';
+                                }
+                            }
+                        });
+
+                        // Check for removed items
+                        previousItemsMap.forEach((oldItem, name) => {
+                            if (name !== '..' && !newItemsMap.has(name)) {
+                                newChangeStatus[name] = 'removed';
+                                // Temporarily add removed item back to the list for animation
+                                finalListing.push(oldItem);
+                            }
+                        });
+
+                        delete newChangeStatus['..']; // Don't animate '..' directory
+
+                        if (Object.keys(newChangeStatus).length > 0) {
+                           // FIX: Merge new changes with existing ones to prevent overwriting statuses for in-progress animations.
+                           itemChangeStatus = { ...itemChangeStatus, ...newChangeStatus };
+                           clearTimeout(changeClearTimeout);
+                           changeClearTimeout = setTimeout(() => {
+                               // After animation, filter out removed items and clear all statuses
+                               items = items.filter(item => itemChangeStatus[item.name] !== 'removed');
+                               itemChangeStatus = {};
+                           }, 1500); // Animation duration
+                        }
+                    }
+                    // Always update previousItemsMap for the next comparison
+                    previousItemsMap = new Map(listing.map(item => [item.name, item]));
+                    // --- End of change detection ---
+
                     currentPath = path;
                     // Add parent directory ".." for navigation if not at root
                     const parentDir = { name: '..', type: 'dir', size: -1, mtime: -1 };
-                    const sortedItems = listing.sort((a, b) => {
+                    const sortedItems = finalListing.sort((a, b) => {
                         if (a.type === b.type) return a.name.localeCompare(b.name);
                         return a.type === 'dir' ? -1 : 1; // Directories first
                     });
@@ -264,6 +324,7 @@
         }
         if (unsubscribeResponses) unsubscribeResponses();
         if (unsubscribeWatchEvents) unsubscribeWatchEvents();
+        clearTimeout(changeClearTimeout);
     });
 </script>
 
@@ -435,6 +496,50 @@
         -webkit-box-orient: vertical;
     }
 
+    /* --- Animation styles for Watch updates --- */
+    @keyframes green-pop-tile {
+        0% { transform: scale(0.5); opacity: 0; box-shadow: 0 0 30px 10px rgba(39, 174, 96, 0.9); }
+        50% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 15px 5px rgba(39, 174, 96, 0.6); }
+        100% { transform: scale(1); opacity: 1; box-shadow: none; }
+    }
+    @keyframes blue-pulse-tile {
+        0% { transform: scale(1); box-shadow: none; }
+        25% { transform: scale(1.05); box-shadow: 0 0 25px 8px rgba(41, 128, 185, 0.8); }
+        50% { transform: scale(0.95); box-shadow: none; }
+        75% { transform: scale(1.05); box-shadow: 0 0 25px 8px rgba(41, 128, 185, 0.8); }
+        100% { transform: scale(1); box-shadow: none; }
+    }
+    @keyframes red-implode-tile {
+        from { transform: scale(1) rotate(0deg); opacity: 1; box-shadow: 0 0 20px 5px rgba(231, 76, 60, 0.8); }
+        to { transform: scale(0) rotate(90deg); opacity: 0; box-shadow: none; }
+    }
+
+    .tile-item.new { animation: green-pop-tile 1.2s ease-out; }
+    .tile-item.modified { animation: blue-pulse-tile 1.2s ease-in-out; }
+    .tile-item.removed {
+        animation: red-implode-tile 1s ease-in forwards;
+        pointer-events: none;
+    }
+
+    @keyframes green-flash-list {
+        from { background-color: rgba(39, 174, 96, 0.4); }
+        to { background-color: transparent; }
+    }
+    @keyframes blue-flash-list {
+        from { background-color: rgba(41, 128, 185, 0.4); }
+        to { background-color: transparent; }
+    }
+    @keyframes red-flash-list {
+        from { background-color: rgba(231, 76, 60, 0.5); opacity: 1; }
+        to { background-color: rgba(231, 76, 60, 0); transform: translateX(-30px); opacity: 0; }
+    }
+    .item.new { animation: green-flash-list 1.5s ease-out; }
+    .item.modified { animation: blue-flash-list 1.5s ease-out; }
+    .item.removed {
+        animation: red-flash-list 1s ease-out forwards;
+        pointer-events: none;
+    }
+
 
     /* Styles for settings modal (borrowed from IoskConsole) */
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
@@ -486,7 +591,12 @@
     {#if viewMode === 'list'}
         <div class="item-list">
             {#each items as item (item.name)}
-                <div class="item" on:click={() => handleItemClick(item)} title={item.name}>
+                <div class="item" 
+                     on:click={() => handleItemClick(item)} 
+                     title={item.name}
+                     class:new={itemChangeStatus[item.name] === 'new'}
+                     class:modified={itemChangeStatus[item.name] === 'modified'}
+                     class:removed={itemChangeStatus[item.name] === 'removed'}>
                     <span class="item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
                     <span class="item-name">{item.name}</span>
                     <span class="item-size">
@@ -504,7 +614,9 @@
                      on:click={() => handleItemClick(item)}
                      title={item.name}
                      style:background-color={getTileColor(item, colorMode)}
-                >
+                     class:new={itemChangeStatus[item.name] === 'new'}
+                     class:modified={itemChangeStatus[item.name] === 'modified'}
+                     class:removed={itemChangeStatus[item.name] === 'removed'}>
                     <div class="tile-icon">{item.type === 'dir' ? '🗂️' : '📄'}</div>
                     <div class="tile-name">{item.name}</div>
                 </div>
