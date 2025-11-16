@@ -3,25 +3,31 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { onMount, onDestroy } from 'svelte';
+    import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
     import { fileSystemRequests, fileSystemResponses, fileSystemWatchEvents } from './ioskEvents.js';
     import { newIoskFileViewer, windows } from './windows.js';
     import { windowSettings } from './desktopStore.js';
 
+    // --- Component Props & State ---
     export let id; // Window ID, passed from Window.svelte
     export let groupId;
     export let consoleId;
     export let initialPath = '.';
     export let componentName;
     export let x, y, width, height;
-
     export let consoleConnection = null; // Passed during Dash restore
 
-    let currentPath = (initialPath && initialPath !== '.') ? initialPath : '/';
-    let items = []; // { name, type, size, mtime }
-    let errorMessage = '';
+    // --- Recursive Rendering Props (for <svelte:self>) ---
+    export let treeNode = null;
+    export let treeLevel = 0;
+    // Pass down reactive props needed by the recursive part
+    export { viewMode, colorMode, getTileColor, handleItemClick, expandedNodes, toggleNode };
 
+
+    let currentPath = (initialPath && initialPath !== '.') ? initialPath : '/';
+    let items = []; // Flat list: { name, type, size, mtime, path? }
+    let errorMessage = '';
     let unsubscribeResponses;
 
     // --- State for Watch feature ---
@@ -34,11 +40,16 @@
     // --- View State ---
     let viewMode = 'list'; // 'list' or 'tiles'
     let colorMode = 'type'; // 'type' or 'age'
+    let nestedView = false; // 'nested' or 'flat'
+    let treeItems = []; // Hierarchical data for nested views
+    let expandedNodes = new Set(); // Stores paths of expanded dirs in nested view
 
     // --- Settings Modal State ---
     let showSettings = false;
     let settingsModel = { usePwd: true, path: '/' };
     let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
+    
+    const dispatch = createEventDispatcher();
 
     function getFileExtension(name) {
         if (name === '..') return '';
@@ -164,6 +175,72 @@
         }
     }
 
+    // --- Nested View Logic ---
+    function toggleNestedView() {
+        // Disable watch mode when entering nested view, as it's not compatible
+        if (isWatching) {
+            toggleWatch();
+        }
+        nestedView = !nestedView;
+        items = [];
+        treeItems = [];
+        expandedNodes.clear();
+        expandedNodes = expandedNodes;
+        requestPath(currentPath);
+    }
+
+    function toggleNode(path) {
+        if (expandedNodes.has(path)) {
+            expandedNodes.delete(path);
+        } else {
+            expandedNodes.add(path);
+        }
+        expandedNodes = expandedNodes; // Trigger Svelte reactivity
+    }
+
+    function buildTree(flatList, basePath) {
+        if (!flatList || flatList.length === 0) return [];
+        
+        const map = new Map();
+        flatList.forEach(item => map.set(item.path, { ...item, children: [] }));
+
+        const roots = [];
+        flatList.forEach(item => {
+            const node = map.get(item.path);
+            const lastSlash = item.path.lastIndexOf('/');
+            let parentPath = null;
+
+            if (lastSlash > 0) { // e.g., /foo/bar -> /foo
+                parentPath = item.path.substring(0, lastSlash);
+            } else if (lastSlash === 0 && item.path.length > 1) { // e.g., /foo -> /
+                parentPath = '/';
+            }
+
+            if (parentPath === basePath) {
+                roots.push(node);
+            } else if (parentPath && map.has(parentPath)) {
+                map.get(parentPath).children.push(node);
+            }
+        });
+
+        const sortRecursive = (nodes) => {
+            nodes.sort((a, b) => {
+                if (a.type === b.type) return a.name.localeCompare(b.name);
+                return a.type === 'dir' ? -1 : 1;
+            });
+            nodes.forEach(node => {
+                if (node.children.length > 0) sortRecursive(node.children);
+            });
+        };
+        sortRecursive(roots);
+        return roots;
+    }
+
+    $: if (nestedView) {
+        treeItems = buildTree(items, currentPath);
+    }
+    
+    // --- Data Fetching & Watch ---
     function sendWatchRequest(type, path) {
         if (!consoleId) return;
         const request = {
@@ -179,7 +256,6 @@
             sendWatchRequest('fs_watch_start', currentPath);
         } else {
             sendWatchRequest('fs_watch_stop', currentPath);
-            // Clear change detection state when stopping watch
             previousItemsMap.clear();
             itemChangeStatus = {};
             clearTimeout(changeClearTimeout);
@@ -190,57 +266,50 @@
         errorMessage = '';
         if (!consoleId) {
             items = [];
-            return false; // Indicate failure
+            return false;
         }
         const request = {
             consoleId,
-            requesterId: id, // Identify this explorer window
+            requesterId: id,
             command: {
                 type: 'fs_list',
-                path
+                path,
+                recursive: nestedView // Request recursive listing if in nested view
             }
         };
-        // Use a unique object to ensure svelte store triggers update for same consecutive requests
         fileSystemRequests.set({ ...request, timestamp: Date.now() });
-        return true; // Indicate success
+        return true;
     }
 
     function handleItemClick(item) {
-        if (itemChangeStatus[item.name] === 'removed') return; // Prevent action on a disappearing item
+        if (itemChangeStatus[item.name] === 'removed' && !nestedView) return;
 
-        if (item.type === 'dir') {
+        if (item.type === 'dir' && !nestedView) {
             if (isWatching) {
                 sendWatchRequest('fs_watch_stop', currentPath);
                 isWatching = false;
             }
-            // Clear change detection state on manual navigation
             previousItemsMap.clear();
             itemChangeStatus = {};
             clearTimeout(changeClearTimeout);
 
             let newPath;
             if (item.name === '..') {
-                // Navigate up
                 if (currentPath === '/') return;
                 newPath = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
             } else {
-                // Navigate down
                 newPath = currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`;
             }
             requestPath(newPath);
         } else if (item.type === 'file') {
-            const filePath = currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`;
+            const filePath = item.path || (currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`);
             newIoskFileViewer(consoleId, filePath);
         }
     }
 
     onMount(() => {
         unsubscribeResponses = fileSystemResponses.subscribe(response => {
-            // Filter responses to only those intended for this specific explorer window
-            if (response && response.requesterId === id) {
-                // Ensure we only process fs_list_response here
-                if (response.data.type !== 'fs_list_response') return;
-
+            if (response && response.requesterId === id && response.data.type === 'fs_list_response') {
                 const { path, listing, error } = response.data;
 
                 if (error) {
@@ -250,57 +319,45 @@
                 } else if (listing) {
                     let finalListing = [...listing];
 
-                    // --- Change detection for Watch mode ---
                     if (isWatching && previousItemsMap.size > 0) {
                         const newItemsMap = new Map(listing.map(item => [item.name, item]));
                         const newChangeStatus = {};
-
-                        // Check for new and modified items
                         newItemsMap.forEach((newItem, name) => {
-                            if (!previousItemsMap.has(name)) {
-                                newChangeStatus[name] = 'new';
-                            } else {
+                            if (!previousItemsMap.has(name)) newChangeStatus[name] = 'new';
+                            else {
                                 const oldItem = previousItemsMap.get(name);
-                                if (newItem.mtime !== oldItem.mtime || newItem.size !== oldItem.size) {
-                                    newChangeStatus[name] = 'modified';
-                                }
+                                if (newItem.mtime !== oldItem.mtime || newItem.size !== oldItem.size) newChangeStatus[name] = 'modified';
                             }
                         });
-
-                        // Check for removed items
                         previousItemsMap.forEach((oldItem, name) => {
                             if (name !== '..' && !newItemsMap.has(name)) {
                                 newChangeStatus[name] = 'removed';
-                                // Temporarily add removed item back to the list for animation
                                 finalListing.push(oldItem);
                             }
                         });
-
-                        delete newChangeStatus['..']; // Don't animate '..' directory
-
+                        delete newChangeStatus['..'];
                         if (Object.keys(newChangeStatus).length > 0) {
-                           // FIX: Merge new changes with existing ones to prevent overwriting statuses for in-progress animations.
                            itemChangeStatus = { ...itemChangeStatus, ...newChangeStatus };
                            clearTimeout(changeClearTimeout);
                            changeClearTimeout = setTimeout(() => {
-                               // After animation, filter out removed items and clear all statuses
                                items = items.filter(item => itemChangeStatus[item.name] !== 'removed');
                                itemChangeStatus = {};
-                           }, 1500); // Animation duration
+                           }, 1500);
                         }
                     }
-                    // Always update previousItemsMap for the next comparison
                     previousItemsMap = new Map(listing.map(item => [item.name, item]));
-                    // --- End of change detection ---
-
                     currentPath = path;
-                    // Add parent directory ".." for navigation if not at root
-                    const parentDir = { name: '..', type: 'dir', size: -1, mtime: -1 };
-                    const sortedItems = finalListing.sort((a, b) => {
-                        if (a.type === b.type) return a.name.localeCompare(b.name);
-                        return a.type === 'dir' ? -1 : 1; // Directories first
-                    });
-                    items = (path !== '/') ? [parentDir, ...sortedItems] : sortedItems;
+
+                    if (!nestedView) {
+                        const parentDir = { name: '..', type: 'dir', size: -1, mtime: -1 };
+                        const sortedItems = finalListing.sort((a, b) => {
+                            if (a.type === b.type) return a.name.localeCompare(b.name);
+                            return a.type === 'dir' ? -1 : 1;
+                        });
+                        items = (path !== '/') ? [parentDir, ...sortedItems] : sortedItems;
+                    } else {
+                        items = finalListing; // For nested view, store flat list for tree processing
+                    }
                 }
             }
         });
@@ -311,17 +368,13 @@
             }
         });
 
-        // If we are created with a consoleId, request the path immediately.
-        // If we are restored (with consoleConnection), the reactive block will handle it.
         if (consoleId) {
             requestPath(currentPath);
         }
     });
 
     onDestroy(() => {
-        if (isWatching) {
-            sendWatchRequest('fs_watch_stop', currentPath);
-        }
+        if (isWatching) sendWatchRequest('fs_watch_stop', currentPath);
         if (unsubscribeResponses) unsubscribeResponses();
         if (unsubscribeWatchEvents) unsubscribeWatchEvents();
         clearTimeout(changeClearTimeout);
@@ -417,6 +470,10 @@
         border-color: #2980b9;
         color: #3498db;
     }
+    .watch-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
     .error-message {
         color: #e74c3c;
         padding: 8px;
@@ -451,6 +508,16 @@
         text-align: right;
         flex-shrink: 0;
         color: #7f8c8d;
+    }
+
+    /* Tree View (Nested List) Styles */
+    .tree-node-expander {
+        width: 15px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+    .tree-item {
+        padding-left: calc(8px + var(--level) * 20px);
     }
 
     /* Tile View Styles */
@@ -494,6 +561,28 @@
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
+    }
+
+    /* Nested Tile View Styles */
+    .nested-tile {
+        justify-content: flex-start;
+        font-size: calc(1em - var(--level, 0) * 0.08em);
+        overflow: hidden;
+    }
+    .nested-tile .tile-icon {
+        font-size: calc(2.5em - var(--level, 0) * 0.5em);
+    }
+    .nested-tile-children {
+        width: 100%;
+        flex-grow: 1;
+        margin-top: 5px;
+        padding: 5px;
+        background-color: rgba(0,0,0,0.15);
+        border-radius: 4px;
+        display: grid;
+        gap: 4px;
+        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+        overflow-y: auto;
     }
 
     /* --- Animation styles for Watch updates --- */
@@ -561,6 +650,7 @@
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
+{#if !treeNode}
 <div class="explorer-container">
     <div class="path-bar">
         <span class="path-text">{currentPath}</span>
@@ -579,7 +669,8 @@
                 <button class="view-button" class:active={viewMode === 'list'} on:click={() => viewMode = 'list'} title="List View">☰</button>
                 <button class="view-button" class:active={viewMode === 'tiles'} on:click={() => viewMode = 'tiles'} title="Tiles View">⊞</button>
             </div>
-            <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates">
+             <button class="watch-button" class:active={nestedView} on:click={toggleNestedView} title="Toggle Nested View">Nested</button>
+            <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates" disabled={nestedView}>
                 {isWatching ? 'Watching' : 'Watch'} 👀
             </button>
         </div>
@@ -590,37 +681,49 @@
 
     {#if viewMode === 'list'}
         <div class="item-list">
-            {#each items as item (item.name)}
-                <div class="item" 
-                     on:click={() => handleItemClick(item)} 
-                     title={item.name}
-                     class:new={itemChangeStatus[item.name] === 'new'}
-                     class:modified={itemChangeStatus[item.name] === 'modified'}
-                     class:removed={itemChangeStatus[item.name] === 'removed'}>
-                    <span class="item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
-                    <span class="item-name">{item.name}</span>
-                    <span class="item-size">
-                        {#if item.type === 'file' && item.size >= 0}
-                            {item.size}
-                        {/if}
-                    </span>
-                </div>
-            {/each}
+            {#if nestedView}
+                {#each treeItems as item (item.path)}
+                    <svelte:self {item} treeNode={item} treeLevel={0} bind:expandedNodes />
+                {/each}
+            {:else}
+                {#each items as item (item.name)}
+                    <div class="item" 
+                         on:click={() => handleItemClick(item)} 
+                         title={item.name}
+                         class:new={itemChangeStatus[item.name] === 'new'}
+                         class:modified={itemChangeStatus[item.name] === 'modified'}
+                         class:removed={itemChangeStatus[item.name] === 'removed'}>
+                        <span class="item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
+                        <span class="item-name">{item.name}</span>
+                        <span class="item-size">
+                            {#if item.type === 'file' && item.size >= 0}
+                                {item.size}
+                            {/if}
+                        </span>
+                    </div>
+                {/each}
+            {/if}
         </div>
     {:else if viewMode === 'tiles'}
         <div class="tile-grid">
-             {#each items as item (item.name)}
-                <div class="tile-item"
-                     on:click={() => handleItemClick(item)}
-                     title={item.name}
-                     style:background-color={getTileColor(item, colorMode)}
-                     class:new={itemChangeStatus[item.name] === 'new'}
-                     class:modified={itemChangeStatus[item.name] === 'modified'}
-                     class:removed={itemChangeStatus[item.name] === 'removed'}>
-                    <div class="tile-icon">{item.type === 'dir' ? '🗂️' : '📄'}</div>
-                    <div class="tile-name">{item.name}</div>
-                </div>
-            {/each}
+             {#if nestedView}
+                {#each treeItems as item (item.path)}
+                    <svelte:self {item} treeNode={item} treeLevel={0} bind:expandedNodes />
+                {/each}
+             {:else}
+                 {#each items as item (item.name)}
+                    <div class="tile-item"
+                         on:click={() => handleItemClick(item)}
+                         title={item.name}
+                         style:background-color={getTileColor(item, colorMode)}
+                         class:new={itemChangeStatus[item.name] === 'new'}
+                         class:modified={itemChangeStatus[item.name] === 'modified'}
+                         class:removed={itemChangeStatus[item.name] === 'removed'}>
+                        <div class="tile-icon">{item.type === 'dir' ? '🗂️' : '📄'}</div>
+                        <div class="tile-name">{item.name}</div>
+                    </div>
+                {/each}
+             {/if}
         </div>
     {/if}
 
@@ -680,3 +783,47 @@
         </div>
     {/if}
 </div>
+{:else}
+    <!-- RECURSIVE TEMPLATE for Nested Views -->
+    {#if viewMode === 'list'}
+        <div class="tree-node-container" style="--level: {treeLevel}">
+            <div class="item tree-item" on:click={() => treeNode.type === 'dir' ? toggleNode(treeNode.path) : handleItemClick(treeNode)}>
+                <span class="tree-node-expander">
+                    {#if treeNode.type === 'dir' && treeNode.children.length > 0}
+                        {expandedNodes.has(treeNode.path) ? '▼' : '►'}
+                    {/if}
+                </span>
+                <span class="item-icon">{treeNode.type === 'dir' ? '🗂️' : '📄'}</span>
+                <span class="item-name">{treeNode.name}</span>
+                 <span class="item-size">
+                    {#if treeNode.type === 'file' && treeNode.size >= 0}
+                        {treeNode.size}
+                    {/if}
+                </span>
+            </div>
+            {#if treeNode.children && treeNode.children.length > 0 && expandedNodes.has(treeNode.path)}
+                {#each treeNode.children as child (child.path)}
+                    <svelte:self item={child} treeNode={child} treeLevel={treeLevel + 1} bind:expandedNodes />
+                {/each}
+            {/if}
+        </div>
+    {:else} <!-- Nested Tile View -->
+        <div class="tile-item nested-tile"
+             style:background-color={getTileColor(treeNode, colorMode)}
+             style="--level: {treeLevel}"
+             on:click={() => treeNode.type === 'dir' ? toggleNode(treeNode.path) : handleItemClick(treeNode)}
+             title={treeNode.name}>
+             
+            <div class="tile-icon">{treeNode.type === 'dir' ? '🗂️' : '📄'}</div>
+            <div class="tile-name">{treeNode.name}</div>
+            
+            {#if treeNode.children && treeNode.children.length > 0 && expandedNodes.has(treeNode.path)}
+                <div class="nested-tile-children">
+                     {#each treeNode.children as child (child.path)}
+                        <svelte:self item={child} treeNode={child} treeLevel={treeLevel + 1} bind:expandedNodes />
+                    {/each}
+                </div>
+            {/if}
+        </div>
+    {/if}
+{/if}
