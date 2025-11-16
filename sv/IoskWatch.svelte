@@ -4,6 +4,42 @@
     import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
     import { windows } from './windows.js';
 
+    // --- Color Handling ---
+    const ansiCodeToCssVar = {
+        '30': 'var(--ansi-black)', '31': 'var(--ansi-red)', '32': 'var(--ansi-green)', '33': 'var(--ansi-yellow)',
+        '34': 'var(--ansi-blue)', '35': 'var(--ansi-magenta)', '36': 'var(--ansi-cyan)', '37': 'var(--ansi-white)',
+        '90': 'var(--ansi-bright-black)', '91': 'var(--ansi-bright-red)', '92': 'var(--ansi-bright-green)', '93': 'var(--ansi-bright-yellow)',
+        '94': 'var(--ansi-bright-blue)', '95': 'var(--ansi-bright-magenta)', '96': 'var(--ansi-bright-cyan)', '97': 'var(--ansi-bright-white)',
+    };
+
+    function parseAnsi(text) {
+        if (typeof text !== 'string') return '';
+        const ansiRegex = /\u001b\[(\d+)m/g;
+        let openSpan = false;
+        
+        let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        let html = sanitizedText.replace(ansiRegex, (match, code) => {
+            let newHtml = '';
+            if (openSpan) {
+                newHtml += '</span>';
+                openSpan = false;
+            }
+            if (code === '0') {
+                // Reset code, just close the span
+            } else if (ansiCodeToCssVar[code]) {
+                newHtml += `<span style="color: ${ansiCodeToCssVar[code]}">`;
+                openSpan = true;
+            }
+            return newHtml;
+        });
+
+        if (openSpan) {
+            html += '</span>';
+        }
+        return html;
+    }
+
     export let id; // tab id
     export let groupId;
     export let consoleId;
@@ -176,7 +212,7 @@
         padding: 8px;
         white-space: pre;
         font-family: monospace;
-        background-color: var(--title-bar-bg);
+        background-color: var(--console-bg); /* Changed for a darker, terminal-like look */
         border: 1px solid var(--border-color);
         border-radius: 3px;
     }
@@ -206,7 +242,7 @@
     {:else}
         <div class="watch-view">
             <h3>Watching: <code>{command}</code></h3>
-            <div class="output-area">{output}</div>
+            <div class="output-area">{@html parseAnsi(output)}</div>
             <div class="buttons">
                 {#if watchState === 'watching'}
                     <button class="stop-button" on:click={stopWatching}>Stop</button>
