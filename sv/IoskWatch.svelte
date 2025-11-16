@@ -42,7 +42,9 @@
             );
 
             if (compatibleConsoleTab) {
-                consoleId = compatibleConsoleTab.id;
+                if (consoleId !== compatibleConsoleTab.id) {
+                    consoleId = compatibleConsoleTab.id;
+                }
                 statusMessage = '';
                 if (watchState === 'watching') {
                     // if it was watching when saved, restart it
@@ -58,7 +60,6 @@
     $: if (id !== undefined && groupId !== undefined) {
         windows.updateTabProps(groupId, id, { 
             consoleId,
-            consoleConnection,
             initialCommand: command,
             initialPwd: pwd,
             initialInterval: interval,
