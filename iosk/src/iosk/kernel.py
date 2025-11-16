@@ -729,6 +729,33 @@ class IOSK:
         # Delegate the entire pipeline execution to the CommandPipelineExecutor
         return await self.pipeline_executor.execute_pipeline(io, args, self.parser)
 
+    async def execute_transient_command(self, base_io: Context, command_str: str, pwd: str) -> str:
+        """
+        Executes a command in a temporary, non-interactive context and captures its output.
+        Used for features like 'watch'.
+        """
+        if not await self.exists(base_io, pwd):
+            return f"watch error: directory not found: {pwd}"
+            
+        temp_io = base_io.fork()
+        temp_io.base = False  # Mark as a non-base, transient session
+        temp_io.dev = '/dev/null' # Does not have a real device
+        temp_io.pwd = pwd
+
+        # Redirect stdout and stderr to a string buffer
+        output_capture = StringIO()
+        temp_io.stdout = output_capture
+        temp_io.stderr = output_capture
+
+        try:
+            # Execute the command pipeline
+            await self.call(temp_io, command_str)
+        except Exception as e:
+            # Capture exceptions during command parsing/execution as well
+            traceback.print_exc(file=output_capture)
+        
+        return output_capture.getvalue()
+
     async def exec(self, io:Context, path:str, argv:list=None):
         """When you know what you need and you've come prepared (arguments).
         This method expects `path` to be an absolute path within the sandboxed

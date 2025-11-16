@@ -776,6 +776,14 @@ class PortManager:
                 else:
                     log.warning("Received room_action from non-client connection.")
 
+            elif msg_type == "exec_command":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    io_context = self.kernel.users.get(conn_meta.username)
+                    if io_context:
+                        await self._handle_exec_command(websocket, io_context, message)
+                else:
+                    log.warning("Received exec_command from non-client connection.")
+
             elif msg_type == "fs_list":
                 if conn_meta.type == 'client' and conn_meta.username:
                     path = message.get("path", "/")
@@ -828,6 +836,26 @@ class PortManager:
             log.error("Failed to decode JSON message.")
         except Exception:
             log.error(f"Error dispatching message: {traceback.format_exc()}")
+
+    async def _handle_exec_command(self, websocket: WebSocketServerProtocol, io_context: "Context", message: Dict[str, Any]):
+        """Handles a transient command execution request from a client (for Watch)."""
+        command_str = message.get("command_str")
+        pwd = message.get("pwd")
+        requesterId = message.get("requesterId")
+
+        if not all([command_str, pwd, requesterId is not None]):
+            log.warning("Malformed exec_command request received.")
+            return
+
+        response = {"type": "exec_command_response", "requesterId": requesterId}
+        try:
+            output = await self.kernel.execute_transient_command(io_context, command_str, pwd)
+            response["output"] = output
+        except Exception as e:
+            log.error(f"Error during exec_command for {io_context.user} on command '{command_str}': {e}")
+            response["error"] = f"An internal server error occurred during execution: {e}"
+
+        await self.send_payload_to_client(io_context.user, response)
 
     async def _handle_fs_list(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Optional[Any], recursive: bool = False):
         """Handles a file system list request from a client."""
@@ -903,11 +931,11 @@ class PortManager:
 
         loop = asyncio.get_running_loop()
         event_handler = self._ClientUpdateEventHandler(self, io_context.user, path, loop)
-        
+
         observer = Observer()
         observer.schedule(event_handler, host_path, recursive=False)
         observer.start()
-        
+
         self.active_watchers[key] = observer
         log.info(f"Started watching '{path}' for user '{io_context.user}'.")
 
@@ -955,7 +983,7 @@ class PortManager:
                     if not line:
                         await asyncio.sleep(0.5)
                         continue
-                    
+
                     payload = {
                         "type": "fs_tail_update",
                         "path": path,
