@@ -19,7 +19,7 @@
     export let consoleConnection = null; // Passed during Dash restore
 
     let currentPath = (initialPath && initialPath !== '.') ? initialPath : '/';
-    let items = []; // { name, type, size }
+    let items = []; // { name, type, size, mtime }
     let errorMessage = '';
 
     let unsubscribeResponses;
@@ -28,10 +28,54 @@
     let isWatching = false;
     let unsubscribeWatchEvents;
 
+    // --- View State ---
+    let viewMode = 'list'; // 'list' or 'tiles'
+    let colorMode = 'type'; // 'type' or 'age'
+
     // --- Settings Modal State ---
     let showSettings = false;
     let settingsModel = { usePwd: true, path: '/' };
     let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
+
+    function getFileExtension(name) {
+        if (name === '..') return '';
+        const lastDot = name.lastIndexOf('.');
+        if (lastDot === -1 || lastDot === 0) return '';
+        return name.substring(lastDot + 1).toLowerCase();
+    }
+
+    function getTileColor(item) {
+        if (item.type === 'dir' && item.name === '..') return '#555e64';
+
+        if (colorMode === 'age') {
+            if (item.mtime <= 0) return '#7f8c8d';
+            const now = Date.now() / 1000;
+            const ageSeconds = now - item.mtime;
+
+            if (ageSeconds < 3600) return '#27ae60';       // < 1 hour (green)
+            if (ageSeconds < 86400) return '#2980b9';      // < 1 day (blue)
+            if (ageSeconds < 604800) return '#f39c12';     // < 1 week (yellow)
+            if (ageSeconds < 2592000) return '#d35400';    // < 1 month (orange)
+            return '#c0392b';                              // older (red)
+        } else { // colorMode === 'type'
+            if (item.type === 'dir') return '#2980b9'; // Blue for directories
+
+            const ext = getFileExtension(item.name);
+            switch (ext) {
+                case 'txt': case 'md': case 'json': case 'yml': case 'xml': case 'log':
+                    return '#27ae60'; // Green for text-like
+                case 'js': case 'py': case 'svelte': case 'html': case 'css': case 'sh': case 'c': case 'cpp':
+                    return '#8e44ad'; // Purple for code
+                case 'png': case 'jpg': case 'jpeg': case 'gif': case 'svg': case 'ico':
+                    return '#c0392b'; // Red for images
+                case 'zip': case 'gz': case 'tar': case 'rar':
+                    return '#d35400'; // Orange for archives
+                default:
+                    return '#7f8c8d'; // Grey for others/files without extension
+            }
+        }
+    }
+
 
     export function showSettingsDialog() {
         const allSettings = get(windowSettings);
@@ -191,7 +235,7 @@
                 } else if (listing) {
                     currentPath = path;
                     // Add parent directory ".." for navigation if not at root
-                    const parentDir = { name: '..', type: 'dir', size: -1 };
+                    const parentDir = { name: '..', type: 'dir', size: -1, mtime: -1 };
                     const sortedItems = listing.sort((a, b) => {
                         if (a.type === b.type) return a.name.localeCompare(b.name);
                         return a.type === 'dir' ? -1 : 1; // Directories first
@@ -245,10 +289,55 @@
         justify-content: space-between;
         align-items: center;
     }
-    .path-bar span {
+    .path-bar .path-text {
         flex-grow: 1;
         overflow-x: hidden;
         text-overflow: ellipsis;
+    }
+    .controls-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+        margin-left: 10px;
+    }
+    .view-mode-selector, .color-mode-selector {
+        display: flex;
+        background: var(--taskbar-button-bg);
+        border-radius: 3px;
+        border: 1px solid var(--border-color);
+        overflow: hidden;
+    }
+    .color-mode-selector {
+        padding: 2px 5px;
+        gap: 8px;
+        font-size: 12px;
+    }
+    .color-mode-selector label {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        cursor: pointer;
+    }
+    .view-button {
+        background: transparent;
+        border: none;
+        border-left: 1px solid var(--border-color);
+        color: var(--taskbar-text);
+        padding: 2px 8px;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+    }
+    .view-button:first-child {
+        border-left: none;
+    }
+    .view-button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .view-button.active {
+        background-color: var(--taskbar-button-hover-bg);
+        color: #3498db;
     }
     .watch-button {
         background: var(--taskbar-button-bg);
@@ -257,7 +346,6 @@
         padding: 2px 8px;
         border-radius: 3px;
         cursor: pointer;
-        margin-left: 10px;
         flex-shrink: 0;
     }
     .watch-button:hover {
@@ -304,6 +392,50 @@
         color: #7f8c8d;
     }
 
+    /* Tile View Styles */
+    .tile-grid {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: 8px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 8px;
+    }
+    .tile-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        text-align: center;
+        color: white;
+        word-break: break-word;
+        aspect-ratio: 1 / 1;
+        transition: transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
+    }
+    .tile-item:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        z-index: 10;
+    }
+    .tile-icon {
+        font-size: 2.5em;
+        line-height: 1;
+    }
+    .tile-name {
+        font-size: 12px;
+        margin-top: 5px;
+        max-height: 2.6em; /* approx 2 lines */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+
+
     /* Styles for settings modal (borrowed from IoskConsole) */
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
     .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
@@ -326,27 +458,59 @@
 
 <div class="explorer-container">
     <div class="path-bar">
-        <span>{currentPath}</span>
-        <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates">
-            {isWatching ? 'Watching' : 'Watch'} 👀
-        </button>
+        <span class="path-text">{currentPath}</span>
+        <div class="controls-group">
+            {#if viewMode === 'tiles'}
+                <div class="color-mode-selector">
+                    <label title="Color by file type">
+                        <input type="radio" bind:group={colorMode} value={'type'}> Type
+                    </label>
+                    <label title="Color by modification time">
+                        <input type="radio" bind:group={colorMode} value={'age'}> Age
+                    </label>
+                </div>
+            {/if}
+            <div class="view-mode-selector">
+                <button class="view-button" class:active={viewMode === 'list'} on:click={() => viewMode = 'list'} title="List View">☰</button>
+                <button class="view-button" class:active={viewMode === 'tiles'} on:click={() => viewMode = 'tiles'} title="Tiles View">⊞</button>
+            </div>
+            <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates">
+                {isWatching ? 'Watching' : 'Watch'} 👀
+            </button>
+        </div>
     </div>
     {#if errorMessage}
         <div class="error-message">{errorMessage}</div>
     {/if}
-    <div class="item-list">
-        {#each items as item (item.name)}
-            <div class="item" on:click={() => handleItemClick(item)} title={item.name}>
-                <span class="item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
-                <span class="item-name">{item.name}</span>
-                <span class="item-size">
-                    {#if item.type === 'file' && item.size >= 0}
-                        {item.size}
-                    {/if}
-                </span>
-            </div>
-        {/each}
-    </div>
+
+    {#if viewMode === 'list'}
+        <div class="item-list">
+            {#each items as item (item.name)}
+                <div class="item" on:click={() => handleItemClick(item)} title={item.name}>
+                    <span class="item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
+                    <span class="item-name">{item.name}</span>
+                    <span class="item-size">
+                        {#if item.type === 'file' && item.size >= 0}
+                            {item.size}
+                        {/if}
+                    </span>
+                </div>
+            {/each}
+        </div>
+    {:else if viewMode === 'tiles'}
+        <div class="tile-grid">
+             {#each items as item (item.name)}
+                <div class="tile-item"
+                     on:click={() => handleItemClick(item)}
+                     title={item.name}
+                     style:background-color={getTileColor(item)}
+                >
+                    <div class="tile-icon">{item.type === 'dir' ? '🗂️' : '📄'}</div>
+                    <div class="tile-name">{item.name}</div>
+                </div>
+            {/each}
+        </div>
+    {/if}
 
     <!-- Settings Modal Markup -->
     {#if showSettings}
@@ -404,3 +568,4 @@
         </div>
     {/if}
 </div>
+

@@ -17,7 +17,7 @@ import aioconsole
 from datetime import datetime, timedelta
 import os
 import posixpath
-from os.path import isdir, isfile, exists, getsize
+from os.path import isdir, isfile, exists, getsize, getmtime
 import importlib, importlib.util
 import sys
 import shutil
@@ -592,7 +592,7 @@ class IOSK:
         # MODIFIED: Update local network_users and then broadcast
         user_addr = f"{user_to_logout}.{self.hostname}"
         if user_addr in self.network_users:
-            del self.network_users[user_addr]
+            del self.network_users[user_to_logout]
 
         # Announce user logout to network peers
         if self.port:
@@ -992,9 +992,11 @@ class IOSK:
                         item_virtual_path = posixpath.join(virtual_root, item_name)
                         try:
                             size = getsize(item_host_path)
+                            mtime = getmtime(item_host_path)
                         except OSError:
                             size = -1
-                        listing.append({'name': item_name, 'path': item_virtual_path, 'type': 'file', 'size': size})
+                            mtime = -1
+                        listing.append({'name': item_name, 'path': item_virtual_path, 'type': 'file', 'size': size, 'mtime': mtime})
 
                     # Process all subdirectories at the current level
                     for item_name in dirs:
@@ -1002,9 +1004,11 @@ class IOSK:
                         item_virtual_path = posixpath.join(virtual_root, item_name)
                         try:
                             size = getsize(item_host_path)
+                            mtime = getmtime(item_host_path)
                         except OSError:
                             size = -1
-                        listing.append({'name': item_name, 'path': item_virtual_path, 'type': 'dir', 'size': size})
+                            mtime = -1
+                        listing.append({'name': item_name, 'path': item_virtual_path, 'type': 'dir', 'size': size, 'mtime': mtime})
             else:
                 for item_name in sorted(os.listdir(host_path)):
                     full_item_path_host = os.path.join(host_path, item_name)
@@ -1012,13 +1016,16 @@ class IOSK:
                     item_type = 'dir' if isdir(full_item_path_host) else 'file'
                     try:
                         size = getsize(full_item_path_host)
+                        mtime = getmtime(full_item_path_host)
                     except OSError:
                         size = -1
+                        mtime = -1
                     listing.append({
                         'name': item_name,
                         'path': full_item_path_virtual,
                         'type': item_type,
-                        'size': size
+                        'size': size,
+                        'mtime': mtime
                     })
         except OSError as e:
             await io.error(f"Error reading directory {path}: {e}")
