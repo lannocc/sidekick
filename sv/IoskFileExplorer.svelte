@@ -299,10 +299,16 @@
     }
 
     function handleItemClick(item) {
-        if (itemChangeStatus[item.name] === 'removed' && !nestedView) return;
+        // In flat view, ignore clicks on items being removed by watch
+        if (!nestedView && itemChangeStatus[item.name] === 'removed') return;
 
-        // Navigate on directory click ONLY when NOT in a nested view
-        if (item.type === 'dir' && !nestedView) {
+        // Files are always clickable, opening a viewer
+        if (item.type === 'file') {
+            const filePath = item.path || (currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`);
+            newIoskFileViewer(consoleId, filePath);
+        }
+        // Directories are only clickable for navigation when NOT in a nested view
+        else if (item.type === 'dir' && !nestedView) {
             if (isWatching) {
                 sendWatchRequest('fs_watch_stop', currentPath);
                 isWatching = false;
@@ -319,11 +325,11 @@
                 newPath = currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`;
             }
             requestPath(newPath);
-        } else if (item.type === 'file') {
-            const filePath = item.path || (currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`);
-            newIoskFileViewer(consoleId, filePath);
         }
+        // In nested views (both list and tile), clicking a directory does nothing here.
+        // The list view's expand/collapse is handled separately in its on:click directive.
     }
+
 
     onMount(() => {
         unsubscribeResponses = fileSystemResponses.subscribe(response => {
@@ -591,6 +597,7 @@
         background: rgba(0,0,0,0.1);
         min-height: 0; /* Prevents flexbox overflow issues */
         overflow: hidden;
+        cursor: default; /* Ensure directory containers are not perceived as clickable */
     }
     .nested-dir-name {
         padding: 2px 4px;
@@ -727,7 +734,7 @@
         <div class="item-list">
             {#if nestedView}
                 {#each treeItems as item (item.path)}
-                    <svelte:self {item} treeNode={item} treeLevel={0} bind:expandedNodes />
+                    <svelte:self treeNode={item} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes />
                 {/each}
             {:else}
                 {#each items as item (item.name)}
@@ -768,7 +775,7 @@
                             <div class="nested-dir-content-grid">
                                 {#if item.children && item.children.length > 0}
                                     {#each item.children as child (child.path)}
-                                        <svelte:self treeNode={child} treeLevel={treeLevel + 1} />
+                                        <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes />
                                     {/each}
                                 {/if}
                             </div>
@@ -858,7 +865,7 @@
     <!-- RECURSIVE TEMPLATE for Nested Views -->
     {#if viewMode === 'list'}
         <div class="tree-node-container" style="--level: {treeLevel}">
-            <div class="item tree-item" on:click={() => treeNode.type === 'dir' ? toggleNode(treeNode.path) : handleItemClick(treeNode)}>
+            <div class="item tree-item" on:click={() => { if (treeNode.type === 'dir') toggleNode(treeNode.path); else handleItemClick(treeNode); }}>
                 <span class="tree-node-expander">
                     {#if treeNode.type === 'dir' && treeNode.children.length > 0}
                         {expandedNodes.has(treeNode.path) ? '▼' : '►'}
@@ -874,7 +881,7 @@
             </div>
             {#if treeNode.children && treeNode.children.length > 0 && expandedNodes.has(treeNode.path)}
                 {#each treeNode.children as child}
-                    <svelte:self item={child} treeNode={child} treeLevel={treeLevel + 1} bind:expandedNodes />
+                    <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes />
                 {/each}
             {/if}
         </div>
@@ -895,7 +902,7 @@
                 <div class="nested-dir-content-grid">
                     {#if treeNode.children && treeNode.children.length > 0}
                         {#each treeNode.children as child (child.path)}
-                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} />
+                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes />
                         {/each}
                     {/if}
                 </div>
