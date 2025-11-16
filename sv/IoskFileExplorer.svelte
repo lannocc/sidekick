@@ -44,10 +44,10 @@
         return name.substring(lastDot + 1).toLowerCase();
     }
 
-    function getTileColor(item) {
+    function getTileColor(item, mode) {
         if (item.type === 'dir' && item.name === '..') return '#555e64';
 
-        if (colorMode === 'age') {
+        if (mode === 'age') {
             if (item.mtime <= 0) return '#7f8c8d';
             const now = Date.now() / 1000;
             const ageSeconds = now - item.mtime;
@@ -57,7 +57,7 @@
             if (ageSeconds < 604800) return '#f39c12';     // < 1 week (yellow)
             if (ageSeconds < 2592000) return '#d35400';    // < 1 month (orange)
             return '#c0392b';                              // older (red)
-        } else { // colorMode === 'type'
+        } else { // mode === 'type'
             if (item.type === 'dir') return '#2980b9'; // Blue for directories
 
             const ext = getFileExtension(item.name);
@@ -503,7 +503,7 @@
                 <div class="tile-item"
                      on:click={() => handleItemClick(item)}
                      title={item.name}
-                     style:background-color={getTileColor(item)}
+                     style:background-color={getTileColor(item, colorMode)}
                 >
                     <div class="tile-icon">{item.type === 'dir' ? '🗂️' : '📄'}</div>
                     <div class="tile-name">{item.name}</div>
@@ -568,4 +568,3 @@
         </div>
     {/if}
 </div>
-
