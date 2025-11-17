@@ -300,8 +300,7 @@
 
     function setColorForUser(colorName) {
         if (!userContextMenu.user) return;
-        const userNameOnly = userContextMenu.user.split('.')[0];
-        const commandToRun = `$ color -u ${userNameOnly} ${colorName}`;
+        const commandToRun = `$ color -u ${userContextMenu.user} ${colorName}`;
         sendSystemCommand(commandToRun);
         closeUserContextMenu();
         focusInput();
@@ -1018,11 +1017,10 @@
             </div>
             <div class="user-list">
                 {#each roomParticipants as participant (participant)}
-                    {@const userName = participant.includes('.') ? participant.split('.')[0] : participant}
                     <div
                         class="user-item"
                         title={participant}
-                        style="color: {colorNameToCss[userColors[userName]] || 'inherit'}"
+                        style="color: {colorNameToCss[userColors[participant]] || 'inherit'}"
                         on:contextmenu={(e) => handleUserRightClick(e, participant)}
                         on:click={() => openPrivateChat(participant)}
                     >
