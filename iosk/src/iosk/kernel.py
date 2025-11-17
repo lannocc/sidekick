@@ -592,7 +592,7 @@ class IOSK:
         # MODIFIED: Update local network_users and then broadcast
         user_addr = f"{user_to_logout}.{self.hostname}"
         if user_addr in self.network_users:
-            del self.network_users[user_to_logout]
+            del self.network_users[user_addr]
 
         # Announce user logout to network peers
         if self.port:
