@@ -305,10 +305,8 @@
     
     function openPrivateChat(remoteParticipant) {
         if (!remoteParticipant) return;
-        // Don't open chat with self.
-        const remoteUsername = remoteParticipant.split('.')[0];
-        if (remoteUsername === username) return;
-
+        // Allow opening a chat with any participant, including remote users with
+        // the same username or the user themselves.
         newIoskPrivateChat(id, username, remoteParticipant);
         closeUserContextMenu();
         focusInput();
