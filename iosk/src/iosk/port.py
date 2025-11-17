@@ -642,6 +642,7 @@ class PortManager:
 
             # Send initial state info to the new client
             initial_state_payload = {'type': 'state_info'}
+            initial_state_payload['hostname'] = self.kernel.hostname
             initial_state_payload['userColors'] = self._get_color_name_map(io_context)
             # Get available rooms, using the user's new io_context
             available_rooms = await self.kernel.get_room_list(io_context)

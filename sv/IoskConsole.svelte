@@ -28,6 +28,7 @@
 
     // --- State for Connection & Room Awareness ---
     let isConnected = false;
+    let localHostname = '';
     let roomName = null;
     let roomTopic = '';
     let motd = '';
@@ -68,6 +69,39 @@
     let settingsUrlInput;
     let roomsButton;
     let attachButton;
+
+    // --- Computed properties for user lists ---
+    let localUsers = [];
+    let remoteUsers = [];
+
+    $: {
+        const allParticipants = roomParticipants || [];
+
+        if (localHostname) {
+            const localSuffix = `.${localHostname}`;
+
+            // A participant is local if it has no hostname (no '.'), OR if its hostname matches ours.
+            localUsers = allParticipants
+                .filter(p => !p.includes('.') || p.endsWith(localSuffix))
+                // Strip suffix if it exists
+                .map(p => p.endsWith(localSuffix) ? p.slice(0, -localSuffix.length) : p)
+                .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+            // A participant is remote if it has a hostname (has '.') AND its hostname does NOT match ours.
+            remoteUsers = allParticipants
+                .filter(p => p.includes('.') && !p.endsWith(localSuffix))
+                .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        } else {
+            // Fallback if localHostname is not known. Treat any user with a '.' as remote.
+            localUsers = allParticipants
+                .filter(p => !p.includes('.'))
+                .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+            remoteUsers = allParticipants
+                .filter(p => p.includes('.'))
+                .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        }
+    }
 
     // --- WebSocket instance for this specific console window ---
     let ws = null;
@@ -432,6 +466,7 @@
                             // Trigger a bell sound/flash.
                             handleBell();
                         } else if (data.type === 'state_info' || data.type === 'room_state_update') {
+                            if (data.hostname) localHostname = data.hostname;
                             roomName = data.roomName || null;
                             roomTopic = data.roomTopic || '';
                             roomParticipants = data.participants || [];
@@ -578,7 +613,7 @@
             ws.onclose = async () => {
                 isConnected = false;
                 ws = null;
-                roomName = null; roomTopic = ''; motd = ''; roomParticipants = []; availableRooms = []; userColors = {};
+                localHostname = ''; roomName = null; roomTopic = ''; motd = ''; roomParticipants = []; availableRooms = []; userColors = {};
                 output = [...output, {type: 'output', content: `Connection closed.`}];
                 const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
                 windows.updateTabProps(groupId, id, { title: `Disconnected - ${username}@${host}` });
@@ -1016,7 +1051,21 @@
                 <button class="attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
             </div>
             <div class="user-list">
-                {#each roomParticipants as participant (participant)}
+                {#each localUsers as participant (participant)}
+                    <div
+                        class="user-item"
+                        title={`${participant}.${localHostname}`}
+                        style="color: {colorNameToCss[userColors[`${participant}.${localHostname}`]] || 'inherit'}"
+                        on:contextmenu={(e) => handleUserRightClick(e, `${participant}.${localHostname}`)}
+                        on:click={() => openPrivateChat(`${participant}.${localHostname}`)}
+                    >
+                        {participant}
+                    </div>
+                {/each}
+                {#if localUsers.length > 0 && remoteUsers.length > 0}
+                    <div class="menu-separator" style="margin: 4px 0;"></div>
+                {/if}
+                {#each remoteUsers as participant (participant)}
                     <div
                         class="user-item"
                         title={participant}
