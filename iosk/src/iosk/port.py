@@ -1083,9 +1083,17 @@ class PortManager:
             user_addr = f"{user}.{host}"
             if action == "login":
                 self.kernel.network_users[user_addr] = {} # Add user
+                # Assign color for this network user to all local interactive users
+                for uio in self.kernel.users.values():
+                    if not uio.bot and user_addr not in uio.user_colors:
+                        uio.user_colors[user_addr] = self.kernel._get_next_color(uio)
             elif action == "logout":
                 if user_addr in self.kernel.network_users:
                     del self.kernel.network_users[user_addr] # Remove user
+                # Remove color for this network user from all local interactive users
+                for uio in self.kernel.users.values():
+                    if not uio.bot and user_addr in uio.user_colors:
+                        del uio.user_colors[user_addr]
                 # Also remove from rooms dict if they were in one
                 if user_addr in self.kernel.network_rooms:
                     del self.kernel.network_rooms[user_addr]
@@ -1136,6 +1144,7 @@ class PortManager:
 
         if self.kernel.chat:
             await self.kernel.chat._broadcast_room_state_update()
+        await self.broadcast_color_updates()
 
     # --------------------------------------------------------------------------
     # MESHING-SPECIFIC METHODS

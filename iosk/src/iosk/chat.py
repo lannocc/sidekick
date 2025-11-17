@@ -200,11 +200,11 @@ class AIMessenger:
                             # Use canonical sender address for consistency
                             dm_msg = f'\a\n[{remote_from_addr} -> me {now}] << {actual_msg}'
                             if not uio.bot and uio.user_colors:
-                                sender_color = uio.user_colors.get(from_user, '')
+                                sender_color = uio.user_colors.get(remote_from_addr, '')
                                 if sender_color:
                                     reset = self.os.ANSI_RESET
                                     bold = self.os.ANSI_BOLD
-                                    me_color = uio.user_colors.get(uio.user, self.os.BRIGHT_WHITE)
+                                    me_color = uio.user_colors.get(f"{uio.user}.{self.os.hostname}", self.os.BRIGHT_WHITE)
                                     colored_sender = f'{bold}{sender_color}{remote_from_addr}{reset}'
                                     bold_me = f'{bold}{me_color}me{reset}'
                                     colored_msg = f'{sender_color}{actual_msg}{reset}'
@@ -219,12 +219,12 @@ class AIMessenger:
                     if not sender_io.bot and sender_io.user_colors:
                         reset = self.os.ANSI_RESET
                         bold = self.os.ANSI_BOLD
-                        me_color = sender_io.user_colors.get(from_user, self.os.BRIGHT_WHITE)
+                        me_color = sender_io.user_colors.get(f"{from_user}.{self.os.hostname}", self.os.BRIGHT_WHITE)
                         bold_me = f'{bold}{me_color}me{reset}'
                         colored_recipients = []
                         for r_addr in recipients:
-                            r_user = r_addr.split('.', 1)[0]
-                            r_color = sender_io.user_colors.get(r_user, '')
+                            r_key = r_addr if '.' in r_addr else f"{r_addr}.{self.os.hostname}"
+                            r_color = sender_io.user_colors.get(r_key, '')
                             colored_recipients.append(
                                 f'{bold}{r_color}{r_addr}{reset}' if r_color else r_addr
                             )
@@ -247,7 +247,7 @@ class AIMessenger:
                     # For local participants, use the full canonical address for consistency
                     local_msg = f'\n[{remote_from_addr} {now}] << {msg}'
                     if not uio.bot and uio.user_colors:
-                        color = uio.user_colors.get(from_user, '')
+                        color = uio.user_colors.get(remote_from_addr, '')
                         if color:
                             reset = self.os.ANSI_RESET
                             bold = self.os.ANSI_BOLD
@@ -418,8 +418,7 @@ class AIMessenger:
                         # Use the full canonical address for consistency
                         local_msg = f'\n[{from_addr} {now}] << {content}'
                         if not uio.bot and uio.user_colors:
-                            sender_username = from_addr.split('.', 1)[0]
-                            color = uio.user_colors.get(sender_username, '')
+                            color = uio.user_colors.get(from_addr, '')
                             if color:
                                 reset = self.os.ANSI_RESET
                                 bold = self.os.ANSI_BOLD
@@ -440,12 +439,11 @@ class AIMessenger:
                     # Use the full canonical address for consistency
                     dm_msg = f'\a\n[{from_addr} -> me {now}] << {content}'
                     if not uio.bot and uio.user_colors:
-                        sender_username = from_addr.split('.', 1)[0]
-                        sender_color = uio.user_colors.get(sender_username, '')
+                        sender_color = uio.user_colors.get(from_addr, '')
                         if sender_color:
                             reset = self.os.ANSI_RESET
                             bold = self.os.ANSI_BOLD
-                            me_color = uio.user_colors.get(uio.user, self.os.BRIGHT_WHITE)
+                            me_color = uio.user_colors.get(f"{uio.user}.{self.os.hostname}", self.os.BRIGHT_WHITE)
                             colored_sender = f'{bold}{sender_color}{from_addr}{reset}'
                             bold_me = f'{bold}{me_color}me{reset}'
                             colored_content = f'{sender_color}{content}{reset}'

@@ -417,20 +417,28 @@ class IOSK:
         io.bot = device != self.CONSOLE_DEV
         self.users[user] = io
 
+        user_addr = f"{user}.{self.hostname}"
+
         # --- Color Initialization ---
         if not io.bot:
-            # This user is interactive, set up their color map.
-            io.user_colors[user] = self.BRIGHT_WHITE
+            # This user is interactive, set up their color map with user.host keys.
+            # 1. Assign self-color (white)
+            io.user_colors[user_addr] = self.BRIGHT_WHITE
 
-            # Assign colors for all other users (including bots) in this new user's map.
-            for other_user in self.users:
-                if other_user != user:
-                    io.user_colors[other_user] = self._get_next_color(io)
+            # 2. Populate this new user's map with all other known users.
+            all_other_users = list(self.network_users.keys())
+            for u, uio in self.users.items():
+                # self.users already contains the new user, so we must skip them.
+                if u != user:
+                    all_other_users.append(f"{u}.{self.hostname}")
 
-            # Update all other interactive users' maps to include this new user.
-            for other_user, other_io in self.users.items():
-                if other_user != user and not other_io.bot:
-                    other_io.user_colors[user] = self._get_next_color(other_io)
+            for other_addr in all_other_users:
+                 io.user_colors[other_addr] = self._get_next_color(io)
+
+            # 3. Add this new user to all other interactive users' maps.
+            for other_io in self.users.values():
+                if other_io.user != user and not other_io.bot:
+                    other_io.user_colors[user_addr] = self._get_next_color(other_io)
 
         # --- CWD and Home Directory Initialization ---
         if user == 'root':
@@ -478,7 +486,6 @@ class IOSK:
             else: await io.print(connect)
 
         # MODIFIED: Update local network_users and then broadcast
-        user_addr = f"{user}.{self.hostname}"
         self.network_users[user_addr] = {} # Store user metadata if needed later
 
         # Announce user login to network peers
@@ -577,22 +584,22 @@ class IOSK:
         await self.system.print(logout_msg)
 
         user_to_logout = io.user
+        user_addr_to_logout = f"{user_to_logout}.{self.hostname}"
         user_is_network_client = io.dev.startswith('network:')
         del self.users[user_to_logout]
 
         # --- Color Cleanup ---
         for remaining_io in self.users.values():
-            if user_to_logout in remaining_io.user_colors:
-                del remaining_io.user_colors[user_to_logout]
+            if not remaining_io.bot and user_addr_to_logout in remaining_io.user_colors:
+                del remaining_io.user_colors[user_addr_to_logout]
 
         if disconnect:
             if self.chat: await self.chat.send(user_to_logout, disconnect, sys=True)
             else: await io.print(disconnect)
 
         # MODIFIED: Update local network_users and then broadcast
-        user_addr = f"{user_to_logout}.{self.hostname}"
-        if user_addr in self.network_users:
-            del self.network_users[user_addr]
+        if user_addr_to_logout in self.network_users:
+            del self.network_users[user_addr_to_logout]
 
         # Announce user logout to network peers
         if self.port:
@@ -645,15 +652,27 @@ class IOSK:
         io.network_input_queue = asyncio.Queue()
         self.users[username] = io
 
+        user_addr = f"{username}.{self.hostname}"
+
         # --- Color Initialization (for network user) ---
         if not io.bot:
-            io.user_colors[username] = self.BRIGHT_WHITE
-            for other_user in self.users:
-                if other_user != username:
-                    io.user_colors[other_user] = self._get_next_color(io)
-            for other_user, other_io in self.users.items():
-                if other_user != username and not other_io.bot:
-                    other_io.user_colors[username] = self._get_next_color(other_io)
+            # This user is interactive, set up their color map with user.host keys.
+            # 1. Assign self-color (white)
+            io.user_colors[user_addr] = self.BRIGHT_WHITE
+
+            # 2. Populate this new user's map with all other known users.
+            all_other_users = list(self.network_users.keys())
+            for u, uio in self.users.items():
+                if u != username:
+                    all_other_users.append(f"{u}.{self.hostname}")
+
+            for other_addr in all_other_users:
+                 io.user_colors[other_addr] = self._get_next_color(io)
+
+            # 3. Add this new user to all other interactive users' maps.
+            for other_io in self.users.values():
+                if other_io.user != username and not other_io.bot:
+                    other_io.user_colors[user_addr] = self._get_next_color(other_io)
 
         if username == 'root':
             home_dir_virtual = '/root'
@@ -686,7 +705,6 @@ class IOSK:
         io.motd_cache = await self.get_motd(io)
 
         # MODIFIED: Update local network_users and then broadcast
-        user_addr = f"{username}.{self.hostname}"
         self.network_users[user_addr] = {}
 
         if self.port:
