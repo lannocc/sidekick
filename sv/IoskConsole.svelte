@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
-    import { get } from 'svelte/store'; 
+    import { get } from 'svelte/store';
     import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch } from './windows.js';
     import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents } from './ioskEvents.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
@@ -57,6 +57,7 @@
 
     // --- State for Token Telemetry ---
     let userTokenStats = {};
+    let tokenTooltip = { visible: false, x: 0, y: 0, stats: null };
 
     // --- Internal Component State ---
     let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
@@ -176,7 +177,7 @@
         if (typeof text !== 'string') return '';
         const ansiRegex = /\u001b\[(\d+)m/g;
         let openSpan = false;
-        
+
         let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         let html = sanitizedText.replace(ansiRegex, (match, code) => {
@@ -268,7 +269,7 @@
 
     onDestroy(() => {
         if (ws) {
-            ws.onclose = null; 
+            ws.onclose = null;
             ws.close();
         }
         if (requestUnsubscribe) {
@@ -339,7 +340,7 @@
         }
         shouldScroll = true;
     }
-    
+
     function openPrivateChat(remoteParticipant) {
         if (!remoteParticipant) return;
         // Allow opening a chat with any participant, including remote users with
@@ -353,7 +354,7 @@
         if (!userContextMenu.user) return;
 
         const usernameOnly = userContextMenu.user.split('.')[0];
-        
+
         const now = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -383,6 +384,21 @@
         focusInput();
     }
 
+    function showTokenTooltip(event, stats) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        tokenTooltip = {
+            visible: true,
+            // Position below the trigger, with its right edge aligned to the trigger's right edge
+            x: rect.right,
+            y: rect.bottom + 5,
+            stats: stats
+        };
+    }
+
+    function hideTokenTooltip() {
+        tokenTooltip = { ...tokenTooltip, visible: false };
+    }
+
     // --- Functions ---
     export function showSettingsDialog() {
         settingsUrl = wsUrl;
@@ -398,7 +414,7 @@
             height: currentSettings.height ?? height,
             defaultZoom: currentSettings.defaultZoom ?? 1.0,
         };
-        
+
         showSettings = true;
         tick().then(() => settingsUrlInput?.focus());
     }
@@ -535,7 +551,7 @@
                             if (data.output) {
                                 const bellCode = "\u0007";
                                 let outputToProcess = data.output;
-                                
+
                                 // This is now a generic bell handler. DM-specific logic is removed.
                                 if (outputToProcess.includes(bellCode)) {
                                     handleBell();
@@ -875,17 +891,13 @@
     .token-count-wrapper { position: relative; flex-shrink: 0; }
     .token-count { font-weight: bold; color: var(--ansi-yellow); }
     .token-tooltip {
-        display: none;
-        position: absolute;
-        bottom: 100%;
-        right: 0;
-        margin-bottom: 5px;
+        position: fixed;
         background-color: var(--window-bg);
         border: 1px solid var(--border-color);
         padding: 8px;
         border-radius: 4px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        z-index: 10;
+        z-index: 210;
         width: max-content;
         font-size: 12px;
         color: var(--console-text);
@@ -893,7 +905,6 @@
         white-space: nowrap;
         pointer-events: none;
     }
-    .token-count-wrapper:hover .token-tooltip { display: block; }
     .tooltip-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
     .tooltip-grid span:nth-child(odd) { font-weight: bold; text-align: right; color: var(--title-bar-text); }
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
@@ -1046,7 +1057,7 @@
                                 >
                                     👤 {item.name}
                                 </div>
-                            {:else}
+                          {:else}
                                 <div class="list-item">(no users found)</div>
                             {/each}
                         {/if}
@@ -1099,21 +1110,12 @@
                         {#if participant.is_bot && userTokenStats[participant.name]}
                             {@const stats = userTokenStats[participant.name]}
                             <span class="user-item-filler"></span>
-                            <div class="token-count-wrapper">
+                            <div class="token-count-wrapper"
+                                 on:mouseenter={(e) => showTokenTooltip(e, stats)}
+                                 on:mouseleave={hideTokenTooltip}>
                                 <span class="token-count">
                                     {abbreviateNumber(stats.cumulative_input_tokens)}
                                 </span>
-                                <div class="token-tooltip">
-                                    <div class="tooltip-grid">
-                                        <span>Cumulative Input:</span><span>{stats.cumulative_input_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.cumulative_input_bytes)})</span>
-                                        <span>Cumulative Output:</span><span>{stats.cumulative_output_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.cumulative_output_bytes)})</span>
-                                        <span>Last Trip Input:</span><span>{stats.last_trip_input_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.last_trip_input_bytes)})</span>
-                                        <span>Last Trip Output:</span><span>{stats.last_trip_output_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.last_trip_output_bytes)})</span>
-                                        <span>Banked Memory:</span><span>{stats.banked_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.banked_bytes)})</span>
-                                        <span>Chat History:</span><span>{stats.history_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.history_bytes)})</span>
-                                        <span>Caching Context:</span><span>{stats.caching_context_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.caching_context_bytes)})</span>
-                                    </div>
-                                </div>
                             </div>
                         {/if}
                     </div>
@@ -1132,21 +1134,12 @@
                         {#if participant.is_bot && userTokenStats[participant.name]}
                             {@const stats = userTokenStats[participant.name]}
                             <span class="user-item-filler"></span>
-                            <div class="token-count-wrapper">
+                             <div class="token-count-wrapper"
+                                 on:mouseenter={(e) => showTokenTooltip(e, stats)}
+                                 on:mouseleave={hideTokenTooltip}>
                                 <span class="token-count">
                                     {abbreviateNumber(stats.cumulative_input_tokens)}
                                 </span>
-                                <div class="token-tooltip">
-                                    <div class="tooltip-grid">
-                                        <span>Cumulative Input:</span><span>{stats.cumulative_input_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.cumulative_input_bytes)})</span>
-                                        <span>Cumulative Output:</span><span>{stats.cumulative_output_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.cumulative_output_bytes)})</span>
-                                        <span>Last Trip Input:</span><span>{stats.last_trip_input_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.last_trip_input_bytes)})</span>
-                                        <span>Last Trip Output:</span><span>{stats.last_trip_output_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.last_trip_output_bytes)})</span>
-                                        <span>Banked Memory:</span><span>{stats.banked_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.banked_bytes)})</span>
-                                        <span>Chat History:</span><span>{stats.history_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.history_bytes)})</span>
-                                        <span>Caching Context:</span><span>{stats.caching_context_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.caching_context_bytes)})</span>
-                                    </div>
-                                </div>
                             </div>
                         {/if}
                     </div>
@@ -1240,4 +1233,23 @@
             {/if}
         </div>
     {/if}
+
+    {#if tokenTooltip.visible}
+        {@const stats = tokenTooltip.stats}
+        <div
+            class="token-tooltip"
+            style="top: {tokenTooltip.y}px; left: {tokenTooltip.x}px; transform: translateX(-100%);"
+        >
+            <div class="tooltip-grid">
+                <span>Cumulative Input:</span><span>{stats.cumulative_input_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.cumulative_input_bytes)})</span>
+                <span>Cumulative Output:</span><span>{stats.cumulative_output_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.cumulative_output_bytes)})</span>
+                <span>Last Trip Input:</span><span>{stats.last_trip_input_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.last_trip_input_bytes)})</span>
+                <span>Last Trip Output:</span><span>{stats.last_trip_output_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.last_trip_output_bytes)})</span>
+                <span>Banked Memory:</span><span>{stats.banked_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.banked_bytes)})</span>
+                <span>Chat History:</span><span>{stats.history_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.history_bytes)})</span>
+                <span>Caching Context:</span><span>{stats.caching_context_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.caching_context_bytes)})</span>
+            </div>
+        </div>
+    {/if}
 </div>
+
