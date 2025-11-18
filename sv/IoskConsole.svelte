@@ -1097,14 +1097,13 @@
                     >
                         <span class="user-name-display" style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
                         {#if participant.is_bot && userTokenStats[participant.name]}
+                            {@const stats = userTokenStats[participant.name]}
                             <span class="user-item-filler"></span>
                             <div class="token-count-wrapper">
                                 <span class="token-count">
-                                    {abbreviateNumber(userTokenStats[participant.name].cumulative_input_tokens)}
+                                    {abbreviateNumber(stats.cumulative_input_tokens)}
                                 </span>
                                 <div class="token-tooltip">
-                                    {@const stats = userTokenStats[participant.name]}
-                                    {#if stats}
                                     <div class="tooltip-grid">
                                         <span>Cumulative Input:</span><span>{stats.cumulative_input_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.cumulative_input_bytes)})</span>
                                         <span>Cumulative Output:</span><span>{stats.cumulative_output_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.cumulative_output_bytes)})</span>
@@ -1114,7 +1113,6 @@
                                         <span>Chat History:</span><span>{stats.history_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.history_bytes)})</span>
                                         <span>Caching Context:</span><span>{stats.caching_context_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.caching_context_bytes)})</span>
                                     </div>
-                                    {/if}
                                 </div>
                             </div>
                         {/if}
@@ -1132,14 +1130,13 @@
                     >
                         <span class="user-name-display" style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
                         {#if participant.is_bot && userTokenStats[participant.name]}
+                            {@const stats = userTokenStats[participant.name]}
                             <span class="user-item-filler"></span>
                             <div class="token-count-wrapper">
                                 <span class="token-count">
-                                    {abbreviateNumber(userTokenStats[participant.name].cumulative_input_tokens)}
+                                    {abbreviateNumber(stats.cumulative_input_tokens)}
                                 </span>
                                 <div class="token-tooltip">
-                                    {@const stats = userTokenStats[participant.name]}
-                                    {#if stats}
                                     <div class="tooltip-grid">
                                         <span>Cumulative Input:</span><span>{stats.cumulative_input_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.cumulative_input_bytes)})</span>
                                         <span>Cumulative Output:</span><span>{stats.cumulative_output_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.cumulative_output_bytes)})</span>
@@ -1149,7 +1146,6 @@
                                         <span>Chat History:</span><span>{stats.history_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.history_bytes)})</span>
                                         <span>Caching Context:</span><span>{stats.caching_context_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.caching_context_bytes)})</span>
                                     </div>
-                                    {/if}
                                 </div>
                             </div>
                         {/if}
