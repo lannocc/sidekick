@@ -661,20 +661,36 @@ class PortManager:
                 # Room is active, send room state
                 room = self.kernel.chat
 
-                # Gather participants
-                all_participants = set(room.local_room_participants)
-                for user_addr, room_name in self.kernel.network_rooms.items():
-                    if room_name == room.active_room:
-                            user_part, host_part = user_addr.split('.', 1)
-                            if host_part == self.kernel.hostname:
-                                all_participants.add(user_part)
-                            else:
-                                all_participants.add(user_addr)
+                # MODIFIED: Gather participants as objects with name and is_bot status
+                all_participants_map = {} # Use dict to handle duplicates
+
+                # 1. Add local users (without hostname)
+                for username in room.local_room_participants:
+                    user_io = self.kernel.users.get(username)
+                    if user_io:
+                        all_participants_map[username] = {
+                            'name': username,
+                            'is_bot': user_io.bot
+                        }
+
+                # 2. Add network users in the same room (with hostname)
+                for user_addr, r_name in self.kernel.network_rooms.items():
+                    if r_name == room.active_room:
+                        user_part, host_part = user_addr.split('.', 1)
+                        # Only add if they are not on the local host, as they are already covered.
+                        if host_part != self.kernel.hostname:
+                            user_info = self.kernel.network_users.get(user_addr, {})
+                            all_participants_map[user_addr] = {
+                                'name': user_addr,
+                                'is_bot': user_info.get('is_bot', False)
+                            }
+
+                participants_list = sorted(list(all_participants_map.values()), key=lambda p: p['name'])
 
                 initial_state_payload.update({
                     'roomName': room.active_room,
                     'roomTopic': room.room_topic,
-                    'participants': sorted(list(all_participants))
+                    'participants': participants_list
                 })
             else:
                 # No room, send MOTD. The MOTD was selected and cached during login.
@@ -1343,3 +1359,4 @@ class PortManager:
 
             # 3. Propagate the disconnection to remaining peers
             await self._broadcast_peer_disconnect(disconnected_host)
+
