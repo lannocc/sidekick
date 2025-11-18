@@ -446,7 +446,7 @@
                         if (data.type === 'private_message') {
                             // This is the new, definitive handler for DMs.
                             // It triggers the bell and opens the chat window on reception.
-                            handleBell();
+                            playBellSound();
                             privateMessages.set({
                                 from: stripAnsi(data.from),
                                 to: data.to,
@@ -716,7 +716,7 @@
         focusInput();
     }
 
-    function handleBell() {
+    function playBellSound() {
         // 1. Play sound
         if (settings?.chimeType && settings.chimeType !== 'none') {
             let src;
@@ -732,6 +732,11 @@
                 } catch (e) { console.error("Failed to create audio element for bell:", e); }
             }
         }
+    }
+
+    function handleBell() {
+        // 1. Play sound
+        playBellSound();
 
         // 2. Flash window
         windows.updateWindowProps(id, { isFlashing: true });

@@ -102,6 +102,12 @@
         if (isForThisWindow) {
             messages = [...messages, message];
             shouldScroll = true;
+
+            // Flash window on new message received from another user
+            if (message.from !== localUser) {
+                windows.updateWindowProps(id, { isFlashing: true });
+                setTimeout(() => windows.updateWindowProps(id, { isFlashing: false }), 500);
+            }
         }
     }
 
