@@ -25,7 +25,7 @@ async def iocall(io, argv):
             is_remote_request = (
                 io.os.port and
                 potential_host != io.os.hostname and
-                potential_host in io.os.routing_table
+                potential_host in io.os.port.routing_table
             )
 
             if is_remote_request:
