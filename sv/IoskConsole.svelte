@@ -444,10 +444,9 @@
                         const data = JSON.parse(jsonData);
 
                         if (data.type === 'private_message') {
-                            // This is a new dedicated DM message.
-                            // The backend sends this *in addition* to the regular output
-                            // for console history, so we just process this for the chat window
-                            // and play the bell, but don't add to the console `output` array here.
+                            // This is the new, definitive handler for DMs.
+                            // It triggers the bell and opens the chat window on reception.
+                            handleBell();
                             privateMessages.set({
                                 from: stripAnsi(data.from),
                                 to: data.to,
@@ -455,14 +454,11 @@
                                 timestamp: Date.now()
                             });
 
-                            // A user can receive a DM confirmation they sent. Don't open a window for that.
+                            // Open a chat window if this is a message from another user.
                             const remoteUsername = stripAnsi(data.from).split('.')[0];
                             if (remoteUsername !== username) {
                                 newIoskPrivateChat(id, username, stripAnsi(data.from));
                             }
-
-                            // Trigger a bell sound/flash.
-                            handleBell();
                         } else if (data.type === 'state_info' || data.type === 'room_state_update') {
                             if (data.hostname) localHostname = data.hostname;
                             roomName = data.roomName || null;
@@ -501,40 +497,14 @@
                             if (data.output) {
                                 const bellCode = "\u0007";
                                 let outputToProcess = data.output;
-                                let hasRegularBell = false;
-
-                                if (outputToProcess.includes(bellCode)) {
-                                    const dmRegex = new RegExp(`^${bellCode}\\s*\\n\\[\\s*(.*?)\\s*->\\s*me.*?\\]\\s*<<\\s*([\\s\\S]*)`, 'm');
-                                    let match;
-                                    // Loop in case there are multiple DMs in one output block
-                                    while ((match = dmRegex.exec(outputToProcess)) !== null) {
-                                        const fromUser = match[1].trim();
-                                        const content = match[2].trim();
-                                        
-                                        // A user can receive a DM confirmation from the server they sent, don't open a window for that.
-                                        const remoteUsername = stripAnsi(fromUser).split('.')[0];
-                                        if (remoteUsername !== username) {
-                                            newIoskPrivateChat(id, username, stripAnsi(fromUser));
-                                            privateMessages.set({
-                                                from: stripAnsi(fromUser),
-                                                to: username,
-                                                content: content,
-                                                timestamp: Date.now()
-                                            });
-                                        }
-                                        // Remove the bell from the matched DM so it doesn't trigger a sound, but leave the message for console history.
-                                        outputToProcess = outputToProcess.replace(match[0], match[0].substring(1));
-                                    }
-                                }
-
-                                // Now check if any other, non-DM bells remain.
+                                
+                                // This is now a generic bell handler. DM-specific logic is removed.
                                 if (outputToProcess.includes(bellCode)) {
                                     handleBell();
                                     outputToProcess = outputToProcess.replace(new RegExp(bellCode, 'g'), '');
                                 }
 
                                 let cleanOutput = outputToProcess;
-
                                 const clearScreenCode = "\x1b[H\x1b[2J";
                                 if (cleanOutput === clearScreenCode) {
                                     output = [];

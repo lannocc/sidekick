@@ -1149,9 +1149,9 @@ class IOSK:
                             from_user=from_user,
                             content=content
                         )
-                        # Also send the formatted message to the console for history,
-                        # but without the bell character that triggers special handling.
-                        await self.port.send_to_client(io.user, data[1:])
+                        # Also send the formatted message to the console for history.
+                        # The bell is required to trigger sounds and fallbacks.
+                        await self.port.send_to_client(io.user, data)
                         return # We are done with this data.
 
                     except Exception as e:
