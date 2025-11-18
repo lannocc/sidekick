@@ -62,6 +62,17 @@ class Context:
         self.banking = None
         self.preamble_cache = None
 
+        # Added for token telemetry proposal
+        self.token_stats = {
+            'cumulative_input_tokens': 0, 'cumulative_input_bytes': 0,
+            'cumulative_output_tokens': 0, 'cumulative_output_bytes': 0,
+            'last_trip_input_tokens': 0, 'last_trip_input_bytes': 0,
+            'last_trip_output_tokens': 0, 'last_trip_output_bytes': 0,
+            'banked_tokens': 0, 'banked_bytes': 0,
+            'history_tokens': 0, 'history_bytes': 0,
+            'caching_context_tokens': 0, 'caching_context_bytes': 0
+        }
+
         self.stdin = None
         self.stdout = None
 

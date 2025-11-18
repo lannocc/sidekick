@@ -486,7 +486,7 @@ class IOSK:
             else: await io.print(connect)
 
         # MODIFIED: Update local network_users and then broadcast
-        self.network_users[user_addr] = {} # Store user metadata if needed later
+        self.network_users[user_addr] = {'is_bot': io.bot}
 
         # Announce user login to network peers
         if self.port:
@@ -495,7 +495,8 @@ class IOSK:
                 'type': 'user_update',
                 'action': 'login',
                 'user': user,
-                'host': self.hostname
+                'host': self.hostname,
+                'is_bot': io.bot
             })
             # Announce user login to the entire mesh system log
             await self.port.broadcast_to_peers({
@@ -705,7 +706,7 @@ class IOSK:
         io.motd_cache = await self.get_motd(io)
 
         # MODIFIED: Update local network_users and then broadcast
-        self.network_users[user_addr] = {}
+        self.network_users[user_addr] = {'is_bot': io.bot}
 
         if self.port:
             await self.port.broadcast_color_updates()
@@ -713,7 +714,8 @@ class IOSK:
                 'type': 'user_update',
                 'action': 'login',
                 'user': username,
-                'host': self.hostname
+                'host': self.hostname,
+                'is_bot': io.bot
             })
             await self.port.broadcast_to_peers({
                 'type': 'system_broadcast',
@@ -1248,6 +1250,55 @@ class IOSK:
             return None
 
     ###
+    ### TOKEN TELEMETRY
+    ###
+
+    async def _calculate_context_tokens(self, io: Context) -> dict:
+        """
+        Calculates token and byte counts for the components of a user's context.
+        This logic is extracted from 'tokens.py' for reuse in telemetry.
+        """
+        stats = {
+            'banked_bytes': 0, 'banked_tokens': 0,
+            'history_bytes': 0, 'history_tokens': 0,
+            'caching_context_bytes': 0, 'caching_context_tokens': 0
+        }
+        encoding = None
+        try:
+            encoding = tiktoken.get_encoding('cl100k_base')
+        except Exception:
+            # If tiktoken fails, we can't calculate tokens, but can still do bytes.
+            pass
+
+        # --- 1. Preamble Content ---
+        preamble_content = io.preamble_cache or ""
+
+        # --- 2. Banked Memory Content ---
+        banking_content = ""
+        if io.banks:
+            for bank_acct, data in io.banks.items():
+                banking_content += '\n' + data + '\n'
+
+        stats['banked_bytes'] = len(banking_content.encode('utf-8'))
+        if encoding:
+            stats['banked_tokens'] = len(encoding.encode(banking_content))
+
+        # --- 3. Chat History Content ---
+        io.session.seek(0)
+        chat_history_content = io.session.read()
+        stats['history_bytes'] = len(chat_history_content.encode('utf-8'))
+        if encoding:
+            stats['history_tokens'] = len(encoding.encode(chat_history_content))
+
+        # --- 4. Caching Context (Preamble + Banked + History) ---
+        caching_context_content = preamble_content + banking_content + chat_history_content
+        stats['caching_context_bytes'] = len(caching_context_content.encode('utf-8'))
+        if encoding:
+            stats['caching_context_tokens'] = len(encoding.encode(caching_context_content))
+
+        return stats
+
+    ###
     ### TRACE
     ###
 
@@ -1257,23 +1308,49 @@ class IOSK:
 
     async def log_trip_trace(self, io: Context, prompt: str, reply: str):
         """
-        Logs token usage for TPM tracking. If 'trip' trace is active, also writes
-        the prompt, reply, and token counts to log files.
+        Logs token usage for TPM tracking and real-time telemetry. If 'trip' trace
+        is active, also writes the prompt, reply, and token counts to log files.
         """
-        # --- 1. Token Calculation (always needed for TPM) ---
+        # --- 1. Token Calculation for Telemetry and TPM ---
         prompt_tokens = -1
         reply_tokens = -1
         reply_str = reply or ""
+        prompt_bytes = len(prompt.encode('utf-8'))
+        reply_bytes = len(reply_str.encode('utf-8'))
+
         try:
             encoding = tiktoken.get_encoding('cl100k_base')
             prompt_tokens = len(encoding.encode(prompt))
             reply_tokens = len(encoding.encode(reply_str))
         except Exception as e:
-            # Silently fail on tiktoken error, tokens will be -1
-            # A more robust system might log this, but for now we prioritize not crashing.
+            # Silently fail on tiktoken error, tokens will be -1.
             pass
 
-        # --- 2. TPM Tracking (always needed) ---
+        # --- 2. Update Bot Telemetry Stats ---
+        if io.bot:
+            # First, calculate the state of the context that was just used for the trip.
+            context_stats = await self._calculate_context_tokens(io)
+            io.token_stats.update(context_stats)
+
+            # Update last trip stats
+            io.token_stats['last_trip_input_bytes'] = prompt_bytes
+            io.token_stats['last_trip_input_tokens'] = prompt_tokens if prompt_tokens != -1 else 0
+            io.token_stats['last_trip_output_bytes'] = reply_bytes
+            io.token_stats['last_trip_output_tokens'] = reply_tokens if reply_tokens != -1 else 0
+
+            # Increment cumulative stats
+            io.token_stats['cumulative_input_bytes'] += prompt_bytes
+            if prompt_tokens != -1:
+                io.token_stats['cumulative_input_tokens'] += prompt_tokens
+            io.token_stats['cumulative_output_bytes'] += reply_bytes
+            if reply_tokens != -1:
+                io.token_stats['cumulative_output_tokens'] += reply_tokens
+            
+            # Broadcast the update to clients
+            if self.port:
+                await self.port.broadcast_token_stats_update(io)
+
+        # --- 3. TPM Tracking (always needed) ---
         try:
             total_tokens = (prompt_tokens if prompt_tokens != -1 else 0) + \
                            (reply_tokens if reply_tokens != -1 else 0)
@@ -1288,11 +1365,11 @@ class IOSK:
         except Exception as e:
             await self.system.error(f"!! Failed during TPM tracking for {io.dev}: {e}")
 
-        # --- 3. Check for Active Trace ---
+        # --- 4. Check for Active Trace ---
         if not await self.is_trace_active('trip'):
             return
 
-        # --- 4. Write Trace Files ---
+        # --- 5. Write Trace Files ---
         try:
             # Filename Construction
             device_path = io.dev
@@ -1307,8 +1384,6 @@ class IOSK:
             tokens_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.tokens')
 
             # Token content string construction
-            prompt_bytes = len(prompt.encode('utf-8'))
-            reply_bytes = len(reply_str.encode('utf-8'))
             tokens_content = (
                 f"PROMPT\n"
                 f"Bytes: {prompt_bytes}\n"

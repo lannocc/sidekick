@@ -467,6 +467,16 @@ class PortManager:
         }
         await self.send_payload_to_client(to_user, payload)
 
+    async def broadcast_token_stats_update(self, user_io: "Context"):
+        """Broadcasts a bot's token telemetry update to all connected clients."""
+        if not user_io.bot: return
+        payload = {
+            "type": "token_stats_update",
+            "user": f"{user_io.user}.{self.kernel.hostname}",
+            "stats": user_io.token_stats
+        }
+        await self.broadcast_to_clients(payload)
+
     # --------------------------------------------------------------------------
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
@@ -1083,7 +1093,8 @@ class PortManager:
 
             user_addr = f"{user}.{host}"
             if action == "login":
-                self.kernel.network_users[user_addr] = {} # Add user
+                is_bot = message.get('is_bot', False)
+                self.kernel.network_users[user_addr] = {'is_bot': is_bot} # Add user
                 # Assign color for this network user to all local interactive users
                 for uio in self.kernel.users.values():
                     if not uio.bot and user_addr not in uio.user_colors:
