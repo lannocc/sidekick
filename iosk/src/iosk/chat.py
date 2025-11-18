@@ -33,12 +33,28 @@ class AIMessenger:
         """Gathers current room state and broadcasts it to clients."""
         if not self.os.port: return
 
-        # Gather participants from local and network, ensuring canonical user.host format
-        all_participants = set()
+        # --- BEGIN MODIFICATION ---
+        # The original code sent a list of strings, causing a frontend crash.
+        # This new logic constructs a list of objects, each with 'name' and 'is_bot'
+        # properties, which is what the frontend expects.
+
+        all_participants = []
         if self.active_room:
+            # We iterate network_rooms, which is the single source of truth for who is in what room.
             for user_addr, room_name in self.os.network_rooms.items():
                 if room_name == self.active_room:
-                    all_participants.add(user_addr)
+                    user, host = user_addr.split('.', 1)
+                    is_bot = False
+                    if host == self.os.hostname:
+                        # It's a local user; get the 'is_bot' status from the live context.
+                        if user in self.os.users:
+                            is_bot = self.os.users[user].bot
+                    else:
+                        # It's a remote user; get the 'is_bot' status from the cached network state.
+                        user_info = self.os.network_users.get(user_addr, {})
+                        is_bot = user_info.get('is_bot', False)
+                    
+                    all_participants.append({'name': user_addr, 'is_bot': is_bot})
 
         # Get available rooms. Need a valid IO context for kernel calls. Use system.
         available_rooms = await self.os.get_room_list(self.os.system)
@@ -47,10 +63,11 @@ class AIMessenger:
             'type': 'room_state_update',
             'roomName': self.active_room,
             'roomTopic': self.room_topic,
-            'participants': sorted(list(all_participants)),
+            'participants': sorted(all_participants, key=lambda p: p['name']),
             'availableRooms': available_rooms
         }
         await self.os.port.broadcast_to_clients(payload)
+        # --- END MODIFICATION ---
 
     async def _setup_chat_context(self, io):
         """Executes preamble, caches it, and calculates initial token counts."""
@@ -744,3 +761,4 @@ class Engagement:
 
         # Remove the original markdown block from the text that will be processed for chat broadcast.
         return text.replace(original_block, '')
+
