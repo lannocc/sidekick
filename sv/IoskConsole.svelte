@@ -454,11 +454,9 @@
                                 timestamp: Date.now()
                             });
 
-                            // Open a chat window if this is a message from another user.
-                            const remoteUsername = stripAnsi(data.from).split('.')[0];
-                            if (remoteUsername !== username) {
-                                newIoskPrivateChat(id, username, stripAnsi(data.from));
-                            }
+                            // Open a chat window, whether from another user or from ourself.
+                            const remoteUserAddress = stripAnsi(data.from);
+                            newIoskPrivateChat(id, username, remoteUserAddress);
                         } else if (data.type === 'state_info' || data.type === 'room_state_update') {
                             if (data.hostname) localHostname = data.hostname;
                             roomName = data.roomName || null;
