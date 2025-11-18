@@ -57,7 +57,7 @@
 
     // --- State for Token Telemetry ---
     let userTokenStats = {};
-    let tokenTooltip = { visible: false, x: 0, y: 0, stats: null };
+    let tokenTooltip = { visible: false, x: 0, y: 0, user: null };
 
     // --- Internal Component State ---
     let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
@@ -384,14 +384,14 @@
         focusInput();
     }
 
-    function showTokenTooltip(event, stats) {
+    function showTokenTooltip(event, user) {
         const rect = event.currentTarget.getBoundingClientRect();
         tokenTooltip = {
             visible: true,
             // Position below the trigger, with its right edge aligned to the trigger's right edge
             x: rect.right,
             y: rect.bottom + 5,
-            stats: stats
+            user: user
         };
     }
 
@@ -514,11 +514,23 @@
                             if (data.hostname) localHostname = data.hostname;
                             roomName = data.roomName || null;
                             roomTopic = data.roomTopic || '';
-                            roomParticipants = data.participants || [];
+                            const newParticipants = data.participants || [];
+                            roomParticipants = newParticipants;
                             availableRooms = data.availableRooms || [];
                             if (data.userColors) {
                                 userColors = data.userColors;
                             }
+
+                            // Prune userTokenStats to only include current participants
+                            const currentParticipantNames = new Set(newParticipants.map(p => p.name));
+                            const newStats = {};
+                            for (const user of Object.keys(userTokenStats)) {
+                                if (currentParticipantNames.has(user)) {
+                                    newStats[user] = userTokenStats[user];
+                                }
+                            }
+                            userTokenStats = newStats;
+
                             if (data.type === 'state_info') {
                                 motd = data.motd || '';
                             }
@@ -905,8 +917,19 @@
         white-space: nowrap;
         pointer-events: none;
     }
-    .tooltip-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
-    .tooltip-grid span:nth-child(odd) { font-weight: bold; text-align: right; color: var(--title-bar-text); }
+    .tooltip-grid { display: grid; grid-template-columns: auto max-content max-content; gap: 4px 12px; align-items: center; }
+    .tooltip-grid span:nth-child(3n-2) { /* Label */
+        font-weight: bold;
+        text-align: right;
+        color: var(--title-bar-text);
+    }
+    .tooltip-grid span:nth-child(3n-1) { /* Tokens */
+        text-align: right;
+    }
+    .tooltip-grid span:nth-child(3n) { /* Bytes */
+        text-align: right;
+        color: var(--ansi-bright-black);
+    }
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
     .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
     .modal-content h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
@@ -1111,7 +1134,7 @@
                             {@const stats = userTokenStats[participant.name]}
                             <span class="user-item-filler"></span>
                             <div class="token-count-wrapper"
-                                 on:mouseenter={(e) => showTokenTooltip(e, stats)}
+                                 on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
                                  on:mouseleave={hideTokenTooltip}>
                                 <span class="token-count">
                                     {abbreviateNumber(stats.cumulative_input_tokens)}
@@ -1135,7 +1158,7 @@
                             {@const stats = userTokenStats[participant.name]}
                             <span class="user-item-filler"></span>
                              <div class="token-count-wrapper"
-                                 on:mouseenter={(e) => showTokenTooltip(e, stats)}
+                                 on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
                                  on:mouseleave={hideTokenTooltip}>
                                 <span class="token-count">
                                     {abbreviateNumber(stats.cumulative_input_tokens)}
@@ -1234,22 +1257,21 @@
         </div>
     {/if}
 
-    {#if tokenTooltip.visible}
-        {@const stats = tokenTooltip.stats}
+    {#if tokenTooltip.visible && tokenTooltip.user && userTokenStats[tokenTooltip.user]}
+        {@const stats = userTokenStats[tokenTooltip.user]}
         <div
             class="token-tooltip"
             style="top: {tokenTooltip.y}px; left: {tokenTooltip.x}px; transform: translateX(-100%);"
         >
             <div class="tooltip-grid">
-                <span>Cumulative Input:</span><span>{stats.cumulative_input_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.cumulative_input_bytes)})</span>
-                <span>Cumulative Output:</span><span>{stats.cumulative_output_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.cumulative_output_bytes)})</span>
-                <span>Last Trip Input:</span><span>{stats.last_trip_input_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.last_trip_input_bytes)})</span>
-                <span>Last Trip Output:</span><span>{stats.last_trip_output_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.last_trip_output_bytes)})</span>
-                <span>Banked Memory:</span><span>{stats.banked_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.banked_bytes)})</span>
-                <span>Chat History:</span><span>{stats.history_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.history_bytes)})</span>
-                <span>Caching Context:</span><span>{stats.caching_context_tokens.toLocaleString('en-US')} tokens ({formatBytes(stats.caching_context_bytes)})</span>
+                <span>Cumulative Input:</span><span>{stats.cumulative_input_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.cumulative_input_bytes)})</span>
+                <span>Cumulative Output:</span><span>{stats.cumulative_output_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.cumulative_output_bytes)})</span>
+                <span>Last Trip Input:</span><span>{stats.last_trip_input_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.last_trip_input_bytes)})</span>
+                <span>Last Trip Output:</span><span>{stats.last_trip_output_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.last_trip_output_bytes)})</span>
+                <span>Banked Memory:</span><span>{stats.banked_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.banked_bytes)})</span>
+                <span>Chat History:</span><span>{stats.history_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.history_bytes)})</span>
+                <span>Caching Context:</span><span>{stats.caching_context_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.caching_context_bytes)})</span>
             </div>
         </div>
     {/if}
 </div>
-
