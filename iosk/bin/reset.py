@@ -70,9 +70,6 @@ async def iocall(io, argv):
     target_io.aliases.clear()
 
     # Reset token counts and preamble cache
-    target_io.caching_token_total = 0
-    target_io.full_token_total = 0
-    target_io.initial_static_tokens = 0
     target_io.preamble_cache = None
     # --- History Proposal Implementation ---
     # Trigger a full recalculation of token stats after clearing everything.

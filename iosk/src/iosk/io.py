@@ -83,10 +83,6 @@ class Context:
         self.user_colors = {} # How this user sees other users' colors
         self.color_idx = 0    # Index for assigning next default color
 
-        self.caching_token_total = 0
-        self.full_token_total = 0
-        self.initial_static_tokens = 0
-
         self.stage = self.STAGE_NORMAL
         self.pre = None
         self.post = None
@@ -186,10 +182,19 @@ class Context:
         Performs a full recalculation of all token and byte counts for the
         user's context (preamble, banks, and history).
         """
-        banking_content = ""
+        raw_banking_content = ""
         if self.banks:
             for _, data in self.banks.items():
-                banking_content += '\n' + data + '\n'
+                raw_banking_content += '\n' + data + '\n'
+
+        banking_content = ""
+        if raw_banking_content:
+            banking_content = (
+                '\n=== CORE RULES/MEMORY BEGIN ===\n'
+                'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS REMEMBER:\n'
+                f'{raw_banking_content}'
+                '\n=== END   CORE RULES/MEMORY ===\n'
+            )
 
         preamble_content = self.preamble_cache or ""
         history_content = self.get_session_string()

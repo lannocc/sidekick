@@ -1308,10 +1308,19 @@ class IOSK:
         preamble_content = io.preamble_cache or ""
 
         # --- 2. Banked Memory Content ---
-        banking_content = ""
+        raw_banking_content = ""
         if io.banks:
             for bank_acct, data in io.banks.items():
-                banking_content += '\n' + data + '\n'
+                raw_banking_content += '\n' + data + '\n'
+
+        banking_content = ""
+        if raw_banking_content:
+            banking_content = (
+                '\n=== CORE RULES/MEMORY BEGIN ===\n'
+                'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS REMEMBER:\n'
+                f'{raw_banking_content}'
+                '\n=== END   CORE RULES/MEMORY ===\n'
+            )
 
         stats['banked_bytes'] = len(banking_content.encode('utf-8'))
         if encoding:
