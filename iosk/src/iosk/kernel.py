@@ -420,12 +420,14 @@ class IOSK:
         user_addr = f"{user}.{self.hostname}"
 
         # --- Color Initialization ---
+        # Part 1: If the new user is interactive, set up THEIR color map.
+        # Bots do not need their own color map as they don't "see" colors.
         if not io.bot:
             # This user is interactive, set up their color map with user.host keys.
-            # 1. Assign self-color (white)
+            # 1a. Assign self-color (white)
             io.user_colors[user_addr] = self.BRIGHT_WHITE
 
-            # 2. Populate this new user's map with all other known users.
+            # 1b. Populate this new user's map with all other known users.
             all_other_users = list(self.network_users.keys())
             for u, uio in self.users.items():
                 # self.users already contains the new user, so we must skip them.
@@ -435,10 +437,11 @@ class IOSK:
             for other_addr in all_other_users:
                  io.user_colors[other_addr] = self._get_next_color(io)
 
-            # 3. Add this new user to all other interactive users' maps.
-            for other_io in self.users.values():
-                if other_io.user != user and not other_io.bot:
-                    other_io.user_colors[user_addr] = self._get_next_color(other_io)
+        # Part 2: Add the new user (bot or not) to all existing interactive users' maps.
+        # This allows interactive users to see and set colors for bots.
+        for other_io in self.users.values():
+            if other_io.user != user and not other_io.bot:
+                other_io.user_colors[user_addr] = self._get_next_color(other_io)
 
         # --- CWD and Home Directory Initialization ---
         if user == 'root':
@@ -657,12 +660,13 @@ class IOSK:
         user_addr = f"{username}.{self.hostname}"
 
         # --- Color Initialization (for network user) ---
+        # Part 1: If the new user is interactive, set up THEIR color map.
         if not io.bot:
             # This user is interactive, set up their color map with user.host keys.
-            # 1. Assign self-color (white)
+            # 1a. Assign self-color (white)
             io.user_colors[user_addr] = self.BRIGHT_WHITE
 
-            # 2. Populate this new user's map with all other known users.
+            # 1b. Populate this new user's map with all other known users.
             all_other_users = list(self.network_users.keys())
             for u, uio in self.users.items():
                 if u != username:
@@ -671,10 +675,10 @@ class IOSK:
             for other_addr in all_other_users:
                  io.user_colors[other_addr] = self._get_next_color(io)
 
-            # 3. Add this new user to all other interactive users' maps.
-            for other_io in self.users.values():
-                if other_io.user != username and not other_io.bot:
-                    other_io.user_colors[user_addr] = self._get_next_color(other_io)
+        # Part 2: Add the new user (bot or not) to all existing interactive users' maps.
+        for other_io in self.users.values():
+            if other_io.user != username and not other_io.bot:
+                other_io.user_colors[user_addr] = self._get_next_color(other_io)
 
         if username == 'root':
             home_dir_virtual = '/root'
