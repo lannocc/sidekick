@@ -80,8 +80,14 @@ async def iocall(io, argv):
     # --- End Implementation ---
 
 
-    # Reset Current Working Directory
-    target_io.pwd = f'/home/{target_user_name}'
+    # --- BEGIN FIX ---
+    # Reset Current Working Directory, correctly handling the 'root' user.
+    if target_user_name == 'root':
+        home_dir = '/root'
+    else:
+        home_dir = f'/home/{target_user_name}'
+    target_io.pwd = home_dir
+    # --- END FIX ---
 
     # --- 2. Re-initialize the session ---
 
@@ -94,8 +100,10 @@ async def iocall(io, argv):
     if await io.os.exists(target_io, skrc_global_path):
         await io.os.exec(target_io, skrc_global_path)
 
-    # Re-run user-specific .skrc
-    skrc_user_path = f'/home/{target_user_name}/.skrc'
+    # --- BEGIN FIX ---
+    # Re-run user-specific .skrc, using the correctly determined home directory.
+    skrc_user_path = f'{home_dir}/.skrc'
+    # --- END FIX ---
     if await io.os.exists(target_io, skrc_user_path):
         await io.os.exec(target_io, skrc_user_path)
 
