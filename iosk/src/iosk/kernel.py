@@ -525,8 +525,10 @@ class IOSK:
                     else:
                         prompt_char = '$'
 
-                    # Construct the prompt
-                    prompt_str = f'[{io.user} {io.pwd}] {prompt_char} '
+                    # --- History Proposal Implementation ---
+                    # Construct the prompt with the new prompt number
+                    prompt_str = f'[{io.user} {io.pwd} {io.prompt_number}] {prompt_char} '
+                    # --- End Implementation ---
 
                     while (text := await io.input(prompt=prompt_str)) is None:
                         # non-blocking inputs return None until data
@@ -560,6 +562,14 @@ class IOSK:
                             if first_word in ('exit', 'logout'):
                                 await self.logout(io)
                                 return 'logout' # Return reason for exit
+
+                            # --- History Proposal Implementation ---
+                            # Add the user's command to the session history.
+                            # The corresponding output is not yet captured here.
+                            # That will be handled by the CommandPipelineExecutor in a future step.
+                            full_command_with_prompt = f"{prompt_str}{command_line}\n"
+                            io.add_history_entry(full_command_with_prompt)
+                            # --- End Implementation ---
 
                             if command_line:
                                 io.history.append(command_line)
@@ -1290,8 +1300,11 @@ class IOSK:
             stats['banked_tokens'] = len(encoding.encode(banking_content))
 
         # --- 3. Chat History Content ---
-        io.session.seek(0)
-        chat_history_content = io.session.read()
+        # --- History Proposal Implementation ---
+        chat_history_content = io.get_session_string()
+        # io.session.seek(0) # REPLACED
+        # chat_history_content = io.session.read() # REPLACED
+        # --- End Implementation ---
         stats['history_bytes'] = len(chat_history_content.encode('utf-8'))
         if encoding:
             stats['history_tokens'] = len(encoding.encode(chat_history_content))

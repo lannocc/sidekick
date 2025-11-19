@@ -46,9 +46,16 @@ async def iocall(io, argv):
 
     # --- 1. Clear all session state ---
 
-    # Clear chat history and engagement buffers (for bots)
-    target_io.session.seek(0)
-    target_io.session.truncate(0)
+    # --- History Proposal Implementation ---
+    # Clear structured chat history, reset prompt number and rolling config
+    target_io.session_history.clear()
+    target_io.prompt_number = 1
+    target_io.rolling_config = {'enabled': False, 'mode': None, 'limit': 0}
+    # target_io.session.seek(0) # REPLACED
+    # target_io.session.truncate(0) # REPLACED
+    # --- End Implementation ---
+
+    # Clear engagement buffers (for bots)
     if target_io.bot and target_user_name in io.os.chat.engagements:
         engagement = io.os.chat.engagements[target_user_name]
         engagement.buf = None
@@ -67,6 +74,11 @@ async def iocall(io, argv):
     target_io.full_token_total = 0
     target_io.initial_static_tokens = 0
     target_io.preamble_cache = None
+    # --- History Proposal Implementation ---
+    # Trigger a full recalculation of token stats after clearing everything.
+    target_io.recalculate_token_stats()
+    # --- End Implementation ---
+
 
     # Reset Current Working Directory
     target_io.pwd = f'/home/{target_user_name}'
@@ -93,4 +105,3 @@ async def iocall(io, argv):
     await io.print(f":: session for user '{target_user_name}' has been reset.")
 
     return True
-

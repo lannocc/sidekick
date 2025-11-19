@@ -163,6 +163,11 @@ class AIMessenger:
         if sys:
             for user, uio in self.os.users.items():
                 if uio.paused: continue
+                # --- History Proposal Implementation ---
+                # System messages should be part of a bot's context.
+                if uio.bot:
+                    uio.add_history_entry(msg + '\n')
+                # --- End Implementation ---
                 await uio.print(msg)
             return
 
@@ -220,6 +225,10 @@ class AIMessenger:
                         if not uio.paused:
                             # Use canonical sender address for consistency
                             dm_msg = f'\a\n[{remote_from_addr} -> me {now}] << {actual_msg}'
+                            # --- History Proposal Implementation ---
+                            if uio.bot:
+                                uio.add_history_entry(dm_msg + '\n')
+                            # --- End Implementation ---
                             if not uio.bot and uio.user_colors:
                                 sender_color = uio.user_colors.get(remote_from_addr, '')
                                 if sender_color:
@@ -237,6 +246,10 @@ class AIMessenger:
                 if sender_io:
                     recipient_str = ', '.join(recipients)
                     dm_conf = f'\n[me -> {recipient_str} {now}] << {actual_msg}'
+                    # --- History Proposal Implementation ---
+                    if sender_io.bot:
+                        sender_io.add_history_entry(dm_conf + '\n')
+                    # --- End Implementation ---
                     if not sender_io.bot and sender_io.user_colors:
                         reset = self.os.ANSI_RESET
                         bold = self.os.ANSI_BOLD
@@ -267,6 +280,10 @@ class AIMessenger:
                     uio = self.os.users[user]
                     # For local participants, use the full canonical address for consistency
                     local_msg = f'\n[{remote_from_addr} {now}] << {msg}'
+                    # --- History Proposal Implementation ---
+                    if uio.bot:
+                        uio.add_history_entry(local_msg + '\n')
+                    # --- End Implementation ---
                     if not uio.bot and uio.user_colors:
                         color = uio.user_colors.get(remote_from_addr, '')
                         if color:
@@ -547,16 +564,22 @@ class Engagement:
                         or secs_since_trip >= self.SECS_NOISY_WAIT_REPLY:
                     #print(f'SENDING TO {self.dev}: {self.buf}')
 
-                    self.io.session.seek(0)
-                    prompt = self.io.session.read() #+ self.buf
+                    # --- History Proposal Implementation ---
+                    prompt = self.io.get_session_string()
+                    # self.io.session.seek(0) # REPLACED
+                    # prompt = self.io.session.read() #+ self.buf # REPLACED
+                    # --- End Implementation ---
                     self.buf = None
                     self.last_buf = None
 
             # or is there no output but we're ready to check for input?
             elif secs_since_trip >= self.SECS_QUIET_IDLE_POLL:
                 #print('POLLING FOR REPLY')
-                self.io.session.seek(0)
-                prompt = self.io.session.read()
+                # --- History Proposal Implementation ---
+                prompt = self.io.get_session_string()
+                # self.io.session.seek(0) # REPLACED
+                # prompt = self.io.session.read() # REPLACED
+                # --- End Implementation ---
 
             # FIXME: note we didn't actually use the buffer directly...
             #       just an indicator above that there was data waiting
@@ -606,7 +629,7 @@ class Engagement:
                    + prompt \
                    + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
                    + '\n' + post \
-                   + f'\n[{self.io.user} {self.io.pwd}] {prompt_char} '
+                   + f'\n[{self.io.user} {self.io.pwd} {self.io.prompt_number}] {prompt_char} '
 
                 # --- Update Running Token Totals ---
                 try:

@@ -7,10 +7,34 @@ from os.path import join, isdir, exists
 from io import StringIO
 import sys
 
+try:
+    import tiktoken
+except ImportError:
+    tiktoken = None
+
 
 def print_flush(*args, **kwargs):
     print(*args, **kwargs)
     sys.stdout.flush()
+
+
+class HistoryEntry:
+    """Represents a discrete, numbered entry in the session history."""
+    def __init__(self, number, content_str):
+        self.number = number
+        self.content = content_str
+        self.byte_count = len(content_str.encode('utf-8'))
+        self.line_count = content_str.count('\n')
+
+        self.token_count = 0
+        if tiktoken:
+            try:
+                # Use a global encoder instance if available for performance
+                encoding = tiktoken.get_encoding('cl100k_base')
+                self.token_count = len(encoding.encode(content_str))
+            except Exception:
+                # If encoding fails, token_count remains 0
+                pass
 
 
 class Context:
@@ -41,7 +65,14 @@ class Context:
         self.bot = False # True if this is a bot user
         self.paused = False # True if the bot's engagement is paused
         self.login_time = None
-        self.session = StringIO() # the chat history
+
+        # --- History Proposal Implementation ---
+        # self.session = StringIO() # REPLACED
+        self.session_history = []
+        self.prompt_number = 1
+        self.rolling_config = {'enabled': False, 'mode': None, 'limit': 0}
+        # --- End Implementation ---
+
         self.banks = { } # core memory
         self.env = {} # environment variables
         self.pwd = None # current working directory, virtual path (e.g., /home/user)
@@ -75,6 +106,118 @@ class Context:
 
         self.stdin = None
         self.stdout = None
+
+    # --- History Proposal Methods ---
+
+    def add_history_entry(self, content: str):
+        """
+        Creates a HistoryEntry, adds it to the session, increments the prompt
+        number, updates token counts, and applies the rolling cutoff.
+        This is the sole entry point for adding to the session history.
+        """
+        if not content:
+            return
+
+        entry = HistoryEntry(self.prompt_number, content)
+        self.session_history.append(entry)
+        self.prompt_number += 1
+
+        # Incrementally update token stats for efficiency
+        self.token_stats['history_tokens'] += entry.token_count
+        self.token_stats['history_bytes'] += entry.byte_count
+        # The caching context also grows by the same amount.
+        self.token_stats['caching_context_tokens'] += entry.token_count
+        self.token_stats['caching_context_bytes'] += entry.byte_count
+
+        self._apply_rolling_cutoff()
+
+    def _apply_rolling_cutoff(self):
+        """Checks and applies the rolling history cutoff if configured."""
+        if not self.rolling_config.get('enabled'):
+            return
+
+        mode = self.rolling_config.get('mode')
+        limit = self.rolling_config.get('limit', 0)
+
+        if not mode or limit <= 0:
+            return
+
+        # Determine the current total based on the configured mode
+        if mode == 'tokens':
+            current_total = sum(e.token_count for e in self.session_history)
+        elif mode == 'bytes':
+            current_total = sum(e.byte_count for e in self.session_history)
+        elif mode == 'lines':
+            current_total = sum(e.line_count for e in self.session_history)
+        elif mode == 'prompts':
+            current_total = len(self.session_history)
+        else:
+            return  # Invalid mode
+
+        if current_total <= limit:
+            return
+
+        # Prune oldest entries until the total is within the limit
+        removed_count = 0
+        while current_total > limit and self.session_history:
+            entry_to_remove = self.session_history[0]
+            if mode == 'tokens':
+                current_total -= entry_to_remove.token_count
+            elif mode == 'bytes':
+                current_total -= entry_to_remove.byte_count
+            elif mode == 'lines':
+                current_total -= entry_to_remove.line_count
+            elif mode == 'prompts':
+                current_total -= 1
+
+            self.session_history.pop(0)
+            removed_count += 1
+
+        if removed_count > 0:
+            # A modification occurred, so trigger a full, accurate recalculation.
+            self.recalculate_token_stats()
+
+    def get_session_string(self) -> str:
+        """Concatenates all history entries into a single string for AI context."""
+        return "".join([entry.content for entry in self.session_history])
+
+    def recalculate_token_stats(self):
+        """
+        Performs a full recalculation of all token and byte counts for the
+        user's context (preamble, banks, and history).
+        """
+        banking_content = ""
+        if self.banks:
+            for _, data in self.banks.items():
+                banking_content += '\n' + data + '\n'
+
+        preamble_content = self.preamble_cache or ""
+        history_content = self.get_session_string()
+        caching_context_content = preamble_content + banking_content + history_content
+
+        # Calculate byte counts (always possible)
+        self.token_stats['history_bytes'] = len(history_content.encode('utf-8'))
+        self.token_stats['banked_bytes'] = len(banking_content.encode('utf-8'))
+        self.token_stats['caching_context_bytes'] = len(caching_context_content.encode('utf-8'))
+
+        # Calculate token counts (if tiktoken is available)
+        if tiktoken:
+            try:
+                encoding = tiktoken.get_encoding('cl100k_base')
+                self.token_stats['history_tokens'] = len(encoding.encode(history_content))
+                self.token_stats['banked_tokens'] = len(encoding.encode(banking_content))
+                self.token_stats['caching_context_tokens'] = len(encoding.encode(caching_context_content))
+            except Exception:
+                # On failure, reset token counts to 0
+                self.token_stats['history_tokens'] = 0
+                self.token_stats['banked_tokens'] = 0
+                self.token_stats['caching_context_tokens'] = 0
+        else:
+            self.token_stats['history_tokens'] = 0
+            self.token_stats['banked_tokens'] = 0
+            self.token_stats['caching_context_tokens'] = 0
+
+    # --- End History Proposal Methods ---
 
     def fork(self):
         child = Context(self.os, self.dev, self.log)
@@ -132,7 +275,8 @@ class Context:
 
     async def comment(self, text):
         if self.base and self.bot:
-            self.session.write(text + '\n')
+            # Comments for bots are now added as history entries.
+            self.add_history_entry(text + '\n')
 
 
     async def input(self, prompt=None):
@@ -149,11 +293,12 @@ class Context:
                 self.log.write('\n')
                 self.log.flush()
 
-            if self.base and self.bot:
-                if prompt: self.session.write(prompt)
-                self.session.write(data)
-                self.session.write('\n')
-                self.session.flush()
+            # REMOVED: Writing to session buffer is now handled by command execution logic.
+            # if self.base and self.bot:
+            #     if prompt: self.session.write(prompt)
+            #     self.session.write(data)
+            #     self.session.write('\n')
+            #     self.session.flush()
 
         return data
 
@@ -190,9 +335,10 @@ class Context:
             self.log.write(ltext)
             self.log.flush()
 
-        if self.base and self.bot:
-            self.session.write(text)
-            self.session.flush()
+        # REMOVED: Writing to session buffer is now handled by higher-level logic.
+        # if self.base and self.bot:
+        #     self.session.write(text)
+        #     self.session.flush()
 
         await self.os.send(self, self.dev, text)
 
