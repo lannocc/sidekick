@@ -20,6 +20,8 @@ Several pieces of common, reusable logic are currently duplicated across multipl
 
 *   **Remote Command Dispatching**: The commands `bin/attach.py`, `bin/detach.py`, `bin/pause.py`, and `bin/unpause.py` share an identical block of code for parsing `user.host` arguments and dispatching the command to a remote peer if necessary. This logic will be extracted into a single helper function, `dispatch_remote_if_needed`, within `src/iosk/util.py`. The commands will call this helper, and if it returns `True` (indicating the command was dispatched), they will exit; otherwise, they will proceed with local execution.
 
+*   **AI Prompt Formatting Constants**: The string literals used to structure parts of the AI's context, such as the banking/memory section, are currently hardcoded in multiple locations (`src/iosk/chat.py`, `src/iosk/kernel.py`, and `src/iosk/io.py`). This includes markers like `=== CORE RULES/MEMORY BEGIN ===`, `THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS REMEMBER:`, and `=== END   CORE RULES/MEMORY ===`. Any change to this formatting requires finding and updating all instances, which is error-prone. These will be consolidated into named constants within `src/iosk/util.py` to ensure consistency and ease of modification.
+
 #### 2. Decomposing Core Kernel and PortManager Classes
 
 The `src/iosk/kernel.py` and `src/iosk/port.py` files have become excessively large, handling too many distinct responsibilities. This violates the single-responsibility principle and makes the code difficult to navigate and understand.
@@ -48,4 +50,3 @@ Implementing these refactoring changes will yield significant benefits:
 *   **Enhanced Readability**: Smaller, single-responsibility modules are easier for developers and AI agents to read, understand, and reason about.
 *   **Reduced Code Footprint**: Eliminating boilerplate files and redundant logic will decrease the overall size of the codebase.
 *   **Increased Consistency**: Centralizing common logic (e.g., user setup, remote dispatch) ensures that all parts of the system behave consistently.
-
