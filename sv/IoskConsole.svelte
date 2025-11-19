@@ -874,7 +874,7 @@
     .input-area { display: flex; padding: 4px 8px; background-color: var(--title-bar-bg); border-top: 1px solid var(--border-color); flex-shrink: 0; }
     .input-area span { color: var(--console-prompt); padding-right: 5px; white-space: pre; }
     .input-area input { flex-grow: 1; background: transparent; border: none; outline: none; color: var(--console-input); font-family: inherit; font-size: inherit; }
-    .users-panel { width: 220px; flex-shrink: 0; border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
+    .users-panel { width: 260px; flex-shrink: 0; border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
     .panel-header { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
     .panel-header .attach-button {
         background-color: #9b59b6;
@@ -908,8 +908,9 @@
     .user-name-display { flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .user-name-display.paused { font-style: italic; }
     .user-item-filler { flex-grow: 1; border-bottom: 1px dotted #7f8c8d; margin: 0 4px; position: relative; top: -4px; }
-    .token-count-wrapper { position: relative; flex-shrink: 0; }
+    .token-count-wrapper { position: relative; flex-shrink: 0; display: flex; align-items: center; }
     .token-count { font-weight: bold; color: var(--ansi-yellow); }
+    .last-trip-token-count { font-weight: bold; color: var(--ansi-cyan); }
     .token-tooltip {
         position: fixed;
         background-color: var(--window-bg);
@@ -1160,7 +1161,11 @@
                                 <div class="token-count-wrapper"
                                      on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
                                      on:mouseleave={hideTokenTooltip}>
-                                    <span class="token-count">
+                                    <span class="last-trip-token-count" title="Last trip input tokens">
+                                        {abbreviateNumber(stats.last_trip_input_tokens)}
+                                    </span>
+                                    <span style="color: var(--ansi-bright-black); margin: 0 3px;">/</span>
+                                    <span class="token-count" title="Cumulative input tokens">
                                         {abbreviateNumber(stats.cumulative_input_tokens)}
                                     </span>
                                 </div>
@@ -1193,7 +1198,11 @@
                                  <div class="token-count-wrapper"
                                      on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
                                      on:mouseleave={hideTokenTooltip}>
-                                    <span class="token-count">
+                                    <span class="last-trip-token-count" title="Last trip input tokens">
+                                        {abbreviateNumber(stats.last_trip_input_tokens)}
+                                    </span>
+                                    <span style="color: var(--ansi-bright-black); margin: 0 3px;">/</span>
+                                    <span class="token-count" title="Cumulative input tokens">
                                         {abbreviateNumber(stats.cumulative_input_tokens)}
                                     </span>
                                 </div>
