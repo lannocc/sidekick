@@ -311,23 +311,32 @@ class Context:
     async def output(self, text):
         if text is None: return
 
-        if self.stdout:
-            # If stdout is a custom stream (file, StringIO), write to it.
-            # This bypasses the normal async output to the device.
-            self.stdout.write(text)
-            return
+        # --- BEGIN FIX ---
+        # Prioritize special I/O stages (PRE, BANK, POST) over standard output
+        # redirection. This ensures that commands like 'bank' can correctly
+        # capture I/O without it leaking into the command's stdout, logs, or history.
 
         if self.stage == self.STAGE_PRE:
             self.pre.write(text)
             return
 
         elif self.stage == self.STAGE_BANK:
+            # Capture the output for the memory bank.
             self.banking[1].write(text)
-            if self.bot: return
+            # Unconditionally return to prevent this content from being logged
+            # or added to command output.
+            return
 
         elif self.stage == self.STAGE_POST:
             self.post.write(text)
             return
+
+        # Handle standard output redirection (for pipelines and file redirects) only
+        # if no special stage was active.
+        if self.stdout:
+            self.stdout.write(text)
+            return
+        # --- END FIX ---
 
         self.chatter.write(text)
 
@@ -340,11 +349,6 @@ class Context:
                                      f'\n===    ...       ...    [...{s}] =.= ')
             self.log.write(ltext)
             self.log.flush()
-
-        # REMOVED: Writing to session buffer is now handled by higher-level logic.
-        # if self.base and self.bot:
-        #     self.session.write(text)
-        #     self.session.flush()
 
         await self.os.send(self, self.dev, text)
 
