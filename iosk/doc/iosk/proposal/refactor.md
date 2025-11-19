@@ -43,6 +43,40 @@ The `src/iosk/kernel.py` and `src/iosk/port.py` files have become excessively la
 *   **User Session Initialization**: The logic for creating home directories, copying the `.skrc` file from `/etc/skel`, displaying the MOTD, and initializing user colors is currently duplicated with minor variations across `kernel.login` (for local console users) and `kernel.login_network_user` (for remote client users).
     *   **Proposal**: We will create a single, unified internal method, `async def _initialize_user_context(self, io: Context)`, within the `UserManager` (from decomposition step 3). This method will perform all common setup tasks. Both the local and network login functions will call this helper after creating the user's `Context` object, ensuring a consistent and DRY setup process for all user types.
 
+#### 4. Explicit User Session State (`src/iosk/io.py`)
+
+The `Context` class in `src/iosk/io.py` currently mixes two distinct types of data: long-lived, session-wide state that should be shared across all commands for a user, and transient, per-command state that is often unique to a single command or pipeline segment. This distinction is managed implicitly within the `Context.fork()` method, making it difficult to reason about data ownership and lifecycle.
+
+*   **Problem**: When a command is executed, `io.fork()` is called. In the current implementation, some attributes like `env` are copied (`child.env = self.env.copy()`), making them unique to the child context. Others, like `aliases` and `history`, are shared by reference (`child.aliases = self.aliases`), meaning a child's modification affects the parent. This implicit behavior is subtle and error-prone. A "user session" is not a first-class concept in the code.
+
+*   **Proposal**: We will introduce a new class, `UserSessionState`, to explicitly manage all shared, long-lived data for a user's session. The `Context` class will be refactored to hold a reference to this session state object and will only contain transient, per-command data.
+
+    1.  **Create `UserSessionState` Class**: A new class will be created in `src/iosk/io.py`. It will contain all attributes that define a user's session.
+        *   **Attributes to Move**: The following attributes will be moved from `Context` to `UserSessionState`:
+            *   User Identity: `user`, `su`, `bot`, `paused`, `login_time`
+            *   AI Context: `session_history`, `prompt_number`, `rolling_config`, `preamble_cache`
+            *   User State: `banks`, `history` (command history), `aliases`
+            *   Display/Telemetry: `user_colors`, `color_idx`, `token_stats`
+
+    2.  **Refactor `Context` Class**: The `Context` class will be simplified to manage only per-command or transient state.
+        *   **Attributes to Keep**:
+            *   A new reference: `self.session: UserSessionState`
+            *   System/Instance State: `os`, `dev`, `log`, `parent`, `cid`
+            *   Per-Command State: `pwd`, `env`
+            *   I/O State: `stdin`, `stdout`
+            *   Staging State: `stage`, `pre`, `post`, `banking`
+
+    3.  **Update `kernel.login()`**: When a user logs in, the `kernel` will create a single `UserSessionState` instance for that user. The user's "base" `Context` object will hold the first reference to it.
+
+    4.  **Simplify `Context.fork()`**: The `fork()` method will become much simpler. It will create a new `Context`, pass the *same reference* to the parent's `UserSessionState` object, and perform a deep copy only for truly per-context attributes like `env`.
+
+    5.  **Update Access Patterns**: Code throughout the system that accesses session-state will be updated to use the new pattern. For example, `io.history` will become `io.session.history`, and `io.user` will become `io.session.user`. Per-context state like `io.pwd` and `io.env` will remain unchanged.
+
+*   **Benefits of this Change**:
+    *   **Clarity**: The separation of concerns becomes explicit. It is immediately obvious whether a piece of data belongs to the entire session or just the current command.
+    *   **Robustness**: Eliminates the possibility of bugs where a forked context accidentally modifies a parent's state that should have been isolated, or vice-versa.
+    *   **Maintainability**: Adding new session-level features (e.g., session-wide settings) becomes a simple matter of adding a field to the `UserSessionState` class, without needing to modify the complex `fork()` logic.
+
 ### Benefits
 
 Implementing these refactoring changes will yield significant benefits:
