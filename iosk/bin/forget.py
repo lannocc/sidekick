@@ -1,4 +1,19 @@
-# bin/forget.py
+import asyncio
+
+DOCSTRING = """Remove entries from the session history.
+
+Usage: forget [--help] <id> | <id>-<id> | -<id> | <id>- ...
+
+Removes entries from the session history by their prompt number.
+You can specify single numbers, ranges, or a combination.
+
+Examples:
+  forget 15          # Forget entry number 15
+  forget 15-16       # Forget entries 15 and 16
+  forget -10         # Forget all entries up to and including 10
+  forget 25-         # Forget all entries from 25 to the most recent
+  forget 5 8-12 15   # Forget entry 5, entries 8 through 12, and entry 15
+"""
 
 async def iocall(io, argv):
     """Handle the 'forget' command execution."""
@@ -60,3 +75,4 @@ async def iocall(io, argv):
     await io.print(f":: {removed_count} entries forgotten. History is now {new_token_count} tokens.")
 
     return True
+
