@@ -533,8 +533,8 @@ class IOSK:
                         prompt_char = '$'
 
                     # --- History Proposal Implementation ---
-                    # Construct the prompt with the new prompt number
-                    prompt_str = f'[{io.user} {io.pwd} {io.prompt_number}] {prompt_char} '
+                    # Construct the prompt with the new prompt number and format.
+                    prompt_str = f'[{io.user} #{io.prompt_number} {io.pwd}] {prompt_char} '
                     # --- End Implementation ---
 
                     while (text := await io.input(prompt=prompt_str)) is None:
@@ -580,8 +580,10 @@ class IOSK:
                             # to the AI's session_history. We pass it the command to execute
                             # and the original line for accurate logging.
                             await self.call(io, command_to_run, original_command_line)
-                        else:  # Is a chat message because we are in a room and not a command
+                        else:   # Is a chat message because we are in a room and not a command.
                             if self.chat:
+                                # The chat system is responsible for creating history entries
+                                # and displaying the message for all participants (including the sender).
                                 await self.chat.send(io.user, line)
                             else:
                                 await io.print(line)

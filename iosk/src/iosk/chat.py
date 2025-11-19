@@ -163,11 +163,9 @@ class AIMessenger:
         if sys:
             for user, uio in self.os.users.items():
                 if uio.paused: continue
-                # --- History Proposal Implementation ---
                 # System messages should be part of a bot's context.
-                if uio.bot:
-                    uio.add_history_entry(msg + '\n')
-                # --- End Implementation ---
+                # They are added to history for all users to be forgettable.
+                uio.add_history_entry(msg + '\n')
                 await uio.print(msg)
             return
 
@@ -223,12 +221,14 @@ class AIMessenger:
                     if user in self.os.users:
                         uio = self.os.users[user]
                         if not uio.paused:
+                            prompt_num = uio.prompt_number
                             # Use canonical sender address for consistency
-                            dm_msg = f'\a\n[{remote_from_addr} -> me {now}] << {actual_msg}'
-                            # --- History Proposal Implementation ---
-                            if uio.bot:
-                                uio.add_history_entry(dm_msg + '\n')
-                            # --- End Implementation ---
+                            history_msg = f'\a\n[{remote_from_addr} -> me #{prompt_num} {now}] << {actual_msg}'
+                            # Add to history for all users, which increments their prompt_number.
+                            uio.add_history_entry(history_msg + '\n')
+
+                            # Prepare a potentially colored version for display.
+                            display_msg = history_msg
                             if not uio.bot and uio.user_colors:
                                 sender_color = uio.user_colors.get(remote_from_addr, '')
                                 if sender_color:
@@ -238,18 +238,20 @@ class AIMessenger:
                                     colored_sender = f'{bold}{sender_color}{remote_from_addr}{reset}'
                                     bold_me = f'{bold}{me_color}me{reset}'
                                     colored_msg = f'{sender_color}{actual_msg}{reset}'
-                                    dm_msg = f'\a\n[{colored_sender} -> {bold_me} {now}] << {colored_msg}'
-                            await uio.print(dm_msg)
+                                    display_msg = f'\a\n[{colored_sender} -> {bold_me} #{prompt_num} {now}] << {colored_msg}'
+                            await uio.print(display_msg)
 
                 # Send confirmation to sender
                 sender_io = self.os.users.get(from_user)
                 if sender_io:
+                    prompt_num = sender_io.prompt_number
                     recipient_str = ', '.join(recipients)
-                    dm_conf = f'\n[me -> {recipient_str} {now}] << {actual_msg}'
-                    # --- History Proposal Implementation ---
-                    if sender_io.bot:
-                        sender_io.add_history_entry(dm_conf + '\n')
-                    # --- End Implementation ---
+                    history_msg = f'\n[me -> {recipient_str} #{prompt_num} {now}] << {actual_msg}'
+                    # Add to the sender's own history.
+                    sender_io.add_history_entry(history_msg + '\n')
+
+                    # Prepare a potentially colored version for display.
+                    display_msg = history_msg
                     if not sender_io.bot and sender_io.user_colors:
                         reset = self.os.ANSI_RESET
                         bold = self.os.ANSI_BOLD
@@ -264,8 +266,8 @@ class AIMessenger:
                             )
                         recipient_str = ', '.join(colored_recipients)
                         colored_msg = f'{me_color}{actual_msg}{reset}'
-                        dm_conf = f'\n[{bold_me} -> {recipient_str} {now}] << {colored_msg}'
-                    await sender_io.print(dm_conf)
+                        display_msg = f'\n[{bold_me} -> {recipient_str} #{prompt_num} {now}] << {colored_msg}'
+                    await sender_io.print(display_msg)
 
                 return # End of DM handling
 
@@ -278,12 +280,14 @@ class AIMessenger:
             for user in self.local_room_participants:
                 if user in self.os.users:
                     uio = self.os.users[user]
-                    # For local participants, use the full canonical address for consistency
-                    local_msg = f'\n[{remote_from_addr} {now}] << {msg}'
-                    # --- History Proposal Implementation ---
-                    if uio.bot:
-                        uio.add_history_entry(local_msg + '\n')
-                    # --- End Implementation ---
+                    prompt_num = uio.prompt_number
+                    # Create the canonical message string for history.
+                    history_msg = f'\n[{remote_from_addr} #{prompt_num} {now}] << {msg}'
+                    # Add to this user's history, incrementing their prompt_number.
+                    uio.add_history_entry(history_msg + '\n')
+
+                    # Prepare a potentially colored version for display.
+                    display_msg = history_msg
                     if not uio.bot and uio.user_colors:
                         color = uio.user_colors.get(remote_from_addr, '')
                         if color:
@@ -291,8 +295,8 @@ class AIMessenger:
                             bold = self.os.ANSI_BOLD
                             colored_sender = f'{bold}{color}{remote_from_addr}{reset}'
                             colored_msg = f'{color}{msg}{reset}'
-                            local_msg = f'\n[{colored_sender} {now}] << {colored_msg}'
-                    await uio.print(local_msg)
+                            display_msg = f'\n[{colored_sender} #{prompt_num} {now}] << {colored_msg}'
+                    await uio.print(display_msg)
 
             # Broadcast to network peers
             payload = {
@@ -453,8 +457,13 @@ class AIMessenger:
                 for user in self.local_room_participants:
                     if user in self.os.users:
                         uio = self.os.users[user]
-                        # Use the full canonical address for consistency
-                        local_msg = f'\n[{from_addr} {now}] << {content}'
+                        prompt_num = uio.prompt_number
+                        # Create the canonical message string for history.
+                        history_msg = f'\n[{from_addr} #{prompt_num} {now}] << {content}'
+                        uio.add_history_entry(history_msg + '\n')
+
+                        # Prepare a potentially colored version for display.
+                        display_msg = history_msg
                         if not uio.bot and uio.user_colors:
                             color = uio.user_colors.get(from_addr, '')
                             if color:
@@ -462,8 +471,8 @@ class AIMessenger:
                                 bold = self.os.ANSI_BOLD
                                 colored_sender = f'{bold}{color}{from_addr}{reset}'
                                 colored_content = f'{color}{content}{reset}'
-                                local_msg = f'\n[{colored_sender} {now}] << {colored_content}'
-                        await uio.print(local_msg)
+                                display_msg = f'\n[{colored_sender} #{prompt_num} {now}] << {colored_content}'
+                        await uio.print(display_msg)
 
         elif msg_type == "direct_message":
             to_users = message.get("to_users", [])
@@ -474,8 +483,13 @@ class AIMessenger:
             for user in to_users:
                 if user in self.os.users:
                     uio = self.os.users[user]
-                    # Use the full canonical address for consistency
-                    dm_msg = f'\a\n[{from_addr} -> me {now}] << {content}'
+                    prompt_num = uio.prompt_number
+                    # Create the canonical message for history.
+                    history_msg = f'\a\n[{from_addr} -> me #{prompt_num} {now}] << {content}'
+                    uio.add_history_entry(history_msg + '\n')
+
+                    # Prepare a potentially colored version for display.
+                    display_msg = history_msg
                     if not uio.bot and uio.user_colors:
                         sender_color = uio.user_colors.get(from_addr, '')
                         if sender_color:
@@ -485,8 +499,9 @@ class AIMessenger:
                             colored_sender = f'{bold}{sender_color}{from_addr}{reset}'
                             bold_me = f'{bold}{me_color}me{reset}'
                             colored_content = f'{sender_color}{content}{reset}'
-                            dm_msg = f'\a\n[{colored_sender} -> {bold_me} {now}] << {colored_content}'
-                    await uio.print(dm_msg)
+                            display_msg = f'\a\n[{colored_sender} -> {bold_me} #{prompt_num} {now}] << {colored_content}'
+                    await uio.print(display_msg)
+
 
 class Engagement:
     CODE = 0 # per-run code instance counter
