@@ -124,7 +124,7 @@ class CommandPipelineExecutor:
             prompt_char = '>>'
         else:
             prompt_char = '$'
-        prompt_str = f'[{io.user} {io.pwd} {io.prompt_number}] {prompt_char} '
+        prompt_str = f'[{io.user} #{io.prompt_number} {io.pwd}] {prompt_char} '
 
         command_part = f"{prompt_str}{original_line_for_history}\n"
         output_part = ""

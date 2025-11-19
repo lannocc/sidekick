@@ -644,7 +644,7 @@ class Engagement:
                    + prompt \
                    + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
                    + '\n' + post \
-                   + f'\n[{self.io.user} {self.io.pwd} {self.io.prompt_number}] {prompt_char} '
+                   + f'\n[{self.io.user} #{self.io.prompt_number} {self.io.pwd}] {prompt_char} '
 
                 # --- Update Running Token Totals ---
                 try:
