@@ -399,6 +399,13 @@
         tokenTooltip = { ...tokenTooltip, visible: false };
     }
 
+    function togglePause(participant) {
+        if (!participant || !participant.is_bot) return;
+        const command = participant.paused ? `unpause ${participant.name}` : `pause ${participant.name}`;
+        sendSystemCommand(`$ ${command}`);
+        focusInput();
+    }
+
     // --- Functions ---
     export function showSettingsDialog() {
         settingsUrl = wsUrl;
@@ -867,7 +874,7 @@
     .input-area { display: flex; padding: 4px 8px; background-color: var(--title-bar-bg); border-top: 1px solid var(--border-color); flex-shrink: 0; }
     .input-area span { color: var(--console-prompt); padding-right: 5px; white-space: pre; }
     .input-area input { flex-grow: 1; background: transparent; border: none; outline: none; color: var(--console-input); font-family: inherit; font-size: inherit; }
-    .users-panel { width: 180px; flex-shrink: 0; border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
+    .users-panel { width: 220px; flex-shrink: 0; border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
     .panel-header { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
     .panel-header .attach-button {
         background-color: #9b59b6;
@@ -896,7 +903,7 @@
         right: 5px;
     }
     .user-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
-    .user-item { padding: 2px 6px; cursor: pointer; border-radius: 2px; display: flex; align-items: baseline; }
+    .user-item { padding: 2px 6px; cursor: pointer; border-radius: 2px; display: flex; align-items: center; }
     .user-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .user-name-display { flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .user-item-filler { flex-grow: 1; border-bottom: 1px dotted #7f8c8d; margin: 0 4px; position: relative; top: -4px; }
@@ -972,6 +979,21 @@
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 
     /* User Context Menu Styles */
+    .pause-resume-button {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0 4px;
+        font-size: 1.1em;
+        margin-left: 4px;
+        line-height: 1;
+        opacity: 0.6;
+        transition: opacity 0.2s;
+    }
+    .pause-resume-button:hover {
+        opacity: 1;
+    }
+
     .user-context-menu {
         position: fixed;
         background-color: var(--window-bg);
@@ -1130,16 +1152,25 @@
                         on:click={() => openPrivateChat(participant.name)}
                     >
                         <span class="user-name-display" style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
-                        {#if participant.is_bot && userTokenStats[participant.name]}
-                            {@const stats = userTokenStats[participant.name]}
+                        {#if participant.is_bot}
                             <span class="user-item-filler"></span>
-                            <div class="token-count-wrapper"
-                                 on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
-                                 on:mouseleave={hideTokenTooltip}>
-                                <span class="token-count">
-                                    {abbreviateNumber(stats.cumulative_input_tokens)}
-                                </span>
-                            </div>
+                            {#if userTokenStats[participant.name]}
+                                {@const stats = userTokenStats[participant.name]}
+                                <div class="token-count-wrapper"
+                                     on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
+                                     on:mouseleave={hideTokenTooltip}>
+                                    <span class="token-count">
+                                        {abbreviateNumber(stats.cumulative_input_tokens)}
+                                    </span>
+                                </div>
+                            {/if}
+                            <button
+                                class="pause-resume-button"
+                                on:click|stopPropagation={() => togglePause(participant)}
+                                title={participant.paused ? `Resume ${participant.displayName}` : `Pause ${participant.displayName}`}
+                            >
+                                {participant.paused ? '▶️' : '⏸️'}
+                            </button>
                         {/if}
                     </div>
                 {/each}
@@ -1154,16 +1185,25 @@
                         on:click={() => openPrivateChat(participant.name)}
                     >
                         <span class="user-name-display" style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
-                        {#if participant.is_bot && userTokenStats[participant.name]}
-                            {@const stats = userTokenStats[participant.name]}
+                        {#if participant.is_bot}
                             <span class="user-item-filler"></span>
-                             <div class="token-count-wrapper"
-                                 on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
-                                 on:mouseleave={hideTokenTooltip}>
-                                <span class="token-count">
-                                    {abbreviateNumber(stats.cumulative_input_tokens)}
-                                </span>
-                            </div>
+                            {#if userTokenStats[participant.name]}
+                                {@const stats = userTokenStats[participant.name]}
+                                 <div class="token-count-wrapper"
+                                     on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
+                                     on:mouseleave={hideTokenTooltip}>
+                                    <span class="token-count">
+                                        {abbreviateNumber(stats.cumulative_input_tokens)}
+                                    </span>
+                                </div>
+                            {/if}
+                            <button
+                                class="pause-resume-button"
+                                on:click|stopPropagation={() => togglePause(participant)}
+                                title={participant.paused ? `Resume ${participant.displayName}` : `Pause ${participant.displayName}`}
+                            >
+                                {participant.paused ? '▶️' : '⏸️'}
+                            </button>
                         {/if}
                     </div>
                 {/each}

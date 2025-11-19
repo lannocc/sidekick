@@ -69,7 +69,7 @@ User/Device Management:
     $ bankrupt      - clear user core memory bank
     $ detach        - disconnect a device user (forced exit)
     $ login         - log in as a different user (logout current, new session for target)
-    $ pause         - pause a bot user's AI engagement
+    $ pause         - pause a bot user's AI engagement (see also: unpause)
     $ reattach      - reattach a user (or self) to a different device
     $ reset         - reset a user's session to a clean state
     $ send          - send file contents or piped data to the chat (to all users)
