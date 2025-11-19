@@ -580,7 +580,12 @@ class Engagement:
                     #print(f'SENDING TO {self.dev}: {self.buf}')
 
                     # --- History Proposal Implementation ---
+                    # --- BEGIN FIX ---
+                    # Proactively apply the rolling cutoff before assembling the prompt
+                    # to ensure the context sent to the AI respects the current limit.
+                    self.io._apply_rolling_cutoff()
                     prompt = self.io.get_session_string()
+                    # --- END FIX ---
                     # self.io.session.seek(0) # REPLACED
                     # prompt = self.io.session.read() #+ self.buf # REPLACED
                     # --- End Implementation ---
@@ -591,7 +596,12 @@ class Engagement:
             elif secs_since_trip >= self.SECS_QUIET_IDLE_POLL:
                 #print('POLLING FOR REPLY')
                 # --- History Proposal Implementation ---
+                # --- BEGIN FIX ---
+                # Proactively apply the rolling cutoff before assembling the prompt
+                # to ensure the context sent to the AI respects the current limit.
+                self.io._apply_rolling_cutoff()
                 prompt = self.io.get_session_string()
+                # --- END FIX ---
                 # self.io.session.seek(0) # REPLACED
                 # prompt = self.io.session.read() # REPLACED
                 # --- End Implementation ---
@@ -646,28 +656,12 @@ class Engagement:
                    + '\n' + post \
                    + f'\n[{self.io.user} #{self.io.prompt_number} {self.io.pwd}] {prompt_char} '
 
-                # --- Update Running Token Totals ---
-                try:
-                    encoding = tiktoken.get_encoding('cl100k_base')
-
-                    # Calculate tokens for the dynamic part of the prompt
-                    # The 'prompt' var here is just the chat history.
-                    dynamic_content = ('\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n'
-                                       f'{prompt}'
-                                       '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n\n'
-                                       f'{post}')
-                    dynamic_tokens = len(encoding.encode(dynamic_content))
-
-                    # Full prompt tokens for this trip
-                    full_prompt_tokens = self.io.initial_static_tokens + dynamic_tokens
-
-                    # Update running totals
-                    self.io.caching_token_total += dynamic_tokens
-                    self.io.full_token_total += full_prompt_tokens
-
-                except Exception as e:
-                    # Don't crash the engagement if token calculation fails
-                    await self.io.os.system.error(f"!! token calculation failed during trip: {e}")
+                # --- BEGIN FIX ---
+                # This entire block of code was for a redundant and incorrect telemetry
+                # calculation. The official telemetry is now handled exclusively by the
+                # log_trip_trace kernel function, which is called after the trip.
+                # Removing this block simplifies the code and eliminates a source of bugs.
+                # --- END FIX ---
 
                 self.waiting = True
                 reply = None
