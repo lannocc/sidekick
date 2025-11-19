@@ -243,6 +243,12 @@ class Context:
         # Share the parent's banks dictionary by reference.
         child.banks = self.banks
 
+        # --- BEGIN FIX ---
+        # Share the parent's command history by reference so that commands
+        # like 'history' can see the list from the main user session.
+        child.history = self.history
+        # --- END FIX ---
+
         return child
 
     def environ(self):
