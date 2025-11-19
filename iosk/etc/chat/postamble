@@ -7,7 +7,7 @@ Do not act like a chatbot, but an expert IOSK user.
 THIS INFORMATION IS CURRENT, FINAL PROMPTING:
 
 $ status
-#$ tokens
+$ tokens
 
 The current model (device) I use is:
 $ whoami -d
