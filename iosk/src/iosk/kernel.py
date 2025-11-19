@@ -409,6 +409,7 @@ class IOSK:
         io = self.system.fork()
         io.login_time = datetime.now()
         io.banks = { } # A user's base context gets its own banks.
+        io.history = [] # A user's base context gets its own history.
         io.log = Capture.log(self, f'{self.USER_LOG}/{user}', True)
         io.dev = device
         io.user = user
@@ -656,6 +657,7 @@ class IOSK:
         io = self.system.fork()
         io.login_time = datetime.now()
         io.banks = {}
+        io.history = [] # A network user's base context gets its own history.
         io.log = Capture.log(self, f'{self.USER_LOG}/{username}', True)
         io.dev = device_path
         io.user = username

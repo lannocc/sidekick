@@ -378,7 +378,10 @@ class Context:
         assert len(indicator) == 1
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         i = indicator
-        self.log.write(f'=== {now} [{self.os.BOOT}/{self.cid}] ={i}= ')
+        if i == 'I':
+            self.log.write(f'=== {now} [{self.os.BOOT}/{self.cid}/{self.prompt_number}] ={i}= ')
+        else:
+            self.log.write(f'=== {now} [{self.os.BOOT}/{self.cid}] ={i}= ')
 
 
 class Capture:
