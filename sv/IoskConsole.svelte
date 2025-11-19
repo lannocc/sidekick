@@ -923,12 +923,12 @@
         text-align: right;
         color: var(--title-bar-text);
     }
-    .tooltip-grid span:nth-child(3n-1) { /* Tokens */
-        text-align: right;
-    }
-    .tooltip-grid span:nth-child(3n) { /* Bytes */
+    .tooltip-grid span:nth-child(3n-1) { /* Bytes */
         text-align: right;
         color: var(--ansi-bright-black);
+    }
+    .tooltip-grid span:nth-child(3n) { /* Tokens */
+        text-align: right;
     }
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
     .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
@@ -1264,13 +1264,13 @@
             style="top: {tokenTooltip.y}px; left: {tokenTooltip.x}px; transform: translateX(-100%);"
         >
             <div class="tooltip-grid">
-                <span>Cumulative Input:</span><span>{stats.cumulative_input_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.cumulative_input_bytes)})</span>
-                <span>Cumulative Output:</span><span>{stats.cumulative_output_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.cumulative_output_bytes)})</span>
-                <span>Last Trip Input:</span><span>{stats.last_trip_input_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.last_trip_input_bytes)})</span>
-                <span>Last Trip Output:</span><span>{stats.last_trip_output_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.last_trip_output_bytes)})</span>
-                <span>Banked Memory:</span><span>{stats.banked_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.banked_bytes)})</span>
-                <span>Chat History:</span><span>{stats.history_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.history_bytes)})</span>
-                <span>Caching Context:</span><span>{stats.caching_context_tokens.toLocaleString('en-US')} tokens</span><span>({formatBytes(stats.caching_context_bytes)})</span>
+                <span>Cumulative Input:</span><span>({formatBytes(stats.cumulative_input_bytes)})</span><span>{stats.cumulative_input_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Cumulative Output:</span><span>({formatBytes(stats.cumulative_output_bytes)})</span><span>{stats.cumulative_output_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Last Trip Input:</span><span>({formatBytes(stats.last_trip_input_bytes)})</span><span>{stats.last_trip_input_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Last Trip Output:</span><span>({formatBytes(stats.last_trip_output_bytes)})</span><span>{stats.last_trip_output_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Banked Memory:</span><span>({formatBytes(stats.banked_bytes)})</span><span>{stats.banked_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Chat History:</span><span>({formatBytes(stats.history_bytes)})</span><span>{stats.history_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Caching Context:</span><span>({formatBytes(stats.caching_context_bytes)})</span><span>{stats.caching_context_tokens.toLocaleString('en-US')} tokens</span>
             </div>
         </div>
     {/if}
