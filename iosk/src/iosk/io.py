@@ -238,7 +238,8 @@ class Context:
         child.pwd = self.pwd
         # Use a copy so child modifications don't affect the parent.
         child.env = self.env.copy()
-        child.aliases = self.aliases.copy()
+        # Share the parent's aliases dictionary by reference so the 'alias' command can modify it.
+        child.aliases = self.aliases
 
         # Share the parent's banks dictionary by reference.
         child.banks = self.banks
