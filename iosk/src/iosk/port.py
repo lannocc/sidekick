@@ -661,31 +661,34 @@ class PortManager:
                 # Room is active, send room state
                 room = self.kernel.chat
 
-                # MODIFIED: Gather participants as objects with name and is_bot status
-                all_participants_map = {} # Use dict to handle duplicates
-
-                # 1. Add local users (without hostname)
-                for username in room.local_room_participants:
-                    user_io = self.kernel.users.get(username)
-                    if user_io:
-                        all_participants_map[username] = {
-                            'name': username,
-                            'is_bot': user_io.bot
-                        }
-
-                # 2. Add network users in the same room (with hostname)
-                for user_addr, r_name in self.kernel.network_rooms.items():
-                    if r_name == room.active_room:
-                        user_part, host_part = user_addr.split('.', 1)
-                        # Only add if they are not on the local host, as they are already covered.
-                        if host_part != self.kernel.hostname:
-                            user_info = self.kernel.network_users.get(user_addr, {})
-                            all_participants_map[user_addr] = {
+                # REVISED: Gather participants as objects with name, is_bot, and paused status
+                all_participants = []
+                if room.active_room:
+                    # Iterate network_rooms, the single source of truth for room membership
+                    for user_addr, r_name in self.kernel.network_rooms.items():
+                        if r_name == room.active_room:
+                            user, host = user_addr.split('.', 1)
+                            is_bot = False
+                            paused = False
+                            if host == self.kernel.hostname:
+                                # Local user: get live info from context
+                                if user in self.kernel.users:
+                                    user_io = self.kernel.users[user]
+                                    is_bot = user_io.bot
+                                    paused = user_io.paused
+                            else:
+                                # Remote user: get cached info
+                                user_info = self.kernel.network_users.get(user_addr, {})
+                                is_bot = user_info.get('is_bot', False)
+                                paused = user_info.get('paused', False)
+                            
+                            all_participants.append({
                                 'name': user_addr,
-                                'is_bot': user_info.get('is_bot', False)
-                            }
+                                'is_bot': is_bot,
+                                'paused': paused
+                            })
 
-                participants_list = sorted(list(all_participants_map.values()), key=lambda p: p['name'])
+                participants_list = sorted(all_participants, key=lambda p: p['name'])
 
                 initial_state_payload.update({
                     'roomName': room.active_room,
@@ -1110,7 +1113,8 @@ class PortManager:
             user_addr = f"{user}.{host}"
             if action == "login":
                 is_bot = message.get('is_bot', False)
-                self.kernel.network_users[user_addr] = {'is_bot': is_bot} # Add user
+                paused = message.get('paused', False)
+                self.kernel.network_users[user_addr] = {'is_bot': is_bot, 'paused': paused} # Add user
                 # Assign color for this network user to all local interactive users
                 for uio in self.kernel.users.values():
                     if not uio.bot and user_addr not in uio.user_colors:
@@ -1125,6 +1129,11 @@ class PortManager:
                 # Also remove from rooms dict if they were in one
                 if user_addr in self.kernel.network_rooms:
                     del self.kernel.network_rooms[user_addr]
+            elif action == "state_update":
+                if user_addr in self.kernel.network_users:
+                    paused = message.get('paused')
+                    if paused is not None:
+                        self.kernel.network_users[user_addr]['paused'] = paused
 
         elif msg_type == "room_update":
             action = message.get("action")
@@ -1359,4 +1368,3 @@ class PortManager:
 
             # 3. Propagate the disconnection to remaining peers
             await self._broadcast_peer_disconnect(disconnected_host)
-

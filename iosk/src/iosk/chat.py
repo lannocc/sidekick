@@ -45,16 +45,20 @@ class AIMessenger:
                 if room_name == self.active_room:
                     user, host = user_addr.split('.', 1)
                     is_bot = False
+                    paused = False # NEW: default paused state
                     if host == self.os.hostname:
                         # It's a local user; get the 'is_bot' status from the live context.
                         if user in self.os.users:
-                            is_bot = self.os.users[user].bot
+                            user_io = self.os.users[user] # Get context once
+                            is_bot = user_io.bot
+                            paused = user_io.paused # NEW: get paused state
                     else:
                         # It's a remote user; get the 'is_bot' status from the cached network state.
                         user_info = self.os.network_users.get(user_addr, {})
                         is_bot = user_info.get('is_bot', False)
+                        paused = user_info.get('paused', False) # NEW: get paused state
                     
-                    all_participants.append({'name': user_addr, 'is_bot': is_bot})
+                    all_participants.append({'name': user_addr, 'is_bot': is_bot, 'paused': paused})
 
         # Get available rooms. Need a valid IO context for kernel calls. Use system.
         available_rooms = await self.os.get_room_list(self.os.system)
@@ -761,4 +765,3 @@ class Engagement:
 
         # Remove the original markdown block from the text that will be processed for chat broadcast.
         return text.replace(original_block, '')
-

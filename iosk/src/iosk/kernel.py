@@ -486,7 +486,7 @@ class IOSK:
             else: await io.print(connect)
 
         # MODIFIED: Update local network_users and then broadcast
-        self.network_users[user_addr] = {'is_bot': io.bot}
+        self.network_users[user_addr] = {'is_bot': io.bot, 'paused': io.paused}
 
         # Announce user login to network peers
         if self.port:
@@ -496,7 +496,8 @@ class IOSK:
                 'action': 'login',
                 'user': user,
                 'host': self.hostname,
-                'is_bot': io.bot
+                'is_bot': io.bot,
+                'paused': io.paused
             })
             # Announce user login to the entire mesh system log
             await self.port.broadcast_to_peers({
@@ -706,7 +707,7 @@ class IOSK:
         io.motd_cache = await self.get_motd(io)
 
         # MODIFIED: Update local network_users and then broadcast
-        self.network_users[user_addr] = {'is_bot': io.bot}
+        self.network_users[user_addr] = {'is_bot': io.bot, 'paused': io.paused}
 
         if self.port:
             await self.port.broadcast_color_updates()
@@ -715,7 +716,8 @@ class IOSK:
                 'action': 'login',
                 'user': username,
                 'host': self.hostname,
-                'is_bot': io.bot
+                'is_bot': io.bot,
+                'paused': io.paused
             })
             await self.port.broadcast_to_peers({
                 'type': 'system_broadcast',
