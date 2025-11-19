@@ -61,17 +61,21 @@ Viewing and Analyzing Files:
     $ tail          - print last few lines of file
     $ wc            - count lines, words, and characters in a file
 
-User/Device Management:
+User/Device/Memory Management:
     $ ask           - ask an AI device (user) a question, with optional files
     $ attach        - attach a device as a user (bring user online)
     $ bank          - load a skrip into user core memory by executing it
     $ banks         - list user memory accounts currently banked
     $ bankrupt      - clear user core memory bank
+    $ color         - view or set user colors for chat messages
+    $ colors        - display the chat colors for all connected users
     $ detach        - disconnect a device user (forced exit)
+    $ forget        - remove entries from the session history (see also: reset, rolling)
     $ login         - log in as a different user (logout current, new session for target)
     $ pause         - pause a bot user's AI engagement (see also: unpause)
     $ reattach      - reattach a user (or self) to a different device
-    $ reset         - reset a user's session to a clean state
+    $ reset         - reset a user's session to a clean state (see also: forget, rolling)
+    $ rolling       - configure the rolling session history cutoff (see also: forget, reset)
     $ send          - send file contents or piped data to the chat (to all users)
     $ su            - execute a command as another user (superuser only)
     $ tokens        - calculate total bytes and estimate tokens for session context
@@ -146,4 +150,3 @@ async def iocall(io, argv):
     # If we reach here, it means invalid arguments were provided (e.g., `help cmd1 cmd2`)
     await io.error("!! help: too many arguments or unknown option. Use 'help --help' for usage.")
     return False
-

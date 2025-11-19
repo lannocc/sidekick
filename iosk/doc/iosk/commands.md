@@ -51,6 +51,17 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ clroom` or `$ clroom --help`
     *   Notes: Closes the single active chat room on the local system. This command can typically only be run by the room's owner or a superuser.
     *   Status: Working.
+*   **color**: View or set user colors for chat messages.
+    *   Usage: `$ color [--help] [-u USER[.HOST]] [COLOR]`
+    *   Options:
+        *   `-u`, `--user USER[.HOST]`: Target another user. If specified, you will view or set the color for that specific user. Can be a local user or a network user (e.g., alice.mars).
+        *   `--help`: Displays this help message.
+    *   Notes: Manages the colors you see for users in chat. AI agents do not use colors. Available colors include: black, red, green, yellow, blue, magenta, cyan, white, and their bright variants.
+    *   Status: Working.
+*   **colors**: Display the chat colors for all connected users.
+    *   Usage: `$ colors` or `$ colors --help`
+    *   Notes: Shows a list of all known users (local and network) and the color you see their chat messages in. This command is not available for bot users.
+    *   Status: Working.
 *   **cp**: Copy a file or directory.
     *   Usage: `$ cp <source> <destination>` or `$ cp --help`
     *   Notes: Handles file-to-file copy and file-to-existing-directory copy. Errors if source does not exist.
@@ -80,6 +91,10 @@ These commands are generally available to users within the IOSK environment. Mos
 *   **export**: Set or display environment variables.
     *   Usage: `$ export [NAME=VALUE] ...` or `$ export --help`
     *   Notes: With no arguments, `export` prints a list of all environment variables. Otherwise, it sets each `NAME` to `VALUE`. Values are stored after stripping a single layer of quotes.
+    *   Status: Working.
+*   **forget**: Remove entries from the session history.
+    *   Usage: `$ forget [--help] <id> | <id>-<id> | -<id> | <id>- ...`
+    *   Notes: Removes entries from the session history by their prompt number. You can specify single numbers, ranges, or a combination (e.g., `forget 15`, `forget 15-16`, `forget -10`, `forget 25-`, `forget 5 8-12 15`).
     *   Status: Working.
 *   **get**: Get the contents of a file.
     *   Usage: `$ get <filename>` or `$ get --help`
@@ -124,7 +139,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working (as an alias).
 *   **login**: Log in as a different user.
     *   Usage: `$ login <username>` or `$ login --help`
-    *   Notes: Logs out the current session and starts a new session for the specified user on the same device. This is useful for switching users without restarting the system.
+    *   Notes: Starts a new interactive session for the specified user on the same device. The current session is suspended until the new user logs out, at which point the original session resumes.
     *   Status: Working.
 *   **ls**: List directory contents.
     *   Usage: `$ ls [options] [path ...]` or `$ ls --help`
@@ -198,6 +213,15 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ rmdir <directory>...` or `$ rmdir --help`
     *   Notes: This command only removes empty directories. Multiple directories can be specified.
     *   Status: Working.
+*   **rolling**: Configure the rolling session history cutoff.
+    *   Usage: `$ rolling [--help]` or `$ rolling on|off` or `$ rolling --<mode> <limit>`
+    *   Modes:
+        *   `--tokens`: Limit by total token count.
+        *   `--bytes`: Limit by total byte count.
+        *   `--lines`: Limit by total line count.
+        *   `--prompts`: Limit by total number of entries (prompts).
+    *   Notes: When enabled, the oldest history entries are automatically removed to keep the session context within a configured limit.
+    *   Status: Working.
 *   **room**: Opens a new local chat room.
     *   Usage: `$ room [room_name]` or `$ room --help`
     *   Notes: Opens a new chat room on the local system with the specified name. If no `room_name` is provided, it defaults to 'iosk'. Only one room can be active at a time. This command will fail if a room is already open.
@@ -258,7 +282,7 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Status: Working.
 *   **tokens**: Calculate token usage for the current session context.
     *   Usage: `$ tokens` or `$ tokens --help`
-    *   Notes: This command assembles the full context that would be sent to an AI, including the preamble, banked memory, chat history, and postamble, and reports its size. It also displays two running totals for the entire session: Session Total (caching) and Session Total (cumulative).
+    *   Notes: This command displays a detailed breakdown of token and byte counts for the current session, including cumulative totals, last AI trip statistics, and the current sizes of context components like banked memory and chat history. This provides the same data visible in the SKYBOARD UI tooltip.
     *   Status: Working.
 *   **top**: Provide a single, non-interactive snapshot of system activity.
     *   Usage: `$ top` or `$ top --help`
@@ -369,4 +393,3 @@ These commands are typically used for system administration tasks. Most `/sbin` 
     *   Usage: `$ shutdown` or `$ shutdown --help`
     *   Notes: Initiates the shutdown sequence for the IOSK system. This command signals the underlying operating system to halt the system.
     *   Status: Assumed working. No further testing required as execution interrupts the running system.
-
