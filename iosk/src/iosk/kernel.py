@@ -564,11 +564,9 @@ class IOSK:
                                 return 'logout' # Return reason for exit
 
                             # --- History Proposal Implementation ---
-                            # Add the user's command to the session history.
-                            # The corresponding output is not yet captured here.
-                            # That will be handled by the CommandPipelineExecutor in a future step.
-                            full_command_with_prompt = f"{prompt_str}{command_line}\n"
-                            io.add_history_entry(full_command_with_prompt)
+                            # The CommandPipelineExecutor is now responsible for creating
+                            # the history entry, as it can capture command output.
+                            # This block has been removed.
                             # --- End Implementation ---
 
                             if command_line:

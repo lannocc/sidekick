@@ -50,27 +50,29 @@ class CommandPipelineExecutor:
         if not commands: # Valid empty command line
             return True
 
-        # Step 3: Differentiate between simple command and full pipeline for optimization
-        num_commands = len(commands)
-        if num_commands == 1 and not redirect_out_path:
-            return await self._execute_single_command(io, commands[0])
+        # --- History Proposal (Part 2) Implementation ---
+        # All command execution, simple or pipelined, will now run through the
+        # full pipeline logic to consistently capture output for session history.
+        # An output capture buffer is created if the final output is not redirected to a file.
+        output_capture = StringIO()
+        is_capturing_output = redirect_out_path is None
+        # --- End Implementation ---
 
-        # Step 4: Full Pipeline Execution
+        # Step 3 & 4: Full Pipeline Execution
         pipe_buffer: Optional[StringIO] = None
         success = True
+        num_commands = len(commands)
 
         for idx, command_argv in enumerate(commands):
             is_last_cmd = (idx == num_commands - 1)
 
             # Create a forked context for each command in the pipeline.
-            # This ensures that each command has its own isolated I/O streams and environment (inherited).
             cmd_io = io.fork()
 
             # Configure stdin for the current command from the previous command's output
             if pipe_buffer:
                 pipe_buffer.seek(0)
                 cmd_io.stdin = pipe_buffer
-                # Reset pipe_buffer reference for the next iteration (or to prevent accidental reuse)
                 pipe_buffer = None
 
             redirect_file_handle = None
@@ -81,7 +83,6 @@ class CommandPipelineExecutor:
                     host_path = self.os.box(redirect_out_path, io_context=io)
                     parent_dir = os.path.dirname(host_path)
 
-                    # Create parent directories for redirection target if they don't exist
                     if not os.path.exists(parent_dir):
                         try:
                             os.makedirs(parent_dir)
@@ -97,9 +98,9 @@ class CommandPipelineExecutor:
                     pipe_buffer = StringIO()
                     cmd_io.stdout = pipe_buffer
                 else:
-                    # For the last command in a pipe without redirection,
-                    # it should inherit the original io's stdout (console or other redirect).
-                    cmd_io.stdout = io.stdout
+                    # Last command in a pipe OR a single command.
+                    # Its output goes to our capture buffer.
+                    cmd_io.stdout = output_capture
 
                 # Execute the single command segment
                 success = await self._execute_single_command(cmd_io, command_argv)
@@ -114,6 +115,33 @@ class CommandPipelineExecutor:
 
             if not success:
                 break # If any command fails, stop the pipeline
+
+        # --- History Proposal (Part 2) Implementation ---
+        # After execution, process the captured output and create the history entry.
+
+        # Reconstruct the prompt string as it was displayed to the user.
+        if self.os.chat and self.os.chat.active_room:
+            prompt_char = '>>'
+        else:
+            prompt_char = '$'
+        prompt_str = f'[{io.user} {io.pwd} {io.prompt_number}] {prompt_char} '
+
+        command_part = f"{prompt_str}{raw_command_line}\n"
+        output_part = ""
+
+        if is_capturing_output:
+            captured_text = output_capture.getvalue()
+            if captured_text:
+                # Send the captured output to the user's actual console.
+                await io.output(captured_text)
+                output_part = captured_text
+
+        # Create the single, consolidated history entry if the command was not empty.
+        if raw_command_line.strip():
+            full_history_entry = command_part + output_part
+            # Ensure there is exactly one trailing newline for a clean history log.
+            io.add_history_entry(full_history_entry.rstrip('\n') + '\n')
+        # --- End Implementation ---
 
         return success
 
@@ -231,4 +259,3 @@ class CommandPipelineExecutor:
             await io.error(f'!! exception calling {cmd}: {e}')
             traceback.print_exc()
             return False
-
