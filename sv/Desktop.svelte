@@ -82,6 +82,15 @@
         }
     }
 
+    function handleContentWheel(event, tab) {
+        if (event.ctrlKey || event.altKey) {
+            event.preventDefault();
+            const zoomStep = 0.1;
+            const delta = event.deltaY < 0 ? zoomStep : -zoomStep;
+            windows.changeTabZoom(tab.group.id, tab.id, delta);
+        }
+    }
+
 
     function handleRightClick(event) {
         if (get(dashActive)) return; // Don't show if dash is active
@@ -237,7 +246,6 @@
         padding: 5px;
         pointer-events: auto;
         background-color: var(--window-bg);
-        height: calc(100% - 30px);
     }
 </style>
 
@@ -268,19 +276,23 @@
                     on:mouseenter={() => handleContentMouseEnter(group)}
                     on:mouseleave={() => handleContentMouseLeave(group)}
                     on:mousedown={e => handleContentMouseDown(e, group)}
+                    on:wheel={e => handleContentWheel(e, tab)}
                 >
-                    <svelte:component
-                        bind:this={componentInstances[tab.id]}
-                        this={tab.component}
-                        {...tab}
-                        groupId={group.id}
-                        id={tab.id}
-                        isActive={group.isActive && tab.id === group.activeTabId}
-                        x={group.x} y={group.y} width={group.width} height={group.height}
-                    />
-                    {#if componentInstances[tab.id]}
-                        <InstanceRegistrar tabId={tab.id} instance={componentInstances[tab.id]} />
-                    {/if}
+                    <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
+                        <svelte:component
+                            bind:this={componentInstances[tab.id]}
+                            this={tab.component}
+                            {...tab}
+                            groupId={group.id}
+                            id={tab.id}
+                            isActive={group.isActive && tab.id === group.activeTabId}
+                            x={group.x} y={group.y} width={group.width} height={group.height}
+                            maximized={group.maximized}
+                        />
+                        {#if componentInstances[tab.id]}
+                            <InstanceRegistrar tabId={tab.id} instance={componentInstances[tab.id]} />
+                        {/if}
+                    </div>
                 </div>
             </div>
         {/each}

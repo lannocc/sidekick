@@ -13,7 +13,7 @@ RESET_CODE = '\033[0m'
 async def iocall(io, argv):
     """View or set user colors for chat messages.
 
-    Usage: color [--help] [-u USER] [COLOR]
+    Usage: color [--help] [-u USER[.HOST]] [COLOR]
 
     This command manages the colors you see for users in chat.
     AI agents do not use colors.
@@ -23,9 +23,10 @@ async def iocall(io, argv):
                    current color. See available colors below.
 
     Options:
-      -u, --user USER  Target another user. If specified, you will view or
-                       set the color for that specific user.
-      --help           Displays this help message.
+      -u, --user USER[.HOST]  Target another user. If specified, you will view or
+                              set the color for that specific user. Can be a local
+                              user or a network user (e.g., alice.mars).
+      --help                  Displays this help message.
 
     Available Colors:
     black, red, green, yellow, blue, magenta, cyan, white
@@ -37,7 +38,7 @@ async def iocall(io, argv):
         return False
 
     parser = argparse.ArgumentParser(prog='color', description='View or set user colors.', add_help=False)
-    parser.add_argument('-u', '--user', help='The target user.')
+    parser.add_argument('-u', '--user', help='The target user, e.g., "bob" or "alice.mars".')
     parser.add_argument('color', nargs='?', help='The color to set.')
     parser.add_argument('--help', action='store_true', help='Show help message.')
 
@@ -52,12 +53,18 @@ async def iocall(io, argv):
         await io.print(iocall.__doc__)
         return True
 
-    target_user = args.user if args.user else io.user
+    target_user_str = args.user if args.user else io.user
     new_color_name = args.color
 
+    # Resolve target_user_str to a full user.host address
+    if '.' in target_user_str:
+        target_addr = target_user_str
+    else:
+        target_addr = f"{target_user_str}.{io.os.hostname}"
+
     # Check if the target user is known
-    if target_user not in io.user_colors:
-        await io.error(f"!! color: user '{target_user}' not found or is not a color-enabled user.")
+    if target_addr not in io.user_colors:
+        await io.error(f"!! color: user '{target_user_str}' not found or is not a color-enabled user.")
         return False
 
     if new_color_name:
@@ -67,8 +74,8 @@ async def iocall(io, argv):
             return False
         
         color_code = COLOR_MAP[new_color_name]
-        io.user_colors[target_user] = color_code
-        display_target = 'Your color' if target_user == io.user else f"Color for {target_user}"
+        io.user_colors[target_addr] = color_code
+        display_target = 'Your color' if target_user_str == io.user else f"Color for {target_user_str}"
         await io.print(f":: {display_target} set to {color_code}{new_color_name}{RESET_CODE}")
         
         # Broadcast the color change to network clients
@@ -78,8 +85,8 @@ async def iocall(io, argv):
         return True
     else:
         # View the current color
-        current_code = io.user_colors.get(target_user, '')
+        current_code = io.user_colors.get(target_addr, '')
         current_name = REVERSE_COLOR_MAP.get(current_code, 'none')
-        display_target = 'Your color is' if target_user == io.user else f"Color for {target_user} is"
+        display_target = 'Your color is' if target_user_str == io.user else f"Color for {target_user_str} is"
         await io.print(f":: {display_target} {current_code}{current_name}{RESET_CODE}")
         return True

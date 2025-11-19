@@ -10,8 +10,8 @@ import shutil
 # string line after the backticks (e.g., "python:path/to/file.py").
 CODEBLOCK_REGEX = re.compile(r'```(?P<language>[^\n]*)\n(?P<code>.*?)\n```', re.DOTALL)
 
-# Regex to find ">>> BEGIN FILE <path>:" markers before code blocks.
-BEGIN_FILE_REGEX = re.compile(r'>>> BEGIN FILE\s+([^:\n]+):')
+# Regex to find ">>> BEGIN ... <path>:" markers before code blocks (e.g., BEGIN FILE, BEGIN NEW FILE, BEGIN PATCH).
+BEGIN_FILE_REGEX = re.compile(r'>>> BEGIN .*\s+([^:\n]+):')
 
 # Regex to find file paths in backticks, updated to allow spaces in the path.
 FILENAME_REGEX = re.compile(r'`([^`]+)`')
@@ -60,6 +60,26 @@ def extract_target_from_code(code_content):
     return None
 
 
+def is_plausible_filename(candidate: str) -> bool:
+    """
+    Determines if a candidate string is a plausible filename.
+    Rejects common placeholders and requires some structural characteristics.
+    """
+    candidate = candidate.strip()
+    if not candidate or candidate in ('...', '....', '…'):
+        return False
+
+    # A plausible filename has a path separator, an extension, or is a single word
+    # (like Makefile, Dockerfile) without spaces. This helps avoid capturing
+    # random backticked words that aren't filenames.
+    return (
+        '/' in candidate or
+        '\\' in candidate or
+        '.' in candidate or
+        ' ' not in candidate
+    )
+
+
 def apply_patch(target_file, diff_content):
     """Applies a diff to a target file using the system's patch command."""
     try:
@@ -77,9 +97,9 @@ def apply_patch(target_file, diff_content):
             with open(target_file, 'w', encoding='utf-8') as f:
                 pass # Create an empty file.
 
-        # Execute the system's `patch` command.
+        # Execute the system's `patch` command with a fuzz factor of 3.
         result = subprocess.run(
-            ['patch', target_file, diff_filename],
+            ['patch', '-F', '3', target_file, diff_filename],
             capture_output=True, text=True, check=False
         )
 
@@ -124,19 +144,13 @@ def do_work(prompt, answer, transcript_path):
         if ':' in language_info:
             parts = language_info.split(':', 1)
             candidate = parts[1].strip()
-            # A simple plausibility check to avoid matching random text after a colon.
-            is_plausible = (
-                '/' in candidate or
-                '\\' in candidate or
-                ('.' in candidate and ' ' not in candidate)
-            )
-            if is_plausible:
+            if is_plausible_filename(candidate):
                 filename = candidate
 
         # --- Fallback to existing methods if filename not found in language line ---
         search_window = answer[max(0, match.start() - 512):match.start()]
 
-        # 2. Look for ">>> BEGIN FILE <path>:" marker, another strong signal.
+        # 2. Look for ">>> BEGIN ... <path>:" marker, another strong signal.
         if not filename:
             begin_file_matches = BEGIN_FILE_REGEX.findall(search_window)
             if begin_file_matches:
@@ -151,12 +165,7 @@ def do_work(prompt, answer, transcript_path):
             heading_matches = HEADING_FILENAME_REGEX.findall(search_window)
             if heading_matches:
                 candidate = heading_matches[-1].strip()
-                is_plausible = (
-                    '/' in candidate or
-                    '\\' in candidate or
-                    ('.' in candidate and ' ' not in candidate)
-                )
-                if is_plausible:
+                if is_plausible_filename(candidate):
                     filename = candidate
 
         # 4. Look for a line ending in `filename`:
@@ -165,12 +174,7 @@ def do_work(prompt, answer, transcript_path):
             if line_ending_matches:
                 # Take the last one found before the code block.
                 candidate = line_ending_matches[-1].strip()
-                is_plausible = (
-                    '/' in candidate or
-                    '\\' in candidate or
-                    ('.' in candidate and ' ' not in candidate)
-                )
-                if is_plausible:
+                if is_plausible_filename(candidate):
                     filename = candidate
 
         # 5. If no heading match, infer from general context (backticked text).
@@ -180,12 +184,7 @@ def do_work(prompt, answer, transcript_path):
                 # Iterate in reverse to find the most recent plausible filename.
                 for candidate in reversed(context_filenames):
                     candidate = candidate.strip()
-                    is_plausible = (
-                        '/' in candidate or
-                        '\\' in candidate or
-                        ('.' in candidate and ' ' not in candidate)
-                    )
-                    if is_plausible:
+                    if is_plausible_filename(candidate):
                         filename = candidate
                         break # Stop after finding the first plausible one from the end.
 

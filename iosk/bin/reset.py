@@ -46,9 +46,16 @@ async def iocall(io, argv):
 
     # --- 1. Clear all session state ---
 
-    # Clear chat history and engagement buffers (for bots)
-    target_io.session.seek(0)
-    target_io.session.truncate(0)
+    # --- History Proposal Implementation ---
+    # Clear structured chat history, reset prompt number and rolling config
+    target_io.session_history.clear()
+    target_io.prompt_number = 1
+    target_io.rolling_config = {'enabled': False, 'mode': None, 'limit': 0}
+    # target_io.session.seek(0) # REPLACED
+    # target_io.session.truncate(0) # REPLACED
+    # --- End Implementation ---
+
+    # Clear engagement buffers (for bots)
     if target_io.bot and target_user_name in io.os.chat.engagements:
         engagement = io.os.chat.engagements[target_user_name]
         engagement.buf = None
@@ -63,13 +70,21 @@ async def iocall(io, argv):
     target_io.aliases.clear()
 
     # Reset token counts and preamble cache
-    target_io.caching_token_total = 0
-    target_io.full_token_total = 0
-    target_io.initial_static_tokens = 0
     target_io.preamble_cache = None
+    # --- History Proposal Implementation ---
+    # Trigger a full recalculation of token stats after clearing everything.
+    target_io.recalculate_token_stats()
+    # --- End Implementation ---
 
-    # Reset Current Working Directory
-    target_io.pwd = f'/home/{target_user_name}'
+
+    # --- BEGIN FIX ---
+    # Reset Current Working Directory, correctly handling the 'root' user.
+    if target_user_name == 'root':
+        home_dir = '/root'
+    else:
+        home_dir = f'/home/{target_user_name}'
+    target_io.pwd = home_dir
+    # --- END FIX ---
 
     # --- 2. Re-initialize the session ---
 
@@ -82,8 +97,10 @@ async def iocall(io, argv):
     if await io.os.exists(target_io, skrc_global_path):
         await io.os.exec(target_io, skrc_global_path)
 
-    # Re-run user-specific .skrc
-    skrc_user_path = f'/home/{target_user_name}/.skrc'
+    # --- BEGIN FIX ---
+    # Re-run user-specific .skrc, using the correctly determined home directory.
+    skrc_user_path = f'{home_dir}/.skrc'
+    # --- END FIX ---
     if await io.os.exists(target_io, skrc_user_path):
         await io.os.exec(target_io, skrc_user_path)
 
@@ -93,4 +110,3 @@ async def iocall(io, argv):
     await io.print(f":: session for user '{target_user_name}' has been reset.")
 
     return True
-

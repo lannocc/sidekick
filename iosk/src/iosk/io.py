@@ -7,10 +7,34 @@ from os.path import join, isdir, exists
 from io import StringIO
 import sys
 
+try:
+    import tiktoken
+except ImportError:
+    tiktoken = None
+
 
 def print_flush(*args, **kwargs):
     print(*args, **kwargs)
     sys.stdout.flush()
+
+
+class HistoryEntry:
+    """Represents a discrete, numbered entry in the session history."""
+    def __init__(self, number, content_str):
+        self.number = number
+        self.content = content_str
+        self.byte_count = len(content_str.encode('utf-8'))
+        self.line_count = content_str.count('\n')
+
+        self.token_count = 0
+        if tiktoken:
+            try:
+                # Use a global encoder instance if available for performance
+                encoding = tiktoken.get_encoding('cl100k_base')
+                self.token_count = len(encoding.encode(content_str))
+            except Exception:
+                # If encoding fails, token_count remains 0
+                pass
 
 
 class Context:
@@ -41,7 +65,14 @@ class Context:
         self.bot = False # True if this is a bot user
         self.paused = False # True if the bot's engagement is paused
         self.login_time = None
-        self.session = StringIO() # the chat history
+
+        # --- History Proposal Implementation ---
+        # self.session = StringIO() # REPLACED
+        self.session_history = []
+        self.prompt_number = 1
+        self.rolling_config = {'enabled': False, 'mode': None, 'limit': 0}
+        # --- End Implementation ---
+
         self.banks = { } # core memory
         self.env = {} # environment variables
         self.pwd = None # current working directory, virtual path (e.g., /home/user)
@@ -52,18 +83,146 @@ class Context:
         self.user_colors = {} # How this user sees other users' colors
         self.color_idx = 0    # Index for assigning next default color
 
-        self.caching_token_total = 0
-        self.full_token_total = 0
-        self.initial_static_tokens = 0
-
         self.stage = self.STAGE_NORMAL
         self.pre = None
         self.post = None
         self.banking = None
         self.preamble_cache = None
 
+        # Added for token telemetry proposal
+        self.token_stats = {
+            'cumulative_input_tokens': 0, 'cumulative_input_bytes': 0,
+            'cumulative_output_tokens': 0, 'cumulative_output_bytes': 0,
+            'last_trip_input_tokens': 0, 'last_trip_input_bytes': 0,
+            'last_trip_output_tokens': 0, 'last_trip_output_bytes': 0,
+            'banked_tokens': 0, 'banked_bytes': 0,
+            'history_tokens': 0, 'history_bytes': 0,
+            'caching_context_tokens': 0, 'caching_context_bytes': 0
+        }
+
         self.stdin = None
         self.stdout = None
+
+    # --- History Proposal Methods ---
+
+    def add_history_entry(self, content: str):
+        """
+        Creates a HistoryEntry, adds it to the session, increments the prompt
+        number, updates token counts, and applies the rolling cutoff.
+        This is the sole entry point for adding to the session history.
+        """
+        if not content:
+            return
+
+        entry = HistoryEntry(self.prompt_number, content)
+        self.session_history.append(entry)
+        self.prompt_number += 1
+
+        # Incrementally update token stats for efficiency
+        self.token_stats['history_tokens'] += entry.token_count
+        self.token_stats['history_bytes'] += entry.byte_count
+        # The caching context also grows by the same amount.
+        self.token_stats['caching_context_tokens'] += entry.token_count
+        self.token_stats['caching_context_bytes'] += entry.byte_count
+
+        self._apply_rolling_cutoff()
+
+    def _apply_rolling_cutoff(self):
+        """Checks and applies the rolling history cutoff if configured."""
+        if not self.rolling_config.get('enabled'):
+            return
+
+        mode = self.rolling_config.get('mode')
+        limit = self.rolling_config.get('limit', 0)
+
+        if not mode or limit <= 0:
+            return
+
+        # Determine the current total based on the configured mode
+        if mode == 'tokens':
+            current_total = sum(e.token_count for e in self.session_history)
+        elif mode == 'bytes':
+            current_total = sum(e.byte_count for e in self.session_history)
+        elif mode == 'lines':
+            current_total = sum(e.line_count for e in self.session_history)
+        elif mode == 'prompts':
+            current_total = len(self.session_history)
+        else:
+            return  # Invalid mode
+
+        if current_total <= limit:
+            return
+
+        # Prune oldest entries until the total is within the limit
+        removed_count = 0
+        while current_total > limit and self.session_history:
+            entry_to_remove = self.session_history[0]
+            if mode == 'tokens':
+                current_total -= entry_to_remove.token_count
+            elif mode == 'bytes':
+                current_total -= entry_to_remove.byte_count
+            elif mode == 'lines':
+                current_total -= entry_to_remove.line_count
+            elif mode == 'prompts':
+                current_total -= 1
+
+            self.session_history.pop(0)
+            removed_count += 1
+
+        if removed_count > 0:
+            # A modification occurred, so trigger a full, accurate recalculation.
+            self.recalculate_token_stats()
+
+    def get_session_string(self) -> str:
+        """Concatenates all history entries into a single string for AI context."""
+        return "".join([entry.content for entry in self.session_history])
+
+    def recalculate_token_stats(self):
+        """
+        Performs a full recalculation of all token and byte counts for the
+        user's context (preamble, banks, and history).
+        """
+        raw_banking_content = ""
+        if self.banks:
+            for _, data in self.banks.items():
+                raw_banking_content += '\n' + data + '\n'
+
+        banking_content = ""
+        if raw_banking_content:
+            banking_content = (
+                '\n=== CORE RULES/MEMORY BEGIN ===\n'
+                'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS REMEMBER:\n'
+                f'{raw_banking_content}'
+                '\n=== END   CORE RULES/MEMORY ===\n'
+            )
+
+        preamble_content = self.preamble_cache or ""
+        history_content = self.get_session_string()
+        caching_context_content = preamble_content + banking_content + history_content
+
+        # Calculate byte counts (always possible)
+        self.token_stats['history_bytes'] = len(history_content.encode('utf-8'))
+        self.token_stats['banked_bytes'] = len(banking_content.encode('utf-8'))
+        self.token_stats['caching_context_bytes'] = len(caching_context_content.encode('utf-8'))
+
+        # Calculate token counts (if tiktoken is available)
+        if tiktoken:
+            try:
+                encoding = tiktoken.get_encoding('cl100k_base')
+                self.token_stats['history_tokens'] = len(encoding.encode(history_content))
+                self.token_stats['banked_tokens'] = len(encoding.encode(banking_content))
+                self.token_stats['caching_context_tokens'] = len(encoding.encode(caching_context_content))
+            except Exception:
+                # On failure, reset token counts to 0
+                self.token_stats['history_tokens'] = 0
+                self.token_stats['banked_tokens'] = 0
+                self.token_stats['caching_context_tokens'] = 0
+        else:
+            self.token_stats['history_tokens'] = 0
+            self.token_stats['banked_tokens'] = 0
+            self.token_stats['caching_context_tokens'] = 0
+
+    # --- End History Proposal Methods ---
 
     def fork(self):
         child = Context(self.os, self.dev, self.log)
@@ -84,10 +243,22 @@ class Context:
         child.pwd = self.pwd
         # Use a copy so child modifications don't affect the parent.
         child.env = self.env.copy()
-        child.aliases = self.aliases.copy()
+        # Share the parent's aliases dictionary by reference so the 'alias' command can modify it.
+        child.aliases = self.aliases
 
         # Share the parent's banks dictionary by reference.
         child.banks = self.banks
+
+        # --- BEGIN FIX ---
+        # Share the parent's command history by reference so that commands
+        # like 'history' can see the list from the main user session.
+        child.history = self.history
+
+        # Share the new session history state so commands like 'forget' can modify it.
+        child.session_history = self.session_history
+        child.prompt_number = self.prompt_number
+        child.rolling_config = self.rolling_config
+        # --- END FIX ---
 
         return child
 
@@ -121,7 +292,8 @@ class Context:
 
     async def comment(self, text):
         if self.base and self.bot:
-            self.session.write(text + '\n')
+            # Comments for bots are now added as history entries.
+            self.add_history_entry(text + '\n')
 
 
     async def input(self, prompt=None):
@@ -138,34 +310,44 @@ class Context:
                 self.log.write('\n')
                 self.log.flush()
 
-            if self.base and self.bot:
-                if prompt: self.session.write(prompt)
-                self.session.write(data)
-                self.session.write('\n')
-                self.session.flush()
+            # REMOVED: Writing to session buffer is now handled by command execution logic.
+            # if self.base and self.bot:
+            #     if prompt: self.session.write(prompt)
+            #     self.session.write(data)
+            #     self.session.write('\n')
+            #     self.session.flush()
 
         return data
 
     async def output(self, text):
         if text is None: return
 
-        if self.stdout:
-            # If stdout is a custom stream (file, StringIO), write to it.
-            # This bypasses the normal async output to the device.
-            self.stdout.write(text)
-            return
+        # --- BEGIN FIX ---
+        # Prioritize special I/O stages (PRE, BANK, POST) over standard output
+        # redirection. This ensures that commands like 'bank' can correctly
+        # capture I/O without it leaking into the command's stdout, logs, or history.
 
         if self.stage == self.STAGE_PRE:
             self.pre.write(text)
             return
 
         elif self.stage == self.STAGE_BANK:
+            # Capture the output for the memory bank.
             self.banking[1].write(text)
-            if self.bot: return
+            # Unconditionally return to prevent this content from being logged
+            # or added to command output.
+            return
 
         elif self.stage == self.STAGE_POST:
             self.post.write(text)
             return
+
+        # Handle standard output redirection (for pipelines and file redirects) only
+        # if no special stage was active.
+        if self.stdout:
+            self.stdout.write(text)
+            return
+        # --- END FIX ---
 
         self.chatter.write(text)
 
@@ -178,10 +360,6 @@ class Context:
                                      f'\n===    ...       ...    [...{s}] =.= ')
             self.log.write(ltext)
             self.log.flush()
-
-        if self.base and self.bot:
-            self.session.write(text)
-            self.session.flush()
 
         await self.os.send(self, self.dev, text)
 
@@ -215,7 +393,10 @@ class Context:
         assert len(indicator) == 1
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         i = indicator
-        self.log.write(f'=== {now} [{self.os.BOOT}/{self.cid}] ={i}= ')
+        if i == 'I':
+            self.log.write(f'=== {now} [{self.os.BOOT}/{self.cid}/{self.prompt_number}] ={i}= ')
+        else:
+            self.log.write(f'=== {now} [{self.os.BOOT}/{self.cid}] ={i}= ')
 
 
 class Capture:

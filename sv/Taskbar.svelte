@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser } from './windows.js';
+    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow } from './windows.js';
     import { dashActive } from './desktopStore.js';
     import Clock from './Clock.svelte';
 
@@ -137,6 +137,9 @@
     function launchIosk() { newIoskConnection(); showMenu = false; }
     function launchCalculator() { newCalculator(); showMenu = false; }
     function launchSettings() { newSettings(); showMenu = false; }
+    function launchLocalTerminal() { newLocalTerminal(); showMenu = false; }
+    function launchLocalFileExplorer() { newLocalFileExplorer(); showMenu = false; }
+    function launchAsk() { newAskWindow(); showMenu = false; }
 
     onMount(() => window.addEventListener('click', handleWindowClick));
     onDestroy(() => window.removeEventListener('click', handleWindowClick));
@@ -243,13 +246,16 @@
     <div class="taskbar-center" bind:this={centerSectionEl}><Clock /></div>
     <div class="taskbar-right" bind:this={rightSectionEl}>
         <button class="quick-launch-button" on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); launchIosk(); }} title="IOSK Connection">$+</button>
-        <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }}>SK</button>
+        <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }}>SKY</button>
         {#if showMenu}
             <div class="start-menu">
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchSettings(); }}>Settings</button>
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchIosk(); }}>IOSK Connection</button>
-                <div class="menu-separator"></div>
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); newWebBrowser(); showMenu = false; }}>Web Browser</button>
+                <div class="menu-separator"></div>
+                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchAsk(); }}>Ask</button>
+                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchLocalTerminal(); }}>Terminal</button>
+                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer(); }}>Files</button>
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchCalculator(); }}>Calculator</button>
             </div>

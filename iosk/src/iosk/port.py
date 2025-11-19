@@ -11,10 +11,17 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, Any, Optional
 import shlex
 import base64
+import os
+import posixpath
 
 import websockets
 from websockets.server import WebSocketServerProtocol
 from websockets.exceptions import ConnectionClosed
+
+from binaryornot.check import is_binary
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
 
 if TYPE_CHECKING:
     from .kernel import IOSK
@@ -57,6 +64,9 @@ class PortManager:
         self.remote_exec_sessions: Dict[str, Dict[str, Any]] = {}
         self.seen_message_ids: set = set()
         self.MESSAGE_ID_CACHE_SIZE = 500
+        # --- ADDED for Filesystem Events Proposal ---
+        self.active_watchers: Dict[tuple, Observer] = {}
+        self.active_tailers: Dict[tuple, asyncio.Task] = {}
 
     # --------------------------------------------------------------------------
     # Public API (Kernel-Facing)
@@ -457,9 +467,42 @@ class PortManager:
         }
         await self.send_payload_to_client(to_user, payload)
 
+    async def broadcast_token_stats_update(self, user_io: "Context"):
+        """Broadcasts a bot's token telemetry update to all connected clients."""
+        if not user_io.bot: return
+        payload = {
+            "type": "token_stats_update",
+            "user": f"{user_io.user}.{self.kernel.hostname}",
+            "stats": user_io.token_stats
+        }
+        await self.broadcast_to_clients(payload)
+
     # --------------------------------------------------------------------------
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
+
+    class _ClientUpdateEventHandler(FileSystemEventHandler):
+        """Helper class to dispatch watchdog events back to the client."""
+        def __init__(self, port_manager, user, watched_path, loop):
+            self.pm = port_manager
+            self.user = user
+            self.watched_path = watched_path
+            self.loop = loop
+
+        def on_any_event(self, event):
+            # We are in a separate thread. Use thread-safe call.
+            affected_filename = os.path.basename(event.src_path)
+            affected_virtual_path = posixpath.join(self.watched_path, affected_filename)
+
+            payload = {
+                "type": "fs_watch_update",
+                "path": self.watched_path,
+                "event_type": event.event_type, # 'created', 'deleted', 'modified', 'moved'
+                "affected_path": affected_virtual_path,
+                "is_dir": event.is_directory
+            }
+            coro = self.pm.send_payload_to_client(self.user, payload)
+            asyncio.run_coroutine_threadsafe(coro, self.loop)
 
     def _get_color_name_map(self, user_io: "Context") -> dict:
         """Converts a user's ANSI color map to a map of usernames to color names."""
@@ -609,6 +652,7 @@ class PortManager:
 
             # Send initial state info to the new client
             initial_state_payload = {'type': 'state_info'}
+            initial_state_payload['hostname'] = self.kernel.hostname
             initial_state_payload['userColors'] = self._get_color_name_map(io_context)
             # Get available rooms, using the user's new io_context
             available_rooms = await self.kernel.get_room_list(io_context)
@@ -617,20 +661,39 @@ class PortManager:
                 # Room is active, send room state
                 room = self.kernel.chat
 
-                # Gather participants
-                all_participants = set(room.local_room_participants)
-                for user_addr, room_name in self.kernel.network_rooms.items():
-                    if room_name == room.active_room:
-                            user_part, host_part = user_addr.split('.', 1)
-                            if host_part == self.kernel.hostname:
-                                all_participants.add(user_part)
+                # REVISED: Gather participants as objects with name, is_bot, and paused status
+                all_participants = []
+                if room.active_room:
+                    # Iterate network_rooms, the single source of truth for room membership
+                    for user_addr, r_name in self.kernel.network_rooms.items():
+                        if r_name == room.active_room:
+                            user, host = user_addr.split('.', 1)
+                            is_bot = False
+                            paused = False
+                            if host == self.kernel.hostname:
+                                # Local user: get live info from context
+                                if user in self.kernel.users:
+                                    user_io = self.kernel.users[user]
+                                    is_bot = user_io.bot
+                                    paused = user_io.paused
                             else:
-                                all_participants.add(user_addr)
+                                # Remote user: get cached info
+                                user_info = self.kernel.network_users.get(user_addr, {})
+                                is_bot = user_info.get('is_bot', False)
+                                paused = user_info.get('paused', False)
+                            
+                            all_participants.append({
+                                'name': user_addr,
+                                'is_bot': is_bot,
+                                'paused': paused
+                            })
+
+                participants_list = sorted(all_participants, key=lambda p: p['name'])
 
                 initial_state_payload.update({
                     'roomName': room.active_room,
                     'roomTopic': room.room_topic,
-                    'participants': sorted(list(all_participants))
+                    'participants': participants_list
                 })
             else:
                 # No room, send MOTD. The MOTD was selected and cached during login.
@@ -743,25 +806,58 @@ class PortManager:
                 else:
                     log.warning("Received room_action from non-client connection.")
 
+            elif msg_type == "exec_command":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    io_context = self.kernel.users.get(conn_meta.username)
+                    if io_context:
+                        await self._handle_exec_command(websocket, io_context, message)
+                else:
+                    log.warning("Received exec_command from non-client connection.")
+
             elif msg_type == "fs_list":
                 if conn_meta.type == 'client' and conn_meta.username:
                     path = message.get("path", "/")
                     requesterId = message.get("requesterId")
+                    recursive = message.get("recursive", False)
                     io_context = self.kernel.users.get(conn_meta.username)
                     if io_context:
-                        await self._handle_fs_list(websocket, io_context, path, requesterId)
+                        await self._handle_fs_list(websocket, io_context, path, requesterId, recursive)
                 else:
                     log.warning("Received fs_list from non-client connection.")
 
             elif msg_type == "fs_read":
                 if conn_meta.type == 'client' and conn_meta.username:
-                    path = message.get("path")
-                    requesterId = message.get("requesterId")
                     io_context = self.kernel.users.get(conn_meta.username)
-                    if io_context and path is not None and requesterId is not None:
-                        await self._handle_fs_read(websocket, io_context, path, requesterId)
+                    if io_context:
+                        await self._handle_fs_read(websocket, io_context, message)
                 else:
                     log.warning("Received fs_read from non-client or malformed request.")
+
+            elif msg_type == "fs_watch_start":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    path = message.get("path")
+                    io_context = self.kernel.users.get(conn_meta.username)
+                    if io_context and path:
+                        await self._handle_fs_watch_start(websocket, io_context, path)
+
+            elif msg_type == "fs_watch_stop":
+                if conn_meta.type == 'client':
+                    path = message.get("path")
+                    if path:
+                        await self._handle_fs_watch_stop(websocket, path)
+
+            elif msg_type == "fs_tail_start":
+                if conn_meta.type == 'client' and conn_meta.username:
+                    path = message.get("path")
+                    io_context = self.kernel.users.get(conn_meta.username)
+                    if io_context and path:
+                        await self._handle_fs_tail_start(websocket, io_context, path)
+
+            elif msg_type == "fs_tail_stop":
+                if conn_meta.type == 'client':
+                    path = message.get("path")
+                    if path:
+                        await self._handle_fs_tail_stop(websocket, path)
 
             else:
                 log.warning(f"Received unknown message type: {msg_type}")
@@ -771,13 +867,33 @@ class PortManager:
         except Exception:
             log.error(f"Error dispatching message: {traceback.format_exc()}")
 
-    async def _handle_fs_list(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Optional[Any]):
+    async def _handle_exec_command(self, websocket: WebSocketServerProtocol, io_context: "Context", message: Dict[str, Any]):
+        """Handles a transient command execution request from a client (for Watch)."""
+        command_str = message.get("command_str")
+        pwd = message.get("pwd")
+        requesterId = message.get("requesterId")
+
+        if not all([command_str, pwd, requesterId is not None]):
+            log.warning("Malformed exec_command request received.")
+            return
+
+        response = {"type": "exec_command_response", "requesterId": requesterId}
+        try:
+            output = await self.kernel.execute_transient_command(io_context, command_str, pwd)
+            response["output"] = output
+        except Exception as e:
+            log.error(f"Error during exec_command for {io_context.user} on command '{command_str}': {e}")
+            response["error"] = f"An internal server error occurred during execution: {e}"
+
+        await self.send_payload_to_client(io_context.user, response)
+
+    async def _handle_fs_list(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Optional[Any], recursive: bool = False):
         """Handles a file system list request from a client."""
         response = {"type": "fs_list_response", "path": path}
         if requesterId is not None:
             response["requesterId"] = requesterId
         try:
-            listing = await self.kernel.list_dir(io_context, path)
+            listing = await self.kernel.list_dir(io_context, path, recursive=recursive)
             response["listing"] = listing
         except FileNotFoundError as e:
             response["error"] = str(e)
@@ -789,23 +905,127 @@ class PortManager:
 
         await self.send_payload_to_client(io_context.user, response)
 
-    async def _handle_fs_read(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Any):
-        """Handles a file read request from a client."""
+    async def _handle_fs_read(self, websocket: WebSocketServerProtocol, io_context: "Context", message: Dict[str, Any]):
+        """Handles a file read request from a client, now supporting chunking."""
+        path = message.get("path")
+        requesterId = message.get("requesterId")
+        offset = message.get("offset", 0)
+        length = message.get("length", -1)
+
+        if path is None or requesterId is None:
+            log.warning("Malformed fs_read request received.")
+            return
+
         response = {
             "type": "fs_read_response",
             "path": path,
-            "requesterId": requesterId
+            "requesterId": requesterId,
+            "offset": offset,
+            "length": length,
         }
 
-        content_bytes, is_binary, error = await self.kernel.get_raw(io_context, path)
+        try:
+            host_path = self.kernel.box(path, io_context=io_context)
 
-        if error:
-            response["error"] = error
-        else:
-            response["content_b64"] = base64.b64encode(content_bytes).decode('ascii')
-            response["is_binary"] = is_binary
+            if not os.path.exists(host_path):
+                response["error"] = f"path not found: {path}"
+            elif not os.path.isfile(host_path):
+                response["error"] = f"not a file: {path}"
+            else:
+                total_size = os.path.getsize(host_path)
+                response["total_size"] = total_size
+
+                with open(host_path, 'rb') as f:
+                    f.seek(offset)
+                    content_bytes = f.read(length)
+
+                is_binary_file = is_binary(host_path)
+                response["content_b64"] = base64.b64encode(content_bytes).decode('ascii')
+                response["is_binary"] = is_binary_file
+        except Exception as e:
+            log.error(f"Error during fs_read for {io_context.user} at '{path}': {e}")
+            response["error"] = "An internal server error occurred."
 
         await self.send_payload_to_client(io_context.user, response)
+
+    async def _handle_fs_watch_start(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str):
+        key = (websocket, path)
+        if key in self.active_watchers:
+            log.warning(f"Watcher already active for {io_context.user} on '{path}'.")
+            return
+
+        host_path = self.kernel.box(path, io_context=io_context)
+        if not os.path.isdir(host_path):
+            log.error(f"Cannot watch '{path}': not a valid directory for user '{io_context.user}'.")
+            return
+
+        loop = asyncio.get_running_loop()
+        event_handler = self._ClientUpdateEventHandler(self, io_context.user, path, loop)
+
+        observer = Observer()
+        observer.schedule(event_handler, host_path, recursive=False)
+        observer.start()
+
+        self.active_watchers[key] = observer
+        log.info(f"Started watching '{path}' for user '{io_context.user}'.")
+
+    async def _handle_fs_watch_stop(self, websocket: WebSocketServerProtocol, path: str):
+        key = (websocket, path)
+        observer = self.active_watchers.pop(key, None)
+        if observer:
+            observer.stop()
+            observer.join()
+            log.info(f"Stopped watching '{path}' for connection.")
+        else:
+            log.warning(f"Could not find active watcher for '{path}' to stop.")
+
+    async def _handle_fs_tail_start(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str):
+        key = (websocket, path)
+        if key in self.active_tailers:
+            log.warning(f"Tailing already active for {io_context.user} on '{path}'.")
+            return
+
+        host_path = self.kernel.box(path, io_context=io_context)
+        if not os.path.isfile(host_path):
+            log.error(f"Cannot tail '{path}': not a valid file for user '{io_context.user}'.")
+            return
+
+        task = asyncio.create_task(self._tail_file_task(websocket, io_context, path))
+        self.active_tailers[key] = task
+        log.info(f"Started tailing '{path}' for user '{io_context.user}'.")
+
+    async def _handle_fs_tail_stop(self, websocket: WebSocketServerProtocol, path: str):
+        key = (websocket, path)
+        task = self.active_tailers.pop(key, None)
+        if task:
+            task.cancel()
+            log.info(f"Stopped tailing '{path}' for connection.")
+        else:
+            log.warning(f"Could not find active tailing task for '{path}' to stop.")
+
+    async def _tail_file_task(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str):
+        try:
+            host_path = self.kernel.box(path, io_context=io_context)
+            with open(host_path, 'r', encoding='utf-8', errors='ignore') as f:
+                f.seek(0, 2)
+                while True:
+                    line = f.readline()
+                    if not line:
+                        await asyncio.sleep(0.5)
+                        continue
+
+                    payload = {
+                        "type": "fs_tail_update",
+                        "path": path,
+                        "data": line
+                    }
+                    await self.send_payload_to_client(io_context.user, payload)
+        except asyncio.CancelledError:
+            pass # Task cancellation is the normal way to stop tailing.
+        except Exception as e:
+            log.error(f"Error in tailing task for '{path}': {e}")
+        finally:
+            log.info(f"Tailing task for '{path}' for user '{io_context.user}' has ended.")
 
     async def _handle_remote_exec(self, websocket: WebSocketServerProtocol, message: Dict[str, Any]):
         """Handles a remote execution request and streams output back."""
@@ -892,13 +1112,28 @@ class PortManager:
 
             user_addr = f"{user}.{host}"
             if action == "login":
-                self.kernel.network_users[user_addr] = {} # Add user
+                is_bot = message.get('is_bot', False)
+                paused = message.get('paused', False)
+                self.kernel.network_users[user_addr] = {'is_bot': is_bot, 'paused': paused} # Add user
+                # Assign color for this network user to all local interactive users
+                for uio in self.kernel.users.values():
+                    if not uio.bot and user_addr not in uio.user_colors:
+                        uio.user_colors[user_addr] = self.kernel._get_next_color(uio)
             elif action == "logout":
                 if user_addr in self.kernel.network_users:
                     del self.kernel.network_users[user_addr] # Remove user
+                # Remove color for this network user from all local interactive users
+                for uio in self.kernel.users.values():
+                    if not uio.bot and user_addr in uio.user_colors:
+                        del uio.user_colors[user_addr]
                 # Also remove from rooms dict if they were in one
                 if user_addr in self.kernel.network_rooms:
                     del self.kernel.network_rooms[user_addr]
+            elif action == "state_update":
+                if user_addr in self.kernel.network_users:
+                    paused = message.get('paused')
+                    if paused is not None:
+                        self.kernel.network_users[user_addr]['paused'] = paused
 
         elif msg_type == "room_update":
             action = message.get("action")
@@ -946,6 +1181,7 @@ class PortManager:
 
         if self.kernel.chat:
             await self.kernel.chat._broadcast_room_state_update()
+        await self.broadcast_color_updates()
 
     # --------------------------------------------------------------------------
     # MESHING-SPECIFIC METHODS
@@ -1087,6 +1323,22 @@ class PortManager:
         if websocket not in self.active_connections:
             return
 
+        # --- ADDED for Filesystem Events Proposal ---
+        # Clean up any watchers associated with this websocket
+        for (ws, path), observer in list(self.active_watchers.items()):
+            if ws == websocket:
+                observer.stop()
+                observer.join()
+                del self.active_watchers[(ws, path)]
+                log.info(f"Cleaned up watcher for '{path}' on disconnect.")
+
+        # Clean up any tailers associated with this websocket
+        for (ws, path), task in list(self.active_tailers.items()):
+            if ws == websocket:
+                task.cancel()
+                del self.active_tailers[(ws, path)]
+                log.info(f"Cleaned up tailer for '{path}' on disconnect.")
+        
         conn_data = self.active_connections.pop(websocket)
 
         if conn_data.type == 'client' and conn_data.username:
@@ -1116,4 +1368,3 @@ class PortManager:
 
             # 3. Propagate the disconnection to remaining peers
             await self._broadcast_peer_disconnect(disconnected_host)
-

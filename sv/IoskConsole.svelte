@@ -5,8 +5,8 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, newIoskFileExplorer, newIoskPrivateChat } from './windows.js';
-    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages } from './ioskEvents.js';
+    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch } from './windows.js';
+    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents } from './ioskEvents.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
 
     export let id; // Unique ID from the window manager
@@ -28,6 +28,7 @@
 
     // --- State for Connection & Room Awareness ---
     let isConnected = false;
+    let localHostname = '';
     let roomName = null;
     let roomTopic = '';
     let motd = '';
@@ -42,7 +43,6 @@
     let attachUsers = [];
     let selectedDevice = null;
     let selectedUser = null;
-    let deviceBrowsePath = '/dev';
     let isLoadingDevices = false;
     let isLoadingUsers = false;
 
@@ -54,6 +54,10 @@
         user: null,
         showColorPicker: false
     };
+
+    // --- State for Token Telemetry ---
+    let userTokenStats = {};
+    let tokenTooltip = { visible: false, x: 0, y: 0, user: null };
 
     // --- Internal Component State ---
     let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
@@ -69,6 +73,73 @@
     let settingsUrlInput;
     let roomsButton;
     let attachButton;
+
+    // --- Helper functions for telemetry display ---
+    function abbreviateNumber(num) {
+        if (num == null) return '';
+        if (num < 1000) return num.toString();
+        const suffixes = ["", "k", "m", "b", "t"];
+        const i = Math.floor(Math.log10(num) / 3);
+        let short = num / Math.pow(1000, i);
+        let precision = 2;
+        if (short >= 100) {
+            precision = 0;
+        } else if (short >= 10) {
+            precision = 1;
+        }
+        // Using toFixed and then parseFloat to remove trailing zeros
+        return parseFloat(short.toFixed(precision)) + suffixes[i];
+    }
+
+    function formatBytes(bytes, decimals = 2) {
+        if (bytes == null || bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+
+    // --- Computed properties for user lists ---
+    let localUsers = [];
+    let remoteUsers = [];
+
+    $: {
+        const allParticipants = roomParticipants || [];
+
+        if (localHostname) {
+            const localSuffix = `.${localHostname}`;
+
+            // A participant is local if it has no hostname (no '.'), OR if its hostname matches ours.
+            localUsers = allParticipants
+                .filter(p => !p.name.includes('.') || p.name.endsWith(localSuffix))
+                .map(p => ({
+                    ...p,
+                    displayName: p.name.endsWith(localSuffix) ? p.name.slice(0, -localSuffix.length) : p.name
+                }))
+                .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }));
+
+            // A participant is remote if it has a hostname (has '.') AND its hostname does NOT match ours.
+            remoteUsers = allParticipants
+                .filter(p => p.name.includes('.') && !p.name.endsWith(localSuffix))
+                .map(p => ({
+                    ...p,
+                    displayName: p.name // remote users keep full name
+                }))
+                .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }));
+        } else {
+            // Fallback if localHostname is not known. Treat any user with a '.' as remote.
+            localUsers = allParticipants
+                .filter(p => !p.name.includes('.'))
+                .map(p => ({...p, displayName: p.name }))
+                .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }));
+
+            remoteUsers = allParticipants
+                .filter(p => p.name.includes('.'))
+                .map(p => ({...p, displayName: p.name }))
+                .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }));
+        }
+    }
 
     // --- WebSocket instance for this specific console window ---
     let ws = null;
@@ -106,7 +177,7 @@
         if (typeof text !== 'string') return '';
         const ansiRegex = /\u001b\[(\d+)m/g;
         let openSpan = false;
-        
+
         let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         let html = sanitizedText.replace(ansiRegex, (match, code) => {
@@ -198,7 +269,7 @@
 
     onDestroy(() => {
         if (ws) {
-            ws.onclose = null; 
+            ws.onclose = null;
             ws.close();
         }
         if (requestUnsubscribe) {
@@ -269,22 +340,37 @@
         }
         shouldScroll = true;
     }
-    
+
     function openPrivateChat(remoteParticipant) {
         if (!remoteParticipant) return;
-        // Don't open chat with self.
-        const remoteUsername = remoteParticipant.split('.')[0];
-        if (remoteUsername === username) return;
-
+        // Allow opening a chat with any participant, including remote users with
+        // the same username or the user themselves.
         newIoskPrivateChat(id, username, remoteParticipant);
+        closeUserContextMenu();
+        focusInput();
+    }
+
+    function viewUserLog() {
+        if (!userContextMenu.user) return;
+
+        const usernameOnly = userContextMenu.user.split('.')[0];
+
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
+
+        const logPath = `/var/log/user/${usernameOnly}/${dateString}.log`;
+
+        newIoskFileViewer(id, logPath);
         closeUserContextMenu();
         focusInput();
     }
 
     function setColorForUser(colorName) {
         if (!userContextMenu.user) return;
-        const userNameOnly = userContextMenu.user.split('.')[0];
-        const commandToRun = `$ color -u ${userNameOnly} ${colorName}`;
+        const commandToRun = `$ color -u ${userContextMenu.user} ${colorName}`;
         sendSystemCommand(commandToRun);
         closeUserContextMenu();
         focusInput();
@@ -298,9 +384,30 @@
         focusInput();
     }
 
+    function showTokenTooltip(event, user) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        tokenTooltip = {
+            visible: true,
+            // Position below the trigger, with its right edge aligned to the trigger's right edge
+            x: rect.right,
+            y: rect.bottom + 5,
+            user: user
+        };
+    }
+
+    function hideTokenTooltip() {
+        tokenTooltip = { ...tokenTooltip, visible: false };
+    }
+
+    function togglePause(participant) {
+        if (!participant || !participant.is_bot) return;
+        const command = participant.paused ? `unpause ${participant.name}` : `pause ${participant.name}`;
+        sendSystemCommand(`$ ${command}`);
+        focusInput();
+    }
+
     // --- Functions ---
     export function showSettingsDialog() {
-        if (isConnected) return;
         settingsUrl = wsUrl;
         settingsUsername = username;
 
@@ -312,8 +419,9 @@
             y: currentSettings.y ?? y,
             width: currentSettings.width ?? width,
             height: currentSettings.height ?? height,
+            defaultZoom: currentSettings.defaultZoom ?? 1.0,
         };
-        
+
         showSettings = true;
         tick().then(() => settingsUrlInput?.focus());
     }
@@ -360,6 +468,13 @@
         }
     }
 
+    function requestAllDevices() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            const message = { type: 'fs_list', path: '/dev', recursive: true };
+            ws.send(JSON.stringify(message));
+        }
+    }
+
     export async function connect() {
         // Sync local input values back to the main props before connecting
         wsUrl = localWsUrl;
@@ -389,10 +504,9 @@
                         const data = JSON.parse(jsonData);
 
                         if (data.type === 'private_message') {
-                            // This is a new dedicated DM message.
-                            // The backend sends this *in addition* to the regular output
-                            // for console history, so we just process this for the chat window
-                            // and play the bell, but don't add to the console `output` array here.
+                            // This is the new, definitive handler for DMs.
+                            // It triggers the bell and opens the chat window on reception.
+                            playBellSound();
                             privateMessages.set({
                                 from: stripAnsi(data.from),
                                 to: data.to,
@@ -400,65 +514,70 @@
                                 timestamp: Date.now()
                             });
 
-                            // A user can receive a DM confirmation they sent. Don't open a window for that.
-                            const remoteUsername = stripAnsi(data.from).split('.')[0];
-                            if (remoteUsername !== username) {
-                                newIoskPrivateChat(id, username, stripAnsi(data.from));
-                            }
-
-                            // Trigger a bell sound/flash.
-                            handleBell();
+                            // Open a chat window, whether from another user or from ourself.
+                            const remoteUserAddress = stripAnsi(data.from);
+                            newIoskPrivateChat(id, username, remoteUserAddress);
                         } else if (data.type === 'state_info' || data.type === 'room_state_update') {
+                            if (data.hostname) localHostname = data.hostname;
                             roomName = data.roomName || null;
                             roomTopic = data.roomTopic || '';
-                            roomParticipants = data.participants || [];
+                            const newParticipants = data.participants || [];
+                            roomParticipants = newParticipants;
                             availableRooms = data.availableRooms || [];
                             if (data.userColors) {
                                 userColors = data.userColors;
                             }
+
+                            // Prune userTokenStats to only include current participants
+                            const currentParticipantNames = new Set(newParticipants.map(p => p.name));
+                            const newStats = {};
+                            for (const user of Object.keys(userTokenStats)) {
+                                if (currentParticipantNames.has(user)) {
+                                    newStats[user] = userTokenStats[user];
+                                }
+                            }
+                            userTokenStats = newStats;
+
                             if (data.type === 'state_info') {
                                 motd = data.motd || '';
                             }
+                        } else if (data.type === 'token_stats_update') {
+                            userTokenStats[data.user] = data.stats;
+                            userTokenStats = userTokenStats; // Trigger reactivity
                         } else if (data.type === 'user_colors_update') {
                             userColors = data.colors;
+                        } else if (data.type === 'fs_watch_update') {
+                            fileSystemWatchEvents.set({
+                                consoleId: id,
+                                data: data,
+                                timestamp: Date.now()
+                            });
+                        } else if (data.type === 'fs_tail_update') {
+                            fileSystemTailEvents.set({
+                                consoleId: id,
+                                data: data,
+                                timestamp: Date.now()
+                            });
+                        } else if (data.type === 'exec_command_response') {
+                            // Pass all exec responses to the event bus for other components (like IoskWatch)
+                            fileSystemResponses.set({
+                                consoleId: id,
+                                requesterId: data.requesterId,
+                                data: data,
+                                timestamp: Date.now()
+                            });
                         } else if (data.output || data.prompt) {
                             if (data.output) {
                                 const bellCode = "\u0007";
                                 let outputToProcess = data.output;
-                                let hasRegularBell = false;
 
-                                if (outputToProcess.includes(bellCode)) {
-                                    const dmRegex = new RegExp(`^${bellCode}\\s*\\n\\[\\s*(.*?)\\s*->\\s*me.*?\\]\\s*<<\\s*([\\s\\S]*)`, 'm');
-                                    let match;
-                                    // Loop in case there are multiple DMs in one output block
-                                    while ((match = dmRegex.exec(outputToProcess)) !== null) {
-                                        const fromUser = match[1].trim();
-                                        const content = match[2].trim();
-                                        
-                                        // A user can receive a DM confirmation from the server they sent, don't open a window for that.
-                                        const remoteUsername = stripAnsi(fromUser).split('.')[0];
-                                        if (remoteUsername !== username) {
-                                            newIoskPrivateChat(id, username, stripAnsi(fromUser));
-                                            privateMessages.set({
-                                                from: stripAnsi(fromUser),
-                                                to: username,
-                                                content: content,
-                                                timestamp: Date.now()
-                                            });
-                                        }
-                                        // Remove the bell from the matched DM so it doesn't trigger a sound, but leave the message for console history.
-                                        outputToProcess = outputToProcess.replace(match[0], match[0].substring(1));
-                                    }
-                                }
-
-                                // Now check if any other, non-DM bells remain.
+                                // This is now a generic bell handler. DM-specific logic is removed.
                                 if (outputToProcess.includes(bellCode)) {
                                     handleBell();
                                     outputToProcess = outputToProcess.replace(new RegExp(bellCode, 'g'), '');
                                 }
 
                                 let cleanOutput = outputToProcess;
-
                                 const clearScreenCode = "\x1b[H\x1b[2J";
                                 if (cleanOutput === clearScreenCode) {
                                     output = [];
@@ -471,24 +590,51 @@
                                 currentPrompt = data.prompt;
                             }
                         } else if (data.type === 'fs_list_response') {
-                            if (data.path.startsWith('/dev')) {
-                                deviceBrowsePath = data.path;
-                                let items = data.listing || [];
-                                if (data.path !== '/dev') {
-                                    items.unshift({ name: '..', type: 'dir' });
-                                }
-                                attachDevices = items;
-                                isLoadingDevices = false;
-                            } else if (data.path === '/home') {
-                                attachUsers = (data.listing || []).filter(item => item.type === 'dir');
-                                isLoadingUsers = false;
-                            } else {
+                            if (data.requesterId) {
+                                // It's for an external component like File Explorer
                                 fileSystemResponses.set({
                                     consoleId: id,
                                     requesterId: data.requesterId,
                                     data: data,
                                     timestamp: Date.now()
                                 });
+                            } else {
+                                // It's for this console's internal UI (attach menu)
+                                if (data.path === '/dev') {
+                                    // This is the recursive device listing
+                                    let items = data.listing || [];
+                                    attachDevices = items
+                                        .filter(item => {
+                                            const basename = item.path.split('/').pop();
+                                            if (basename && basename.startsWith('.')) {
+                                                return false; // Always ignore dotfiles/dotdirs
+                                            }
+                                            // Ignore if any path segment starts with '_'
+                                            return !item.path.split('/').some(segment => segment.startsWith('_'));
+                                        })
+                                        .map(item => {
+                                            let displayPath = item.path.startsWith('/dev/') ? item.path.substring(5) : item.path;
+
+                                            if (item.type === 'file' && displayPath.endsWith('.py')) {
+                                                displayPath = displayPath.slice(0, -3);
+                                            }
+                                            if (displayPath.endsWith('/')) {
+                                                displayPath = displayPath.slice(0, -1);
+                                            }
+
+                                            return {
+                                                displayName: displayPath || '/', // Handle root case
+                                                fullPath: item.path,
+                                                type: item.type
+                                            };
+                                        })
+                                        .sort((a, b) => a.displayName.localeCompare(b.displayName));
+                                    isLoadingDevices = false;
+                                } else if (data.path === '/home') {
+                                    // This is the user listing
+                                    attachUsers = (data.listing || []).filter(item => item.type === 'dir');
+                                    isLoadingUsers = false;
+                                }
                             }
                         } else if (data.type === 'fs_read_response') {
                             fileSystemResponses.set({
@@ -508,7 +654,7 @@
             ws.onclose = async () => {
                 isConnected = false;
                 ws = null;
-                roomName = null; roomTopic = ''; motd = ''; roomParticipants = []; availableRooms = []; userColors = {};
+                localHostname = ''; roomName = null; roomTopic = ''; motd = ''; roomParticipants = []; availableRooms = []; userColors = {}; userTokenStats = {};
                 output = [...output, {type: 'output', content: `Connection closed.`}];
                 const host = (() => { try { return new URL(wsUrl).hostname } catch { return 'invalid-host' }})();
                 windows.updateTabProps(groupId, id, { title: `Disconnected - ${username}@${host}` });
@@ -615,7 +761,7 @@
             selectedUser = null;
             if (attachDevices.length === 0) {
                 isLoadingDevices = true;
-                requestFsList('/dev');
+                requestAllDevices();
             }
             if (attachUsers.length === 0) {
                 isLoadingUsers = true;
@@ -625,21 +771,7 @@
     }
 
     function handleDeviceClick(item) {
-        const newPath = deviceBrowsePath === '/' ? `/${item.name}` : `${deviceBrowsePath}/${item.name}`;
-        if (item.type === 'dir') {
-            if (item.name === '..') {
-                const parentPath = deviceBrowsePath.substring(0, deviceBrowsePath.lastIndexOf('/')) || '/';
-                if (parentPath.startsWith('/dev')) {
-                     isLoadingDevices = true;
-                     requestFsList(parentPath);
-                }
-            } else {
-                isLoadingDevices = true;
-                requestFsList(newPath);
-            }
-        } else {
-            selectedDevice = newPath.substring('/dev/'.length);
-        }
+        selectedDevice = item.displayName;
     }
 
     function handleUserClick(item) {
@@ -647,8 +779,10 @@
     }
 
     function performAttach() {
-        if (!selectedDevice || !selectedUser) return;
-        const commandToRun = `$ attach ${selectedDevice} ${selectedUser}`;
+        if (!selectedDevice) return;
+        const commandToRun = selectedUser
+            ? `$ attach ${selectedDevice} ${selectedUser}`
+            : `$ attach ${selectedDevice}`;
         output = [...output, {type: 'prompt', content: currentPrompt + commandToRun}];
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
@@ -657,7 +791,7 @@
         focusInput();
     }
 
-    function handleBell() {
+    function playBellSound() {
         // 1. Play sound
         if (settings?.chimeType && settings.chimeType !== 'none') {
             let src;
@@ -673,10 +807,23 @@
                 } catch (e) { console.error("Failed to create audio element for bell:", e); }
             }
         }
+    }
+
+    function handleBell() {
+        // 1. Play sound
+        playBellSound();
 
         // 2. Flash window
         windows.updateWindowProps(id, { isFlashing: true });
         setTimeout(() => windows.updateWindowProps(id, { isFlashing: false }), 500);
+    }
+
+    // --- Watch Window Function ---
+    function launchWatchWindow() {
+        const match = currentPrompt.match(/\[\S+\s+([^\]]+)\]/);
+        const pwd = match ? match[1] : '/';
+        newIoskWatch(id, pwd);
+        focusInput();
     }
 </script>
 
@@ -699,7 +846,7 @@
         --ansi-bright-cyan: #1abc9c;
         --ansi-bright-white: #ecf0f1;
     }
-    .console-container { display: flex; flex-direction: column; height: 100%; background-color: var(--console-bg); color: var(--console-text); font-family: 'Courier New', Courier, monospace; font-size: 14px; position: relative; }
+    .console-container { display: flex; flex-direction: column; height: 100%; background-color: var(--console-bg); color: var(--console-text); font-family: monospace; font-size: 14px; position: relative; }
     .connect-form { display: flex; gap: 8px; padding: 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); flex-shrink: 0; align-items: center; }
     .connect-form input { flex-grow: 1; background-color: var(--window-bg); color: var(--title-bar-text); border: 1px solid var(--border-color); padding: 4px; }
     .connect-form .connect-button { background-color: #27c93f; border: 1px solid #1a9c2a; color: white; padding: 4px 8px; cursor: pointer; border-radius: 3px; }
@@ -710,13 +857,15 @@
     .connect-form .disconnect-button:hover { background-color: #c0392b; }
     .connect-form .room-button { background-color: #ffbd2e; border-color: #e0a320; color: white; position: relative; padding-left: 15px; }
     .connect-form .room-button:hover { background-color: #e0a320; }
-    .connect-form .files-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
-    .connect-form .files-button:hover { background-color: #1a9c2a; }
-    .connect-form .attach-button { background-color: #3498db; border-color: #2980b9; color: white; position: relative; padding-right: 15px; }
-    .connect-form .attach-button:hover { background-color: #2980b9; }
-    .connect-form .room-button::before, .connect-form .attach-button::after { content: ''; position: absolute; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
+    /* Watch button gets green color */
+    .connect-form .watch-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
+    .connect-form .watch-button:hover { background-color: #1a9c2a; }
+    /* Files button gets blue color */
+    .connect-form .files-button { background-color: #3498db; border-color: #2980b9; color: white; }
+    .connect-form .files-button:hover { background-color: #2980b9; }
+
+    .connect-form .room-button::before { content: ''; position: absolute; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
     .connect-form .room-button::before { left: 5px; }
-    .connect-form .attach-button::after { right: 5px; }
     .header-info { flex-grow: 1; text-align: center; color: #bdc3c7; font-style: italic; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 10px; }
     .main-flex-area { flex-grow: 1; display: flex; overflow: hidden; }
     .terminal-wrapper { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
@@ -725,11 +874,71 @@
     .input-area { display: flex; padding: 4px 8px; background-color: var(--title-bar-bg); border-top: 1px solid var(--border-color); flex-shrink: 0; }
     .input-area span { color: var(--console-prompt); padding-right: 5px; white-space: pre; }
     .input-area input { flex-grow: 1; background: transparent; border: none; outline: none; color: var(--console-input); font-family: inherit; font-size: inherit; }
-    .users-panel { width: 180px; flex-shrink: 0; border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
-    .panel-header { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); font-weight: bold; text-align: center; }
+    .users-panel { width: 260px; flex-shrink: 0; border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
+    .panel-header { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    .panel-header .attach-button {
+        background-color: #9b59b6;
+        border: 1px solid #8e44ad;
+        color: white;
+        padding: 2px 6px;
+        font-size: 0.9em;
+        cursor: pointer;
+        border-radius: 3px;
+        position: relative;
+        padding-right: 15px;
+    }
+    .panel-header .attach-button:hover {
+        background-color: #8e44ad;
+    }
+    .panel-header .attach-button::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 4px solid rgba(255, 255, 255, 0.7);
+        right: 5px;
+    }
     .user-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
-    .user-item { padding: 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; border-radius: 2px; }
+    .user-item { padding: 2px 6px; cursor: pointer; border-radius: 2px; display: flex; align-items: center; }
     .user-item:hover { background-color: var(--taskbar-button-hover-bg); }
+    .user-name-display { flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .user-name-display.paused { font-style: italic; }
+    .user-item-filler { flex-grow: 1; border-bottom: 1px dotted #7f8c8d; margin: 0 4px; position: relative; top: -4px; }
+    .token-count-wrapper { position: relative; flex-shrink: 0; display: flex; align-items: center; }
+    .token-count { font-weight: bold; color: var(--ansi-yellow); }
+    .last-trip-token-count { font-weight: bold; color: var(--ansi-cyan); }
+    .token-tooltip {
+        position: fixed;
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        padding: 8px;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        z-index: 210;
+        width: max-content;
+        font-size: 12px;
+        color: var(--console-text);
+        text-align: left;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+    .tooltip-grid { display: grid; grid-template-columns: auto max-content max-content; gap: 4px 12px; align-items: center; }
+    .tooltip-grid span:nth-child(3n-2) { /* Label */
+        font-weight: bold;
+        text-align: right;
+        color: var(--title-bar-text);
+    }
+    .tooltip-grid span:nth-child(3n-1) { /* Bytes */
+        text-align: right;
+        color: var(--ansi-bright-black);
+    }
+    .tooltip-grid span:nth-child(3n) { /* Tokens */
+        text-align: right;
+    }
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
     .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
     .modal-content h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
@@ -750,9 +959,10 @@
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 0; }
     .close-item { color: #e74c3c; }
     .close-item:hover { background-color: #c0392b; color: white; }
-    .attach-menu { position: absolute; top: 45px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 100; display: flex; width: 450px; height: 300px; flex-direction: column; }
+    .attach-menu { position: absolute; top: 45px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 100; display: flex; width: 600px; height: 300px; flex-direction: column; }
     .attach-panels { display: flex; flex-grow: 1; overflow: hidden; }
-    .attach-panel { width: 50%; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
+    .attach-panel { width: 35%; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
+    .attach-panel:first-child { width: 65%; }
     .attach-panel:last-child { border-right: none; }
     .panel-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
     .list-item { padding: 4px 8px; cursor: pointer; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -771,6 +981,21 @@
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 
     /* User Context Menu Styles */
+    .pause-resume-button {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0 4px;
+        font-size: 1.1em;
+        margin-left: 4px;
+        line-height: 1;
+        opacity: 0.6;
+        transition: opacity 0.2s;
+    }
+    .pause-resume-button:hover {
+        opacity: 1;
+    }
+
     .user-context-menu {
         position: fixed;
         background-color: var(--window-bg);
@@ -816,8 +1041,8 @@
             <div class="header-info" title={stripAnsi(roomTopic || motd)}>
                 {@html parseAnsi(roomTopic || motd)}
             </div>
+            <button type="button" class="header-button watch-button" on:click={launchWatchWindow} title="Watch a command">Watch</button>
             <button type="button" class="header-button files-button" on:click={() => { newIoskFileExplorer(id, title); focusInput(); }}>Files</button>
-            <button type="button" class="header-button attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
         {/if}
     </form>
 
@@ -844,19 +1069,18 @@
             <div class="attach-panels">
                 <div class="attach-panel">
                     <div class="panel-header">Device</div>
-                    <div class="path-header">{deviceBrowsePath}</div>
                     <div class="panel-list">
                         {#if isLoadingDevices}
                             <div class="list-item">Loading...</div>
                         {:else}
-                            {#each attachDevices as item (item.name)}
+                            {#each attachDevices as item (item.fullPath)}
                                 <div
                                     class="list-item"
-                                    class:selected={selectedDevice === (deviceBrowsePath === '/' ? item.name : deviceBrowsePath.substring('/dev/'.length) + '/' + item.name)}
+                                    class:selected={selectedDevice === item.displayName}
                                     on:click={() => handleDeviceClick(item)}
-                                    title={item.name}
+                                    title={item.displayName}
                                 >
-                                    {item.type === 'dir' ? '🗂️' : '🔌'} {item.name}
+                                    {item.type === 'dir' ? '🗂️' : '🔌'} {item.displayName}
                                 </div>
                             {:else}
                                 <div class="list-item">(empty)</div>
@@ -865,7 +1089,7 @@
                     </div>
                 </div>
                 <div class="attach-panel">
-                    <div class="panel-header">User</div>
+                    <div class="panel-header">User (Optional)</div>
                     <div class="path-header">/home</div>
                      <div class="panel-list">
                         {#if isLoadingUsers}
@@ -880,7 +1104,7 @@
                                 >
                                     👤 {item.name}
                                 </div>
-                            {:else}
+                          {:else}
                                 <div class="list-item">(no users found)</div>
                             {/each}
                         {/if}
@@ -890,7 +1114,7 @@
             <div class="attach-footer">
                 <button
                     class="primary"
-                    disabled={!selectedDevice || !selectedUser}
+                    disabled={!selectedDevice}
                     on:click={performAttach}>
                     Attach
                 </button>
@@ -917,18 +1141,80 @@
 
         {#if roomName}
         <div class="users-panel">
-            <div class="panel-header">Users</div>
+            <div class="panel-header">
+                <span>Users</span>
+                <button class="attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
+            </div>
             <div class="user-list">
-                {#each roomParticipants as participant (participant)}
-                    {@const userName = participant.includes('.') ? participant.split('.')[0] : participant}
+                {#each localUsers as participant (participant.name)}
                     <div
                         class="user-item"
-                        title={participant}
-                        style="color: {colorNameToCss[userColors[userName]] || 'inherit'}"
-                        on:contextmenu={(e) => handleUserRightClick(e, participant)}
-                        on:click={() => openPrivateChat(participant)}
+                        title={participant.name}
+                        on:contextmenu={(e) => handleUserRightClick(e, participant.name)}
+                        on:click={() => openPrivateChat(participant.name)}
                     >
-                        {participant}
+                        <span class="user-name-display" class:paused={participant.paused} style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
+                        {#if participant.is_bot}
+                            <span class="user-item-filler"></span>
+                            {#if userTokenStats[participant.name]}
+                                {@const stats = userTokenStats[participant.name]}
+                                <div class="token-count-wrapper"
+                                     on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
+                                     on:mouseleave={hideTokenTooltip}>
+                                    <span class="last-trip-token-count" title="Last trip input tokens">
+                                        {abbreviateNumber(stats.last_trip_input_tokens)}
+                                    </span>
+                                    <span style="color: var(--ansi-bright-black); margin: 0 3px;">/</span>
+                                    <span class="token-count" title="Cumulative input tokens">
+                                        {abbreviateNumber(stats.cumulative_input_tokens)}
+                                    </span>
+                                </div>
+                            {/if}
+                            <button
+                                class="pause-resume-button"
+                                on:click|stopPropagation={() => togglePause(participant)}
+                                title={participant.paused ? `Resume ${participant.displayName}` : `Pause ${participant.displayName}`}
+                            >
+                                {participant.paused ? '▶️' : '⏸️'}
+                            </button>
+                        {/if}
+                    </div>
+                {/each}
+                {#if localUsers.length > 0 && remoteUsers.length > 0}
+                    <div class="menu-separator" style="margin: 4px 0;"></div>
+                {/if}
+                {#each remoteUsers as participant (participant.name)}
+                    <div
+                        class="user-item"
+                        title={participant.name}
+                        on:contextmenu={(e) => handleUserRightClick(e, participant.name)}
+                        on:click={() => openPrivateChat(participant.name)}
+                    >
+                        <span class="user-name-display" class:paused={participant.paused} style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
+                        {#if participant.is_bot}
+                            <span class="user-item-filler"></span>
+                            {#if userTokenStats[participant.name]}
+                                {@const stats = userTokenStats[participant.name]}
+                                 <div class="token-count-wrapper"
+                                     on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
+                                     on:mouseleave={hideTokenTooltip}>
+                                    <span class="last-trip-token-count" title="Last trip input tokens">
+                                        {abbreviateNumber(stats.last_trip_input_tokens)}
+                                    </span>
+                                    <span style="color: var(--ansi-bright-black); margin: 0 3px;">/</span>
+                                    <span class="token-count" title="Cumulative input tokens">
+                                        {abbreviateNumber(stats.cumulative_input_tokens)}
+                                    </span>
+                                </div>
+                            {/if}
+                            <button
+                                class="pause-resume-button"
+                                on:click|stopPropagation={() => togglePause(participant)}
+                                title={participant.paused ? `Resume ${participant.displayName}` : `Pause ${participant.displayName}`}
+                            >
+                                {participant.paused ? '▶️' : '⏸️'}
+                            </button>
+                        {/if}
                     </div>
                 {/each}
             </div>
@@ -965,6 +1251,16 @@
                     {/if}
                 </fieldset>
 
+                <fieldset>
+                    <legend>Appearance</legend>
+                    <div class="form-grid" style="grid-template-columns: 1fr; padding-left: 0;">
+                        <label style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Default Zoom</span>
+                            <input type="number" bind:value={windowSettingsForModal.defaultZoom} min="0.5" max="3" step="0.1" style="width: 80px;">
+                        </label>
+                    </div>
+                </fieldset>
+
                 <div class="buttons">
                     <button on:click={handleCancelSettings}>Cancel</button>
                     <button class="save-button" on:click={handleSaveSettings}>Save Defaults</button>
@@ -998,6 +1294,9 @@
                 <button class="menu-item" on:click={() => openPrivateChat(userContextMenu.user)}>
                     Private Chat
                 </button>
+                <button class="menu-item" on:click={viewUserLog}>
+                    View Log...
+                </button>
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={() => userContextMenu.showColorPicker = true}> Set Color... </button>
                 <div class="menu-separator"></div>
@@ -1005,6 +1304,24 @@
                     Detach
                 </button>
             {/if}
+        </div>
+    {/if}
+
+    {#if tokenTooltip.visible && tokenTooltip.user && userTokenStats[tokenTooltip.user]}
+        {@const stats = userTokenStats[tokenTooltip.user]}
+        <div
+            class="token-tooltip"
+            style="top: {tokenTooltip.y}px; left: {tokenTooltip.x}px; transform: translateX(-100%);"
+        >
+            <div class="tooltip-grid">
+                <span>Cumulative Input:</span><span>({formatBytes(stats.cumulative_input_bytes)})</span><span>{stats.cumulative_input_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Cumulative Output:</span><span>({formatBytes(stats.cumulative_output_bytes)})</span><span>{stats.cumulative_output_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Last Trip Input:</span><span>({formatBytes(stats.last_trip_input_bytes)})</span><span>{stats.last_trip_input_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Last Trip Output:</span><span>({formatBytes(stats.last_trip_output_bytes)})</span><span>{stats.last_trip_output_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Banked Memory:</span><span>({formatBytes(stats.banked_bytes)})</span><span>{stats.banked_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Session History:</span><span>({formatBytes(stats.history_bytes)})</span><span>{stats.history_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Caching Context:</span><span>({formatBytes(stats.caching_context_bytes)})</span><span>{stats.caching_context_tokens.toLocaleString('en-US')} tokens</span>
+            </div>
         </div>
     {/if}
 </div>

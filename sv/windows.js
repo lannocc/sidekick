@@ -6,6 +6,10 @@ import IoskFileExplorer from './IoskFileExplorer.svelte';
 import IoskFileViewer from './IoskFileViewer.svelte';
 import WebBrowser from './WebBrowser.svelte';
 import IoskPrivateChat from './IoskPrivateChat.svelte';
+import LocalTerminal from './LocalTerminal.svelte';
+import LocalFileExplorer from './LocalFileExplorer.svelte';
+import Ask from './Ask.svelte';
+import IoskWatch from './IoskWatch.svelte';
 import { desktopSettings, windowSettings } from './desktopStore.js';
 
 let windowGroupIdCounter = 0;
@@ -24,7 +28,11 @@ const componentMap = {
     'IoskFileExplorer': IoskFileExplorer,
     'IoskFileViewer': IoskFileViewer,
     'WebBrowser': WebBrowser,
-    'IoskPrivateChat': IoskPrivateChat
+    'IoskPrivateChat': IoskPrivateChat,
+    'LocalTerminal': LocalTerminal,
+    'LocalFileExplorer': LocalFileExplorer,
+    'Ask': Ask,
+    'IoskWatch': IoskWatch,
 };
 
 function createWindowManager() {
@@ -47,6 +55,7 @@ function createWindowManager() {
             component: component,
             componentName: componentName,
             ...tabProps,
+            zoom: savedSettings?.defaultZoom ?? 1.0,
             lastFocusedElement: null,
         };
 
@@ -178,6 +187,38 @@ function createWindowManager() {
             }
             return g;
         }));
+    };
+
+    const changeTabZoom = (groupId, tabId, delta) => {
+        update(windows => {
+            const group = windows.find(g => g.id === groupId);
+            if (!group) return windows;
+            const tab = group.tabs.find(t => t.id === tabId);
+            if (!tab) return windows;
+
+            const currentZoom = tab.zoom || 1.0;
+            const newZoom = currentZoom + delta;
+            const clampedZoom = Math.max(0.5, Math.min(3.0, newZoom));
+
+            if (clampedZoom !== currentZoom) {
+                const newTabs = group.tabs.map(t => t.id === tabId ? { ...t, zoom: clampedZoom } : t);
+                return windows.map(g => g.id === groupId ? { ...g, tabs: newTabs } : g);
+            }
+            return windows;
+        });
+    };
+
+    const resetTabZoom = (groupId, tabId) => {
+        const group = get(windows).find(g => g.id === groupId);
+        if (!group) return;
+        const tab = group.tabs.find(t => t.id === tabId);
+        if (!tab) return;
+    
+        const allWindowSettings = get(windowSettings);
+        const componentSettings = allWindowSettings[tab.componentName];
+        const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
+    
+        updateTabProps(groupId, tabId, { zoom: defaultZoom });
     };
 
     const toggleMinimize = (id) => {
@@ -348,11 +389,16 @@ function createWindowManager() {
             
             const { componentType, ...props } = tabData;
     
+            const allWindowSettings = get(windowSettings);
+            const componentSettings = allWindowSettings[tabData.componentType];
+            const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
+
             return {
                 id: ++tabIdCounter,
                 component,
                 componentName: tabData.componentType,
                 ...props,
+                zoom: props.zoom ?? defaultZoom,
             };
         }).filter(Boolean);
     
@@ -394,6 +440,8 @@ function createWindowManager() {
         setActiveTab,
         updateWindowProps,
         updateTabProps,
+        changeTabZoom,
+        resetTabZoom,
         toggleMinimize,
         toggleMaximize,
         closeAllWindows,
@@ -472,4 +520,35 @@ export function newIoskPrivateChat(consoleTabId, localUser, remoteUser) {
 
     const title = remoteUser.split('.')[0];
     windows.addWindow(IoskPrivateChat, { title: `Chat with ${title}`, consoleId: consoleTabId, localUser, remoteUser, width: 450, height: 400 });
+}
+
+export function newLocalTerminal() {
+    windows.addWindow(LocalTerminal, { title: 'Local Terminal', width: 800, height: 500 });
+}
+
+export function newLocalFileExplorer(props = {}) {
+    const defaultProps = { title: 'Local Files', width: 500, height: 600 };
+    windows.addWindow(LocalFileExplorer, { ...defaultProps, ...props });
+}
+
+export function newAskWindow(initialFiles = []) {
+    windows.addWindow(Ask, { title: 'Ask', initialFiles, width: 900, height: 600 });
+}
+
+export function newIoskWatch(consoleTabId, pwd) {
+    const allWindows = get(windows);
+    const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
+    if (!consoleTab || !consoleTab.isConsoleConnected) {
+        alert("Cannot open Watch window. The selected console is not connected.");
+        return;
+    }
+
+    windows.addWindow(IoskWatch, {
+        title: 'Watch',
+        consoleId: consoleTabId,
+        consoleConnection: consoleTab.consoleConnection, // Pass this for Dash restore
+        initialPwd: pwd,
+        width: 700,
+        height: 400
+    });
 }

@@ -17,7 +17,7 @@ import aioconsole
 from datetime import datetime, timedelta
 import os
 import posixpath
-from os.path import isdir, isfile, exists, getsize
+from os.path import isdir, isfile, exists, getsize, getmtime
 import importlib, importlib.util
 import sys
 import shutil
@@ -409,6 +409,13 @@ class IOSK:
         io = self.system.fork()
         io.login_time = datetime.now()
         io.banks = { } # A user's base context gets its own banks.
+        io.history = [] # A user's base context gets its own history.
+        # --- BEGIN FIX ---
+        # A new user's base context must have its own session history to prevent
+        # inheriting and sharing history with the system context or other users.
+        io.session_history = []
+        io.prompt_number = 1
+        # --- END FIX ---
         io.log = Capture.log(self, f'{self.USER_LOG}/{user}', True)
         io.dev = device
         io.user = user
@@ -417,20 +424,31 @@ class IOSK:
         io.bot = device != self.CONSOLE_DEV
         self.users[user] = io
 
+        user_addr = f"{user}.{self.hostname}"
+
         # --- Color Initialization ---
+        # Part 1: If the new user is interactive, set up THEIR color map.
+        # Bots do not need their own color map as they don't "see" colors.
         if not io.bot:
-            # This user is interactive, set up their color map.
-            io.user_colors[user] = self.BRIGHT_WHITE
+            # This user is interactive, set up their color map with user.host keys.
+            # 1a. Assign self-color (white)
+            io.user_colors[user_addr] = self.BRIGHT_WHITE
 
-            # Assign colors for all other users (including bots) in this new user's map.
-            for other_user in self.users:
-                if other_user != user:
-                    io.user_colors[other_user] = self._get_next_color(io)
+            # 1b. Populate this new user's map with all other known users.
+            all_other_users = list(self.network_users.keys())
+            for u, uio in self.users.items():
+                # self.users already contains the new user, so we must skip them.
+                if u != user:
+                    all_other_users.append(f"{u}.{self.hostname}")
 
-            # Update all other interactive users' maps to include this new user.
-            for other_user, other_io in self.users.items():
-                if other_user != user and not other_io.bot:
-                    other_io.user_colors[user] = self._get_next_color(other_io)
+            for other_addr in all_other_users:
+                 io.user_colors[other_addr] = self._get_next_color(io)
+
+        # Part 2: Add the new user (bot or not) to all existing interactive users' maps.
+        # This allows interactive users to see and set colors for bots.
+        for other_io in self.users.values():
+            if other_io.user != user and not other_io.bot:
+                other_io.user_colors[user_addr] = self._get_next_color(other_io)
 
         # --- CWD and Home Directory Initialization ---
         if user == 'root':
@@ -478,8 +496,7 @@ class IOSK:
             else: await io.print(connect)
 
         # MODIFIED: Update local network_users and then broadcast
-        user_addr = f"{user}.{self.hostname}"
-        self.network_users[user_addr] = {} # Store user metadata if needed later
+        self.network_users[user_addr] = {'is_bot': io.bot, 'paused': io.paused}
 
         # Announce user login to network peers
         if self.port:
@@ -488,7 +505,9 @@ class IOSK:
                 'type': 'user_update',
                 'action': 'login',
                 'user': user,
-                'host': self.hostname
+                'host': self.hostname,
+                'is_bot': io.bot,
+                'paused': io.paused
             })
             # Announce user login to the entire mesh system log
             await self.port.broadcast_to_peers({
@@ -513,8 +532,10 @@ class IOSK:
                     else:
                         prompt_char = '$'
 
-                    # Construct the prompt
-                    prompt_str = f'[{io.user} {io.pwd}] {prompt_char} '
+                    # --- History Proposal Implementation ---
+                    # Construct the prompt with the new prompt number and format.
+                    prompt_str = f'[{io.user} #{io.prompt_number} {io.pwd}] {prompt_char} '
+                    # --- End Implementation ---
 
                     while (text := await io.input(prompt=prompt_str)) is None:
                         # non-blocking inputs return None until data
@@ -531,29 +552,38 @@ class IOSK:
                             continue
 
                         is_command = False
-                        command_line = ''
+                        command_to_run = ''
+                        # The original line as typed by the user, for history purposes.
+                        original_command_line = line
 
                         if line.startswith('$ '):
                             is_command = True
-                            command_line = line[2:]
+                            command_to_run = line[2:]
                         elif not is_room_active:
                             # Not in a room, so treat as a command.
                             is_command = True
-                            command_line = line
+                            command_to_run = line
 
                         if is_command:
                             # Check for built-in exit commands before executing.
                             # This is now the sole place `exit` is handled.
-                            first_word = command_line.strip().split(' ', 1)[0]
+                            first_word = command_to_run.strip().split(' ', 1)[0]
                             if first_word in ('exit', 'logout'):
                                 await self.logout(io)
                                 return 'logout' # Return reason for exit
 
-                            if command_line:
-                                io.history.append(command_line)
-                            await self.call(io, command_line)
-                        else:  # Is a chat message because we are in a room and not a command
+                            # The `history` command uses io.history. We must store the original line.
+                            if command_to_run:
+                                io.history.append(original_command_line)
+
+                            # The `call` function handles adding the command and output
+                            # to the AI's session_history. We pass it the command to execute
+                            # and the original line for accurate logging.
+                            await self.call(io, command_to_run, original_command_line)
+                        else:   # Is a chat message because we are in a room and not a command.
                             if self.chat:
+                                # The chat system is responsible for creating history entries
+                                # and displaying the message for all participants (including the sender).
                                 await self.chat.send(io.user, line)
                             else:
                                 await io.print(line)
@@ -577,22 +607,22 @@ class IOSK:
         await self.system.print(logout_msg)
 
         user_to_logout = io.user
+        user_addr_to_logout = f"{user_to_logout}.{self.hostname}"
         user_is_network_client = io.dev.startswith('network:')
         del self.users[user_to_logout]
 
         # --- Color Cleanup ---
         for remaining_io in self.users.values():
-            if user_to_logout in remaining_io.user_colors:
-                del remaining_io.user_colors[user_to_logout]
+            if not remaining_io.bot and user_addr_to_logout in remaining_io.user_colors:
+                del remaining_io.user_colors[user_addr_to_logout]
 
         if disconnect:
             if self.chat: await self.chat.send(user_to_logout, disconnect, sys=True)
             else: await io.print(disconnect)
 
         # MODIFIED: Update local network_users and then broadcast
-        user_addr = f"{user_to_logout}.{self.hostname}"
-        if user_addr in self.network_users:
-            del self.network_users[user_addr]
+        if user_addr_to_logout in self.network_users:
+            del self.network_users[user_addr_to_logout]
 
         # Announce user logout to network peers
         if self.port:
@@ -636,6 +666,13 @@ class IOSK:
         io = self.system.fork()
         io.login_time = datetime.now()
         io.banks = {}
+        io.history = [] # A network user's base context gets its own history.
+        # --- BEGIN FIX ---
+        # A new network user's base context must also have its own session history
+        # to ensure isolation from other users.
+        io.session_history = []
+        io.prompt_number = 1
+        # --- END FIX ---
         io.log = Capture.log(self, f'{self.USER_LOG}/{username}', True)
         io.dev = device_path
         io.user = username
@@ -645,15 +682,28 @@ class IOSK:
         io.network_input_queue = asyncio.Queue()
         self.users[username] = io
 
+        user_addr = f"{username}.{self.hostname}"
+
         # --- Color Initialization (for network user) ---
+        # Part 1: If the new user is interactive, set up THEIR color map.
         if not io.bot:
-            io.user_colors[username] = self.BRIGHT_WHITE
-            for other_user in self.users:
-                if other_user != username:
-                    io.user_colors[other_user] = self._get_next_color(io)
-            for other_user, other_io in self.users.items():
-                if other_user != username and not other_io.bot:
-                    other_io.user_colors[username] = self._get_next_color(other_io)
+            # This user is interactive, set up their color map with user.host keys.
+            # 1a. Assign self-color (white)
+            io.user_colors[user_addr] = self.BRIGHT_WHITE
+
+            # 1b. Populate this new user's map with all other known users.
+            all_other_users = list(self.network_users.keys())
+            for u, uio in self.users.items():
+                if u != username:
+                    all_other_users.append(f"{u}.{self.hostname}")
+
+            for other_addr in all_other_users:
+                 io.user_colors[other_addr] = self._get_next_color(io)
+
+        # Part 2: Add the new user (bot or not) to all existing interactive users' maps.
+        for other_io in self.users.values():
+            if other_io.user != username and not other_io.bot:
+                other_io.user_colors[user_addr] = self._get_next_color(other_io)
 
         if username == 'root':
             home_dir_virtual = '/root'
@@ -686,8 +736,7 @@ class IOSK:
         io.motd_cache = await self.get_motd(io)
 
         # MODIFIED: Update local network_users and then broadcast
-        user_addr = f"{username}.{self.hostname}"
-        self.network_users[user_addr] = {}
+        self.network_users[user_addr] = {'is_bot': io.bot, 'paused': io.paused}
 
         if self.port:
             await self.port.broadcast_color_updates()
@@ -695,7 +744,9 @@ class IOSK:
                 'type': 'user_update',
                 'action': 'login',
                 'user': username,
-                'host': self.hostname
+                'host': self.hostname,
+                'is_bot': io.bot,
+                'paused': io.paused
             })
             await self.port.broadcast_to_peers({
                 'type': 'system_broadcast',
@@ -724,10 +775,40 @@ class IOSK:
     ### COMMAND
     ###
 
-    async def call(self, io:Context, args:str):
+    async def call(self, io:Context, command_to_execute:str, original_line_for_history:str=None):
         """Interpret arguments, parse for pipes/redirection, and invoke commands."""
+        # If original_line_for_history is not provided, it's a non-interactive call.
+        # Use the command itself for the history line; it will be filtered by `io.base` anyway.
+        history_line = original_line_for_history if original_line_for_history is not None else command_to_execute
         # Delegate the entire pipeline execution to the CommandPipelineExecutor
-        return await self.pipeline_executor.execute_pipeline(io, args, self.parser)
+        return await self.pipeline_executor.execute_pipeline(io, command_to_execute, history_line, self.parser)
+
+    async def execute_transient_command(self, base_io: Context, command_str: str, pwd: str) -> str:
+        """
+        Executes a command in a temporary, non-interactive context and captures its output.
+        Used for features like 'watch'.
+        """
+        if not await self.exists(base_io, pwd):
+            return f"watch error: directory not found: {pwd}"
+            
+        temp_io = base_io.fork()
+        temp_io.base = False  # Mark as a non-base, transient session
+        temp_io.dev = '/dev/null' # Does not have a real device
+        temp_io.pwd = pwd
+
+        # Redirect stdout and stderr to a string buffer
+        output_capture = StringIO()
+        temp_io.stdout = output_capture
+        temp_io.stderr = output_capture
+
+        try:
+            # Execute the command pipeline
+            await self.call(temp_io, command_str)
+        except Exception as e:
+            # Capture exceptions during command parsing/execution as well
+            traceback.print_exc(file=output_capture)
+
+        return output_capture.getvalue()
 
     async def exec(self, io:Context, path:str, argv:list=None):
         """When you know what you need and you've come prepared (arguments).
@@ -963,8 +1044,8 @@ class IOSK:
             await io.error(f"!! failed to remove directory '{path}': {e}")
             return False
 
-    async def list_dir(self, io: Context, path: str) -> list:
-        """Lists the contents of a directory in the sandbox."""
+    async def list_dir(self, io: Context, path: str, recursive: bool = False) -> list:
+        """Lists the contents of a directory in the sandbox, optionally recursively."""
         host_path = self.box(path, io_context=io)
         if not exists(host_path):
             raise FileNotFoundError(f"Path not found: {path}")
@@ -973,14 +1054,60 @@ class IOSK:
 
         listing = []
         try:
-            for item_name in sorted(os.listdir(host_path)):
-                full_item_path = os.path.join(host_path, item_name)
-                item_type = 'dir' if isdir(full_item_path) else 'file'
-                try:
-                    size = getsize(full_item_path)
-                except OSError:
-                    size = -1
-                listing.append({'name': item_name, 'type': item_type, 'size': size})
+            if recursive:
+                for root, dirs, files in os.walk(host_path, topdown=True):
+                    # Sort dirs and files to ensure consistent output
+                    dirs.sort()
+                    files.sort()
+                    # Convert host root path back to virtual path for this level
+                    relative_path_from_start = os.path.relpath(root, host_path)
+                    if relative_path_from_start == '.':
+                        virtual_root = path
+                    else:
+                        # Ensure we use POSIX separators for the virtual path
+                        virtual_root = posixpath.join(path, *relative_path_from_start.split(os.sep))
+
+                    # Process all files at the current level
+                    for item_name in files:
+                        item_host_path = os.path.join(root, item_name)
+                        item_virtual_path = posixpath.join(virtual_root, item_name)
+                        try:
+                            size = getsize(item_host_path)
+                            mtime = getmtime(item_host_path)
+                        except OSError:
+                            size = -1
+                            mtime = -1
+                        listing.append({'name': item_name, 'path': item_virtual_path, 'type': 'file', 'size': size, 'mtime': mtime})
+
+                    # Process all subdirectories at the current level
+                    for item_name in dirs:
+                        item_host_path = os.path.join(root, item_name)
+                        item_virtual_path = posixpath.join(virtual_root, item_name)
+                        try:
+                            size = getsize(item_host_path)
+                            mtime = getmtime(item_host_path)
+                        except OSError:
+                            size = -1
+                            mtime = -1
+                        listing.append({'name': item_name, 'path': item_virtual_path, 'type': 'dir', 'size': size, 'mtime': mtime})
+            else:
+                for item_name in sorted(os.listdir(host_path)):
+                    full_item_path_host = os.path.join(host_path, item_name)
+                    full_item_path_virtual = posixpath.join(path, item_name)
+                    item_type = 'dir' if isdir(full_item_path_host) else 'file'
+                    try:
+                        size = getsize(full_item_path_host)
+                        mtime = getmtime(full_item_path_host)
+                    except OSError:
+                        size = -1
+                        mtime = -1
+                    listing.append({
+                        'name': item_name,
+                        'path': full_item_path_virtual,
+                        'type': item_type,
+                        'size': size,
+                        'mtime': mtime
+                    })
         except OSError as e:
             await io.error(f"Error reading directory {path}: {e}")
             raise
@@ -1058,9 +1185,9 @@ class IOSK:
                             from_user=from_user,
                             content=content
                         )
-                        # Also send the formatted message to the console for history,
-                        # but without the bell character that triggers special handling.
-                        await self.port.send_to_client(io.user, data[1:])
+                        # Also send the formatted message to the console for history.
+                        # The bell is required to trigger sounds and fallbacks.
+                        await self.port.send_to_client(io.user, data)
                         return # We are done with this data.
 
                     except Exception as e:
@@ -1157,6 +1284,67 @@ class IOSK:
             return None
 
     ###
+    ### TOKEN TELEMETRY
+    ###
+
+    async def _calculate_context_tokens(self, io: Context) -> dict:
+        """
+        Calculates token and byte counts for the components of a user's context.
+        This logic is extracted from 'tokens.py' for reuse in telemetry.
+        """
+        stats = {
+            'banked_bytes': 0, 'banked_tokens': 0,
+            'history_bytes': 0, 'history_tokens': 0,
+            'caching_context_bytes': 0, 'caching_context_tokens': 0
+        }
+        encoding = None
+        try:
+            encoding = tiktoken.get_encoding('cl100k_base')
+        except Exception:
+            # If tiktoken fails, we can't calculate tokens, but can still do bytes.
+            pass
+
+        # --- 1. Preamble Content ---
+        preamble_content = io.preamble_cache or ""
+
+        # --- 2. Banked Memory Content ---
+        raw_banking_content = ""
+        if io.banks:
+            for bank_acct, data in io.banks.items():
+                raw_banking_content += '\n' + data + '\n'
+
+        banking_content = ""
+        if raw_banking_content:
+            banking_content = (
+                '\n=== CORE RULES/MEMORY BEGIN ===\n'
+                'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS REMEMBER:\n'
+                f'{raw_banking_content}'
+                '\n=== END   CORE RULES/MEMORY ===\n'
+            )
+
+        stats['banked_bytes'] = len(banking_content.encode('utf-8'))
+        if encoding:
+            stats['banked_tokens'] = len(encoding.encode(banking_content))
+
+        # --- 3. Chat History Content ---
+        # --- History Proposal Implementation ---
+        chat_history_content = io.get_session_string()
+        # io.session.seek(0) # REPLACED
+        # chat_history_content = io.session.read() # REPLACED
+        # --- End Implementation ---
+        stats['history_bytes'] = len(chat_history_content.encode('utf-8'))
+        if encoding:
+            stats['history_tokens'] = len(encoding.encode(chat_history_content))
+
+        # --- 4. Caching Context (Preamble + Banked + History) ---
+        caching_context_content = preamble_content + banking_content + chat_history_content
+        stats['caching_context_bytes'] = len(caching_context_content.encode('utf-8'))
+        if encoding:
+            stats['caching_context_tokens'] = len(encoding.encode(caching_context_content))
+
+        return stats
+
+    ###
     ### TRACE
     ###
 
@@ -1166,23 +1354,49 @@ class IOSK:
 
     async def log_trip_trace(self, io: Context, prompt: str, reply: str):
         """
-        Logs token usage for TPM tracking. If 'trip' trace is active, also writes
-        the prompt, reply, and token counts to log files.
+        Logs token usage for TPM tracking and real-time telemetry. If 'trip' trace
+        is active, also writes the prompt, reply, and token counts to log files.
         """
-        # --- 1. Token Calculation (always needed for TPM) ---
+        # --- 1. Token Calculation for Telemetry and TPM ---
         prompt_tokens = -1
         reply_tokens = -1
         reply_str = reply or ""
+        prompt_bytes = len(prompt.encode('utf-8'))
+        reply_bytes = len(reply_str.encode('utf-8'))
+
         try:
             encoding = tiktoken.get_encoding('cl100k_base')
             prompt_tokens = len(encoding.encode(prompt))
             reply_tokens = len(encoding.encode(reply_str))
         except Exception as e:
-            # Silently fail on tiktoken error, tokens will be -1
-            # A more robust system might log this, but for now we prioritize not crashing.
+            # Silently fail on tiktoken error, tokens will be -1.
             pass
 
-        # --- 2. TPM Tracking (always needed) ---
+        # --- 2. Update Bot Telemetry Stats ---
+        if io.bot:
+            # First, calculate the state of the context that was just used for the trip.
+            context_stats = await self._calculate_context_tokens(io)
+            io.token_stats.update(context_stats)
+
+            # Update last trip stats
+            io.token_stats['last_trip_input_bytes'] = prompt_bytes
+            io.token_stats['last_trip_input_tokens'] = prompt_tokens if prompt_tokens != -1 else 0
+            io.token_stats['last_trip_output_bytes'] = reply_bytes
+            io.token_stats['last_trip_output_tokens'] = reply_tokens if reply_tokens != -1 else 0
+
+            # Increment cumulative stats
+            io.token_stats['cumulative_input_bytes'] += prompt_bytes
+            if prompt_tokens != -1:
+                io.token_stats['cumulative_input_tokens'] += prompt_tokens
+            io.token_stats['cumulative_output_bytes'] += reply_bytes
+            if reply_tokens != -1:
+                io.token_stats['cumulative_output_tokens'] += reply_tokens
+            
+            # Broadcast the update to clients
+            if self.port:
+                await self.port.broadcast_token_stats_update(io)
+
+        # --- 3. TPM Tracking (always needed) ---
         try:
             total_tokens = (prompt_tokens if prompt_tokens != -1 else 0) + \
                            (reply_tokens if reply_tokens != -1 else 0)
@@ -1197,11 +1411,11 @@ class IOSK:
         except Exception as e:
             await self.system.error(f"!! Failed during TPM tracking for {io.dev}: {e}")
 
-        # --- 3. Check for Active Trace ---
+        # --- 4. Check for Active Trace ---
         if not await self.is_trace_active('trip'):
             return
 
-        # --- 4. Write Trace Files ---
+        # --- 5. Write Trace Files ---
         try:
             # Filename Construction
             device_path = io.dev
@@ -1216,8 +1430,6 @@ class IOSK:
             tokens_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.tokens')
 
             # Token content string construction
-            prompt_bytes = len(prompt.encode('utf-8'))
-            reply_bytes = len(reply_str.encode('utf-8'))
             tokens_content = (
                 f"PROMPT\n"
                 f"Bytes: {prompt_bytes}\n"

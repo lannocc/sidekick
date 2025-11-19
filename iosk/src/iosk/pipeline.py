@@ -26,17 +26,17 @@ class CommandPipelineExecutor:
     def __init__(self, iosk_kernel: 'IOSK'):
         self.os = iosk_kernel # Reference to the IOSK kernel instance
 
-    async def execute_pipeline(self, io: 'Context', raw_command_line: str, parser: 'CommandLineParser') -> bool:
+    async def execute_pipeline(self, io: 'Context', command_to_execute: str, original_line_for_history: str, parser: 'CommandLineParser') -> bool:
         """
         Interprets arguments, parses for pipes/redirection, and invokes commands.
         This is the main entry point for executing a command line.
         """
-        # Step 1: Alias resolution
-        first_space_idx = raw_command_line.find(' ')
-        cmd_candidate = raw_command_line[:first_space_idx] if first_space_idx != -1 else raw_command_line
-        cmd_rest_of_line = raw_command_line[first_space_idx+1:] if first_space_idx != -1 else ''
+        # Step 1: Alias resolution is performed on the executable part of the command.
+        first_space_idx = command_to_execute.find(' ')
+        cmd_candidate = command_to_execute[:first_space_idx] if first_space_idx != -1 else command_to_execute
+        cmd_rest_of_line = command_to_execute[first_space_idx+1:] if first_space_idx != -1 else ''
 
-        alias_resolved_args = raw_command_line
+        alias_resolved_args = command_to_execute
         if cmd_candidate in io.aliases:
             alias_value = io.aliases[cmd_candidate]
             alias_resolved_args = f"{alias_value} {cmd_rest_of_line}".strip()
@@ -50,27 +50,29 @@ class CommandPipelineExecutor:
         if not commands: # Valid empty command line
             return True
 
-        # Step 3: Differentiate between simple command and full pipeline for optimization
-        num_commands = len(commands)
-        if num_commands == 1 and not redirect_out_path:
-            return await self._execute_single_command(io, commands[0])
+        # --- History Proposal (Part 2) Implementation ---
+        # All command execution, simple or pipelined, will now run through the
+        # full pipeline logic to consistently capture output for session history.
+        # An output capture buffer is created if the final output is not redirected to a file.
+        output_capture = StringIO()
+        is_capturing_output = redirect_out_path is None
+        # --- End Implementation ---
 
-        # Step 4: Full Pipeline Execution
+        # Step 3 & 4: Full Pipeline Execution
         pipe_buffer: Optional[StringIO] = None
         success = True
+        num_commands = len(commands)
 
         for idx, command_argv in enumerate(commands):
             is_last_cmd = (idx == num_commands - 1)
 
             # Create a forked context for each command in the pipeline.
-            # This ensures that each command has its own isolated I/O streams and environment (inherited).
             cmd_io = io.fork()
 
             # Configure stdin for the current command from the previous command's output
             if pipe_buffer:
                 pipe_buffer.seek(0)
                 cmd_io.stdin = pipe_buffer
-                # Reset pipe_buffer reference for the next iteration (or to prevent accidental reuse)
                 pipe_buffer = None
 
             redirect_file_handle = None
@@ -81,7 +83,6 @@ class CommandPipelineExecutor:
                     host_path = self.os.box(redirect_out_path, io_context=io)
                     parent_dir = os.path.dirname(host_path)
 
-                    # Create parent directories for redirection target if they don't exist
                     if not os.path.exists(parent_dir):
                         try:
                             os.makedirs(parent_dir)
@@ -97,9 +98,9 @@ class CommandPipelineExecutor:
                     pipe_buffer = StringIO()
                     cmd_io.stdout = pipe_buffer
                 else:
-                    # For the last command in a pipe without redirection,
-                    # it should inherit the original io's stdout (console or other redirect).
-                    cmd_io.stdout = io.stdout
+                    # Last command in a pipe OR a single command.
+                    # Its output goes to our capture buffer.
+                    cmd_io.stdout = output_capture
 
                 # Execute the single command segment
                 success = await self._execute_single_command(cmd_io, command_argv)
@@ -114,6 +115,34 @@ class CommandPipelineExecutor:
 
             if not success:
                 break # If any command fails, stop the pipeline
+
+        # --- History Proposal (Part 2) Implementation ---
+        # After execution, process the captured output and create the history entry.
+
+        # Reconstruct the prompt string as it was displayed to the user.
+        if self.os.chat and self.os.chat.active_room:
+            prompt_char = '>>'
+        else:
+            prompt_char = '$'
+        prompt_str = f'[{io.user} #{io.prompt_number} {io.pwd}] {prompt_char} '
+
+        command_part = f"{prompt_str}{original_line_for_history}\n"
+        output_part = ""
+
+        if is_capturing_output:
+            captured_text = output_capture.getvalue()
+            if captured_text:
+                # Send the captured output to the user's actual console.
+                await io.output(captured_text)
+                output_part = captured_text
+
+        # Create the single, consolidated history entry if the command was not empty,
+        # is part of the main interactive session, and not in a special stage.
+        if original_line_for_history.strip() and io.base and io.stage == io.STAGE_NORMAL:
+            full_history_entry = command_part + output_part
+            # Ensure there is exactly one trailing newline for a clean history log.
+            io.add_history_entry(full_history_entry.rstrip('\n') + '\n')
+        # --- End Implementation ---
 
         return success
 
@@ -231,4 +260,3 @@ class CommandPipelineExecutor:
             await io.error(f'!! exception calling {cmd}: {e}')
             traceback.print_exc()
             return False
-

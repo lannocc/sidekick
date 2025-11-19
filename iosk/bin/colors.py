@@ -15,8 +15,8 @@ async def iocall(io, argv):
     Usage: colors
            colors --help
 
-    This command shows a list of all known users and the color you
-    see their chat messages in.
+    This command shows a list of all known users (local and network)
+    and the color you see their chat messages in.
 
     --help: Displays this help message.
     """
@@ -33,18 +33,27 @@ async def iocall(io, argv):
         await io.print("  (No users with colors found)")
         return True
 
-    # Sort by username for a consistent, readable output
-    sorted_users = sorted(io.user_colors.keys())
+    # Sort by the full user.host address for a consistent, readable output
+    sorted_user_addrs = sorted(io.user_colors.keys())
 
-    # Find the longest username for alignment
-    max_len = max(len(user) for user in sorted_users) if sorted_users else 0
+    # Create display names and find the longest one for alignment
+    display_names = {}
+    for addr in sorted_user_addrs:
+        user, host = addr.split('.', 1)
+        if host == io.os.hostname:
+            display_names[addr] = user
+        else:
+            display_names[addr] = addr
+    
+    max_len = max(len(name) for name in display_names.values()) if display_names else 0
 
-    for user in sorted_users:
-        code = io.user_colors[user]
+    for addr in sorted_user_addrs:
+        display_name = display_names[addr]
+        code = io.user_colors[addr]
         name = REVERSE_COLOR_MAP.get(code, 'unknown')
         
         # Format with padding for alignment
-        padding = ' ' * (max_len - len(user) + 4)
-        await io.print(f"  {user}{padding}{code}{name}{RESET_CODE}")
+        padding = ' ' * (max_len - len(display_name) + 4)
+        await io.print(f"  {display_name}{padding}{code}{name}{RESET_CODE}")
     
     return True

@@ -30,6 +30,14 @@
             }
         }
 
+        // Close active tab/window with Alt/Ctrl + w
+        if ((e.altKey || e.ctrlKey) && !e.metaKey && e.key.toLowerCase() === 'w') {
+            e.preventDefault();
+            const activeWindow = get(windows).find(w => w.isActive && !w.minimized);
+            if (activeWindow) {
+                windows.removeTab(activeWindow.id, activeWindow.activeTabId);
+            }
+        }
 
         // Check for Meta/Alt + ` or Meta/Alt + ~ (Shift + `)
         if ((e.metaKey || e.altKey) && (e.key === '`' || e.key === '~')) {
