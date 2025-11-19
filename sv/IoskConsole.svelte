@@ -906,6 +906,7 @@
     .user-item { padding: 2px 6px; cursor: pointer; border-radius: 2px; display: flex; align-items: center; }
     .user-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .user-name-display { flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .user-name-display.paused { font-style: italic; }
     .user-item-filler { flex-grow: 1; border-bottom: 1px dotted #7f8c8d; margin: 0 4px; position: relative; top: -4px; }
     .token-count-wrapper { position: relative; flex-shrink: 0; }
     .token-count { font-weight: bold; color: var(--ansi-yellow); }
@@ -1151,7 +1152,7 @@
                         on:contextmenu={(e) => handleUserRightClick(e, participant.name)}
                         on:click={() => openPrivateChat(participant.name)}
                     >
-                        <span class="user-name-display" style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
+                        <span class="user-name-display" class:paused={participant.paused} style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
                         {#if participant.is_bot}
                             <span class="user-item-filler"></span>
                             {#if userTokenStats[participant.name]}
@@ -1184,7 +1185,7 @@
                         on:contextmenu={(e) => handleUserRightClick(e, participant.name)}
                         on:click={() => openPrivateChat(participant.name)}
                     >
-                        <span class="user-name-display" style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
+                        <span class="user-name-display" class:paused={participant.paused} style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
                         {#if participant.is_bot}
                             <span class="user-item-filler"></span>
                             {#if userTokenStats[participant.name]}

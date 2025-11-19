@@ -67,7 +67,7 @@ async def iocall(io, argv):
     # Unpause the user by setting the flag on their context
     target_io.paused = False
 
-    # Broadcast the state change to the network
+    # Broadcast the state change to network peers
     if io.os.port:
         await io.os.port.broadcast_to_peers({
             'type': 'user_update',
@@ -76,6 +76,10 @@ async def iocall(io, argv):
             'host': io.os.hostname,
             'paused': False
         })
+
+    # Broadcast the state change to local clients
+    if io.os.chat:
+        await io.os.chat._broadcast_room_state_update()
 
     confirmation_message = f":: user '{target_user}' has been unpaused at {current_time}."
     await io.print(confirmation_message)
