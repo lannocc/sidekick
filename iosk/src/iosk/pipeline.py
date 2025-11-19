@@ -26,17 +26,17 @@ class CommandPipelineExecutor:
     def __init__(self, iosk_kernel: 'IOSK'):
         self.os = iosk_kernel # Reference to the IOSK kernel instance
 
-    async def execute_pipeline(self, io: 'Context', raw_command_line: str, parser: 'CommandLineParser') -> bool:
+    async def execute_pipeline(self, io: 'Context', command_to_execute: str, original_line_for_history: str, parser: 'CommandLineParser') -> bool:
         """
         Interprets arguments, parses for pipes/redirection, and invokes commands.
         This is the main entry point for executing a command line.
         """
-        # Step 1: Alias resolution
-        first_space_idx = raw_command_line.find(' ')
-        cmd_candidate = raw_command_line[:first_space_idx] if first_space_idx != -1 else raw_command_line
-        cmd_rest_of_line = raw_command_line[first_space_idx+1:] if first_space_idx != -1 else ''
+        # Step 1: Alias resolution is performed on the executable part of the command.
+        first_space_idx = command_to_execute.find(' ')
+        cmd_candidate = command_to_execute[:first_space_idx] if first_space_idx != -1 else command_to_execute
+        cmd_rest_of_line = command_to_execute[first_space_idx+1:] if first_space_idx != -1 else ''
 
-        alias_resolved_args = raw_command_line
+        alias_resolved_args = command_to_execute
         if cmd_candidate in io.aliases:
             alias_value = io.aliases[cmd_candidate]
             alias_resolved_args = f"{alias_value} {cmd_rest_of_line}".strip()
@@ -126,7 +126,7 @@ class CommandPipelineExecutor:
             prompt_char = '$'
         prompt_str = f'[{io.user} {io.pwd} {io.prompt_number}] {prompt_char} '
 
-        command_part = f"{prompt_str}{raw_command_line}\n"
+        command_part = f"{prompt_str}{original_line_for_history}\n"
         output_part = ""
 
         if is_capturing_output:
@@ -136,8 +136,9 @@ class CommandPipelineExecutor:
                 await io.output(captured_text)
                 output_part = captured_text
 
-        # Create the single, consolidated history entry if the command was not empty.
-        if raw_command_line.strip():
+        # Create the single, consolidated history entry if the command was not empty,
+        # is part of the main interactive session, and not in a special stage.
+        if original_line_for_history.strip() and io.base and io.stage == io.STAGE_NORMAL:
             full_history_entry = command_part + output_part
             # Ensure there is exactly one trailing newline for a clean history log.
             io.add_history_entry(full_history_entry.rstrip('\n') + '\n')

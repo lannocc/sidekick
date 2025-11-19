@@ -546,33 +546,34 @@ class IOSK:
                             continue
 
                         is_command = False
-                        command_line = ''
+                        command_to_run = ''
+                        # The original line as typed by the user, for history purposes.
+                        original_command_line = line
 
                         if line.startswith('$ '):
                             is_command = True
-                            command_line = line[2:]
+                            command_to_run = line[2:]
                         elif not is_room_active:
                             # Not in a room, so treat as a command.
                             is_command = True
-                            command_line = line
+                            command_to_run = line
 
                         if is_command:
                             # Check for built-in exit commands before executing.
                             # This is now the sole place `exit` is handled.
-                            first_word = command_line.strip().split(' ', 1)[0]
+                            first_word = command_to_run.strip().split(' ', 1)[0]
                             if first_word in ('exit', 'logout'):
                                 await self.logout(io)
                                 return 'logout' # Return reason for exit
 
-                            # --- History Proposal Implementation ---
-                            # The CommandPipelineExecutor is now responsible for creating
-                            # the history entry, as it can capture command output.
-                            # This block has been removed.
-                            # --- End Implementation ---
+                            # The `history` command uses io.history. We must store the original line.
+                            if command_to_run:
+                                io.history.append(original_command_line)
 
-                            if command_line:
-                                io.history.append(command_line)
-                            await self.call(io, command_line)
+                            # The `call` function handles adding the command and output
+                            # to the AI's session_history. We pass it the command to execute
+                            # and the original line for accurate logging.
+                            await self.call(io, command_to_run, original_command_line)
                         else:  # Is a chat message because we are in a room and not a command
                             if self.chat:
                                 await self.chat.send(io.user, line)
@@ -760,10 +761,13 @@ class IOSK:
     ### COMMAND
     ###
 
-    async def call(self, io:Context, args:str):
+    async def call(self, io:Context, command_to_execute:str, original_line_for_history:str=None):
         """Interpret arguments, parse for pipes/redirection, and invoke commands."""
+        # If original_line_for_history is not provided, it's a non-interactive call.
+        # Use the command itself for the history line; it will be filtered by `io.base` anyway.
+        history_line = original_line_for_history if original_line_for_history is not None else command_to_execute
         # Delegate the entire pipeline execution to the CommandPipelineExecutor
-        return await self.pipeline_executor.execute_pipeline(io, args, self.parser)
+        return await self.pipeline_executor.execute_pipeline(io, command_to_execute, history_line, self.parser)
 
     async def execute_transient_command(self, base_io: Context, command_str: str, pwd: str) -> str:
         """
@@ -789,7 +793,7 @@ class IOSK:
         except Exception as e:
             # Capture exceptions during command parsing/execution as well
             traceback.print_exc(file=output_capture)
-        
+
         return output_capture.getvalue()
 
     async def exec(self, io:Context, path:str, argv:list=None):

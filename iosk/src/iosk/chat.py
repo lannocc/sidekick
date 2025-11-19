@@ -770,7 +770,7 @@ class Engagement:
 
                 # Construct and run the patch command. Its output will go directly to the user's console.
                 patch_command = f"patch {target_file} {virtual_path}"
-                await self.io.os.call(self.io, patch_command)
+                await self.io.os.call(self.io, patch_command, patch_command)
             else:
                 # Could not find a target file, fall back to just saving and notifying locally.
                 replacement_message = f':: auto-saved diff block to {virtual_path} (could not determine target file to patch)'
