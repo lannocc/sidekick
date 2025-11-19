@@ -410,6 +410,12 @@ class IOSK:
         io.login_time = datetime.now()
         io.banks = { } # A user's base context gets its own banks.
         io.history = [] # A user's base context gets its own history.
+        # --- BEGIN FIX ---
+        # A new user's base context must have its own session history to prevent
+        # inheriting and sharing history with the system context or other users.
+        io.session_history = []
+        io.prompt_number = 1
+        # --- END FIX ---
         io.log = Capture.log(self, f'{self.USER_LOG}/{user}', True)
         io.dev = device
         io.user = user
@@ -659,6 +665,12 @@ class IOSK:
         io.login_time = datetime.now()
         io.banks = {}
         io.history = [] # A network user's base context gets its own history.
+        # --- BEGIN FIX ---
+        # A new network user's base context must also have its own session history
+        # to ensure isolation from other users.
+        io.session_history = []
+        io.prompt_number = 1
+        # --- END FIX ---
         io.log = Capture.log(self, f'{self.USER_LOG}/{username}', True)
         io.dev = device_path
         io.user = username
