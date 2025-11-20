@@ -3,6 +3,7 @@
 # @%@~LICENSE~@%@
 
 from .io import print_flush as print
+from . import util
 
 import tiktoken
 #from google.api_core.exceptions import ResourceExhausted
@@ -611,12 +612,10 @@ class Engagement:
 
 
                 if banking:
-                    banking = '' \
-                        + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
-                        + 'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS ' \
-                        + 'REMEMBER:\n' \
-                        + banking \
-                        + '\n=== END   CORE RULES/MEMORY ===\n'
+                    banking = (util.AI_MEM_HEADER
+                               + util.AI_MEM_PROMPT
+                               + banking
+                               + util.AI_MEM_FOOTER)
 
                 # Determine the correct prompt character for the AI's context
                 # This mirrors the logic in kernel.interactive
@@ -625,12 +624,12 @@ class Engagement:
                 else:
                     prompt_char = '$'
 
-                prompt_text_for_trip = pre + banking \
-                   + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
-                   + prompt \
-                   + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
-                   + '\n' + post \
-                   + f'\n[{self.io.user} #{self.io.prompt_number} {self.io.pwd}] {prompt_char} '
+                prompt_text_for_trip = (pre + banking
+                   + util.AI_HISTORY_HEADER
+                   + prompt
+                   + util.AI_HISTORY_FOOTER
+                   + '\n' + post
+                   + f'\n[{self.io.user} #{self.io.prompt_number} {self.io.pwd}] {prompt_char} ')
 
                 # --- BEGIN FIX ---
                 # This entire block of code was for a redundant and incorrect telemetry

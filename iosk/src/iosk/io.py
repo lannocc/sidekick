@@ -6,6 +6,7 @@ from os import makedirs
 from os.path import join, isdir, exists
 from io import StringIO
 import sys
+from . import util
 
 try:
     import tiktoken
@@ -190,10 +191,10 @@ class Context:
         banking_content = ""
         if raw_banking_content:
             banking_content = (
-                '\n=== CORE RULES/MEMORY BEGIN ===\n'
-                'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS REMEMBER:\n'
-                f'{raw_banking_content}'
-                '\n=== END   CORE RULES/MEMORY ===\n'
+                util.AI_MEM_HEADER +
+                util.AI_MEM_PROMPT +
+                f'{raw_banking_content}' +
+                util.AI_MEM_FOOTER
             )
 
         preamble_content = self.preamble_cache or ""

@@ -7,6 +7,7 @@ from .parser import CommandLineParser
 from .pipeline import CommandPipelineExecutor
 from .chat import AIMessenger
 from .port import PortManager
+from . import util
 
 from binaryornot.check import is_binary
 import tiktoken
@@ -1316,10 +1317,10 @@ class IOSK:
         banking_content = ""
         if raw_banking_content:
             banking_content = (
-                '\n=== CORE RULES/MEMORY BEGIN ===\n'
-                'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS REMEMBER:\n'
-                f'{raw_banking_content}'
-                '\n=== END   CORE RULES/MEMORY ===\n'
+                util.AI_MEM_HEADER +
+                util.AI_MEM_PROMPT +
+                f'{raw_banking_content}' +
+                util.AI_MEM_FOOTER
             )
 
         stats['banked_bytes'] = len(banking_content.encode('utf-8'))
