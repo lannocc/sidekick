@@ -495,15 +495,11 @@ class PortManager:
 
         subscribers = self.context_subscriptions.get(target_user_addr, set())
         for ws in list(subscribers):
-            if not ws.closed:
-                conn_meta = self.active_connections.get(ws)
-                if conn_meta and conn_meta.username:
-                    await self.send_payload_to_client(conn_meta.username, payload)
-                else:
-                    # This client is no longer properly registered; remove subscription.
-                    subscribers.remove(ws)
+            conn_meta = self.active_connections.get(ws)
+            if conn_meta and conn_meta.username:
+                await self.send_payload_to_client(conn_meta.username, payload)
             else:
-                # Clean up dead connection
+                # This client is no longer properly registered; remove subscription.
                 subscribers.remove(ws)
 
     # --------------------------------------------------------------------------
