@@ -18,7 +18,8 @@ COLOR_MAP = {
     'bright_cyan': '\033[96m', 'bright_white': '\033[97m',
 }
 REVERSE_COLOR_MAP = {v: k for k, v in COLOR_MAP.items()}
-RESET_CODE = '\033[0m'
+ANSI_RESET = '\033[0m'
+ANSI_BOLD = '\033[1m'
 
 # AI Prompt Formatting Constants
 # As per the refactoring proposal, these constants centralize the markers

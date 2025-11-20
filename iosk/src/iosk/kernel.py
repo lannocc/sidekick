@@ -34,9 +34,6 @@ import re
 class IOSK:
     BOOT = 0 # current boot number
 
-    ANSI_RESET = '\033[0m'
-    ANSI_BOLD = '\033[1m'
-
     CONSOLE_DEV = '/dev/console'
     BOOT_COUNT = '/var/cache/boot'
     INIT_SCRIPT = '/sbin/init'

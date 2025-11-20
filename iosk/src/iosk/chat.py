@@ -209,9 +209,9 @@ class AIMessenger:
                             if not uio.session.bot and uio.session.user_colors:
                                 sender_color = uio.session.user_colors.get(remote_from_addr, '')
                                 if sender_color:
-                                    reset = self.os.ANSI_RESET
-                                    bold = self.os.ANSI_BOLD
-                                    me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", self.os.BRIGHT_WHITE)
+                                    reset = util.ANSI_RESET
+                                    bold = util.ANSI_BOLD
+                                    me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", util.COLOR_MAP['bright_white'])
                                     colored_sender = f'{bold}{sender_color}{remote_from_addr}{reset}'
                                     bold_me = f'{bold}{me_color}me{reset}'
                                     colored_msg = f'{sender_color}{actual_msg}{reset}'
@@ -230,9 +230,9 @@ class AIMessenger:
                     # Prepare a potentially colored version for display.
                     display_msg = history_msg
                     if not sender_io.session.bot and sender_io.session.user_colors:
-                        reset = self.os.ANSI_RESET
-                        bold = self.os.ANSI_BOLD
-                        me_color = sender_io.session.user_colors.get(f"{from_user}.{self.os.hostname}", self.os.BRIGHT_WHITE)
+                        reset = util.ANSI_RESET
+                        bold = util.ANSI_BOLD
+                        me_color = sender_io.session.user_colors.get(f"{from_user}.{self.os.hostname}", util.COLOR_MAP['bright_white'])
                         bold_me = f'{bold}{me_color}me{reset}'
                         colored_recipients = []
                         for r_addr in recipients:
@@ -268,8 +268,8 @@ class AIMessenger:
                     if not uio.session.bot and uio.session.user_colors:
                         color = uio.session.user_colors.get(remote_from_addr, '')
                         if color:
-                            reset = self.os.ANSI_RESET
-                            bold = self.os.ANSI_BOLD
+                            reset = util.ANSI_RESET
+                            bold = util.ANSI_BOLD
                             colored_sender = f'{bold}{color}{remote_from_addr}{reset}'
                             colored_msg = f'{color}{msg}{reset}'
                             display_msg = f'\n[{colored_sender} #{prompt_num} {now}] << {colored_msg}'
@@ -444,8 +444,8 @@ class AIMessenger:
                         if not uio.session.bot and uio.session.user_colors:
                             color = uio.session.user_colors.get(from_addr, '')
                             if color:
-                                reset = self.os.ANSI_RESET
-                                bold = self.os.ANSI_BOLD
+                                reset = util.ANSI_RESET
+                                bold = util.ANSI_BOLD
                                 colored_sender = f'{bold}{color}{from_addr}{reset}'
                                 colored_content = f'{color}{content}{reset}'
                                 display_msg = f'\n[{colored_sender} #{prompt_num} {now}] << {colored_content}'
@@ -470,9 +470,9 @@ class AIMessenger:
                     if not uio.session.bot and uio.session.user_colors:
                         sender_color = uio.session.user_colors.get(from_addr, '')
                         if sender_color:
-                            reset = self.os.ANSI_RESET
-                            bold = self.os.ANSI_BOLD
-                            me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", self.os.BRIGHT_WHITE)
+                            reset = util.ANSI_RESET
+                            bold = util.ANSI_BOLD
+                            me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", util.COLOR_MAP['bright_white'])
                             colored_sender = f'{bold}{sender_color}{from_addr}{reset}'
                             bold_me = f'{bold}{me_color}me{reset}'
                             colored_content = f'{sender_color}{content}{reset}'

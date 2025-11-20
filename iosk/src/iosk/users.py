@@ -3,6 +3,7 @@
 # @%@~LICENSE~@%@
 
 from .io import Context, Capture, UserSessionState
+from . import util
 
 import asyncio
 from datetime import datetime
@@ -13,14 +14,13 @@ from os.path import exists
 
 class UserManager:
     """Manages the user lifecycle for the IOSK kernel, including login, logout, and interactive sessions."""
-    BRIGHT_WHITE = '\033[97m'
     USER_COLORS = [
-        '\033[96m',  # Bright Cyan
-        '\033[92m',  # Bright Green
-        '\033[93m',  # Bright Yellow
-        '\033[94m',  # Bright Blue
-        '\033[95m',  # Bright Magenta
-        '\033[91m',  # Bright Red
+        util.COLOR_MAP['bright_cyan'],
+        util.COLOR_MAP['bright_green'],
+        util.COLOR_MAP['bright_yellow'],
+        util.COLOR_MAP['bright_blue'],
+        util.COLOR_MAP['bright_magenta'],
+        util.COLOR_MAP['bright_red'],
     ]
 
     def __init__(self, kernel):
@@ -168,7 +168,7 @@ class UserManager:
         if not io.session.bot:
             # This user is interactive, set up their color map with user.host keys.
             # 1a. Assign self-color (white)
-            io.session.user_colors[user_addr] = self.BRIGHT_WHITE
+            io.session.user_colors[user_addr] = util.COLOR_MAP['bright_white']
 
             # 1b. Populate this new user's map with all other known users.
             all_other_users = list(self.os.network_users.keys())
@@ -402,7 +402,7 @@ class UserManager:
         if not io.session.bot:
             # This user is interactive, set up their color map with user.host keys.
             # 1a. Assign self-color (white)
-            io.session.user_colors[user_addr] = self.BRIGHT_WHITE
+            io.session.user_colors[user_addr] = util.COLOR_MAP['bright_white']
 
             # 1b. Populate this new user's map with all other known users.
             all_other_users = list(self.os.network_users.keys())
