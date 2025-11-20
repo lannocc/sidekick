@@ -245,8 +245,8 @@
         <div class="tabs">
             <button class="tab-button" class:active={activeTab === 'overview'} on:click={() => activeTab = 'overview'}>Overview</button>
             <button class="tab-button" class:active={activeTab === 'environment'} on:click={() => activeTab = 'environment'}>Environment</button>
-            <button class="tab-button" class:active={activeTab === 'aiContext'} on:click={() => activeTab = 'aiContext'}>Session</button>
-            <button class="tab-button" class:active={activeTab === 'history'} on:click={() => activeTab = 'history'}>Command History</button>
+            <button class="tab-button" class:active={activeTab === 'history'} on:click={() => activeTab = 'history'}>Commands</button>
+            <button class="tab-button" class:active={activeTab === 'aiContext'} on:click={() => activeTab = 'aiContext'}>Prompt</button>
             <button class="tab-button" class:active={activeTab === 'telemetry'} on:click={() => activeTab = 'telemetry'}>Telemetry</button>
         </div>
 
