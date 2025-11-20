@@ -10,6 +10,7 @@ import LocalTerminal from './LocalTerminal.svelte';
 import LocalFileExplorer from './LocalFileExplorer.svelte';
 import Ask from './Ask.svelte';
 import IoskWatch from './IoskWatch.svelte';
+import IoskContextInspector from './IoskContextInspector.svelte';
 import { desktopSettings, windowSettings } from './desktopStore.js';
 
 let windowGroupIdCounter = 0;
@@ -33,6 +34,7 @@ const componentMap = {
     'LocalFileExplorer': LocalFileExplorer,
     'Ask': Ask,
     'IoskWatch': IoskWatch,
+    'IoskContextInspector': IoskContextInspector,
 };
 
 function createWindowManager() {
@@ -550,5 +552,39 @@ export function newIoskWatch(consoleTabId, pwd) {
         initialPwd: pwd,
         width: 700,
         height: 400
+    });
+}
+
+export function newIoskContextInspector(consoleTabId, targetUser) {
+    const allWindows = get(windows);
+    
+    // Find if an inspector for this user from this console already exists
+    const existingInspectorTab = allWindows.flatMap(g => g.tabs).find(t =>
+        t.componentName === 'IoskContextInspector' && t.consoleId === consoleTabId && t.targetUser === targetUser
+    );
+
+    if (existingInspectorTab) {
+        const group = allWindows.find(g => g.tabs.some(t => t.id === existingInspectorTab.id));
+        if (group.minimized) windows.toggleMinimize(group.id);
+        else windows.focusWindow(group.id);
+        windows.setActiveTab(group.id, existingInspectorTab.id);
+        return;
+    }
+    
+    // If not, create a new one, but first check if console is connected
+    const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
+    if (!consoleTab || !consoleTab.isConsoleConnected) {
+        alert("Cannot inspect context. The selected console is not connected.");
+        return;
+    }
+
+    const title = `Context - ${targetUser}`;
+    windows.addWindow(IoskContextInspector, {
+        title,
+        consoleId: consoleTabId,
+        targetUser: targetUser,
+        consoleConnection: consoleTab.consoleConnection, // For dash restore
+        width: 600,
+        height: 700,
     });
 }
