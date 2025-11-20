@@ -555,12 +555,13 @@ export function newIoskWatch(consoleTabId, pwd) {
     });
 }
 
-export function newIoskContextInspector(consoleTabId, targetUser) {
+
+export function newIoskContextInspector(consoleTabId, targetUser, consoleWs) {
     const allWindows = get(windows);
-    
+
     // Find if an inspector for this user from this console already exists
     const existingInspectorTab = allWindows.flatMap(g => g.tabs).find(t =>
-        t.componentName === 'IoskContextInspector' && t.consoleId === consoleTabId && t.targetUser === targetUser
+        t.componentName === 'IoskContextInspector' && !t.isDetached && t.consoleId === consoleTabId && t.targetUser === targetUser
     );
 
     if (existingInspectorTab) {
@@ -570,7 +571,7 @@ export function newIoskContextInspector(consoleTabId, targetUser) {
         windows.setActiveTab(group.id, existingInspectorTab.id);
         return;
     }
-    
+
     // If not, create a new one, but first check if console is connected
     const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
     if (!consoleTab || !consoleTab.isConsoleConnected) {
@@ -583,8 +584,10 @@ export function newIoskContextInspector(consoleTabId, targetUser) {
         title,
         consoleId: consoleTabId,
         targetUser: targetUser,
+        consoleWs: consoleWs, // Pass the WebSocket instance
         consoleConnection: consoleTab.consoleConnection, // For dash restore
         width: 600,
         height: 700,
     });
 }
+

@@ -370,7 +370,7 @@
 
     function inspectUserContext(targetUser) {
       // Open the new window component
-      newIoskContextInspector(id, targetUser);
+      newIoskContextInspector(id, targetUser, ws);
 
       // Subscribe to updates
       if (ws && ws.readyState === WebSocket.OPEN) {
