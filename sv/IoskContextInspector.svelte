@@ -775,7 +775,7 @@
         color: var(--ansi-red);
     }
     .prompt-select-checkbox {
-        margin-right: 8px;
+        margin-left: auto; /* Push checkbox to the far right */
         cursor: pointer;
         width: 16px;
         height: 16px;
@@ -995,8 +995,8 @@
                     </h2>
                     {#if contextData.aiContext?.banks?.length > 0}
                         <div class="expand-collapse-controls">
-                            <button on:click={() => toggleAllBanks(true)}>Expand All</button>
                             <button on:click={() => toggleAllBanks(false)}>Collapse All</button>
+                            <button on:click={() => toggleAllBanks(true)}>Expand All</button>
                         </div>
                     {/if}
                 </div>
@@ -1027,27 +1027,27 @@
                     </h2>
                     {#if contextData.aiContext.sessionHistory.length > 0}
                         <div class="expand-collapse-controls">
-                            <button on:click={() => toggleAllPrompts(true)}>Expand All</button>
                             <button on:click={() => toggleAllPrompts(false)}>Collapse All</button>
+                            <button on:click={() => toggleAllPrompts(true)}>Expand All</button>
                         </div>
                     {/if}
                 </div>
 
                 {#if contextData.aiContext.sessionHistory.length > 0}
                     <div class="prompts-action-bar">
-                        <div class="selection-controls">
-                            <button on:click={selectAllPrompts}>Select All</button>
-                            <button on:click={deselectAllPrompts}>Deselect All</button>
-                        </div>
                         <div class="action-buttons">
+                            <button class="clear-button" on:click={clearHistory}>Clear All</button>
                             <button
                                 class="forget-button"
                                 disabled={selectedPrompts.size === 0}
                                 on:click={forgetSelectedPrompts}
                             >
-                                Forget Selected ({selectedPrompts.size})
+                                Forget ({selectedPrompts.size})
                             </button>
-                            <button class="clear-button" on:click={clearHistory}>Clear History</button>
+                        </div>
+                        <div class="selection-controls">
+                            <button on:click={deselectAllPrompts}>Deselect All</button>
+                            <button on:click={selectAllPrompts}>Select All</button>
                         </div>
                     </div>
                 {/if}
@@ -1063,6 +1063,10 @@
                                 <button class="prompt-delete-button" title="Forget prompt #{entry.number}" on:click|stopPropagation={() => forgetSinglePrompt(entry.number)}>
                                     &times;
                                 </button>
+                                <span class="prompt-number">Prompt #{entry.number}</span>
+                                {#if !promptExpandedState[entry.number]}
+                                    <span class="prompt-preview">{@html parseAnsi(getFirstLine(analysis.content))}</span>
+                                {/if}
                                 <input
                                     type="checkbox"
                                     class="prompt-select-checkbox"
@@ -1071,10 +1075,6 @@
                                     on:click|stopPropagation
                                     on:change={() => togglePromptSelection(entry.number)}
                                 />
-                                <span class="prompt-number">Prompt #{entry.number}</span>
-                                {#if !promptExpandedState[entry.number]}
-                                    <span class="prompt-preview">{@html parseAnsi(getFirstLine(analysis.content))}</span>
-                                {/if}
                             </div>
                             {#if promptExpandedState[entry.number]}
                                 <div class="prompt-content">
