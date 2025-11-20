@@ -78,7 +78,7 @@ async def iocall(io, argv):
 
     # Send the content to the chat.
     # The chat.send method handles routing for both broadcast and direct messages.
-    await io.os.chat.send(io.user, final_message)
+    await io.os.chat.send(io.session.user, final_message)
 
     # For broadcast messages, print a local confirmation.
     # For direct messages, the chat.send method prints its own confirmation to the sender.
@@ -86,4 +86,3 @@ async def iocall(io, argv):
         await io.print(":: content sent to chat.")
 
     return True
-
