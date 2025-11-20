@@ -358,9 +358,20 @@
                 {@const name = ['Overview', 'Environment', 'Commands', 'Session', 'Telemetry', 'JSON'][i]}
                 <div class="tab-button-container">
                     <button class="tab-button" class:active={activeTab === tabName} on:click={() => activeTab = tabName}>
-                        {name}
+                        {name}{#if detachedTabs[tabName]} ⇲{/if}
                     </button>
-                    <button class="pop-out-button" title="Pop out to new window" on:click|stopPropagation={() => popOutTab(tabName)}>
+                    <button
+                        class="pop-out-button"
+                        title={detachedTabs[tabName] ? 'Focus popped-out window' : 'Pop out to new window'}
+                        on:click|stopPropagation={() => {
+                            const info = detachedTabs[tabName];
+                            if (info) {
+                                windows.setActiveTab(info.groupId, info.tabId);
+                            } else {
+                                popOutTab(tabName);
+                            }
+                        }}
+                    >
                         ⇲
                     </button>
                 </div>
