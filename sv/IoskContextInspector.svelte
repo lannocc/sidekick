@@ -30,6 +30,9 @@
         telemetry: null,
         json: null,
     };
+    // --- State for Token Telemetry ---
+    let tokenTooltip = { visible: false, x: 0, y: 0 };
+
 
     const unsubscribeStore = contextUpdates.subscribe(update => {
         // FIX: Reverted to the simpler, working logic from the .bak file.
@@ -91,6 +94,56 @@
             detachedTabs = detachedTabs;
         }
     }
+
+    // --- Helper functions for telemetry display ---
+    function abbreviateNumber(num) {
+        if (num == null) return '';
+        if (num < 1000) return num.toString();
+        const suffixes = ["", "k", "m", "b", "t"];
+        const i = Math.floor(Math.log10(num) / 3);
+        let short = num / Math.pow(1000, i);
+        let precision = 2;
+        if (short >= 100) {
+            precision = 0;
+        } else if (short >= 10) {
+            precision = 1;
+        }
+        // Using toFixed and then parseFloat to remove trailing zeros
+        return parseFloat(short.toFixed(precision)) + suffixes[i];
+    }
+
+    // --- New event handlers for header controls ---
+    function showTokenTooltip(event) {
+        if (!contextData || !contextData.tokenStats) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        tokenTooltip = {
+            visible: true,
+            x: rect.right,
+            y: rect.bottom + 5
+        };
+    }
+
+    function hideTokenTooltip() {
+        tokenTooltip = { ...tokenTooltip, visible: false };
+    }
+
+    function handleTokenClick() {
+        if (isDetached) return;
+        const info = detachedTabs['telemetry'];
+        if (info) {
+            windows.setActiveTab(info.groupId, info.tabId);
+        } else {
+            activeTab = 'telemetry';
+        }
+    }
+
+    function togglePause() {
+        if (!contextData || !contextData.isBot || !consoleWs || consoleWs.readyState !== WebSocket.OPEN) return;
+        const command = contextData.isPaused ? `unpause ${targetUser}` : `pause ${targetUser}`;
+        const commandToRun = `$ ${command}`;
+        consoleWs.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
+    }
+
 
     // --- Helper Functions (copied from .bak file) ---
     const ansiCodeToCssVar = {
@@ -180,6 +233,9 @@
     .header {
         padding: 10px;
         flex-shrink: 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }
     h1 {
         font-size: 1.2em;
@@ -187,6 +243,7 @@
         color: var(--title-bar-text);
         border-bottom: 1px solid var(--border-color);
         padding-bottom: 5px;
+        flex-grow: 1; /* Allow title to take up space */
     }
     .tabs {
         display: flex;
@@ -299,6 +356,41 @@
         text-align: right;
     }
 
+    /* New styles for header controls */
+    .header-controls {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-left: 15px; /* space between title and controls */
+    }
+    .header-controls .token-count-wrapper {
+        position: relative;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        border: 1px solid var(--border-color);
+        padding: 4px 8px;
+        border-radius: 4px;
+        background-color: var(--title-bar-bg);
+    }
+    .header-controls .token-count-wrapper:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .header-controls .token-count,
+    .header-controls .last-trip-token-count {
+        font-weight: bold;
+        font-size: 1.2em;
+    }
+    .header-controls .token-count { color: var(--ansi-yellow); }
+    .header-controls .last-trip-token-count { color: var(--ansi-cyan); }
+    .header-controls .pause-resume-button {
+        background: none; border: none; cursor: pointer; padding: 0 4px;
+        font-size: 1.8em; /* Bigger as requested */
+        line-height: 1; opacity: 0.6; transition: opacity 0.2s;
+    }
+    .header-controls .pause-resume-button:hover { opacity: 1; }
+
     /* New styles for pop-out functionality */
     .tab-button-container {
         display: flex;
@@ -340,6 +432,36 @@
     .detached-placeholder button:hover {
         background-color: var(--taskbar-button-hover-bg);
     }
+
+    /* Token Tooltip styles */
+    .token-tooltip {
+        position: fixed;
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        padding: 8px;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        z-index: 210;
+        width: max-content;
+        font-size: 12px;
+        color: var(--console-text);
+        text-align: left;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+    .tooltip-grid { display: grid; grid-template-columns: auto max-content max-content; gap: 4px 12px; align-items: center; }
+    .tooltip-grid span:nth-child(3n-2) { /* Label */
+        font-weight: bold;
+        text-align: right;
+        color: var(--title-bar-text);
+    }
+    .tooltip-grid span:nth-child(3n-1) { /* Bytes */
+        text-align: right;
+        color: var(--ansi-bright-black);
+    }
+    .tooltip-grid span:nth-child(3n) { /* Tokens */
+        text-align: right;
+    }
 </style>
 
 <div class="inspector-container">
@@ -350,6 +472,34 @@
                 <h1>Context for {contextData.user}</h1>
             {:else}
                 <h1>Context for {targetUser}</h1>
+            {/if}
+
+            {#if contextData && contextData.isBot}
+                {@const stats = contextData.tokenStats}
+                <div class="header-controls">
+                    {#if stats}
+                        <div class="token-count-wrapper"
+                             on:mouseenter={showTokenTooltip}
+                             on:mouseleave={hideTokenTooltip}
+                             on:click={handleTokenClick}
+                             title="Click to view Telemetry">
+                            <span class="last-trip-token-count" title="Last trip input tokens">
+                                {abbreviateNumber(stats.last_trip_input_tokens)}
+                            </span>
+                            <span style="color: var(--ansi-bright-black); margin: 0 4px;">/</span>
+                            <span class="token-count" title="Cumulative input tokens">
+                                {abbreviateNumber(stats.cumulative_input_tokens)}
+                            </span>
+                        </div>
+                    {/if}
+                    <button
+                        class="pause-resume-button"
+                        on:click|stopPropagation={togglePause}
+                        title={contextData.isPaused ? `Resume ${targetUser}` : `Pause ${targetUser}`}
+                    >
+                        {contextData.isPaused ? '▶️' : '⏸️'}
+                    </button>
+                </div>
             {/if}
         </div>
 
@@ -509,5 +659,23 @@
                 <pre class="content-box">{JSON.stringify(contextData, null, 2)}</pre>
             </div>
         {/if}
+    {/if}
+
+    {#if tokenTooltip.visible && contextData && contextData.tokenStats}
+        {@const stats = contextData.tokenStats}
+        <div
+            class="token-tooltip"
+            style="top: {tokenTooltip.y}px; left: {tokenTooltip.x}px; transform: translateX(-100%);"
+        >
+            <div class="tooltip-grid">
+                <span>Cumulative Input:</span><span>({formatBytes(stats.cumulative_input_bytes)})</span><span>{stats.cumulative_input_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Cumulative Output:</span><span>({formatBytes(stats.cumulative_output_bytes)})</span><span>{stats.cumulative_output_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Last Trip Input:</span><span>({formatBytes(stats.last_trip_input_bytes)})</span><span>{stats.last_trip_input_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Last Trip Output:</span><span>({formatBytes(stats.last_trip_output_bytes)})</span><span>{stats.last_trip_output_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Banked Memory:</span><span>({formatBytes(stats.banked_bytes)})</span><span>{stats.banked_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Session History:</span><span>({formatBytes(stats.history_bytes)})</span><span>{stats.history_tokens.toLocaleString('en-US')} tokens</span>
+                <span>Caching Context:</span><span>({formatBytes(stats.caching_context_bytes)})</span><span>{stats.caching_context_tokens.toLocaleString('en-US')} tokens</span>
+            </div>
+        </div>
     {/if}
 </div>
