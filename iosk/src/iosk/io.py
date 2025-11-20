@@ -38,6 +38,44 @@ class HistoryEntry:
                 pass
 
 
+class UserSessionState:
+    """
+    Manages all shared, long-lived data for a user's session.
+    This object is shared by reference across all forked Contexts for a user.
+    """
+    def __init__(self):
+        # User Identity
+        self.user = None
+        self.su = False # superuser privileges?
+        self.bot = False # True if this is a bot user
+        self.paused = False # True if the bot's engagement is paused
+        self.login_time = None
+
+        # AI Context
+        self.session_history = []
+        self.prompt_number = 1
+        self.rolling_config = {'enabled': False, 'mode': None, 'limit': 0}
+        self.preamble_cache = None
+
+        # User State
+        self.banks = { } # core memory
+        self.history = [] # Command history for the current session
+        self.aliases = {} # Aliases for the current user/session
+
+        # Display/Telemetry
+        self.user_colors = {} # How this user sees other users' colors
+        self.color_idx = 0    # Index for assigning next default color
+        self.token_stats = {
+            'cumulative_input_tokens': 0, 'cumulative_input_bytes': 0,
+            'cumulative_output_tokens': 0, 'cumulative_output_bytes': 0,
+            'last_trip_input_tokens': 0, 'last_trip_input_bytes': 0,
+            'last_trip_output_tokens': 0, 'last_trip_output_bytes': 0,
+            'banked_tokens': 0, 'banked_bytes': 0,
+            'history_tokens': 0, 'history_bytes': 0,
+            'caching_context_tokens': 0, 'caching_context_bytes': 0
+        }
+
+
 class Context:
     CID = 0 # next "chatter" id
     CHATTER = '/var/cache/chatter'
@@ -52,6 +90,7 @@ class Context:
         self.cid = Context.CID
         Context.CID += 1
 
+        # System/Instance State (per-Context)
         self.os = iosk_unix # running system
         self.dev = dev_path # device name path
         self.log = log_file # opened file handle
@@ -60,47 +99,22 @@ class Context:
         chatter = join(self.CHATTER, str(self.os.BOOT), str(self.cid))
         self.chatter = open(self.os.box(chatter), 'w')
 
-        self.user = None
-        self.su = False # superuser privileges?
         self.base = False # True if this is the root Context
-        self.bot = False # True if this is a bot user
-        self.paused = False # True if the bot's engagement is paused
-        self.login_time = None
 
-        # --- History Proposal Implementation ---
-        # self.session = StringIO() # REPLACED
-        self.session_history = []
-        self.prompt_number = 1
-        self.rolling_config = {'enabled': False, 'mode': None, 'limit': 0}
-        # --- End Implementation ---
+        # Session State (shared across Contexts)
+        self.session: UserSessionState = None
 
-        self.banks = { } # core memory
+        # Per-Command State (unique to this Context)
         self.env = {} # environment variables
         self.pwd = None # current working directory, virtual path (e.g., /home/user)
-        self.aliases = {} # Aliases for the current user/session
-        self.history = [] # Command history for the current session
 
-        # Add color tracking
-        self.user_colors = {} # How this user sees other users' colors
-        self.color_idx = 0    # Index for assigning next default color
-
+        # Staging State (transient, per-Context)
         self.stage = self.STAGE_NORMAL
         self.pre = None
         self.post = None
         self.banking = None
-        self.preamble_cache = None
 
-        # Added for token telemetry proposal
-        self.token_stats = {
-            'cumulative_input_tokens': 0, 'cumulative_input_bytes': 0,
-            'cumulative_output_tokens': 0, 'cumulative_output_bytes': 0,
-            'last_trip_input_tokens': 0, 'last_trip_input_bytes': 0,
-            'last_trip_output_tokens': 0, 'last_trip_output_bytes': 0,
-            'banked_tokens': 0, 'banked_bytes': 0,
-            'history_tokens': 0, 'history_bytes': 0,
-            'caching_context_tokens': 0, 'caching_context_bytes': 0
-        }
-
+        # I/O State (transient, per-Context)
         self.stdin = None
         self.stdout = None
 
@@ -115,39 +129,39 @@ class Context:
         if not content:
             return
 
-        entry = HistoryEntry(self.prompt_number, content)
-        self.session_history.append(entry)
-        self.prompt_number += 1
+        entry = HistoryEntry(self.session.prompt_number, content)
+        self.session.session_history.append(entry)
+        self.session.prompt_number += 1
 
         # Incrementally update token stats for efficiency
-        self.token_stats['history_tokens'] += entry.token_count
-        self.token_stats['history_bytes'] += entry.byte_count
+        self.session.token_stats['history_tokens'] += entry.token_count
+        self.session.token_stats['history_bytes'] += entry.byte_count
         # The caching context also grows by the same amount.
-        self.token_stats['caching_context_tokens'] += entry.token_count
-        self.token_stats['caching_context_bytes'] += entry.byte_count
+        self.session.token_stats['caching_context_tokens'] += entry.token_count
+        self.session.token_stats['caching_context_bytes'] += entry.byte_count
 
         self._apply_rolling_cutoff()
 
     def _apply_rolling_cutoff(self):
         """Checks and applies the rolling history cutoff if configured."""
-        if not self.rolling_config.get('enabled'):
+        if not self.session.rolling_config.get('enabled'):
             return
 
-        mode = self.rolling_config.get('mode')
-        limit = self.rolling_config.get('limit', 0)
+        mode = self.session.rolling_config.get('mode')
+        limit = self.session.rolling_config.get('limit', 0)
 
         if not mode or limit <= 0:
             return
 
         # Determine the current total based on the configured mode
         if mode == 'tokens':
-            current_total = sum(e.token_count for e in self.session_history)
+            current_total = sum(e.token_count for e in self.session.session_history)
         elif mode == 'bytes':
-            current_total = sum(e.byte_count for e in self.session_history)
+            current_total = sum(e.byte_count for e in self.session.session_history)
         elif mode == 'lines':
-            current_total = sum(e.line_count for e in self.session_history)
+            current_total = sum(e.line_count for e in self.session.session_history)
         elif mode == 'prompts':
-            current_total = len(self.session_history)
+            current_total = len(self.session.session_history)
         else:
             return  # Invalid mode
 
@@ -156,8 +170,8 @@ class Context:
 
         # Prune oldest entries until the total is within the limit
         removed_count = 0
-        while current_total > limit and self.session_history:
-            entry_to_remove = self.session_history[0]
+        while current_total > limit and self.session.session_history:
+            entry_to_remove = self.session.session_history[0]
             if mode == 'tokens':
                 current_total -= entry_to_remove.token_count
             elif mode == 'bytes':
@@ -167,7 +181,7 @@ class Context:
             elif mode == 'prompts':
                 current_total -= 1
 
-            self.session_history.pop(0)
+            self.session.session_history.pop(0)
             removed_count += 1
 
         if removed_count > 0:
@@ -176,7 +190,7 @@ class Context:
 
     def get_session_string(self) -> str:
         """Concatenates all history entries into a single string for AI context."""
-        return "".join([entry.content for entry in self.session_history])
+        return "".join([entry.content for entry in self.session.session_history])
 
     def recalculate_token_stats(self):
         """
@@ -184,8 +198,8 @@ class Context:
         user's context (preamble, banks, and history).
         """
         raw_banking_content = ""
-        if self.banks:
-            for _, data in self.banks.items():
+        if self.session.banks:
+            for _, data in self.session.banks.items():
                 raw_banking_content += '\n' + data + '\n'
 
         banking_content = ""
@@ -197,31 +211,31 @@ class Context:
                 util.AI_MEM_FOOTER
             )
 
-        preamble_content = self.preamble_cache or ""
+        preamble_content = self.session.preamble_cache or ""
         history_content = self.get_session_string()
         caching_context_content = preamble_content + banking_content + history_content
 
         # Calculate byte counts (always possible)
-        self.token_stats['history_bytes'] = len(history_content.encode('utf-8'))
-        self.token_stats['banked_bytes'] = len(banking_content.encode('utf-8'))
-        self.token_stats['caching_context_bytes'] = len(caching_context_content.encode('utf-8'))
+        self.session.token_stats['history_bytes'] = len(history_content.encode('utf-8'))
+        self.session.token_stats['banked_bytes'] = len(banking_content.encode('utf-8'))
+        self.session.token_stats['caching_context_bytes'] = len(caching_context_content.encode('utf-8'))
 
         # Calculate token counts (if tiktoken is available)
         if tiktoken:
             try:
                 encoding = tiktoken.get_encoding('cl100k_base')
-                self.token_stats['history_tokens'] = len(encoding.encode(history_content))
-                self.token_stats['banked_tokens'] = len(encoding.encode(banking_content))
-                self.token_stats['caching_context_tokens'] = len(encoding.encode(caching_context_content))
+                self.session.token_stats['history_tokens'] = len(encoding.encode(history_content))
+                self.session.token_stats['banked_tokens'] = len(encoding.encode(banking_content))
+                self.session.token_stats['caching_context_tokens'] = len(encoding.encode(caching_context_content))
             except Exception:
                 # On failure, reset token counts to 0
-                self.token_stats['history_tokens'] = 0
-                self.token_stats['banked_tokens'] = 0
-                self.token_stats['caching_context_tokens'] = 0
+                self.session.token_stats['history_tokens'] = 0
+                self.session.token_stats['banked_tokens'] = 0
+                self.session.token_stats['caching_context_tokens'] = 0
         else:
-            self.token_stats['history_tokens'] = 0
-            self.token_stats['banked_tokens'] = 0
-            self.token_stats['caching_context_tokens'] = 0
+            self.session.token_stats['history_tokens'] = 0
+            self.session.token_stats['banked_tokens'] = 0
+            self.session.token_stats['caching_context_tokens'] = 0
 
     # --- End History Proposal Methods ---
 
@@ -229,13 +243,10 @@ class Context:
         child = Context(self.os, self.dev, self.log)
         child.parent = self
 
-        child.user = self.user
-        child.bot = self.bot
-        child.paused = self.paused
-        child.login_time = self.login_time
-        child.preamble_cache = self.preamble_cache
+        # The child shares the exact same session state object as the parent.
+        child.session = self.session
 
-        # Inherit I/O streams from parent by default
+        # Inherit I/O streams from parent by default.
         child.stdin = self.stdin
         child.stdout = self.stdout
 
@@ -244,22 +255,6 @@ class Context:
         child.pwd = self.pwd
         # Use a copy so child modifications don't affect the parent.
         child.env = self.env.copy()
-        # Share the parent's aliases dictionary by reference so the 'alias' command can modify it.
-        child.aliases = self.aliases
-
-        # Share the parent's banks dictionary by reference.
-        child.banks = self.banks
-
-        # --- BEGIN FIX ---
-        # Share the parent's command history by reference so that commands
-        # like 'history' can see the list from the main user session.
-        child.history = self.history
-
-        # Share the new session history state so commands like 'forget' can modify it.
-        child.session_history = self.session_history
-        child.prompt_number = self.prompt_number
-        child.rolling_config = self.rolling_config
-        # --- END FIX ---
 
         return child
 
@@ -292,13 +287,13 @@ class Context:
         await self.output('\n')
 
     async def comment(self, text):
-        if self.base and self.bot:
+        if self.base and self.session.bot:
             # Comments for bots are now added as history entries.
             self.add_history_entry(text + '\n')
 
 
     async def input(self, prompt=None):
-        #if prompt and not self.bot:
+        #if prompt and not self.session.bot:
         #    await self.os.send(self, self.dev, prompt)
 
         data = await self.os.recv(self, self.dev, prompt=prompt)
@@ -312,7 +307,7 @@ class Context:
                 self.log.flush()
 
             # REMOVED: Writing to session buffer is now handled by command execution logic.
-            # if self.base and self.bot:
+            # if self.base and self.session.bot:
             #     if prompt: self.session.write(prompt)
             #     self.session.write(data)
             #     self.session.write('\n')
@@ -382,7 +377,7 @@ class Context:
             sio.seek(0)
             data = sio.read()
             self.banking = None
-            self.banks[key] = data
+            self.session.banks[key] = data
 
         self.stage = self.STAGE_NORMAL
 
@@ -395,7 +390,7 @@ class Context:
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         i = indicator
         if i == 'I':
-            self.log.write(f'=== {now} [{self.os.BOOT}/{self.cid}/{self.prompt_number}] ={i}= ')
+            self.log.write(f'=== {now} [{self.os.BOOT}/{self.cid}/{self.session.prompt_number}] ={i}= ')
         else:
             self.log.write(f'=== {now} [{self.os.BOOT}/{self.cid}] ={i}= ')
 
