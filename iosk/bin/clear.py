@@ -16,31 +16,37 @@ async def iocall(io, argv):
         await io.print(iocall.__doc__)
         return True
 
-    if io.bot:
+    if io.session.bot:
         # --- Bot User Logic: Clear session history and engagement state ---
         
         # 1. Reset the associated Engagement buffers to prevent acting on stale data
-        if io.user in io.os.chat.engagements:
-            engagement = io.os.chat.engagements[io.user]
+        if io.session.user in io.os.chat.engagements:
+            engagement = io.os.chat.engagements[io.session.user]
             engagement.buf = None
             engagement.last_buf = None
             engagement.inbuf = None
             engagement.waiting = False
         
-        # 2. Reconstruct the session history with only the last command
-        if io.history:
-            last_command = io.history[-1]
-            # Recreate the line as it would have been logged in the session
-            new_session_content = f"[{io.user}] >> $ {last_command}\n"
-            
-            # Reset the StringIO object for the session
-            io.session.seek(0)
-            io.session.truncate(0)
-            io.session.write(new_session_content)
-        else:
-            # Fallback for an empty history: just clear the session
-            io.session.seek(0)
-            io.session.truncate(0)
+        # 2. Reconstruct the session history
+        # Get the command that triggered 'clear'
+        last_command = ""
+        if io.session.history: # command history
+            last_command = io.session.history[-1]
+        
+        # Create the single line of history content that will remain
+        new_session_content = f"[{io.session.user}] >> $ {last_command}\n"
+        
+        # 3. Clear the existing AI history list and reset prompt counter
+        io.session.session_history.clear()
+        io.session.prompt_number = 1
+        
+        # 4. Add the new, single entry back into the AI history.
+        # This method also correctly increments the prompt number for the next turn.
+        io.add_history_entry(new_session_content)
+
+        # 5. Perform a full recalculation of token stats to ensure accuracy,
+        # as the history was drastically changed.
+        io.recalculate_token_stats()
             
         await io.print(":: session cleared")
 

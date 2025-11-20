@@ -24,7 +24,7 @@ async def iocall(io, argv):
     bright_black, bright_red, bright_green, bright_yellow,
     bright_blue, bright_magenta, bright_cyan, bright_white
     """
-    if io.bot:
+    if io.session.bot:
         await io.error("!! color: this command is not available for your device.")
         return False
 
@@ -44,7 +44,7 @@ async def iocall(io, argv):
         await io.print(iocall.__doc__)
         return True
 
-    target_user_str = args.user if args.user else io.user
+    target_user_str = args.user if args.user else io.session.user
     new_color_name = args.color
 
     # Resolve target_user_str to a full user.host address
@@ -54,7 +54,7 @@ async def iocall(io, argv):
         target_addr = f"{target_user_str}.{io.os.hostname}"
 
     # Check if the target user is known
-    if target_addr not in io.user_colors:
+    if target_addr not in io.session.user_colors:
         await io.error(f"!! color: user '{target_user_str}' not found or is not a color-enabled user.")
         return False
 
@@ -63,21 +63,22 @@ async def iocall(io, argv):
         if new_color_name not in COLOR_MAP:
             await io.error(f"!! color: invalid color '{new_color_name}'. See `color --help` for available colors.")
             return False
-        
+
         color_code = COLOR_MAP[new_color_name]
-        io.user_colors[target_addr] = color_code
-        display_target = 'Your color' if target_user_str == io.user else f"Color for {target_user_str}"
+        io.session.user_colors[target_addr] = color_code
+        display_target = 'Your color' if target_user_str == io.session.user else f"Color for {target_user_str}"
         await io.print(f":: {display_target} set to {color_code}{new_color_name}{RESET_CODE}")
-        
+
         # Broadcast the color change to network clients
         if io.os.port:
             await io.os.broadcast_color_updates()
-            
+
         return True
     else:
         # View the current color
-        current_code = io.user_colors.get(target_addr, '')
+        current_code = io.session.user_colors.get(target_addr, '')
         current_name = REVERSE_COLOR_MAP.get(current_code, 'none')
-        display_target = 'Your color is' if target_user_str == io.user else f"Color for {target_user_str} is"
+        display_target = 'Your color is' if target_user_str == io.session.user else f"Color for {target_user_str} is"
         await io.print(f":: {display_target} {current_code}{current_name}{RESET_CODE}")
         return True
+

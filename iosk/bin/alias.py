@@ -13,14 +13,12 @@ async def iocall(io, argv):
         await io.print(iocall.__doc__)
         return
 
-    # Initialize io.aliases if it doesn't exist for the current session/context
-    if not hasattr(io, 'aliases'):
-        io.aliases = {}
+    # io.session.aliases is guaranteed to exist for any active session.
 
     if not argv:
         # List aliases
-        if io.aliases:
-            for name, value in io.aliases.items():
+        if io.session.aliases:
+            for name, value in io.session.aliases.items():
                 await io.print(f"{name}='{value}'")
         else:
             await io.print(":: No aliases defined.")
@@ -30,7 +28,7 @@ async def iocall(io, argv):
         if name: # Ensure name is not empty
             # Strip quotes from the value
             value = value.strip("'").strip('"')
-            io.aliases[name] = value
+            io.session.aliases[name] = value
             await io.print(f":: Alias '{name}' defined as '{value}'")
         else:
             await io.error("!! Invalid alias definition. NAME cannot be empty. Use: alias NAME=VALUE")
@@ -38,3 +36,4 @@ async def iocall(io, argv):
         await io.error("!! Invalid usage. Use 'alias --help' for more information or 'alias NAME=VALUE' to define.")
 
     return True
+

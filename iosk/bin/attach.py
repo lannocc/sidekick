@@ -24,7 +24,7 @@ async def iocall(io, argv):
 
     device = argv[0]
     handle_arg = argv[1] if len(argv) > 1 else None
-    
+
     # --- Local Execution ---
 
     if not io.os.chat:
@@ -39,9 +39,10 @@ async def iocall(io, argv):
     new_io = await io.os.chat.join(handle, device_path)
 
     if new_io:
-        await io.os.system.print(f":: {io.user} attached user '{handle}' to device '{device_path}'")
+        await io.os.system.print(f":: {io.session.user} attached user '{handle}' to device '{device_path}'")
         return True
     else:
         # The join call would have already printed an error to the user's io.
-        await io.os.system.print(f":: {io.user} FAILED to attach user '{handle}' to device '{device_path}'")
+        await io.os.system.print(f":: {io.session.user} FAILED to attach user '{handle}' to device '{device_path}'")
         return False
+
