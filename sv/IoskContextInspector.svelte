@@ -27,6 +27,7 @@
         environment: null,
         history: null,
         aiContext: null,
+        prompts: null, // New tab for Session History
         telemetry: null,
         json: null,
     };
@@ -329,8 +330,8 @@
         background-color: var(--window-bg);
         white-space: pre-wrap;
         word-break: break-all;
-        max-height: 400px;
-        overflow-y: auto;
+        /* max-height: 400px; <-- REMOVED for vertical expansion */
+        /* overflow-y: auto; <-- REMOVED for vertical expansion */
     }
     .history-entry {
         border-bottom: 1px solid var(--border-color);
@@ -511,7 +512,7 @@
 
         <div class="tabs">
             {#each Object.keys(detachedTabs) as tabName, i (tabName)}
-                {@const name = ['Overview', 'Environment', 'Commands', 'Session', 'Telemetry', 'JSON'][i]}
+                {@const name = ['Overview', 'Environment', 'Commands', 'Session', 'Prompts', 'Telemetry', 'JSON'][i]}
                 <div class="tab-button-container">
                     <button class="tab-button" class:active={activeTab === tabName} on:click={() => activeTab = tabName}>
                         {name}{#if detachedTabs[tabName]} ⇲{/if}
@@ -598,6 +599,19 @@
                     {/each}
                 </div>
             </div>
+        {:else if detachedView === 'history'}
+            <div class="section">
+                 <h2 class="section-title">Command History</h2>
+                 {#if contextData.commandHistory && contextData.commandHistory.length > 0}
+                    <ol class="command-history-list">
+                        {#each contextData.commandHistory as cmd, i (i)}
+                            <li>{cmd}</li>
+                        {/each}
+                    </ol>
+                 {:else}
+                    <p>No command history.</p>
+                 {/if}
+            </div>
         {:else if detachedView === 'aiContext'}
             <div class="section">
                 <details open>
@@ -620,33 +634,45 @@
                     </div>
                 </details>
             </div>
+            <!-- Placeholder for moved session history. Only shown in the main tabbed view. -->
+            {#if detachedView === activeTab}
+                <div class="section">
+                    <details open>
+                        <summary>Session Prompts</summary>
+                        <div class="content-box">
+                            <p>Session history prompts are now in the 'Prompts' tab.</p>
+                            <button 
+                                style="margin-top: 10px; padding: 5px 10px; cursor: pointer; background: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); border-radius: 3px;"
+                                on:click={() => {
+                                    const info = detachedTabs['prompts'];
+                                    if (info) {
+                                        windows.setActiveTab(info.groupId, info.tabId);
+                                    } else {
+                                        activeTab = 'prompts';
+                                    }
+                                }}
+                            >
+                                View Prompts Tab
+                            </button>
+                        </div>
+                    </details>
+                </div>
+            {/if}
+        {:else if detachedView === 'prompts'}
             <div class="section">
                  <details open>
-                    <summary>Session History ({contextData.aiContext.sessionHistory.length} entries)</summary>
+                    <summary>Session Prompts ({contextData.aiContext.sessionHistory.length} entries)</summary>
                     <div class="content-box">
                         {#each contextData.aiContext.sessionHistory as entry (entry.number)}
                             <div class="history-entry">
-                                <div class="history-entry-header">Entry #{entry.number}</div>
-                                <pre style="margin: 0;">{@html parseAnsi(entry.content)}</pre>
+                                <div class="history-entry-header">Prompt #{entry.number}</div>
+                                <pre style="margin: 0; white-space: pre-wrap;">{@html parseAnsi(entry.content)}</pre>
                             </div>
                         {:else}
                             No session history.
                         {/each}
                     </div>
                 </details>
-            </div>
-        {:else if detachedView === 'history'}
-            <div class="section">
-                 <h2 class="section-title">Command History</h2>
-                 {#if contextData.commandHistory && contextData.commandHistory.length > 0}
-                    <ol class="command-history-list">
-                        {#each contextData.commandHistory as cmd, i (i)}
-                            <li>{cmd}</li>
-                        {/each}
-                    </ol>
-                 {:else}
-                    <p>No command history.</p>
-                 {/if}
             </div>
         {:else if detachedView === 'telemetry'}
             <div class="section">
@@ -662,7 +688,7 @@
         {:else if detachedView === 'json'}
             <div class="section">
                 <h2 class="section-title">Raw Context Data</h2>
-                <pre class="content-box">{JSON.stringify(contextData, null, 2)}</pre>
+                <pre class="content-box" style="max-height: 400px; overflow-y: auto;">{JSON.stringify(contextData, null, 2)}</pre>
             </div>
         {/if}
     {/if}
