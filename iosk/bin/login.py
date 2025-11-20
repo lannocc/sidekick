@@ -26,7 +26,7 @@ async def iocall(io, argv):
         return False
 
     new_username = argv[0]
-    current_user = io.user
+    current_user = io.session.user
     current_device = io.dev
 
     if new_username == current_user:
@@ -73,4 +73,3 @@ async def iocall(io, argv):
 
     # The iocall returns, and the original user's interactive loop continues.
     return True
-

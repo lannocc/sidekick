@@ -24,7 +24,7 @@ async def iocall(io, argv):
             await io.error(f"!! history: invalid argument '{argv[0]}'. Expecting a number.")
             return False
 
-    history_list = io.history
+    history_list = io.session.history
     if not history_list:
         await io.print(":: no history yet for this session.")
         return True
@@ -41,4 +41,3 @@ async def iocall(io, argv):
         await io.print(f"{i: >4}  {command}")
 
     return True
-
