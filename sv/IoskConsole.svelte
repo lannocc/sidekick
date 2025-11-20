@@ -5,8 +5,8 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch } from './windows.js';
-    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents } from './ioskEvents.js';
+    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch, newIoskContextInspector } from './windows.js';
+    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents, contextUpdates } from './ioskEvents.js';
     import { desktopSettings, windowSettings } from './desktopStore.js';
 
     export let id; // Unique ID from the window manager
@@ -231,7 +231,7 @@
             showRoomsMenu = false;
             focusInput();
         }
-        if (showAttachMenu && attachButton && !attachButton.contains(event.target) && !event.target.closest('.attach-menu')) {
+        if (showAttachMenu && attachButton && !event.target.closest('.attach-menu')) {
             showAttachMenu = false;
             focusInput();
         }
@@ -366,6 +366,17 @@
         newIoskFileViewer(id, logPath);
         closeUserContextMenu();
         focusInput();
+    }
+
+    function inspectUserContext(targetUser) {
+      // Open the new window component
+      newIoskContextInspector(id, targetUser);
+
+      // Subscribe to updates
+      if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ui_context_subscribe', targetUser }));
+      }
+      closeUserContextMenu();
     }
 
     function setColorForUser(colorName) {
@@ -503,7 +514,9 @@
                         const jsonData = event.data.substring(PREAMBLE.length);
                         const data = JSON.parse(jsonData);
 
-                        if (data.type === 'private_message') {
+                        if (data.type === 'context_update') {
+                            contextUpdates.set(data);
+                        } else if (data.type === 'private_message') {
                             // This is the new, definitive handler for DMs.
                             // It triggers the bell and opens the chat window on reception.
                             playBellSound();
@@ -1297,6 +1310,7 @@
                 <button class="menu-item" on:click={viewUserLog}>
                     View Log...
                 </button>
+                <button class="menu-item" on:click={() => inspectUserContext(userContextMenu.user)}> Context... </button>
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={() => userContextMenu.showColorPicker = true}> Set Color... </button>
                 <div class="menu-separator"></div>
