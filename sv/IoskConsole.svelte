@@ -984,7 +984,7 @@
     .menu-item:hover:not(:disabled) { background-color: var(--taskbar-button-hover-bg); }
     .menu-item:disabled { color: #7f8c8d; cursor: not-allowed; font-style: italic; }
     .menu-item-empty { padding: 8px 12px; color: #7f8c8d; font-style: italic; }
-    .menu-separator { height: 1px; background-color: var(--border-color); margin: 0; }
+    .menu-separator { height: 3px; background-color: var(--border-color); margin: 0; }
     .close-item { color: #e74c3c; }
     .close-item:hover { background-color: #c0392b; color: white; }
     .attach-menu { position: absolute; top: 45px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 100; display: flex; width: 600px; height: 300px; flex-direction: column; }
@@ -1319,15 +1319,19 @@
                     &larr; Back
                 </button>
             {:else}
+                <button class="menu-item" on:click={() => inspectUserContext(userContextMenu.user)}>
+                  Context
+                </button>
+                <div class="menu-separator"></div>
                 <button class="menu-item" on:click={() => openPrivateChat(userContextMenu.user)}>
                     Private Chat
                 </button>
                 <button class="menu-item" on:click={viewUserLog}>
-                    View Log...
+                    View Log
                 </button>
-                <button class="menu-item" on:click={() => inspectUserContext(userContextMenu.user)}> Context... </button>
-                <div class="menu-separator"></div>
-                <button class="menu-item" on:click={() => userContextMenu.showColorPicker = true}> Set Color... </button>
+                <button class="menu-item" on:click={() => userContextMenu.showColorPicker = true}>
+                  Color
+                </button>
                 <div class="menu-separator"></div>
                 <button class="menu-item close-item" on:click={handleDetachUser}>
                     Detach
