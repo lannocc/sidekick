@@ -26,7 +26,7 @@ async def iocall(io, argv):
         return False
 
     # Access the process table from the kernel
-    process_table = io.os.process_table
+    process_table = io.os.proc.process_table
 
     # Check if the process exists
     if pid_to_kill not in process_table:

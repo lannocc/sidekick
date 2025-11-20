@@ -21,7 +21,7 @@ async def iocall(io, argv):
         await io.print(DOCSTRING.strip())
         return True
 
-    process_table = io.os.process_table
+    process_table = io.os.proc.process_table
     if not process_table:
         await io.print(":: no active processes")
         return True

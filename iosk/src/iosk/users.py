@@ -2,12 +2,14 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
+from .io import Context, Capture
+
 import asyncio
 from datetime import datetime
 import os
 import posixpath
+from os.path import exists
 
-from .io import Context, Capture
 
 class UserManager:
     """Manages the user lifecycle for the IOSK kernel, including login, logout, and interactive sessions."""

@@ -30,7 +30,7 @@ async def iocall(io, argv):
 
     # User and process counts
     total_users = len(io.os.users.contexts)
-    process_table = io.os.process_table
+    process_table = io.os.proc.process_table
     total_procs = len(process_table)
     
     # --- 2. Print Summary ---

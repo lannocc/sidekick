@@ -155,8 +155,8 @@ class CommandPipelineExecutor:
             return True # An empty command in a pipeline is a no-op, considered success
 
         # --- Process Creation ---
-        pid = self.os.next_pid
-        self.os.next_pid += 1
+        pid = self.os.proc.next_pid
+        self.os.proc.next_pid += 1
 
         # The command logic is wrapped in a coroutine, which is then run as a task.
         command_coro = self._run_command_logic(io, argv)
@@ -165,7 +165,7 @@ class CommandPipelineExecutor:
         # Use a local import of the Process class to avoid circular dependency issues.
         from .kernel import Process
         process = Process(pid, io.user, argv, datetime.now(), task)
-        self.os.process_table[pid] = process
+        self.os.proc.process_table[pid] = process
 
         try:
             # Await the task that is now being tracked.
@@ -184,8 +184,8 @@ class CommandPipelineExecutor:
             return False
         finally:
             # --- Process Cleanup ---
-            if pid in self.os.process_table:
-                del self.os.process_table[pid]
+            if pid in self.os.proc.process_table:
+                del self.os.proc.process_table[pid]
 
     async def _run_command_logic(self, io: 'Context', argv: List[str]) -> bool:
         """Resolves and executes the logic for a single command."""
