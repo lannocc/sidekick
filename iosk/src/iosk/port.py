@@ -145,7 +145,7 @@ class PortManager:
                     "type": "handshake",
                     "id": "peer",
                     "hostname": self.os.hostname,
-                    "users": list(self.os.users.keys()),
+                    "users": list(self.os.users.contexts.keys()),
                     "room": room_info
                 }
                 await websocket.send(json.dumps(handshake_payload))
@@ -345,7 +345,7 @@ class PortManager:
         ]
 
         for username in client_usernames:
-            io_context = self.os.users.get(username)
+            io_context = self.os.users.contexts.get(username)
             if not io_context:
                 continue
 
@@ -614,7 +614,7 @@ class PortManager:
                 "type": "handshake_ack",
                 "status": "ok",
                 "hostname": self.os.hostname,
-                "users": list(self.os.users.keys()),
+                "users": list(self.os.users.contexts.keys()),
                 "room": local_room_info,
                 "peers": peers_for_ack,
                 # This new field contains the full state of the mesh as known by this peer.
@@ -672,8 +672,8 @@ class PortManager:
                             paused = False
                             if host == self.os.hostname:
                                 # Local user: get live info from context
-                                if user in self.os.users:
-                                    user_io = self.os.users[user]
+                                if user in self.os.users.contexts:
+                                    user_io = self.os.users.contexts[user]
                                     is_bot = user_io.bot
                                     paused = user_io.paused
                             else:
@@ -808,7 +808,7 @@ class PortManager:
 
             elif msg_type == "exec_command":
                 if conn_meta.type == 'client' and conn_meta.username:
-                    io_context = self.os.users.get(conn_meta.username)
+                    io_context = self.os.users.contexts.get(conn_meta.username)
                     if io_context:
                         await self._handle_exec_command(websocket, io_context, message)
                 else:
@@ -819,7 +819,7 @@ class PortManager:
                     path = message.get("path", "/")
                     requesterId = message.get("requesterId")
                     recursive = message.get("recursive", False)
-                    io_context = self.os.users.get(conn_meta.username)
+                    io_context = self.os.users.contexts.get(conn_meta.username)
                     if io_context:
                         await self._handle_fs_list(websocket, io_context, path, requesterId, recursive)
                 else:
@@ -827,7 +827,7 @@ class PortManager:
 
             elif msg_type == "fs_read":
                 if conn_meta.type == 'client' and conn_meta.username:
-                    io_context = self.os.users.get(conn_meta.username)
+                    io_context = self.os.users.contexts.get(conn_meta.username)
                     if io_context:
                         await self._handle_fs_read(websocket, io_context, message)
                 else:
@@ -836,7 +836,7 @@ class PortManager:
             elif msg_type == "fs_watch_start":
                 if conn_meta.type == 'client' and conn_meta.username:
                     path = message.get("path")
-                    io_context = self.os.users.get(conn_meta.username)
+                    io_context = self.os.users.contexts.get(conn_meta.username)
                     if io_context and path:
                         await self._handle_fs_watch_start(websocket, io_context, path)
 
@@ -849,7 +849,7 @@ class PortManager:
             elif msg_type == "fs_tail_start":
                 if conn_meta.type == 'client' and conn_meta.username:
                     path = message.get("path")
-                    io_context = self.os.users.get(conn_meta.username)
+                    io_context = self.os.users.contexts.get(conn_meta.username)
                     if io_context and path:
                         await self._handle_fs_tail_start(websocket, io_context, path)
 
@@ -1116,14 +1116,14 @@ class PortManager:
                 paused = message.get('paused', False)
                 self.os.network_users[user_addr] = {'is_bot': is_bot, 'paused': paused} # Add user
                 # Assign color for this network user to all local interactive users
-                for uio in self.os.users.values():
+                for uio in self.os.users.contexts.values():
                     if not uio.bot and user_addr not in uio.user_colors:
                         uio.user_colors[user_addr] = self.os._get_next_color(uio)
             elif action == "logout":
                 if user_addr in self.os.network_users:
                     del self.os.network_users[user_addr] # Remove user
                 # Remove color for this network user from all local interactive users
-                for uio in self.os.users.values():
+                for uio in self.os.users.contexts.values():
                     if not uio.bot and user_addr in uio.user_colors:
                         del uio.user_colors[user_addr]
                 # Also remove from rooms dict if they were in one

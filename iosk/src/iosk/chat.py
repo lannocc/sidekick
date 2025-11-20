@@ -49,8 +49,8 @@ class AIMessenger:
                     paused = False # NEW: default paused state
                     if host == self.os.hostname:
                         # It's a local user; get the 'is_bot' status from the live context.
-                        if user in self.os.users:
-                            user_io = self.os.users[user] # Get context once
+                        if user in self.os.users.contexts:
+                            user_io = self.os.users.contexts[user] # Get context once
                             is_bot = user_io.bot
                             paused = user_io.paused # NEW: get paused state
                     else:
@@ -138,7 +138,7 @@ class AIMessenger:
 
         # --- System Message Handling (Broadcast to all local users) ---
         if sys:
-            for user, uio in self.os.users.items():
+            for user, uio in self.os.users.contexts.items():
                 if uio.paused: continue
                 # System messages should be part of a bot's context.
                 # They are added to history for all users to be forgettable.
@@ -195,8 +195,8 @@ class AIMessenger:
                 # Send to local users
                 for user in local_recipients:
                     if user == from_user: continue
-                    if user in self.os.users:
-                        uio = self.os.users[user]
+                    if user in self.os.users.contexts:
+                        uio = self.os.users.contexts[user]
                         if not uio.paused:
                             prompt_num = uio.prompt_number
                             # Use canonical sender address for consistency
@@ -219,7 +219,7 @@ class AIMessenger:
                             await uio.print(display_msg)
 
                 # Send confirmation to sender
-                sender_io = self.os.users.get(from_user)
+                sender_io = self.os.users.contexts.get(from_user)
                 if sender_io:
                     prompt_num = sender_io.prompt_number
                     recipient_str = ', '.join(recipients)
@@ -255,8 +255,8 @@ class AIMessenger:
 
             # Broadcast to local participants
             for user in self.local_room_participants:
-                if user in self.os.users:
-                    uio = self.os.users[user]
+                if user in self.os.users.contexts:
+                    uio = self.os.users.contexts[user]
                     prompt_num = uio.prompt_number
                     # Create the canonical message string for history.
                     history_msg = f'\n[{remote_from_addr} #{prompt_num} {now}] << {msg}'
@@ -286,7 +286,7 @@ class AIMessenger:
             await self.os.port.broadcast_to_peers(payload)
         else:
             # No active room, inform the user
-            sender_io = self.os.users.get(from_user)
+            sender_io = self.os.users.contexts.get(from_user)
             if sender_io:
                 await sender_io.error("!! No active room. Use 'room <name>' to start one.")
 
@@ -299,7 +299,7 @@ class AIMessenger:
 
         self.active_room = room_name
         self.room_owner = io.user
-        self.local_room_participants = set(self.os.users.keys())
+        self.local_room_participants = set(self.os.users.contexts.keys())
 
         # Update the kernel's network_rooms state for local users
         for user in self.local_room_participants:
@@ -400,8 +400,8 @@ class AIMessenger:
 
         arrival_msg = f":: {target_io.user} has joined the room."
         for user in self.local_room_participants:
-            if user != target_io.user and user in self.os.users:
-                await self.os.users[user].print(arrival_msg)
+            if user != target_io.user and user in self.os.users.contexts:
+                await self.os.users.contexts[user].print(arrival_msg)
 
         await self._broadcast_room_state_update()
         return True
@@ -418,7 +418,7 @@ class AIMessenger:
             # Announce departure
             departure_msg = f":: {user_name} has left the room."
             for user in self.local_room_participants:
-                await self.os.users[user].print(departure_msg)
+                await self.os.users.contexts[user].print(departure_msg)
             
             await self._broadcast_room_state_update()
 
@@ -432,8 +432,8 @@ class AIMessenger:
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
                 for user in self.local_room_participants:
-                    if user in self.os.users:
-                        uio = self.os.users[user]
+                    if user in self.os.users.contexts:
+                        uio = self.os.users.contexts[user]
                         prompt_num = uio.prompt_number
                         # Create the canonical message string for history.
                         history_msg = f'\n[{from_addr} #{prompt_num} {now}] << {content}'
@@ -458,8 +458,8 @@ class AIMessenger:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
             for user in to_users:
-                if user in self.os.users:
-                    uio = self.os.users[user]
+                if user in self.os.users.contexts:
+                    uio = self.os.users.contexts[user]
                     prompt_num = uio.prompt_number
                     # Create the canonical message for history.
                     history_msg = f'\a\n[{from_addr} -> me #{prompt_num} {now}] << {content}'
