@@ -634,30 +634,28 @@
                     </div>
                 </details>
             </div>
-            <!-- Placeholder for moved session history. Only shown in the main tabbed view. -->
-            {#if detachedView === activeTab}
-                <div class="section">
-                    <details open>
-                        <summary>Session Prompts</summary>
-                        <div class="content-box">
-                            <p>Session history prompts are now in the 'Prompts' tab.</p>
-                            <button 
-                                style="margin-top: 10px; padding: 5px 10px; cursor: pointer; background: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); border-radius: 3px;"
-                                on:click={() => {
-                                    const info = detachedTabs['prompts'];
-                                    if (info) {
-                                        windows.setActiveTab(info.groupId, info.tabId);
-                                    } else {
-                                        activeTab = 'prompts';
-                                    }
-                                }}
-                            >
-                                View Prompts Tab
-                            </button>
-                        </div>
-                    </details>
-                </div>
-            {/if}
+            <!-- Placeholder for moved session history. -->
+            <div class="section">
+                <details open>
+                    <summary>Session Prompts</summary>
+                    <div class="content-box">
+                        <p>Session history prompts are in the 'Prompts' tab.</p>
+                        <button 
+                            style="margin-top: 10px; padding: 5px 10px; cursor: pointer; background: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); border-radius: 3px;"
+                            on:click={() => {
+                                const info = detachedTabs['prompts'];
+                                if (info) {
+                                    windows.setActiveTab(info.groupId, info.tabId);
+                                } else {
+                                    activeTab = 'prompts';
+                                }
+                            }}
+                        >
+                            View Prompts Tab
+                        </button>
+                    </div>
+                </details>
+            </div>
         {:else if detachedView === 'prompts'}
             <div class="section">
                  <details open>
