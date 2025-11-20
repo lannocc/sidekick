@@ -1,5 +1,5 @@
 import argparse
-from sk.iosk.util import COLOR_MAP, REVERSE_COLOR_MAP, RESET_CODE
+from sk.iosk.util import COLOR_MAP, REVERSE_COLOR_MAP, ANSI_RESET
 
 async def iocall(io, argv):
     """View or set user colors for chat messages.
@@ -67,7 +67,7 @@ async def iocall(io, argv):
         color_code = COLOR_MAP[new_color_name]
         io.session.user_colors[target_addr] = color_code
         display_target = 'Your color' if target_user_str == io.session.user else f"Color for {target_user_str}"
-        await io.print(f":: {display_target} set to {color_code}{new_color_name}{RESET_CODE}")
+        await io.print(f":: {display_target} set to {color_code}{new_color_name}{ANSI_RESET}")
 
         # Broadcast the color change to network clients
         if io.os.port:
@@ -79,6 +79,6 @@ async def iocall(io, argv):
         current_code = io.session.user_colors.get(target_addr, '')
         current_name = REVERSE_COLOR_MAP.get(current_code, 'none')
         display_target = 'Your color is' if target_user_str == io.session.user else f"Color for {target_user_str} is"
-        await io.print(f":: {display_target} {current_code}{current_name}{RESET_CODE}")
+        await io.print(f":: {display_target} {current_code}{current_name}{ANSI_RESET}")
         return True
 

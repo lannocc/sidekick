@@ -1,4 +1,4 @@
-from sk.iosk.util import COLOR_MAP, REVERSE_COLOR_MAP, RESET_CODE
+from sk.iosk.util import COLOR_MAP, REVERSE_COLOR_MAP, ANSI_RESET
 
 
 async def iocall(io, argv):
@@ -46,6 +46,6 @@ async def iocall(io, argv):
         
         # Format with padding for alignment
         padding = ' ' * (max_len - len(display_name) + 4)
-        await io.print(f"  {display_name}{padding}{code}{name}{RESET_CODE}")
+        await io.print(f"  {display_name}{padding}{code}{name}{ANSI_RESET}")
     
     return True
