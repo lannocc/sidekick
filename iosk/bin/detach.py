@@ -41,9 +41,10 @@ async def iocall(io, argv):
     success = await io.os.chat.leave(target_io)
 
     if success:
-        await io.os.system.print(f":: {io.user} detached user '{handle}' from device '{device_path}'")
+        await io.os.system.print(f":: {io.session.user} detached user '{handle}' from device '{device_path}'")
     else:
         # The leave call likely prints its own error to the user's io.
-        await io.os.system.print(f":: {io.user} FAILED to detach user '{handle}'")
+        await io.os.system.print(f":: {io.session.user} FAILED to detach user '{handle}'")
 
     return success
+

@@ -16,17 +16,17 @@ async def iocall(io, argv):
         await io.print(iocall.__doc__)
         return
 
-    if io.bot:
+    if io.session.bot:
         await io.error("!! colors: this command is not available for your device.")
         return False
 
     await io.print("User Colors (your perspective):")
-    if not io.user_colors:
+    if not io.session.user_colors:
         await io.print("  (No users with colors found)")
         return True
 
     # Sort by the full user.host address for a consistent, readable output
-    sorted_user_addrs = sorted(io.user_colors.keys())
+    sorted_user_addrs = sorted(io.session.user_colors.keys())
 
     # Create display names and find the longest one for alignment
     display_names = {}
@@ -41,7 +41,7 @@ async def iocall(io, argv):
 
     for addr in sorted_user_addrs:
         display_name = display_names[addr]
-        code = io.user_colors[addr]
+        code = io.session.user_colors[addr]
         name = REVERSE_COLOR_MAP.get(code, 'unknown')
         
         # Format with padding for alignment
