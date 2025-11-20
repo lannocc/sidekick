@@ -331,7 +331,7 @@ class PortManager:
             return
 
         # Use the SK1: protocol wrapper for clients
-        payload = f"SK1:{json.dumps(message)}"
+        payload = f"SK1:{json.dumps(payload)}"
         aws = [ws.send(payload) for ws in clients]
         await asyncio.gather(*aws, return_exceptions=True)
 
@@ -467,11 +467,11 @@ class PortManager:
 
     async def broadcast_token_stats_update(self, user_io: "Context"):
         """Broadcasts a bot's token telemetry update to all connected clients."""
-        if not user_io.bot: return
+        if not user_io.session.bot: return
         payload = {
             "type": "token_stats_update",
-            "user": f"{user_io.user}.{self.os.hostname}",
-            "stats": user_io.token_stats
+            "user": f"{user_io.session.user}.{self.os.hostname}",
+            "stats": user_io.session.token_stats
         }
         await self.broadcast_to_clients(payload)
 
@@ -481,11 +481,11 @@ class PortManager:
 
     def _get_color_name_map(self, user_io: "Context") -> dict:
         """Converts a user's ANSI color map to a map of usernames to color names."""
-        if not user_io or not hasattr(user_io, 'user_colors'):
+        if not user_io or not user_io.session:
             return {}
 
         name_map = {}
-        for user, ansi_code in user_io.user_colors.items():
+        for user, ansi_code in user_io.session.user_colors.items():
             color_name = self.REVERSE_COLOR_MAP.get(ansi_code, 'white')
             name_map[user] = color_name
         return name_map
@@ -649,8 +649,8 @@ class PortManager:
                                 # Local user: get live info from context
                                 if user in self.os.users.contexts:
                                     user_io = self.os.users.contexts[user]
-                                    is_bot = user_io.bot
-                                    paused = user_io.paused
+                                    is_bot = user_io.session.bot
+                                    paused = user_io.session.paused
                             else:
                                 # Remote user: get cached info
                                 user_info = self.os.network_users.get(user_addr, {})
@@ -732,10 +732,10 @@ class PortManager:
             output = await self.os.execute_transient_command(io_context, command_str, pwd)
             response["output"] = output
         except Exception as e:
-            log.error(f"Error during exec_command for {io_context.user} on command '{command_str}': {e}")
+            log.error(f"Error during exec_command for {io_context.session.user} on command '{command_str}': {e}")
             response["error"] = f"An internal server error occurred during execution: {e}"
 
-        await self.send_payload_to_client(io_context.user, response)
+        await self.send_payload_to_client(io_context.session.user, response)
 
     async def _handle_fs_list(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Optional[Any], recursive: bool = False):
         """Handles a file system list request from a client."""
@@ -750,10 +750,10 @@ class PortManager:
         except NotADirectoryError as e:
             response["error"] = str(e)
         except Exception as e:
-            log.error(f"Error during fs_list for {io_context.user} at '{path}': {e}")
+            log.error(f"Error during fs_list for {io_context.session.user} at '{path}': {e}")
             response["error"] = "An internal server error occurred."
 
-        await self.send_payload_to_client(io_context.user, response)
+        await self.send_payload_to_client(io_context.session.user, response)
 
     async def _handle_fs_read(self, websocket: WebSocketServerProtocol, io_context: "Context", message: Dict[str, Any]):
         """Handles a file read request from a client, now supporting chunking."""
@@ -793,31 +793,31 @@ class PortManager:
                 response["content_b64"] = base64.b64encode(content_bytes).decode('ascii')
                 response["is_binary"] = is_binary_file
         except Exception as e:
-            log.error(f"Error during fs_read for {io_context.user} at '{path}': {e}")
+            log.error(f"Error during fs_read for {io_context.session.user} at '{path}': {e}")
             response["error"] = "An internal server error occurred."
 
-        await self.send_payload_to_client(io_context.user, response)
+        await self.send_payload_to_client(io_context.session.user, response)
 
     async def _handle_fs_watch_start(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str):
         key = (websocket, path)
         if key in self.active_watchers:
-            log.warning(f"Watcher already active for {io_context.user} on '{path}'.")
+            log.warning(f"Watcher already active for {io_context.session.user} on '{path}'.")
             return
 
         host_path = self.os.box(path, io_context=io_context)
         if not os.path.isdir(host_path):
-            log.error(f"Cannot watch '{path}': not a valid directory for user '{io_context.user}'.")
+            log.error(f"Cannot watch '{path}': not a valid directory for user '{io_context.session.user}'.")
             return
 
         loop = asyncio.get_running_loop()
-        event_handler = web._ClientUpdateEventHandler(self, io_context.user, path, loop)
+        event_handler = web._ClientUpdateEventHandler(self, io_context.session.user, path, loop)
 
         observer = Observer()
         observer.schedule(event_handler, host_path, recursive=False)
         observer.start()
 
         self.active_watchers[key] = observer
-        log.info(f"Started watching '{path}' for user '{io_context.user}'.")
+        log.info(f"Started watching '{path}' for user '{io_context.session.user}'.")
 
     async def _handle_fs_watch_stop(self, websocket: WebSocketServerProtocol, path: str):
         key = (websocket, path)
@@ -832,17 +832,17 @@ class PortManager:
     async def _handle_fs_tail_start(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str):
         key = (websocket, path)
         if key in self.active_tailers:
-            log.warning(f"Tailing already active for {io_context.user} on '{path}'.")
+            log.warning(f"Tailing already active for {io_context.session.user} on '{path}'.")
             return
 
         host_path = self.os.box(path, io_context=io_context)
         if not os.path.isfile(host_path):
-            log.error(f"Cannot tail '{path}': not a valid file for user '{io_context.user}'.")
+            log.error(f"Cannot tail '{path}': not a valid file for user '{io_context.session.user}'.")
             return
 
         task = asyncio.create_task(self._tail_file_task(websocket, io_context, path))
         self.active_tailers[key] = task
-        log.info(f"Started tailing '{path}' for user '{io_context.user}'.")
+        log.info(f"Started tailing '{path}' for user '{io_context.session.user}'.")
 
     async def _handle_fs_tail_stop(self, websocket: WebSocketServerProtocol, path: str):
         key = (websocket, path)
@@ -869,13 +869,13 @@ class PortManager:
                         "path": path,
                         "data": line
                     }
-                    await self.send_payload_to_client(io_context.user, payload)
+                    await self.send_payload_to_client(io_context.session.user, payload)
         except asyncio.CancelledError:
             pass # Task cancellation is the normal way to stop tailing.
         except Exception as e:
             log.error(f"Error in tailing task for '{path}': {e}")
         finally:
-            log.info(f"Tailing task for '{path}' for user '{io_context.user}' has ended.")
+            log.info(f"Tailing task for '{path}' for user '{io_context.session.user}' has ended.")
 
     async def _handle_remote_exec(self, websocket: WebSocketServerProtocol, message: Dict[str, Any]):
         """Handles a remote execution request and streams output back."""

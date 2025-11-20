@@ -37,8 +37,8 @@ class CommandPipelineExecutor:
         cmd_rest_of_line = command_to_execute[first_space_idx+1:] if first_space_idx != -1 else ''
 
         alias_resolved_args = command_to_execute
-        if cmd_candidate in io.aliases:
-            alias_value = io.aliases[cmd_candidate]
+        if cmd_candidate in io.session.aliases:
+            alias_value = io.session.aliases[cmd_candidate]
             alias_resolved_args = f"{alias_value} {cmd_rest_of_line}".strip()
 
         # Step 2: Parsing, Substitution, Expansion, and Pipeline construction
@@ -124,7 +124,7 @@ class CommandPipelineExecutor:
             prompt_char = '>>'
         else:
             prompt_char = '$'
-        prompt_str = f'[{io.user} #{io.prompt_number} {io.pwd}] {prompt_char} '
+        prompt_str = f'[{io.session.user} #{io.session.prompt_number} {io.pwd}] {prompt_char} '
 
         command_part = f"{prompt_str}{original_line_for_history}\n"
         output_part = ""
@@ -164,7 +164,7 @@ class CommandPipelineExecutor:
 
         # Use a local import of the Process class to avoid circular dependency issues.
         from .kernel import Process
-        process = Process(pid, io.user, argv, datetime.now(), task)
+        process = Process(pid, io.session.user, argv, datetime.now(), task)
         self.os.proc.process_table[pid] = process
 
         try:
