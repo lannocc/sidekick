@@ -25,7 +25,7 @@
     export let minimized;
     export let maximized;
     export let isActive;
-    export let isFlashing;
+    export let notice;
     export let tabs;
     export let activeTabId;
 
@@ -52,7 +52,10 @@
     let titleBarEl;
 
     let showGenericSettingsModal = false;
-    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
+    let windowSettingsForModal = {
+        positioning: 'auto', x: 0, y: 0, width: 0, height: 0,
+        notice: { mode: 'global', visual: { color: '#f39c12' }, audio: { sound: 'ding.wav' } }
+    };
 
     // React to drag/resize requests from other components (like Desktop's content area)
     $: if ($dragRequest && $dragRequest.id === id) {
@@ -83,12 +86,23 @@
             instance.showSettingsDialog();
         } else {
             const allSettings = get(windowSettings);
-            const currentSettings = allSettings[componentName] || { positioning: 'auto' };
+            const currentSettings = allSettings[componentName] || {};
+            const noticeDefaults = get(desktopSettings).noticeDefaults;
+
             windowSettingsForModal = {
                 positioning: currentSettings.positioning || 'auto',
                 x: currentSettings.x ?? x, y: currentSettings.y ?? y,
                 width: currentSettings.width ?? width, height: currentSettings.height ?? height,
                 defaultZoom: currentSettings.defaultZoom ?? 1.0,
+                notice: {
+                    mode: currentSettings.notice?.mode || 'global',
+                    visual: {
+                        color: currentSettings.notice?.visual?.color || noticeDefaults.visual.color,
+                    },
+                    audio: {
+                        sound: currentSettings.notice?.audio?.sound || noticeDefaults.audio.sound,
+                    }
+                }
             };
             showGenericSettingsModal = true;
         }
@@ -383,11 +397,11 @@
 </script>
 
 <style>
-    @keyframes flash-animation {
-        50% { border-color: #f39c12; box-shadow: 0 0 20px 5px rgba(243, 156, 18, 0.7); }
+    @keyframes notice-glow {
+        50% { border-color: var(--notice-color); box-shadow: 0 0 20px 5px var(--notice-color); }
     }
-    .window-frame.active.flashing, .window-frame:not(.active).flashing {
-        animation: flash-animation 0.5s ease-in-out;
+    .window-frame.noticing {
+        animation: notice-glow 1.2s ease-in-out;
     }
     .window-frame { position: absolute; border: 1px solid var(--border-color); background-color: transparent; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; min-width: 250px; min-height: 150px; transition: border-color 0.2s ease-in-out; pointer-events: none; }
     .window-frame:not(.active) { border-color: #7f8c8d; }
@@ -457,9 +471,10 @@
     .form-grid label { display: flex; align-items: center; gap: 5px; }
     .form-grid input { width: 80px; background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
+    .select-input { background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" style:--notice-color={notice?.color} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
     <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id}>
         <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
@@ -556,6 +571,32 @@
                             <input type="number" bind:value={windowSettingsForModal.defaultZoom} min="0.5" max="3" step="0.1" style="width: 80px;">
                         </label>
                     </div>
+                </fieldset>
+                <fieldset>
+                    <legend>Activity Notice</legend>
+                    <div class="radio-group">
+                        <label><input type="radio" bind:group={windowSettingsForModal.notice.mode} value="global"> Global Default</label>
+                        <label><input type="radio" bind:group={windowSettingsForModal.notice.mode} value="enabled"> Override</label>
+                        <label><input type="radio" bind:group={windowSettingsForModal.notice.mode} value="disabled"> Disabled</label>
+                    </div>
+                    {#if windowSettingsForModal.notice.mode === 'enabled'}
+                        <div class="form-grid">
+                            <label style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;">
+                                <span>Flash Color</span>
+                                <input type="color" bind:value={windowSettingsForModal.notice.visual.color}>
+                            </label>
+                            <label style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;">
+                                <span>Notice Sound</span>
+                                <select class="select-input" bind:value={windowSettingsForModal.notice.audio.sound} style="width: 120px;">
+                                    <option value="ding.wav">Ding</option>
+                                    <option value="beep.wav">Beep</option>
+                                    <option value="good_bell.wav">Good Bell</option>
+                                    <option value="key.wav">Key</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </label>
+                        </div>
+                    {/if}
                 </fieldset>
                 <div class="buttons">
                     <button on:click={() => showGenericSettingsModal = false}>Cancel</button>

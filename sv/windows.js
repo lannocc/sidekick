@@ -11,7 +11,7 @@ import LocalFileExplorer from './LocalFileExplorer.svelte';
 import Ask from './Ask.svelte';
 import IoskWatch from './IoskWatch.svelte';
 import IoskContextInspector from './IoskContextInspector.svelte';
-import { desktopSettings, windowSettings } from './desktopStore.js';
+import { desktopSettings, windowSettings, notificationHistory, unreadNoticeCount } from './desktopStore.js';
 
 let windowGroupIdCounter = 0;
 let tabIdCounter = 0;
@@ -74,7 +74,7 @@ function createWindowManager() {
             prevX: 0, prevY: 0, prevWidth: 0, prevHeight: 0,
             tabs: [newTab],
             activeTabId: newTab.id,
-            isFlashing: false,
+            notice: null,
         };
 
         update(windows => {
@@ -372,7 +372,7 @@ function createWindowManager() {
                 prevX: 0, prevY: 0, prevWidth: 0, prevHeight: 0,
                 tabs: [tabToDetach],
                 activeTabId: tabToDetach.id,
-                isFlashing: false,
+                notice: null,
             };
             
             // 3. Add new group and update z-indices/active state
@@ -424,11 +424,94 @@ function createWindowManager() {
                 isActive: true,
                 zIndex: maxZ + 1,
                 prevX: groupData.x, prevY: groupData.y, prevWidth: groupData.width, prevHeight: groupData.height,
-                isFlashing: false,
+                notice: null,
                 tabs: tabs,
                 activeTabId: newActiveTabId,
             };
             return [...updatedWindows, newGroup];
+        });
+    };
+
+    // --- Sentinel Implementation ---
+
+    const resolveNoticeSettings = (componentName) => {
+        const globalDefaults = get(desktopSettings).noticeDefaults;
+        const allWindowOverrides = get(windowSettings);
+        const override = allWindowOverrides[componentName]?.notice;
+
+        if (!globalDefaults.enabled && override?.mode !== 'enabled') {
+            return { enabled: false };
+        }
+
+        if (override?.mode === 'disabled') {
+            return { enabled: false };
+        }
+
+        if (override?.mode === 'enabled') {
+            // Merge global and override settings. Override takes precedence.
+            return {
+                enabled: true,
+                visual: { ...globalDefaults.visual, ...override.visual },
+                audio: { ...globalDefaults.audio, ...override.audio },
+            };
+        }
+
+        // Default case: use global settings ('global' mode or no override)
+        return globalDefaults;
+    };
+
+    const playNoticeSound = (audioSettings) => {
+        const src = audioSettings.url ? audioSettings.url : `/assets/${audioSettings.sound}`;
+        try {
+            new Audio(src).play().catch(e => console.error("Notice audio play failed:", e));
+        } catch (e) {
+            console.error("Could not play notice audio.", e);
+        }
+    };
+    
+    const logToNotificationCenter = (group, tab, payload) => {
+        const newNotification = {
+            id: Date.now(),
+            groupId: group.id,
+            tabId: tab.id,
+            timestamp: new Date(),
+            icon: tab.componentName,
+            summary: payload.summary || `Activity in ${tab.title}`,
+            read: false,
+        };
+        notificationHistory.update(history => [newNotification, ...history].slice(0, 100)); // Keep last 100
+        unreadNoticeCount.update(n => n + 1);
+    };
+
+    const notifyActivity = (groupId, tabId, payload = {}) => {
+        update(windows => {
+            const group = windows.find(g => g.id === groupId);
+            if (!group || group.isActive) {
+                return windows; // Don't notify for active windows
+            }
+    
+            const tab = group.tabs.find(t => t.id === tabId);
+            if (!tab) return windows;
+    
+            const settings = resolveNoticeSettings(tab.componentName);
+            if (!settings.enabled) return windows;
+    
+            const noticeId = Date.now();
+            const updatedGroup = { ...group, notice: { id: noticeId, color: settings.visual.color } };
+    
+            if (settings.audio.enabled && settings.audio.sound && settings.audio.sound !== 'none') {
+                playNoticeSound(settings.audio);
+            }
+    
+            logToNotificationCenter(group, tab, payload);
+    
+            setTimeout(() => {
+                update(currentWindows => currentWindows.map(w =>
+                    (w.id === groupId && w.notice?.id === noticeId) ? { ...w, notice: null } : w
+                ));
+            }, settings.visual.duration);
+    
+            return windows.map(w => w.id === groupId ? updatedGroup : w);
         });
     };
 
@@ -454,6 +537,7 @@ function createWindowManager() {
         reorderTab,
         detachTabToNewWindow,
         restoreWindow,
+        notifyActivity,
     };
 }
 

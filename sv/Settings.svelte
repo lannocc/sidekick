@@ -22,6 +22,16 @@
         { value: 'custom', name: 'Custom URL' }
     ];
 
+    const noticeSounds = [
+        { value: 'ding.wav', name: 'Ding' },
+        { value: 'beep.wav', name: 'Beep' },
+        { value: 'good_bell.wav', name: 'Good Bell' },
+        { value: 'key.wav', name: 'Key' },
+        { value: 'short_beep.wav', name: 'Short Beep' },
+        { value: 'three_tones.wav', name: 'Three Tones' },
+        { value: 'none', name: 'None' },
+    ];
+
     function handleUpdate() {
         desktopSettings.set(settings);
     }
@@ -262,6 +272,30 @@
             <label class="color-picker-label">
                 <span>Focus Delay (ms)</span>
                 <input class="text-input" type="number" bind:value={settings.focusDelay} on:input={handleUpdate} min="0" step="10" style="width: 80px;">
+            </label>
+        </div>
+        {/if}
+    </fieldset>
+
+    <fieldset>
+        <legend>Activity Notice Defaults</legend>
+        <label>
+            <input type="checkbox" bind:checked={settings.noticeDefaults.enabled} on:change={handleUpdate}>
+            Enable Notices Globally
+        </label>
+        {#if settings.noticeDefaults.enabled}
+        <div class="options-group">
+            <label class="color-picker-label">
+                <span>Flash Color</span>
+                <input type="color" bind:value={settings.noticeDefaults.visual.color} on:input={handleUpdate}>
+            </label>
+            <label class="color-picker-label">
+                <span>Notice Sound</span>
+                <select class="select-input" bind:value={settings.noticeDefaults.audio.sound} on:change={handleUpdate}>
+                    {#each noticeSounds as sound}
+                        <option value={sound.value}>{sound.name}</option>
+                    {/each}
+                </select>
             </label>
         </div>
         {/if}
