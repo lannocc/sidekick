@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+from src.iosk.util import format_timedelta
 
 DOCSTRING = """List currently running processes.
 
@@ -9,12 +10,6 @@ Usage: ps
 Displays information about active processes, including their PID,
 the user who started them, their running time, and the command.
 """
-
-def format_timedelta_for_ps(td):
-    """Formats a timedelta object into a human-readable string like "2m 15s"."""
-    total_seconds = int(td.total_seconds())
-    minutes, seconds = divmod(total_seconds, 60)
-    return f"{minutes}m {seconds}s"
 
 async def iocall(io, argv):
     """
@@ -45,7 +40,7 @@ async def iocall(io, argv):
         
         pid_str = str(proc.pid)
         user_str = proc.user
-        time_str = format_timedelta_for_ps(now - proc.start_time)
+        time_str = format_timedelta(now - proc.start_time, style='ps')
         cmd_str = proc.command_str
 
         process_data.append((pid_str, user_str, time_str, cmd_str))

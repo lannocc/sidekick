@@ -1,5 +1,5 @@
 from datetime import datetime # Added import
-import shlex
+from src.iosk.util import dispatch_remote_if_needed
 
 async def iocall(io, argv):
     """Pause a bot user's AI engagement.
@@ -21,27 +21,14 @@ async def iocall(io, argv):
         await io.error("!! pause: too many arguments.")
         return False
 
+    # Check for and handle remote dispatch
+    dispatched, result = await dispatch_remote_if_needed(io, 'pause', argv)
+    if dispatched:
+        return result
+    argv = result  # Update argv with hostname stripped if necessary
+
     if argv:
         target_user = argv[0]
-        if '.' in target_user:
-            parts = target_user.rsplit('.', 1)
-            if len(parts) == 2:
-                potential_user, potential_host = parts
-
-                is_remote_request = (
-                    io.os.port and
-                    potential_host != io.os.hostname and
-                    potential_host in io.os.port.routing_table
-                )
-
-                if is_remote_request:
-                    command_str = f"pause {shlex.quote(potential_user)}"
-                    await io.print(f":: dispatching to {potential_host}: {command_str}")
-                    return await io.os.port.stream_remote_exec(potential_host, command_str, io)
-
-                if potential_host == io.os.hostname:
-                    # It's explicitly for the local host, so strip the host part
-                    target_user = potential_user
     else:
         target_user = io.user
 
