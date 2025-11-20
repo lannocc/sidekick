@@ -34,6 +34,10 @@
     // --- State for Token Telemetry ---
     let tokenTooltip = { visible: false, x: 0, y: 0 };
 
+    // --- State for collapsible sections ---
+    let bankExpandedState = {};
+    let promptExpandedState = {};
+
 
     const unsubscribeStore = contextUpdates.subscribe(update => {
         // FIX: Reverted to the simpler, working logic from the .bak file.
@@ -206,6 +210,31 @@
         }
     }
 
+    // --- New helpers for collapsible views ---
+    function getFirstLine(text) {
+        if (!text || typeof text !== 'string') return '';
+        const newlineIndex = text.indexOf('\n');
+        return newlineIndex === -1 ? text : text.substring(0, newlineIndex);
+    }
+
+    function toggleAllBanks(expand) {
+        if (!contextData || !contextData.aiContext || !contextData.aiContext.banks) return;
+        const newState = {};
+        for (const bank of contextData.aiContext.banks) {
+            newState[bank.name] = expand;
+        }
+        bankExpandedState = newState;
+    }
+
+    function toggleAllPrompts(expand) {
+        if (!contextData || !contextData.aiContext || !contextData.aiContext.sessionHistory) return;
+        const newState = {};
+        for (const entry of contextData.aiContext.sessionHistory) {
+            newState[entry.number] = expand;
+        }
+        promptExpandedState = newState;
+    }
+
     // --- Computed properties for Telemetry (copied from .bak file) ---
     let telemetryData = [];
     $: if (contextData && contextData.tokenStats) {
@@ -361,6 +390,72 @@
     }
     .telemetry-grid span:nth-child(3n) { /* Tokens */
         text-align: right;
+    }
+
+    /* New styles for summary/section controls */
+    .summary-with-controls, .section-title-with-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%; /* Needed for correct layout in <summary> */
+    }
+    .expand-collapse-controls {
+        flex-shrink: 0; /* Prevent controls from wrapping */
+    }
+    .expand-collapse-controls button {
+        background: none;
+        border: 1px solid var(--border-color);
+        color: var(--title-bar-text);
+        padding: 2px 6px;
+        font-size: 0.8em;
+        border-radius: 3px;
+        cursor: pointer;
+        margin-left: 5px;
+    }
+    .expand-collapse-controls button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+
+    /* New styles for collapsible prompts */
+    .prompts-list-container {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .prompt-entry {
+        border: 1px solid var(--border-color);
+        border-radius: 3px;
+        overflow: hidden; /* Keeps child bg colors within border radius */
+    }
+    .prompt-header {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 8px;
+        cursor: pointer;
+        background-color: var(--title-bar-bg);
+        user-select: none;
+        overflow: hidden;
+    }
+    .prompt-header:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .prompt-number {
+        font-weight: bold;
+        color: var(--ansi-yellow);
+        flex-shrink: 0;
+    }
+    .prompt-preview {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        opacity: 0.8;
+        flex-grow: 1;
+        min-width: 0; /* Fix for text-overflow in flexbox */
+    }
+    .prompt-content {
+        padding: 10px;
+        background-color: var(--window-bg);
     }
 
     /* New styles for header controls */
@@ -621,10 +716,18 @@
             </div>
             <div class="section">
                 <details open>
-                    <summary>Memory Banks ({contextData.aiContext.banks.length})</summary>
+                    <summary class="summary-with-controls">
+                        <span>Memory Banks ({contextData.aiContext.banks.length})</span>
+                        {#if contextData.aiContext.banks.length > 0}
+                            <span class="expand-collapse-controls">
+                                <button on:click|preventDefault|stopPropagation={() => toggleAllBanks(true)}>Expand All</button>
+                                <button on:click|preventDefault|stopPropagation={() => toggleAllBanks(false)}>Collapse All</button>
+                            </span>
+                        {/if}
+                    </summary>
                     <div class="content-box">
-                        {#each contextData.aiContext.banks as bank}
-                            <details>
+                        {#each contextData.aiContext.banks as bank (bank.name)}
+                            <details bind:open={bankExpandedState[bank.name]}>
                                 <summary>{bank.name}</summary>
                                 <pre class="content-box" style="background-color: var(--console-bg); margin-top: 5px;">{bank.content}</pre>
                             </details>
@@ -658,19 +761,39 @@
             </div>
         {:else if detachedView === 'prompts'}
             <div class="section">
-                 <details open>
-                    <summary>Session Prompts ({contextData.aiContext.sessionHistory.length} entries)</summary>
-                    <div class="content-box">
-                        {#each contextData.aiContext.sessionHistory as entry (entry.number)}
-                            <div class="history-entry">
-                                <div class="history-entry-header">Prompt #{entry.number}</div>
-                                <pre style="margin: 0; white-space: pre-wrap;">{@html parseAnsi(entry.content)}</pre>
+                <div class="section-title-with-controls">
+                    <h2 class="section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">
+                        Session Prompts ({contextData.aiContext.sessionHistory.length} entries)
+                    </h2>
+                    {#if contextData.aiContext.sessionHistory.length > 0}
+                        <div class="expand-collapse-controls">
+                            <button on:click={() => toggleAllPrompts(true)}>Expand All</button>
+                            <button on:click={() => toggleAllPrompts(false)}>Collapse All</button>
+                        </div>
+                    {/if}
+                </div>
+                <div class="prompts-list-container" style="margin-top: 10px;">
+                    {#each contextData.aiContext.sessionHistory as entry (entry.number)}
+                        <div class="prompt-entry">
+                            <div class="prompt-header" on:click={() => {
+                                promptExpandedState[entry.number] = !promptExpandedState[entry.number];
+                                promptExpandedState = promptExpandedState;
+                            }}>
+                                <span class="prompt-number">Prompt #{entry.number}</span>
+                                {#if !promptExpandedState[entry.number]}
+                                    <span class="prompt-preview">{@html parseAnsi(getFirstLine(entry.content))}</span>
+                                {/if}
                             </div>
-                        {:else}
-                            No session history.
-                        {/each}
-                    </div>
-                </details>
+                            {#if promptExpandedState[entry.number]}
+                                <div class="prompt-content">
+                                    <pre style="margin: 0; white-space: pre-wrap;">{@html parseAnsi(entry.content)}</pre>
+                                </div>
+                            {/if}
+                        </div>
+                    {:else}
+                        <p>No session history.</p>
+                    {/each}
+                </div>
             </div>
         {:else if detachedView === 'telemetry'}
             <div class="section">
