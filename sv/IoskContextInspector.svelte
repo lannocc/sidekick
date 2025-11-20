@@ -601,6 +601,8 @@
         opacity: 0.8;
         flex-grow: 1;
         min-width: 0; /* Fix for text-overflow in flexbox */
+        padding: 2px 8px;
+        border-radius: 3px;
     }
     .prompt-content {
         padding: 10px;
@@ -786,45 +788,52 @@
 
     /* Info Type (e.g., system messages) */
     .prompt-entry.prompt-type-info { border-left: 4px solid var(--ansi-bright-blue); }
-    .prompt-entry.prompt-type-info .prompt-content {
+    .prompt-entry.prompt-type-info .prompt-content,
+    .prompt-entry.prompt-type-info .prompt-preview {
         background-color: rgba(52, 152, 219, 0.1); /* Faded blue */
         font-style: italic;
     }
 
     /* Error Type */
     .prompt-entry.prompt-type-error { border-left: 4px solid var(--ansi-bright-red); }
-    .prompt-entry.prompt-type-error .prompt-content {
+    .prompt-entry.prompt-type-error .prompt-content,
+    .prompt-entry.prompt-type-error .prompt-preview {
         background-color: rgba(231, 76, 60, 0.1); /* Faded red */
     }
 
     /* Command Type */
     .prompt-entry.prompt-type-command { border-left: 4px solid var(--ansi-bright-green); }
-    .prompt-entry.prompt-type-command .prompt-content {
+    .prompt-entry.prompt-type-command .prompt-content,
+    .prompt-entry.prompt-type-command .prompt-preview {
         background-color: rgba(46, 204, 113, 0.1); /* Faded green */
     }
 
     /* Comment Type */
     .prompt-entry.prompt-type-comment { border-left: 4px solid var(--ansi-bright-black); }
-    .prompt-entry.prompt-type-comment .prompt-content {
+    .prompt-entry.prompt-type-comment .prompt-content,
+    .prompt-entry.prompt-type-comment .prompt-preview {
         background-color: rgba(149, 165, 166, 0.1); /* Faded grey */
         font-style: italic;
     }
 
     /* Chat Sent Type */
     .prompt-entry.prompt-type-chat-sent { border-left: 4px solid var(--ansi-bright-cyan); }
-    .prompt-entry.prompt-type-chat-sent .prompt-content {
+    .prompt-entry.prompt-type-chat-sent .prompt-content,
+    .prompt-entry.prompt-type-chat-sent .prompt-preview {
         background-color: rgba(26, 188, 156, 0.1); /* Faded cyan */
     }
 
     /* Chat Received Type */
     .prompt-entry.prompt-type-chat-received { border-left: 4px solid var(--ansi-bright-magenta); }
-    .prompt-entry.prompt-type-chat-received .prompt-content {
+    .prompt-entry.prompt-type-chat-received .prompt-content,
+    .prompt-entry.prompt-type-chat-received .prompt-preview {
         background-color: rgba(155, 89, 182, 0.1); /* Faded magenta */
     }
 
     /* Unknown Type */
     .prompt-entry.prompt-type-unknown { border-left: 4px solid var(--ansi-yellow); }
-    .prompt-entry.prompt-type-unknown .prompt-content {
+    .prompt-entry.prompt-type-unknown .prompt-content,
+    .prompt-entry.prompt-type-unknown .prompt-preview {
         background-color: rgba(241, 196, 15, 0.1); /* Faded yellow */
     }
 </style>
