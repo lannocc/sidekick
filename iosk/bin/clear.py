@@ -1,4 +1,5 @@
 import asyncio
+from sk.iosk import util
 
 async def iocall(io, argv):
     """Clear the session history for bots or the screen for console users.
@@ -52,10 +53,7 @@ async def iocall(io, argv):
 
     else:
         # --- Console/Terminal User Logic: Clear the screen ---
-        # ANSI escape sequence: \033[H moves cursor to home (top-left)
-        #                       \033[2J clears the entire screen
-        clear_screen_code = "\033[H\033[2J"
         # Use io.output to send the raw escape code without extra formatting
-        await io.output(clear_screen_code)
+        await io.output(util.ANSI_CLEAR_SCREEN)
     
     return True

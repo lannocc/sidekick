@@ -6,9 +6,10 @@
 Centralized utility functions and constants for the IOSK system.
 """
 import shlex
+import re
 from datetime import timedelta
 
-# 1. ANSI Color Codes
+# 1. ANSI Color and Control Codes
 # Centralized from bin/color.py and bin/colors.py
 COLOR_MAP = {
     'black': '\033[30m', 'red': '\033[31m', 'green': '\033[32m', 'yellow': '\033[33m',
@@ -20,6 +21,15 @@ COLOR_MAP = {
 REVERSE_COLOR_MAP = {v: k for k, v in COLOR_MAP.items()}
 ANSI_RESET = '\033[0m'
 ANSI_BOLD = '\033[1m'
+
+# Terminal Control Sequences
+ANSI_CLEAR_SCREEN = "\033[H\033[2J"  # Move cursor to home, then clear screen
+ANSI_HIDE_CURSOR = "\033[?25l"
+ANSI_SHOW_CURSOR = "\033[?25h"
+
+# Regex for stripping ANSI escape codes
+ANSI_ESCAPE_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
 
 # AI Prompt Formatting Constants
 # As per the refactoring proposal, these constants centralize the markers

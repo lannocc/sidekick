@@ -1,10 +1,10 @@
 import asyncio
-import re
 import shlex
 from datetime import datetime
 from io import StringIO
 import sys
 import os
+from sk.iosk import util
 
 DOCSTRING = """Execute a command repeatedly, displaying its output. Console only.
 
@@ -112,18 +112,13 @@ async def iocall(io, argv):
         return False
 
     # --- 3. Main Loop ---
-    ansi_escape_re = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    clear_screen_code = "\033[H\033[2J"  # Move cursor home, then clear screen
-    hide_cursor_code = "\033[?25l"
-    show_cursor_code = "\033[?25h"
-
     loop = asyncio.get_running_loop()
 
     try:
-        await io.output(hide_cursor_code)
+        await io.output(util.ANSI_HIDE_CURSOR)
         while True:
             # a. Clear the screen and print the header
-            await io.output(clear_screen_code)
+            await io.output(util.ANSI_CLEAR_SCREEN)
             now_str = datetime.now().strftime('%a %b %d %H:%M:%S %Y')
 
             # Use a different exit message depending on the console type
@@ -142,7 +137,7 @@ async def iocall(io, argv):
 
             # c. Strip ANSI color codes if -c is not specified
             if not color_enabled:
-                output = ansi_escape_re.sub('', output)
+                output = util.ANSI_ESCAPE_RE.sub('', output)
 
             # d. Print the captured output
             await io.output(output)
@@ -160,7 +155,6 @@ async def iocall(io, argv):
         # This block ensures cleanup happens whether the loop breaks normally
         # (e.g., via keypress) or is cancelled.
         await io.print("\n:: watch terminated.")
-        await io.output(show_cursor_code)
+        await io.output(util.ANSI_SHOW_CURSOR)
 
     return True # Indicate graceful exit
-
