@@ -133,6 +133,11 @@ class IOSK:
             io = self.system = Context(self, self.CONSOLE_DEV,
                                        Capture.log(self, self.SYSTEM_LOG, True))
 
+            # The system context needs a session object to satisfy code
+            # that expects io.session to exist (e.g., for aliases).
+            self.system.session = UserSessionState()
+            self.system.session.user = 'iosk'
+
             await io.print(f'IOSK boot number {self.BOOT}...')
 
         if not fail:
