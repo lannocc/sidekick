@@ -422,23 +422,23 @@ class IOSK:
 
                         # Send structured DM payload to the client
                         await self.port.send_private_message_to_client(
-                            to_user=io.user,
+                            to_user=io.session.user,
                             from_user=from_user,
                             content=content
                         )
                         # Also send the formatted message to the console for history.
                         # The bell is required to trigger sounds and fallbacks.
-                        await self.port.send_to_client(io.user, data)
+                        await self.port.send_to_client(io.session.user, data)
                         return # We are done with this data.
 
                     except Exception as e:
                         # If parsing fails for any reason, fall back to old behavior
                         # but log the error to the system log for debugging.
                         await self.system.error(f"!! DM parsing failed in kernel: {e}")
-                        await self.port.send_to_client(io.user, data)
+                        await self.port.send_to_client(io.session.user, data)
                         return
                 else:
-                    await self.port.send_to_client(io.user, data)
+                    await self.port.send_to_client(io.session.user, data)
             return
 
         if not dev.startswith('/dev/'):
@@ -464,7 +464,7 @@ class IOSK:
         """Receive data from device."""
         if dev.startswith('network:'):
             if prompt and self.port:
-                await self.port.send_prompt_to_client(io.user, prompt)
+                await self.port.send_prompt_to_client(io.session.user, prompt)
 
             if hasattr(io, 'network_input_queue'):
                 return await io.network_input_queue.get()
@@ -546,12 +546,12 @@ class IOSK:
             pass
 
         # --- 1. Preamble Content ---
-        preamble_content = io.preamble_cache or ""
+        preamble_content = io.session.preamble_cache or ""
 
         # --- 2. Banked Memory Content ---
         raw_banking_content = ""
-        if io.banks:
-            for bank_acct, data in io.banks.items():
+        if io.session.banks:
+            for bank_acct, data in io.session.banks.items():
                 raw_banking_content += '\n' + data + '\n'
 
         banking_content = ""
@@ -614,24 +614,24 @@ class IOSK:
             pass
 
         # --- 2. Update Bot Telemetry Stats ---
-        if io.bot:
+        if io.session.bot:
             # First, calculate the state of the context that was just used for the trip.
             context_stats = await self._calculate_context_tokens(io)
-            io.token_stats.update(context_stats)
+            io.session.token_stats.update(context_stats)
 
             # Update last trip stats
-            io.token_stats['last_trip_input_bytes'] = prompt_bytes
-            io.token_stats['last_trip_input_tokens'] = prompt_tokens if prompt_tokens != -1 else 0
-            io.token_stats['last_trip_output_bytes'] = reply_bytes
-            io.token_stats['last_trip_output_tokens'] = reply_tokens if reply_tokens != -1 else 0
+            io.session.token_stats['last_trip_input_bytes'] = prompt_bytes
+            io.session.token_stats['last_trip_input_tokens'] = prompt_tokens if prompt_tokens != -1 else 0
+            io.session.token_stats['last_trip_output_bytes'] = reply_bytes
+            io.session.token_stats['last_trip_output_tokens'] = reply_tokens if reply_tokens != -1 else 0
 
             # Increment cumulative stats
-            io.token_stats['cumulative_input_bytes'] += prompt_bytes
+            io.session.token_stats['cumulative_input_bytes'] += prompt_bytes
             if prompt_tokens != -1:
-                io.token_stats['cumulative_input_tokens'] += prompt_tokens
-            io.token_stats['cumulative_output_bytes'] += reply_bytes
+                io.session.token_stats['cumulative_input_tokens'] += prompt_tokens
+            io.session.token_stats['cumulative_output_bytes'] += reply_bytes
             if reply_tokens != -1:
-                io.token_stats['cumulative_output_tokens'] += reply_tokens
+                io.session.token_stats['cumulative_output_tokens'] += reply_tokens
             
             # Broadcast the update to clients
             if self.port:
@@ -663,7 +663,7 @@ class IOSK:
             tid = self.device_trip_counters.get(device_path, 0) + 1
             self.device_trip_counters[device_path] = tid
             device_name = device_path.replace('/dev/', '').replace('/', '-')
-            base_filename = f'{device_name}-{io.user}-{self.BOOT}-{io.cid}-{tid}'
+            base_filename = f'{device_name}-{io.session.user}-{self.BOOT}-{io.cid}-{tid}'
 
             trip_log_dir_host = self.fs.box('/var/log/trip')
             prompt_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.prompt')
