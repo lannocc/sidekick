@@ -780,15 +780,52 @@
         align-self: center;
     }
 
-    /* New styles for prompt types */
-    .prompt-content.info {
+    /* --- NEW styles for all prompt types --- */
+    /* Styles are applied to the parent .prompt-entry based on type,
+       affecting the entire entry (collapsed and expanded states). */
+
+    /* Info Type (e.g., system messages) */
+    .prompt-entry.prompt-type-info { border-left: 4px solid var(--ansi-bright-blue); }
+    .prompt-entry.prompt-type-info .prompt-content {
         background-color: rgba(52, 152, 219, 0.1); /* Faded blue */
-        border-left: 3px solid var(--ansi-bright-blue);
         font-style: italic;
     }
-    .prompt-content.error {
+
+    /* Error Type */
+    .prompt-entry.prompt-type-error { border-left: 4px solid var(--ansi-bright-red); }
+    .prompt-entry.prompt-type-error .prompt-content {
         background-color: rgba(231, 76, 60, 0.1); /* Faded red */
-        border-left: 3px solid var(--ansi-bright-red);
+    }
+
+    /* Command Type */
+    .prompt-entry.prompt-type-command { border-left: 4px solid var(--ansi-bright-green); }
+    .prompt-entry.prompt-type-command .prompt-content {
+        background-color: rgba(46, 204, 113, 0.1); /* Faded green */
+    }
+
+    /* Comment Type */
+    .prompt-entry.prompt-type-comment { border-left: 4px solid var(--ansi-bright-black); }
+    .prompt-entry.prompt-type-comment .prompt-content {
+        background-color: rgba(149, 165, 166, 0.1); /* Faded grey */
+        font-style: italic;
+    }
+
+    /* Chat Sent Type */
+    .prompt-entry.prompt-type-chat-sent { border-left: 4px solid var(--ansi-bright-cyan); }
+    .prompt-entry.prompt-type-chat-sent .prompt-content {
+        background-color: rgba(26, 188, 156, 0.1); /* Faded cyan */
+    }
+
+    /* Chat Received Type */
+    .prompt-entry.prompt-type-chat-received { border-left: 4px solid var(--ansi-bright-magenta); }
+    .prompt-entry.prompt-type-chat-received .prompt-content {
+        background-color: rgba(155, 89, 182, 0.1); /* Faded magenta */
+    }
+
+    /* Unknown Type */
+    .prompt-entry.prompt-type-unknown { border-left: 4px solid var(--ansi-yellow); }
+    .prompt-entry.prompt-type-unknown .prompt-content {
+        background-color: rgba(241, 196, 15, 0.1); /* Faded yellow */
     }
 </style>
 
@@ -1009,7 +1046,7 @@
                 <div class="prompts-list-container" style="margin-top: 10px;">
                     {#each contextData.aiContext.sessionHistory as entry (entry.number)}
                         {@const analysis = analyzePrompt(entry.content)}
-                        <div class="prompt-entry">
+                        <div class="prompt-entry prompt-type-{analysis.type}">
                             <div class="prompt-header" on:click={() => {
                                 promptExpandedState[entry.number] = !promptExpandedState[entry.number];
                                 promptExpandedState = promptExpandedState;
@@ -1031,7 +1068,7 @@
                                 {/if}
                             </div>
                             {#if promptExpandedState[entry.number]}
-                                <div class="prompt-content" class:info={analysis.type === 'info'} class:error={analysis.type === 'error'}>
+                                <div class="prompt-content">
                                     <pre>{#if analysis.prompt}<span>{@html parseAnsi(analysis.prompt)}</span>{/if}{@html parseAnsi(analysis.strippedContent)}</pre>
                                 </div>
                             {/if}
