@@ -1,6 +1,7 @@
 <!-- sv/IoskWatch.svelte -->
 <script>
     import { onMount, onDestroy, tick } from 'svelte';
+    import { get } from 'svelte/store';
     import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
     import { windows } from './windows.js';
 
@@ -113,7 +114,14 @@
                     output = data.error;
                     stopWatching();
                 } else {
-                    output = data.output;
+                    const newOutput = data.output;
+                    // SENTINEL NOTIFICATION: Trigger if output has changed on an inactive window
+                    if (newOutput !== output) {
+                        if (!get(windows).find(w => w.id === groupId)?.isActive) {
+                            windows.notifyActivity(groupId, id, { summary: `Watch output for '${command}' changed` });
+                        }
+                    }
+                    output = newOutput;
                 }
             }
         });

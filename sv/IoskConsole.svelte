@@ -600,8 +600,10 @@
                                 let outputToProcess = data.output;
 
                                 // This is now a generic bell handler. DM-specific logic is removed.
+                                let bellTriggered = false;
                                 if (outputToProcess.includes(bellCode)) {
                                     handleBell();
+                                    bellTriggered = true;
                                     outputToProcess = outputToProcess.replace(new RegExp(bellCode, 'g'), '');
                                 }
 
@@ -609,9 +611,18 @@
                                 const clearScreenCode = "\x1b[H\x1b[2J";
                                 if (cleanOutput === clearScreenCode) {
                                     output = [];
-                                } else if (cleanOutput) {
+                                } else if (cleanOutput) { // Note: can be just a newline
                                     const lines = cleanOutput.split('\n');
                                     output = [...output, ...lines.map(line => ({type: 'output', content: line}))];
+
+                                    // SENTINEL: Notify for new output if the window is inactive,
+                                    // the input isn't focused, and a bell didn't already trigger a notice.
+                                    if (cleanOutput.trim() && !bellTriggered) {
+                                        const isInputFocused = document.activeElement === commandInput;
+                                        if (!isActive && !isInputFocused) {
+                                            windows.notifyActivity(groupId, id, { summary: 'New console output' });
+                                        }
+                                    }
                                 }
                             }
                             if (data.prompt) {
@@ -838,12 +849,9 @@
     }
 
     function handleBell() {
-        // 1. Play sound
-        playBellSound();
-
-        // 2. Flash window
-        windows.updateWindowProps(id, { isFlashing: true });
-        setTimeout(() => windows.updateWindowProps(id, { isFlashing: false }), 500);
+        // Sentinel handles audio and visual notice effects.
+        // The sound will be played based on window/global settings.
+        windows.notifyActivity(groupId, id, { summary: `Bell received in console` });
     }
 
     // --- Watch Window Function ---

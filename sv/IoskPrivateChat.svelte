@@ -103,10 +103,12 @@
             messages = [...messages, message];
             shouldScroll = true;
 
-            // Flash window on new message received from another user
+            // SENTINEL NOTIFICATION: Trigger for new incoming messages on an inactive window
             if (message.from !== localUser) {
-                windows.updateWindowProps(id, { isFlashing: true });
-                setTimeout(() => windows.updateWindowProps(id, { isFlashing: false }), 500);
+                const isWindowActive = get(windows).find(w => w.id === groupId)?.isActive;
+                if (!isWindowActive) {
+                    windows.notifyActivity(groupId, id, { summary: `New message from ${getDisplayName(message.from)}` });
+                }
             }
         }
     }
