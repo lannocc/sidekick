@@ -515,7 +515,8 @@
                         const data = JSON.parse(jsonData);
 
                         if (data.type === 'context_update') {
-                            contextUpdates.set(data);
+                            // Add a 'type' field so the inspector can distinguish a full refresh.
+                            contextUpdates.set({ ...data, type: 'full' });
                         } else if (data.type === 'private_message') {
                             // This is the new, definitive handler for DMs.
                             // It triggers the bell and opens the chat window on reception.
@@ -541,6 +542,14 @@
                                 userColors = data.userColors;
                             }
 
+                            // Forward participant state changes (like 'paused') to any listening context inspectors.
+                            newParticipants.forEach(p => {
+                                contextUpdates.set({
+                                    targetUser: p.name,
+                                    type: 'partial',
+                                    data: { isPaused: p.paused }
+                                });
+                            });
                             // Prune userTokenStats to only include current participants
                             const currentParticipantNames = new Set(newParticipants.map(p => p.name));
                             const newStats = {};
@@ -557,6 +566,12 @@
                         } else if (data.type === 'token_stats_update') {
                             userTokenStats[data.user] = data.stats;
                             userTokenStats = userTokenStats; // Trigger reactivity
+                            // Also forward the stats to any listening context inspector.
+                            contextUpdates.set({
+                                targetUser: data.user,
+                                type: 'partial',
+                                data: { tokenStats: data.stats }
+                            });
                         } else if (data.type === 'user_colors_update') {
                             userColors = data.colors;
                         } else if (data.type === 'fs_watch_update') {

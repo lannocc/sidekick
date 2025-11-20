@@ -38,7 +38,13 @@
         // FIX: Reverted to the simpler, working logic from the .bak file.
         // The new check for `consoleId` was preventing updates from being received.
         if (update && update.targetUser === targetUser) {
-            contextData = update.data;
+            if (update.type === 'full') {
+                contextData = update.data;
+            } else if (update.type === 'partial' && contextData) {
+                // Merge partial updates into the existing context.
+                // This creates a new object, triggering Svelte's reactivity.
+                contextData = { ...contextData, ...update.data };
+            }
         }
     });
 
