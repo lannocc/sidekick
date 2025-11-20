@@ -1,4 +1,4 @@
-from src.iosk.util import dispatch_remote_if_needed
+from sk.iosk.util import dispatch_remote_if_needed
 
 async def iocall(io, argv):
     """Detach a device user.

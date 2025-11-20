@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime
-from src.iosk.util import format_timedelta
+from sk.iosk.util import format_timedelta
 
 DOCSTRING = """List currently running processes.
 

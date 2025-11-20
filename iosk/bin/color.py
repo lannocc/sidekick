@@ -1,5 +1,5 @@
 import argparse
-from src.iosk.util import COLOR_MAP, REVERSE_COLOR_MAP, RESET_CODE
+from sk.iosk.util import COLOR_MAP, REVERSE_COLOR_MAP, RESET_CODE
 
 async def iocall(io, argv):
     """View or set user colors for chat messages.

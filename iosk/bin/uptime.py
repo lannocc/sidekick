@@ -1,5 +1,5 @@
 from datetime import datetime
-from src.iosk.util import format_timedelta
+from sk.iosk.util import format_timedelta
 
 DOCSTRING = """Show how long the system has been running.
 
