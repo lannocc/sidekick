@@ -331,7 +331,7 @@ class PortManager:
             return
 
         # Use the SK1: protocol wrapper for clients
-        payload = f"SK1:{json.dumps(payload)}"
+        payload = f"SK1:{json.dumps(message)}"
         aws = [ws.send(payload) for ws in clients]
         await asyncio.gather(*aws, return_exceptions=True)
 
