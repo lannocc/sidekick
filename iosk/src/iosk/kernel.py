@@ -2,7 +2,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from .io import Context, Capture, print_flush as print
+from .io import Context, Capture, UserSessionState, print_flush as print
 from .parser import CommandLineParser
 from .pipeline import CommandPipelineExecutor
 from .chat import AIMessenger
