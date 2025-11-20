@@ -38,6 +38,9 @@
     let bankExpandedState = {};
     let promptExpandedState = {};
 
+    // --- State for prompt management ---
+    let selectedPrompts = new Set();
+
 
     const unsubscribeStore = contextUpdates.subscribe(update => {
         // FIX: Reverted to the simpler, working logic from the .bak file.
@@ -76,6 +79,21 @@
         }
         if (changed) {
             detachedTabs = detachedTabs; // Trigger reactivity
+        }
+    }
+
+    // Reactive pruning of selected prompts if they disappear from the history
+    $: if (contextData && contextData.aiContext && contextData.aiContext.sessionHistory) {
+        const existingPromptNumbers = new Set(contextData.aiContext.sessionHistory.map(e => e.number));
+        let changed = false;
+        for (const selected of selectedPrompts) {
+            if (!existingPromptNumbers.has(selected)) {
+                selectedPrompts.delete(selected);
+                changed = true;
+            }
+        }
+        if (changed) {
+            selectedPrompts = selectedPrompts; // Trigger reactivity
         }
     }
 
@@ -234,6 +252,52 @@
         }
         promptExpandedState = newState;
     }
+
+    // --- New functions for Prompt Management ---
+    function sendInspectorCommand(command) {
+        if (!consoleWs || consoleWs.readyState !== WebSocket.OPEN) return;
+        const user = contextData ? contextData.user : targetUser;
+        consoleWs.send(JSON.stringify({ type: 'client_input', data: '$ su ' + user + ' ' + command + '\n' }));
+    }
+
+    function forgetSinglePrompt(number) {
+        sendInspectorCommand(`forget ${number}`);
+    }
+
+    function togglePromptSelection(number) {
+        if (selectedPrompts.has(number)) {
+            selectedPrompts.delete(number);
+        } else {
+            selectedPrompts.add(number);
+        }
+        selectedPrompts = selectedPrompts; // trigger reactivity
+    }
+
+    function selectAllPrompts() {
+        if (!contextData || !contextData.aiContext || !contextData.aiContext.sessionHistory) return;
+        selectedPrompts = new Set(contextData.aiContext.sessionHistory.map(e => e.number));
+    }
+
+    function deselectAllPrompts() {
+        selectedPrompts = new Set();
+    }
+
+    function forgetSelectedPrompts() {
+        if (selectedPrompts.size === 0) return;
+        if (confirm(`Are you sure you want to forget ${selectedPrompts.size} selected prompts?`)) {
+            const numbersToForget = Array.from(selectedPrompts).join(' ');
+            sendInspectorCommand(`forget ${numbersToForget}`);
+            selectedPrompts = new Set(); // Clear selection after sending
+        }
+    }
+
+    function clearHistory() {
+        if (confirm('Are you sure you want to clear the entire session history? This cannot be undone.')) {
+            sendInspectorCommand('clear');
+            selectedPrompts = new Set(); // Clear selection as well
+        }
+    }
+
 
     // --- Computed properties for Telemetry (copied from .bak file) ---
     let telemetryData = [];
@@ -429,7 +493,7 @@
     }
     .prompt-header {
         display: flex;
-        align-items: baseline;
+        align-items: center;
         gap: 10px;
         padding: 8px;
         cursor: pointer;
@@ -564,6 +628,68 @@
     .tooltip-grid span:nth-child(3n) { /* Tokens */
         text-align: right;
     }
+
+    /* New styles for prompt management */
+    .prompts-action-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px;
+        background-color: var(--title-bar-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 3px;
+        margin-top: 10px;
+    }
+    .prompts-action-bar button {
+        background-color: var(--taskbar-button-bg);
+        border: 1px solid var(--border-color);
+        color: var(--title-bar-text);
+        padding: 4px 8px;
+        border-radius: 3px;
+        cursor: pointer;
+        margin-left: 5px;
+        font-size: 0.9em;
+    }
+    .prompts-action-bar button:hover:not(:disabled) {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .prompts-action-bar button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .prompts-action-bar .forget-button,
+    .prompts-action-bar .clear-button {
+        background-color: var(--ansi-red);
+        border-color: #e74c3c;
+        color: white;
+    }
+    .prompts-action-bar .forget-button:hover:not(:disabled),
+    .prompts-action-bar .clear-button:hover {
+        background-color: #e74c3c;
+    }
+    .prompt-delete-button {
+        background: none;
+        border: none;
+        color: var(--title-bar-text);
+        cursor: pointer;
+        font-size: 1.5em;
+        line-height: 1;
+        padding: 0 8px 0 0;
+        opacity: 0.5;
+        font-weight: bold;
+        align-self: center;
+    }
+    .prompt-delete-button:hover {
+        opacity: 1;
+        color: var(--ansi-red);
+    }
+    .prompt-select-checkbox {
+        margin-right: 8px;
+        cursor: pointer;
+        width: 16px;
+        height: 16px;
+        align-self: center;
+    }
 </style>
 
 <div class="inspector-container">
@@ -645,7 +771,7 @@
                 </div>
             {:else}
                 <!-- Render content inline using a recursive call to self in detached mode -->
-                <svelte:self {contextData} isDetached={true} detachedView={activeTab} />
+                <svelte:self {contextData} isDetached={true} detachedView={activeTab} {consoleWs} />
             {/if}
         </div>
 
@@ -772,6 +898,26 @@
                         </div>
                     {/if}
                 </div>
+
+                {#if contextData.aiContext.sessionHistory.length > 0}
+                    <div class="prompts-action-bar">
+                        <div class="selection-controls">
+                            <button on:click={selectAllPrompts}>Select All</button>
+                            <button on:click={deselectAllPrompts}>Deselect All</button>
+                        </div>
+                        <div class="action-buttons">
+                            <button
+                                class="forget-button"
+                                disabled={selectedPrompts.size === 0}
+                                on:click={forgetSelectedPrompts}
+                            >
+                                Forget Selected ({selectedPrompts.size})
+                            </button>
+                            <button class="clear-button" on:click={clearHistory}>Clear History</button>
+                        </div>
+                    </div>
+                {/if}
+
                 <div class="prompts-list-container" style="margin-top: 10px;">
                     {#each contextData.aiContext.sessionHistory as entry (entry.number)}
                         <div class="prompt-entry">
@@ -779,6 +925,17 @@
                                 promptExpandedState[entry.number] = !promptExpandedState[entry.number];
                                 promptExpandedState = promptExpandedState;
                             }}>
+                                <button class="prompt-delete-button" title="Forget prompt #{entry.number}" on:click|stopPropagation={() => forgetSinglePrompt(entry.number)}>
+                                    &times;
+                                </button>
+                                <input
+                                    type="checkbox"
+                                    class="prompt-select-checkbox"
+                                    title="Select prompt #{entry.number}"
+                                    checked={selectedPrompts.has(entry.number)}
+                                    on:click|stopPropagation
+                                    on:change={() => togglePromptSelection(entry.number)}
+                                />
                                 <span class="prompt-number">Prompt #{entry.number}</span>
                                 {#if !promptExpandedState[entry.number]}
                                     <span class="prompt-preview">{@html parseAnsi(getFirstLine(entry.content))}</span>
