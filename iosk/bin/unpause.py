@@ -1,4 +1,3 @@
-from datetime import datetime # Added import
 from sk.iosk.util import dispatch_remote_if_needed
 
 async def iocall(io, argv):
@@ -44,32 +43,9 @@ async def iocall(io, argv):
         await io.error(f"!! unpause: no active engagement for bot user '{target_user}'.")
         return False
 
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S') # Get current date and time
-
     if not target_io.paused:
         await io.print(f":: user '{target_user}' is not paused.")
         return True
 
-    # Unpause the user by setting the flag on their context
-    target_io.paused = False
-
-    # Broadcast the state change to network peers
-    if io.os.port:
-        await io.os.port.broadcast_to_peers({
-            'type': 'user_update',
-            'action': 'state_update',
-            'user': target_user,
-            'host': io.os.hostname,
-            'paused': False
-        })
-
-    # Broadcast the state change to local clients
-    if io.os.chat:
-        await io.os.chat._broadcast_room_state_update()
-
-    confirmation_message = f":: user '{target_user}' has been unpaused at {current_time}."
-    await io.print(confirmation_message)
-    await target_io.print(confirmation_message)
-    await io.os.system.print(f":: {io.user} unpaused user '{target_user}'")
-
-    return True
+    # Use the new centralized method in UserManager to set the state and broadcast.
+    return await io.os.users.set_user_pause_state(io, target_user, paused=False)

@@ -33,6 +33,79 @@ class UserManager:
         io.color_idx += 1
         return color
     
+    async def set_user_pause_state(self, io: Context, target_user: str, paused: bool):
+        """Sets the paused state for a user and broadcasts the change."""
+        target_io = self.contexts.get(target_user)
+        if not target_io:
+            # This should be validated by the caller, but as a safeguard.
+            await io.error(f"!! set_user_pause_state: user '{target_user}' not found.")
+            return False
+
+        verb = "paused" if paused else "unpaused"
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        # Set the state
+        target_io.paused = paused
+
+        # Broadcast the state change to network peers
+        if self.os.port:
+            await self.os.port.broadcast_to_peers({
+                'type': 'user_update',
+                'action': 'state_update',
+                'user': target_user,
+                'host': self.os.hostname,
+                'paused': paused
+            })
+
+        # Broadcast the state change to local clients
+        if self.os.chat:
+            await self.os.chat._broadcast_room_state_update()
+
+        # Generate and send confirmations
+        confirmation_message = f":: user '{target_user}' has been {verb} at {current_time}."
+        await io.print(confirmation_message)
+
+        # Inform the target user. If unpausing, always inform. If pausing, only
+        # inform if another user is performing the action.
+        if not paused or io.user != target_user:
+             await target_io.print(confirmation_message)
+
+        # Log to system log
+        await self.os.system.print(f":: {io.user} {verb} user '{target_user}'")
+
+        return True
+
+    def _initialize_user_context(self, user: str, device: str) -> Context:
+        """Creates and initializes a new user context object."""
+        io = self.os.system.fork()
+
+        # Common attributes
+        io.login_time = datetime.now()
+        io.banks = {}
+        io.history = []
+        io.session_history = []
+        io.prompt_number = 1
+        io.base = True
+        io.user = user
+        io.dev = device
+        io.log = Capture.log(self.os, f'{self.os.USER_LOG}/{user}', True)
+
+        # Type-specific attributes
+        is_console_user = (device == self.os.CONSOLE_DEV)
+        is_network_user = device.startswith('network:')
+
+        if is_network_user:
+            io.su = False
+            io.bot = False
+            io.network_input_queue = asyncio.Queue()
+        else: # Covers console and other device (bot) users
+            io.su = is_console_user
+            io.bot = not is_console_user
+            # network_input_queue is not needed
+
+        self.contexts[user] = io
+        return io
+
     async def run_post_login_setup(self, io: Context):
         """Runs startup scripts and other setup after a user is fully logged in."""
         if not io or not io.user:
@@ -85,23 +158,7 @@ class UserManager:
         login_msg = f":: user '{user}' logged in on '{self.os.hostname}'"
         await self.os.system.print(login_msg)
 
-        io = self.os.system.fork()
-        io.login_time = datetime.now()
-        io.banks = { } # A user's base context gets its own banks.
-        io.history = [] # A user's base context gets its own history.
-        # --- BEGIN FIX ---
-        # A new user's base context must have its own session history to prevent
-        # inheriting and sharing history with the system context or other users.
-        io.session_history = []
-        io.prompt_number = 1
-        # --- END FIX ---
-        io.log = Capture.log(self.os, f'{self.os.USER_LOG}/{user}', True)
-        io.dev = device
-        io.user = user
-        io.su = device == self.os.CONSOLE_DEV # if you have console, you're super
-        io.base = True
-        io.bot = device != self.os.CONSOLE_DEV
-        self.contexts[user] = io
+        io = self._initialize_user_context(user, device)
 
         user_addr = f"{user}.{self.os.hostname}"
 
@@ -336,25 +393,7 @@ class UserManager:
         await self.os.system.print(login_msg)
 
         device_path = f"network:{id(websocket)}"
-
-        io = self.os.system.fork()
-        io.login_time = datetime.now()
-        io.banks = {}
-        io.history = [] # A network user's base context gets its own history.
-        # --- BEGIN FIX ---
-        # A new network user's base context must also have its own session history
-        # to ensure isolation from other users.
-        io.session_history = []
-        io.prompt_number = 1
-        # --- END FIX ---
-        io.log = Capture.log(self.os, f'{self.os.USER_LOG}/{username}', True)
-        io.dev = device_path
-        io.user = username
-        io.su = False
-        io.base = True
-        io.bot = False
-        io.network_input_queue = asyncio.Queue()
-        self.contexts[username] = io
+        io = self._initialize_user_context(username, device_path)
 
         user_addr = f"{username}.{self.os.hostname}"
 
