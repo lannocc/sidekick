@@ -39,15 +39,25 @@
         }
     });
 
-    // Reactive statement to check if a detached window was closed
+    // Reactive statement to check if a detached window was closed or moved
     $: if (!isDetached && $windows) {
-        const openWindowIds = new Set($windows.map(w => w.id));
+        // Create a map of tabId -> groupId for efficient lookup
+        const allTabsToGroups = new Map($windows.flatMap(w => w.tabs.map(t => [t.id, w.id])));
         let changed = false;
         for (const tabName in detachedTabs) {
-            const detachedGroupId = detachedTabs[tabName];
-            if (detachedGroupId && !openWindowIds.has(detachedGroupId)) {
-                detachedTabs[tabName] = null;
-                changed = true;
+            const detachedInfo = detachedTabs[tabName];
+            if (detachedInfo) { // detachedInfo is now { groupId, tabId }
+                const currentGroupId = allTabsToGroups.get(detachedInfo.tabId);
+
+                if (!currentGroupId) {
+                    // The tab no longer exists, it must have been closed.
+                    detachedTabs[tabName] = null;
+                    changed = true;
+                } else if (currentGroupId !== detachedInfo.groupId) {
+                    // The tab has been moved to a new window group. Update our reference.
+                    detachedTabs[tabName].groupId = currentGroupId;
+                    changed = true; // IMPORTANT: Signal that an update happened
+                }
             }
         }
         if (changed) {
@@ -66,7 +76,7 @@
 
     function popOutTab(viewName) {
         if (!contextData) return;
-        const newGroupId = windows.addWindow(IoskContextInspector, {
+        const newWindow = windows.addWindow(IoskContextInspector, {
             title: `${viewName.charAt(0).toUpperCase() + viewName.slice(1)} - ${targetUser}`,
             consoleId: consoleId,
             targetUser: targetUser,
@@ -76,8 +86,8 @@
             width: 600,
             height: 500,
         });
-        if (newGroupId) {
-            detachedTabs[viewName] = newGroupId;
+        if (newWindow && newWindow.groupId) {
+            detachedTabs[viewName] = { groupId: newWindow.groupId, tabId: newWindow.tabId };
             detachedTabs = detachedTabs;
         }
     }
@@ -363,7 +373,10 @@
             {:else if detachedTabs[activeTab]}
                 <div class="detached-placeholder">
                     <p>Content is in a separate window.</p>
-                    <button on:click={() => windows.focusWindow(detachedTabs[activeTab])}>
+                    <button on:click={() => {
+                        const info = detachedTabs[activeTab];
+                        if (info) windows.setActiveTab(info.groupId, info.tabId);
+                    }}>
                         Focus Window
                     </button>
                 </div>

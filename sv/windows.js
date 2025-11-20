@@ -82,7 +82,7 @@ function createWindowManager() {
             newWindowGroup.zIndex = updatedWindows.reduce((max, w) => Math.max(max, w.zIndex), 99) + 1;
             return [...updatedWindows, newWindowGroup];
         });
-        return newWindowGroup.id;
+        return { groupId: newWindowGroup.id, tabId: newTab.id };
     };
 
     const removeTab = (groupId, tabId) => {
@@ -590,4 +590,3 @@ export function newIoskContextInspector(consoleTabId, targetUser, consoleWs) {
         height: 700,
     });
 }
-
