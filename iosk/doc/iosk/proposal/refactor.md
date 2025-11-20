@@ -33,7 +33,7 @@ The `src/iosk/kernel.py` and `src/iosk/port.py` files have become excessively la
     The main `IOSK` class will instantiate these managers (e.g., `self.fs = FileSystemManager(...)`) and delegate calls accordingly.
 
 *   **PortManager Decomposition (`src/iosk/port.py`)**: The `PortManager` class contains a large number of `_handle_...` methods for different client message types.
-    *   We will move these handlers into a dedicated `src/iosk/port_handlers.py` module. The main `_dispatch_message` method in `PortManager` will become a simple router that calls the appropriate function from the new handlers module, making the primary class focus purely on connection lifecycle and routing.
+    *   We will move these handlers into a dedicated `src/iosk/web.py` module. The main `_dispatch_message` method in `PortManager` will become a simple router that calls the appropriate function from the new handlers module, making the primary class focus purely on connection lifecycle and routing.
 
 #### 3. Consolidating Redundant Logic
 
