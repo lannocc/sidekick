@@ -20,3 +20,6 @@ export const privateMessages = writable(null);
 
 // Used for file picker communication
 export const fileSelection = writable(null);
+
+// Used for Console -> Context Inspector communication
+export const contextUpdates = writable(null);

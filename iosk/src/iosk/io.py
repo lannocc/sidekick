@@ -418,3 +418,29 @@ class Capture:
             file = open(file_path, 'a')
             cls.logs[file_path] = file
             return file
+
+# --- GlassBox Proposal: Section 3.1.3 ---
+def serialize_context_for_frontend(io: Context) -> dict:
+    """Serializes a user's context for frontend display."""
+    session = io.session
+    return {
+        "user": session.user,
+        "loginTime": session.login_time.isoformat() if session.login_time else None,
+        "isBot": session.bot,
+        "isSuperUser": session.su,
+        "pwd": io.pwd,
+        "env": io.environ(),
+        "aliases": session.aliases,
+        "commandHistory": session.history,
+        "tokenStats": session.token_stats,
+        "aiContext": {
+            "preamble": session.preamble_cache or "",
+            # Postamble is omitted as per proposal.
+            "banks": [{"name": k, "content": v} for k, v in session.banks.items()],
+            "sessionHistory": [
+                {"number": entry.number, "content": entry.content}
+                for entry in session.session_history
+            ],
+        },
+    }
+

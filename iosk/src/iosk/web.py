@@ -216,6 +216,48 @@ async def handle_fs_tail_stop(port_manager: "PortManager", websocket: "WebSocket
         await port_manager._handle_fs_tail_stop(websocket, path)
 
 
+# --- GlassBox Proposal: Section 3.1.2 ---
+async def handle_ui_context_subscribe(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
+    """Handles a client's request to subscribe to a user's context updates."""
+    target_user_addr = message.get("targetUser")
+    if not target_user_addr:
+        log.warning("Received ui_context_subscribe without targetUser.")
+        return
+
+    # Add the client's websocket to the subscription set.
+    if target_user_addr not in port_manager.context_subscriptions:
+        port_manager.context_subscriptions[target_user_addr] = set()
+    port_manager.context_subscriptions[target_user_addr].add(websocket)
+
+    # Immediately trigger an initial broadcast to populate the UI.
+    try:
+        target_user, target_host = target_user_addr.split('.', 1)
+        # This feature only inspects users on the local host.
+        if target_host == port_manager.os.hostname:
+            target_user_io = port_manager.os.users.contexts.get(target_user)
+            if target_user_io:
+                await port_manager.broadcast_context_update(target_user_io)
+            else:
+                log.warning(f"Could not find context for user '{target_user}' to send initial update.")
+    except ValueError:
+        log.warning(f"Received malformed targetUser in ui_context_subscribe: {target_user_addr}")
+
+
+# --- GlassBox Proposal: Section 3.1.2 ---
+async def handle_ui_context_unsubscribe(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
+    """Handles a client's request to unsubscribe from context updates."""
+    target_user_addr = message.get("targetUser")
+    if not target_user_addr:
+        log.warning("Received ui_context_unsubscribe without targetUser.")
+        return
+
+    subscribers = port_manager.context_subscriptions.get(target_user_addr)
+    if subscribers and websocket in subscribers:
+        subscribers.remove(websocket)
+        if not subscribers:
+            del port_manager.context_subscriptions[target_user_addr]
+
+
 async def _process_network_state_update(port_manager: "PortManager", message: dict):
     """Processes state update messages from peers to update the kernel's state caches."""
     msg_type = message.get("type")

@@ -65,6 +65,8 @@ class PortManager:
         # --- ADDED for Filesystem Events Proposal ---
         self.active_watchers: Dict[tuple, Observer] = {}
         self.active_tailers: Dict[tuple, asyncio.Task] = {}
+        # --- GlassBox Proposal: Section 3.1.2 ---
+        self.context_subscriptions: Dict[str, set] = {} # Maps targetUser -> {ws1, ws2, ...}
 
     # --------------------------------------------------------------------------
     # Public API (Kernel-Facing)
@@ -474,6 +476,31 @@ class PortManager:
             "stats": user_io.session.token_stats
         }
         await self.broadcast_to_clients(payload)
+
+    # --- GlassBox Proposal: Section 3.1.2 ---
+    async def broadcast_context_update(self, target_user_io: "Context"):
+        """Serializes and sends a user's full context to subscribed clients."""
+        target_user_addr = f"{target_user_io.session.user}.{self.os.hostname}"
+        if not self.context_subscriptions.get(target_user_addr):
+            return
+
+        from .io import serialize_context_for_frontend
+
+        context_data = serialize_context_for_frontend(target_user_io)
+        payload = {
+            "type": "context_update",
+            "targetUser": target_user_addr,
+            "data": context_data
+        }
+
+        subscribers = self.context_subscriptions.get(target_user_addr, set())
+        for ws in list(subscribers):
+            conn_meta = self.active_connections.get(ws)
+            if conn_meta and conn_meta.username:
+                await self.send_payload_to_client(conn_meta.username, payload)
+            else:
+                # This client is no longer properly registered; remove subscription.
+                subscribers.remove(ws)
 
     # --------------------------------------------------------------------------
     # Internal Logic and Connection Handling
@@ -1103,7 +1130,16 @@ class PortManager:
                 task.cancel()
                 del self.active_tailers[(ws, path)]
                 log.info(f"Cleaned up tailer for '{path}' on disconnect.")
-        
+
+        # --- GlassBox Proposal: Section 3.1.2 ---
+        # Clean up any context subscriptions this websocket had.
+        for user_addr, subscribers in list(self.context_subscriptions.items()):
+            if websocket in subscribers:
+                subscribers.remove(websocket)
+                if not subscribers:
+                    del self.context_subscriptions[user_addr]
+        # --- End Hook ---
+
         conn_data = self.active_connections.pop(websocket)
 
         if conn_data.type == 'client' and conn_data.username:

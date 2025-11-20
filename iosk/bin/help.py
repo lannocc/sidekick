@@ -7,7 +7,6 @@ Any time you run a command ("$ ") or write a comment ("# "), you are the only on
 The following commands are generally available:
 
 General Utilities:
-    $ clear         - clear the session history for bots or the screen for console users
     $ date          - display the current date and time
     $ echo          - display the given arguments
     $ exit          - leave the system chat (logout)
@@ -66,16 +65,17 @@ User/Device/Memory Management:
     $ attach        - attach a device as a user (bring user online)
     $ bank          - load a skrip into user core memory by executing it
     $ banks         - list user memory accounts currently banked
-    $ bankrupt      - clear user core memory bank
+    $ bankrupt      - clear all user core memory banks (see also: reset)
+    $ clear         - clear the session history for bots or the screen for console users
     $ color         - view or set user colors for chat messages
     $ colors        - display the chat colors for all connected users
     $ detach        - disconnect a device user (forced exit)
-    $ forget        - remove entries from the session history (see also: reset, rolling)
+    $ forget        - remove entries from the session history (see also: clear, rolling)
     $ login         - log in as a different user (logout current, new session for target)
     $ pause         - pause a bot user's AI engagement (see also: unpause)
     $ reattach      - reattach a user (or self) to a different device
-    $ reset         - reset a user's session to a clean state (see also: forget, rolling)
-    $ rolling       - configure the rolling session history cutoff (see also: forget, reset)
+    $ reset         - reset a user's login context to a clean state (see also: bankrupt)
+    $ rolling       - configure the rolling session history cutoff (see also: clear, forget)
     $ send          - send file contents or piped data to the chat (to all users)
     $ su            - execute a command as another user (superuser only)
     $ tokens        - calculate total bytes and estimate tokens for session context
