@@ -29,7 +29,7 @@ async def iocall(io, argv):
     if argv:
         target_user = argv[0]
     else:
-        target_user = io.user
+        target_user = io.session.user
 
     # --- Local Execution ---
 
@@ -40,7 +40,7 @@ async def iocall(io, argv):
 
     target_io = io.os.users.contexts[target_user]
 
-    if not target_io.bot:
+    if not target_io.session.bot:
         await io.error(f"!! pause: cannot pause console user '{target_user}'.")
         return False
 
@@ -49,7 +49,7 @@ async def iocall(io, argv):
         await io.error(f"!! pause: no active engagement for bot user '{target_user}'.")
         return False
 
-    if target_io.paused:
+    if target_io.session.paused:
         await io.print(f":: user '{target_user}' is already paused.")
         return True
 

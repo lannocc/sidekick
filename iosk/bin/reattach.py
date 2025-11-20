@@ -30,7 +30,7 @@ async def iocall(io, argv):
         return False
 
     device_name_input = argv[0]
-    target_user_name = argv[1] if len(argv) > 1 else io.user
+    target_user_name = argv[1] if len(argv) > 1 else io.session.user
 
     # --- Initial Validation ---
     if target_user_name not in io.os.users.contexts:
@@ -56,8 +56,8 @@ async def iocall(io, argv):
                 break
 
         # If we are targeting a console and another user is on it, it's a swap.
-        if current_console_io and current_console_io.user != target_io.user:
-            await io.print(f":: Console is occupied. Swapping devices for '{target_io.user}' and '{current_console_io.user}'.")
+        if current_console_io and current_console_io.session.user != target_io.session.user:
+            await io.print(f":: Console is occupied. Swapping devices for '{target_io.session.user}' and '{current_console_io.session.user}'.")
 
             source_user_device = target_io.dev
             console_user_device = current_console_io.dev
@@ -76,32 +76,32 @@ async def iocall(io, argv):
     for user_io_to_change, new_path in jobs:
 
         if user_io_to_change.dev == new_path:
-            await io.print(f":: User '{user_io_to_change.user}' is already on '{new_path}'. No change needed.")
+            await io.print(f":: User '{user_io_to_change.session.user}' is already on '{new_path}'. No change needed.")
             continue
 
-        await io.print(f":: Reattaching user '{user_io_to_change.user}' from '{user_io_to_change.dev}' to '{new_path}'...")
+        await io.print(f":: Reattaching user '{user_io_to_change.session.user}' from '{user_io_to_change.dev}' to '{new_path}'...")
 
         old_device = user_io_to_change.dev
-        was_bot = user_io_to_change.bot
+        was_bot = user_io_to_change.session.bot
         chat_instance = io.os.chat
-        current_engagement = chat_instance.engagements.get(user_io_to_change.user) if chat_instance else None
+        current_engagement = chat_instance.engagements.get(user_io_to_change.session.user) if chat_instance else None
 
         # Tear down old engagement if user was a bot
         if was_bot and current_engagement:
             current_engagement.enabled = False
-            await io.print(f":: Old AI engagement for '{user_io_to_change.user}' disabled.")
-            if chat_instance and user_io_to_change.user in chat_instance.engagements:
-                del chat_instance.engagements[user_io_to_change.user]
+            await io.print(f":: Old AI engagement for '{user_io_to_change.session.user}' disabled.")
+            if chat_instance and user_io_to_change.session.user in chat_instance.engagements:
+                del chat_instance.engagements[user_io_to_change.session.user]
 
         # Update user's device and flags
         user_io_to_change.dev = new_path
-        user_io_to_change.su = new_path in console_devices
-        user_io_to_change.bot = not user_io_to_change.su
+        user_io_to_change.session.su = new_path in console_devices
+        user_io_to_change.session.bot = not user_io_to_change.session.su
 
         # Set up a new engagement if the new device is an AI bot
-        if user_io_to_change.bot and chat_instance:
-            new_engagement = Engagement(user_io_to_change.user)
-            chat_instance.engagements[user_io_to_change.user] = new_engagement
+        if user_io_to_change.session.bot and chat_instance:
+            new_engagement = Engagement(user_io_to_change.session.user)
+            chat_instance.engagements[user_io_to_change.session.user] = new_engagement
             await new_engagement.ioset(user_io_to_change)
 
             device_name_for_mod = new_path.replace('/dev/', '', 1)
@@ -112,9 +112,9 @@ async def iocall(io, argv):
 
             if not new_device_mod:
                 await io.error(f"!! reattach: failed to load device module for '{device_name_for_mod}'.")
-                await io.os.system.print(f":: {io.user} FAILED to reattach user '{user_io_to_change.user}' (module load failed)")
+                await io.os.system.print(f":: {io.session.user} FAILED to reattach user '{user_io_to_change.session.user}' (module load failed)")
                 user_io_to_change.dev = old_device # Revert
-                if was_bot and current_engagement: chat_instance.engagements[user_io_to_change.user] = current_engagement
+                if was_bot and current_engagement: chat_instance.engagements[user_io_to_change.session.user] = current_engagement
                 overall_success = False
                 continue
 
@@ -123,9 +123,9 @@ async def iocall(io, argv):
 
             if not trip_func:
                 await io.error(f"!! reattach: device module '{device_name_for_mod}' is missing a 'trip' function.")
-                await io.os.system.print(f":: {io.user} FAILED to reattach user '{user_io_to_change.user}' (no trip function)")
+                await io.os.system.print(f":: {io.session.user} FAILED to reattach user '{user_io_to_change.session.user}' (no trip function)")
                 user_io_to_change.dev = old_device # Revert
-                if was_bot and current_engagement: chat_instance.engagements[user_io_to_change.user] = current_engagement
+                if was_bot and current_engagement: chat_instance.engagements[user_io_to_change.session.user] = current_engagement
                 overall_success = False
                 continue
 
@@ -137,26 +137,26 @@ async def iocall(io, argv):
                         online_func(user_io_to_change)
                 except Exception as e:
                     await io.error(f"!! reattach: error calling online() for device '{device_name_for_mod}': {e}")
-                    await io.os.system.print(f":: {io.user} FAILED to reattach user '{user_io_to_change.user}' (online() error)")
+                    await io.os.system.print(f":: {io.session.user} FAILED to reattach user '{user_io_to_change.session.user}' (online() error)")
                     user_io_to_change.dev = old_device # Revert
-                    if was_bot and current_engagement: chat_instance.engagements[user_io_to_change.user] = current_engagement
+                    if was_bot and current_engagement: chat_instance.engagements[user_io_to_change.session.user] = current_engagement
                     overall_success = False
                     continue
 
             new_engagement.trip = trip_func
             asyncio.create_task(new_engagement.engage())
-            await io.print(f":: New AI engagement for '{user_io_to_change.user}' started with '{new_path}'.")
+            await io.print(f":: New AI engagement for '{user_io_to_change.session.user}' started with '{new_path}'.")
 
-        elif not user_io_to_change.bot and chat_instance and user_io_to_change.user in chat_instance.engagements:
-            chat_instance.engagements[user_io_to_change.user].enabled = False
-            del chat_instance.engagements[user_io_to_change.user]
-            await io.print(f":: AI engagement for '{user_io_to_change.user}' removed as they are now a console user.")
+        elif not user_io_to_change.session.bot and chat_instance and user_io_to_change.session.user in chat_instance.engagements:
+            chat_instance.engagements[user_io_to_change.session.user].enabled = False
+            del chat_instance.engagements[user_io_to_change.session.user]
+            await io.print(f":: AI engagement for '{user_io_to_change.session.user}' removed as they are now a console user.")
 
-        if chat_instance and user_io_to_change.user != io.user:
-            await chat_instance.send(io.user, f":: Administrator reattached '{user_io_to_change.user}' to '{new_path}'", sys=True)
+        if chat_instance and user_io_to_change.session.user != io.session.user:
+            await chat_instance.send(io.session.user, f":: Administrator reattached '{user_io_to_change.session.user}' to '{new_path}'", sys=True)
 
-        await io.print(f":: Successfully reattached '{user_io_to_change.user}' to '{new_path}'.")
-        await io.os.system.print(f":: {io.user} reattached user '{user_io_to_change.user}' from '{old_device}' to '{new_path}'")
+        await io.print(f":: Successfully reattached '{user_io_to_change.session.user}' to '{new_path}'.")
+        await io.os.system.print(f":: {io.session.user} reattached user '{user_io_to_change.session.user}' from '{old_device}' to '{new_path}'")
 
     # --- Final Reporting ---
     if len(jobs) > 1:
@@ -166,4 +166,3 @@ async def iocall(io, argv):
             await io.error("!! Device swap failed. System may be in an inconsistent state.")
 
     return overall_success
-
