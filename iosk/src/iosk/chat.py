@@ -556,32 +556,14 @@ class Engagement:
                         or secs_since_trip >= self.SECS_NOISY_WAIT_REPLY:
                     #print(f'SENDING TO {self.dev}: {self.buf}')
 
-                    # --- History Proposal Implementation ---
-                    # --- BEGIN FIX ---
-                    # Proactively apply the rolling cutoff before assembling the prompt
-                    # to ensure the context sent to the AI respects the current limit.
-                    self.io._apply_rolling_cutoff()
                     prompt = self.io.get_session_string()
-                    # --- END FIX ---
-                    # self.io.session.seek(0) # REPLACED
-                    # prompt = self.io.session.read() #+ self.buf # REPLACED
-                    # --- End Implementation ---
                     self.buf = None
                     self.last_buf = None
 
             # or is there no output but we're ready to check for input?
             elif secs_since_trip >= self.SECS_QUIET_IDLE_POLL:
                 #print('POLLING FOR REPLY')
-                # --- History Proposal Implementation ---
-                # --- BEGIN FIX ---
-                # Proactively apply the rolling cutoff before assembling the prompt
-                # to ensure the context sent to the AI respects the current limit.
-                self.io._apply_rolling_cutoff()
                 prompt = self.io.get_session_string()
-                # --- END FIX ---
-                # self.io.session.seek(0) # REPLACED
-                # prompt = self.io.session.read() # REPLACED
-                # --- End Implementation ---
 
             # FIXME: note we didn't actually use the buffer directly...
             #       just an indicator above that there was data waiting
@@ -630,13 +612,6 @@ class Engagement:
                    + util.AI_HISTORY_FOOTER
                    + '\n' + post
                    + f'\n[{self.io.session.user} #{self.io.session.prompt_number} {self.io.pwd}] {prompt_char} ')
-
-                # --- BEGIN FIX ---
-                # This entire block of code was for a redundant and incorrect telemetry
-                # calculation. The official telemetry is now handled exclusively by the
-                # log_trip_trace kernel function, which is called after the trip.
-                # Removing this block simplifies the code and eliminates a source of bugs.
-                # --- END FIX ---
 
                 self.waiting = True
                 reply = None
