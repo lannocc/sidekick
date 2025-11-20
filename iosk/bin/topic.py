@@ -34,7 +34,7 @@ async def iocall(io, argv):
 
     # Case 2: Set topic
     # Permission check
-    if not io.su and io.user != chat_subsystem.room_owner:
+    if not io.session.su and io.session.user != chat_subsystem.room_owner:
         await io.error(f"!! topic: permission denied. Only the owner ('{chat_subsystem.room_owner}') or a superuser can set the topic.")
         return False
 
@@ -55,8 +55,8 @@ async def iocall(io, argv):
         return False
 
     # Announce the change locally
-    announcement = f":: {io.user} set the topic to: {new_topic}"
-    await chat_subsystem.send(io.user, announcement, sys=True)
+    announcement = f":: {io.session.user} set the topic to: {new_topic}"
+    await chat_subsystem.send(io.session.user, announcement, sys=True)
 
     # Announce the change to network peers
     if io.os.port:

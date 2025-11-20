@@ -35,7 +35,7 @@ async def iocall(io, argv):
 
     target_io = io.os.users.contexts[target_user]
 
-    if not target_io.bot:
+    if not target_io.session.bot:
         await io.error(f"!! unpause: user '{target_user}' is not a bot and cannot be unpaused.")
         return False
 
@@ -43,7 +43,7 @@ async def iocall(io, argv):
         await io.error(f"!! unpause: no active engagement for bot user '{target_user}'.")
         return False
 
-    if not target_io.paused:
+    if not target_io.session.paused:
         await io.print(f":: user '{target_user}' is not paused.")
         return True
 
