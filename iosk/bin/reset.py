@@ -32,11 +32,11 @@ async def iocall(io, argv):
         return False
 
     # --- Target User Validation ---
-    if target_user_name not in io.os.users:
+    if target_user_name not in io.os.users.contexts:
         await io.error(f"!! reset: user '{target_user_name}' not found.")
         return False
 
-    target_io = io.os.users[target_user_name]
+    target_io = io.os.users.contexts[target_user_name]
 
     await io.print(f":: resetting session for user '{target_user_name}'...")
 

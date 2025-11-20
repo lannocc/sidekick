@@ -31,11 +31,11 @@ async def iocall(io, argv):
         await io.error('!! no chat')
         return
 
-    if handle not in io.os.users:
+    if handle not in io.os.users.contexts:
         await io.error(f'!! not attached: {handle}')
         return
 
-    target_io = io.os.users[handle]
+    target_io = io.os.users.contexts[handle]
     device_path = target_io.dev # Capture device before leaving
 
     success = await io.os.chat.leave(target_io)

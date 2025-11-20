@@ -30,11 +30,11 @@ async def iocall(io, argv):
     # --- Local Execution ---
 
     # Validation
-    if target_user not in io.os.users:
+    if target_user not in io.os.users.contexts:
         await io.error(f"!! unpause: user '{target_user}' not found.")
         return False
 
-    target_io = io.os.users[target_user]
+    target_io = io.os.users.contexts[target_user]
 
     if not target_io.bot:
         await io.error(f"!! unpause: user '{target_user}' is not a bot and cannot be unpaused.")

@@ -64,7 +64,7 @@ async def iocall(io, argv):
     if io.os.chat:
         active_room_name = io.os.chat.active_room
         if active_room_name: # If a room is active locally
-            local_active_user_count = len(io.os.users) # All local users are in the active room
+            local_active_user_count = len(io.os.users.contexts) # All local users are in the active room
 
     room_data = []
 

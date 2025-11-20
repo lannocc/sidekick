@@ -23,7 +23,7 @@ class UserManager:
 
     def __init__(self, kernel):
         self.os = kernel
-        self.user_contexts = {} # handle:Context
+        self.contexts = {} # handle:Context
 
     def _get_next_color(self, io: Context) -> str:
         """Cycles through the USER_COLORS list to pick a color."""
@@ -72,7 +72,7 @@ class UserManager:
             await self.os.system.error(f'!! device not found: {device}')
             return
 
-        if user in self.user_contexts:
+        if user in self.contexts:
             await self.os.system.error(f'!! already logged in: {user}')
             return
 
@@ -99,7 +99,7 @@ class UserManager:
         io.su = device == self.os.CONSOLE_DEV # if you have console, you're super
         io.base = True
         io.bot = device != self.os.CONSOLE_DEV
-        self.user_contexts[user] = io
+        self.contexts[user] = io
 
         user_addr = f"{user}.{self.os.hostname}"
 
@@ -113,7 +113,7 @@ class UserManager:
 
             # 1b. Populate this new user's map with all other known users.
             all_other_users = list(self.os.network_users.keys())
-            for u, uio in self.user_contexts.items():
+            for u, uio in self.contexts.items():
                 # self.users already contains the new user, so we must skip them.
                 if u != user:
                     all_other_users.append(f"{u}.{self.os.hostname}")
@@ -123,7 +123,7 @@ class UserManager:
 
         # Part 2: Add the new user (bot or not) to all existing interactive users' maps.
         # This allows interactive users to see and set colors for bots.
-        for other_io in self.user_contexts.values():
+        for other_io in self.contexts.values():
             if other_io.user != user and not other_io.bot:
                 other_io.user_colors[user_addr] = self._get_next_color(other_io)
 
@@ -276,7 +276,7 @@ class UserManager:
                 continue
 
     async def logout(self, io:Context, disconnect=None):
-        if io.user not in self.user_contexts:
+        if io.user not in self.contexts:
             await self.os.system.error(f'!! not logged in: {io.user}')
             return False
 
@@ -286,10 +286,10 @@ class UserManager:
         user_to_logout = io.user
         user_addr_to_logout = f"{user_to_logout}.{self.os.hostname}"
         user_is_network_client = io.dev.startswith('network:')
-        del self.user_contexts[user_to_logout]
+        del self.contexts[user_to_logout]
 
         # --- Color Cleanup ---
-        for remaining_io in self.user_contexts.values():
+        for remaining_io in self.contexts.values():
             if not remaining_io.bot and user_addr_to_logout in remaining_io.user_colors:
                 del remaining_io.user_colors[user_addr_to_logout]
 
@@ -326,7 +326,7 @@ class UserManager:
         await self.os.ready.wait()
         if self.os.halt.is_set(): return None
 
-        if username in self.user_contexts:
+        if username in self.contexts:
             await self.os.system.error(f"!! login failed: user '{username}' already logged in.")
             return None
 
@@ -352,7 +352,7 @@ class UserManager:
         io.base = True
         io.bot = False
         io.network_input_queue = asyncio.Queue()
-        self.user_contexts[username] = io
+        self.contexts[username] = io
 
         user_addr = f"{username}.{self.os.hostname}"
 
@@ -365,7 +365,7 @@ class UserManager:
 
             # 1b. Populate this new user's map with all other known users.
             all_other_users = list(self.os.network_users.keys())
-            for u, uio in self.user_contexts.items():
+            for u, uio in self.contexts.items():
                 if u != username:
                     all_other_users.append(f"{u}.{self.os.hostname}")
 
@@ -373,7 +373,7 @@ class UserManager:
                  io.user_colors[other_addr] = self._get_next_color(io)
 
         # Part 2: Add the new user (bot or not) to all existing interactive users' maps.
-        for other_io in self.user_contexts.values():
+        for other_io in self.contexts.values():
             if other_io.user != username and not other_io.bot:
                 other_io.user_colors[user_addr] = self._get_next_color(other_io)
 
@@ -432,13 +432,13 @@ class UserManager:
 
     async def logout_network_user(self, username):
         """Called by PortManager when a client disconnects."""
-        if username in self.user_contexts:
-            io = self.user_contexts[username]
+        if username in self.contexts:
+            io = self.contexts[username]
             await self.logout(io, disconnect=f':: {username} has disconnected (network)')
 
     async def handle_client_input(self, username, data):
         """Called by PortManager to feed input to a network user's session."""
-        if username in self.user_contexts:
-            io = self.user_contexts[username]
+        if username in self.contexts:
+            io = self.contexts[username]
             if hasattr(io, 'network_input_queue') and isinstance(io.network_input_queue, asyncio.Queue):
                 await io.network_input_queue.put(data)

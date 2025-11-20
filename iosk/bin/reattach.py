@@ -33,10 +33,10 @@ async def iocall(io, argv):
     target_user_name = argv[1] if len(argv) > 1 else io.user
 
     # --- Initial Validation ---
-    if target_user_name not in io.os.users:
+    if target_user_name not in io.os.users.contexts:
         await io.error(f"!! reattach: user '{target_user_name}' is not logged in.")
         return False
-    target_io = io.os.users[target_user_name]
+    target_io = io.os.users.contexts[target_user_name]
 
     new_device_virtual_path = posixpath.join('/dev', device_name_input)
     if not await io.os.exists(io, new_device_virtual_path):
@@ -50,7 +50,7 @@ async def iocall(io, argv):
 
     if is_console_target:
         current_console_io = None
-        for user_io_obj in io.os.users.values():
+        for user_io_obj in io.os.users.contexts.values():
             if user_io_obj.dev in console_devices:
                 current_console_io = user_io_obj
                 break

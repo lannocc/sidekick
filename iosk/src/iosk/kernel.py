@@ -176,7 +176,7 @@ class IOSK:
         if self.port:
             await self.port.stop()
 
-        for user, uio in self.users.user_contexts.copy().items():
+        for user, uio in self.users.contexts.copy().items():
             disconnect = f':: {user} has been disconnected (shutdown)'
             await self.users.logout(uio, disconnect=disconnect)
 

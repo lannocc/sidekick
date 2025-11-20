@@ -33,7 +33,7 @@ async def iocall(io, argv):
         await io.print(":: You are already logged in as that user.")
         return True
 
-    if new_username in io.os.users:
+    if new_username in io.os.users.contexts:
         await io.error(f"!! login: user '{new_username}' is already logged in.")
         return False
 

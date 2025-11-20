@@ -29,7 +29,7 @@ async def iocall(io, argv):
         uptime = format_timedelta(now - io.os.started, style='uptime')
 
     # User and process counts
-    total_users = len(io.os.users)
+    total_users = len(io.os.users.contexts)
     process_table = io.os.process_table
     total_procs = len(process_table)
     

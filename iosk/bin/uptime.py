@@ -31,7 +31,7 @@ async def iocall(io, argv):
         uptime_str = format_timedelta(now - io.os.started, style='uptime')
 
     # 3. User count
-    user_count = len(io.os.users)
+    user_count = len(io.os.users.contexts)
     user_str = f"{user_count} user{'s' if user_count != 1 else ''}"
 
     # Assemble the final output string, similar to Linux `uptime`
