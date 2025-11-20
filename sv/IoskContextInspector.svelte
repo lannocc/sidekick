@@ -4,11 +4,13 @@
 -->
 <script>
     import { onDestroy } from 'svelte';
+    import { get } from 'svelte/store';
     import { contextUpdates } from './ioskEvents.js';
     import { windows } from './windows.js';
     import IoskContextInspector from './IoskContextInspector.svelte';
 
     // --- Component Props ---
+    export let id; // The window tab ID for this component instance
     export let groupId; // The window group ID for this component instance
     export let consoleId; // The console tab ID this inspector is linked to
     export let targetUser; // The user whose context is being inspected
@@ -70,12 +72,38 @@
         // FIX: Reverted to the simpler, working logic from the .bak file.
         // The new check for `consoleId` was preventing updates from being received.
         if (update && update.targetUser === targetUser) {
+            // --- Sentinel: Store pre-update state for comparison ---
+            const oldIsPaused = contextData?.isPaused;
+            const oldHistoryLength = contextData?.aiContext?.sessionHistory?.length ?? 0;
+
             if (update.type === 'full') {
                 contextData = update.data;
             } else if (update.type === 'partial' && contextData) {
                 // Merge partial updates into the existing context.
                 // This creates a new object, triggering Svelte's reactivity.
                 contextData = { ...contextData, ...update.data };
+            }
+
+            // --- Sentinel: Check for notifiable events after update ---
+            if (contextData && !get(windows).find(w => w.id === groupId)?.isActive) {
+                let notified = false;
+                
+                // Check for new errors in session history
+                const newHistory = contextData.aiContext?.sessionHistory;
+                if (newHistory && newHistory.length > oldHistoryLength) {
+                    const newEntries = newHistory.slice(oldHistoryLength);
+                    const errorEntry = newEntries.find(entry => analyzePrompt(entry.content).type === 'error');
+                    if (errorEntry) {
+                        windows.notifyActivity(groupId, id, { summary: `Error received from ${targetUser}` });
+                        notified = true;
+                    }
+                }
+
+                // If not notified yet, check for pause state change
+                if (!notified && oldIsPaused !== undefined && contextData.isPaused !== oldIsPaused) {
+                    const summary = `${targetUser} has been ${contextData.isPaused ? 'paused' : 'resumed'}.`;
+                    windows.notifyActivity(groupId, id, { summary });
+                }
             }
         }
     });

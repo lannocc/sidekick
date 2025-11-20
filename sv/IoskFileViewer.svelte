@@ -4,6 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy, tick } from 'svelte';
+    import { get } from 'svelte/store';
     import { fileSystemRequests, fileSystemResponses, fileSystemTailEvents } from './ioskEvents.js';
     import { marked } from 'marked';
     import { windows } from './windows.js';
@@ -209,6 +210,11 @@
 
         unsubscribeTailEvents = fileSystemTailEvents.subscribe(event => {
             if (event && event.consoleId === consoleId && isFollowing && event.data.path === path) {
+                // --- Sentinel: Notify on new content if window is inactive ---
+                if (!get(windows).find(w => w.id === groupId)?.isActive) {
+                    windows.notifyActivity(groupId, id, { summary: `Content updated for ${path}` });
+                }
+                // --- End Sentinel ---
                 if (!isBinary) {
                     content_text += event.data.data;
                     scrollToBottom();

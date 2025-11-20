@@ -361,6 +361,11 @@
                         });
                         delete newChangeStatus['..'];
                         if (Object.keys(newChangeStatus).length > 0) {
+                           // --- Sentinel: Notify on changes if window is inactive ---
+                           if (!get(windows).find(w => w.id === groupId)?.isActive) {
+                               windows.notifyActivity(groupId, id, { summary: `File changes in ${currentPath}` });
+                           }
+                           // --- End Sentinel ---
                            itemChangeStatus = { ...itemChangeStatus, ...newChangeStatus };
                            clearTimeout(changeClearTimeout);
                            changeClearTimeout = setTimeout(() => {
