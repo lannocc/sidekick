@@ -386,12 +386,9 @@
         justify-content: center;
         flex-wrap: wrap;
     }
-    .tabs-row-1 { background-color: var(--title-bar-bg); }
-    .tabs-row-2 { background-color: var(--console-bg); }
-    .tabs-row-3 { 
-        background-color: var(--window-bg);
-        border-top: 1px dotted var(--border-color);
-    }
+    .tabs-row-1 { background-color: #012133; }
+    .tabs-row-2 { background-color: #113143; }
+    .tabs-row-3 { background-color: #214153; }
 
     .tab-button {
         padding: 8px 16px;
