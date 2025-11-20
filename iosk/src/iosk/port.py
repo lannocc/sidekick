@@ -2,6 +2,9 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
+from . import util
+from . import web
+
 import asyncio
 import json
 import logging
@@ -43,14 +46,9 @@ class PortManager:
     Manages all network communication for an IOSK system, including the
     WebSocket server, connection lifecycle, and message routing.
     """
-    COLOR_MAP = {
-        'black': '\033[30m', 'red': '\033[31m', 'green': '\033[32m', 'yellow': '\033[33m',
-        'blue': '\033[34m', 'magenta': '\033[35m', 'cyan': '\033[36m', 'white': '\033[37m',
-        'bright_black': '\033[90m', 'bright_red': '\033[91m', 'bright_green': '\033[92m',
-        'bright_yellow': '\033[93m', 'bright_blue': '\033[94m', 'bright_magenta': '\033[95m',
-        'bright_cyan': '\033[96m', 'bright_white': '\033[97m',
-    }
-    REVERSE_COLOR_MAP = {v: k for k, v in COLOR_MAP.items()}
+    # COLOR_MAP and REVERSE_COLOR_MAP are now imported from util
+    COLOR_MAP = util.COLOR_MAP
+    REVERSE_COLOR_MAP = util.REVERSE_COLOR_MAP
 
     def __init__(self, kernel: "IOSK"):
         self.os = kernel
@@ -227,7 +225,7 @@ class PortManager:
                 else:
                     # Fallback for older peers: process only the peer's local state.
                     log.warning(f"Peer {peer_hostname} did not provide full mesh state. Performing partial sync.")
-                    await self._process_network_state_update({
+                    await web._process_network_state_update(self, {
                         "type": "state_sync",
                         "host": peer_hostname,
                         "users": ack_message.get("users", []),
@@ -481,29 +479,6 @@ class PortManager:
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
 
-    class _ClientUpdateEventHandler(FileSystemEventHandler):
-        """Helper class to dispatch watchdog events back to the client."""
-        def __init__(self, port_manager, user, watched_path, loop):
-            self.pm = port_manager
-            self.user = user
-            self.watched_path = watched_path
-            self.loop = loop
-
-        def on_any_event(self, event):
-            # We are in a separate thread. Use thread-safe call.
-            affected_filename = os.path.basename(event.src_path)
-            affected_virtual_path = posixpath.join(self.watched_path, affected_filename)
-
-            payload = {
-                "type": "fs_watch_update",
-                "path": self.watched_path,
-                "event_type": event.event_type, # 'created', 'deleted', 'modified', 'moved'
-                "affected_path": affected_virtual_path,
-                "is_dir": event.is_directory
-            }
-            coro = self.pm.send_payload_to_client(self.user, payload)
-            asyncio.run_coroutine_threadsafe(coro, self.loop)
-
     def _get_color_name_map(self, user_io: "Context") -> dict:
         """Converts a user's ANSI color map to a map of usernames to color names."""
         if not user_io or not hasattr(user_io, 'user_colors'):
@@ -577,7 +552,7 @@ class PortManager:
             old_network_users = set(self.os.network_users.keys())
 
             # ADDED: Process incoming user and room list and sync state
-            await self._process_network_state_update({
+            await web._process_network_state_update(self, {
                 "type": "state_sync",
                 "host": hostname,
                 "users": message.get("users", []),
@@ -714,7 +689,10 @@ class PortManager:
             await self._dispatch_message(websocket, conn_meta, message_str)
 
     async def _dispatch_message(self, websocket: WebSocketServerProtocol, conn_meta: Connection, message_str: str):
-        """Parses and routes a single incoming message based on its type."""
+        """
+        Parses and routes a single incoming message to a handler in the web module.
+        This method is now a simple router, fulfilling the refactoring proposal.
+        """
         try:
             # Client messages might be wrapped in the SK1 protocol
             if message_str.startswith("SK1:"):
@@ -723,142 +701,14 @@ class PortManager:
             message = json.loads(message_str)
             msg_type = message.get("type")
 
-            if msg_type == "forward_request":
-                final_destination = message.get('final_destination')
-                payload = message.get('payload')
-                if not final_destination or payload is None:
-                    log.warning(f"Malformed forward_request received: {message}")
-                    return
-                # Do not process locally. Unwrap and route it onward.
-                await self.route_message(final_destination, payload)
+            # This router maps message types to their corresponding handler functions in web.py.
+            # The handlers are responsible for the full logic, including permissions checks.
+            # This keeps the PortManager focused on connection lifecycle and routing.
+            handler = getattr(web, f"handle_{msg_type}", None)
 
-            # --- MESHING PROPAGATION ---
-            elif msg_type == "peer_update":
-                # MODIFIED: Pass the hostname of the peer that sent this message
-                from_peer_hostname = conn_meta.hostname
-                await self._handle_peer_update(message, from_peer=from_peer_hostname)
-
-            elif msg_type in ("user_update", "room_update", "room_state_update", "user_colors_update"):
-                # 1. Process locally first
-                await self._process_network_state_update(message)
-                # 2. Forward the update to all other peers
-                peers_to_notify = {h: ws for h, ws in self.peers.items() if h != conn_meta.hostname}
-                if peers_to_notify:
-                    log.info(f"Forwarding {msg_type} from {conn_meta.hostname} to {list(peers_to_notify.keys())}")
-                    aws = [ws.send(message_str) for ws in peers_to_notify.values()]
-                    await asyncio.gather(*aws, return_exceptions=True)
-
-            elif msg_type == "state_sync":
-                await self._process_network_state_update(message)
-
-            elif msg_type == "system_broadcast":
-                msg_content = message.get("message")
-                if msg_content:
-                    await self.os.system.print(msg_content)
-
-            elif msg_type == "remote_exec_request":
-                # This is a complex handler that streams output back
-                await self._handle_remote_exec(websocket, message)
-
-            elif msg_type == "remote_exec_response":
-                await self._handle_remote_exec_response(message)
-
-            elif msg_type == "room_message":
-                msg_id = message.get("msg_id")
-                if msg_id:
-                    if msg_id in self.seen_message_ids:
-                        return  # Already processed this message, drop it.
-                    self.seen_message_ids.add(msg_id)
-                    if len(self.seen_message_ids) > self.MESSAGE_ID_CACHE_SIZE:
-                        self.seen_message_ids.pop() # Evict an old ID
-
-                # 1. Process the message locally
-                await self.os.chat.handle_network_message(message)
-
-                # 2. Forward the message to all other connected peers
-                from_peer_hostname = conn_meta.hostname
-                peers_to_forward = {h: ws for h, ws in self.peers.items() if h != from_peer_hostname}
-                if peers_to_forward:
-                    log.info(f"Forwarding room message from '{from_peer_hostname}' to {list(peers_to_forward.keys())}")
-                    aws = [ws.send(message_str) for ws in peers_to_forward.values()]
-                    await asyncio.gather(*aws, return_exceptions=True)
-
-            elif msg_type == "direct_message":
-                await self.os.chat.handle_network_message(message)
-
-            elif msg_type == "client_input":
-                if conn_meta.type == 'client' and conn_meta.username:
-                    await self.os.handle_client_input(conn_meta.username, message.get("data", ""))
-                else:
-                    log.warning("Received client_input from non-client connection.")
-
-            elif msg_type == "room_action":
-                if conn_meta.type == 'client' and conn_meta.username:
-                    action = message.get("action")
-                    if action == "join":
-                        room_name = message.get("roomName")
-                        if room_name:
-                            command = f"$ room {shlex.quote(room_name)}"
-                            await self.os.handle_client_input(conn_meta.username, command + '\n')
-                    elif action == "close":
-                        command = "$ clroom"
-                        await self.os.handle_client_input(conn_meta.username, command + '\n')
-                else:
-                    log.warning("Received room_action from non-client connection.")
-
-            elif msg_type == "exec_command":
-                if conn_meta.type == 'client' and conn_meta.username:
-                    io_context = self.os.users.contexts.get(conn_meta.username)
-                    if io_context:
-                        await self._handle_exec_command(websocket, io_context, message)
-                else:
-                    log.warning("Received exec_command from non-client connection.")
-
-            elif msg_type == "fs_list":
-                if conn_meta.type == 'client' and conn_meta.username:
-                    path = message.get("path", "/")
-                    requesterId = message.get("requesterId")
-                    recursive = message.get("recursive", False)
-                    io_context = self.os.users.contexts.get(conn_meta.username)
-                    if io_context:
-                        await self._handle_fs_list(websocket, io_context, path, requesterId, recursive)
-                else:
-                    log.warning("Received fs_list from non-client connection.")
-
-            elif msg_type == "fs_read":
-                if conn_meta.type == 'client' and conn_meta.username:
-                    io_context = self.os.users.contexts.get(conn_meta.username)
-                    if io_context:
-                        await self._handle_fs_read(websocket, io_context, message)
-                else:
-                    log.warning("Received fs_read from non-client or malformed request.")
-
-            elif msg_type == "fs_watch_start":
-                if conn_meta.type == 'client' and conn_meta.username:
-                    path = message.get("path")
-                    io_context = self.os.users.contexts.get(conn_meta.username)
-                    if io_context and path:
-                        await self._handle_fs_watch_start(websocket, io_context, path)
-
-            elif msg_type == "fs_watch_stop":
-                if conn_meta.type == 'client':
-                    path = message.get("path")
-                    if path:
-                        await self._handle_fs_watch_stop(websocket, path)
-
-            elif msg_type == "fs_tail_start":
-                if conn_meta.type == 'client' and conn_meta.username:
-                    path = message.get("path")
-                    io_context = self.os.users.contexts.get(conn_meta.username)
-                    if io_context and path:
-                        await self._handle_fs_tail_start(websocket, io_context, path)
-
-            elif msg_type == "fs_tail_stop":
-                if conn_meta.type == 'client':
-                    path = message.get("path")
-                    if path:
-                        await self._handle_fs_tail_stop(websocket, path)
-
+            if handler:
+                # Pass all relevant context to the handler. The handler will decide what to use.
+                await handler(self, websocket, conn_meta, message, message_str)
             else:
                 log.warning(f"Received unknown message type: {msg_type}")
 
@@ -960,7 +810,7 @@ class PortManager:
             return
 
         loop = asyncio.get_running_loop()
-        event_handler = self._ClientUpdateEventHandler(self, io_context.user, path, loop)
+        event_handler = web._ClientUpdateEventHandler(self, io_context.user, path, loop)
 
         observer = Observer()
         observer.schedule(event_handler, host_path, recursive=False)
@@ -1097,91 +947,6 @@ class PortManager:
         # Check for completion signal
         if is_complete:
             completion_event.set()
-
-    async def _process_network_state_update(self, message: dict):
-        """Processes state update messages from peers to update the kernel's state caches."""
-        msg_type = message.get("type")
-
-        if msg_type == "user_update":
-            action = message.get("action")
-            user = message.get("user")
-            host = message.get("host")
-
-            if not all([action, user, host]):
-                return # Malformed message
-
-            user_addr = f"{user}.{host}"
-            if action == "login":
-                is_bot = message.get('is_bot', False)
-                paused = message.get('paused', False)
-                self.os.network_users[user_addr] = {'is_bot': is_bot, 'paused': paused} # Add user
-                # Assign color for this network user to all local interactive users
-                for uio in self.os.users.contexts.values():
-                    if not uio.bot and user_addr not in uio.user_colors:
-                        uio.user_colors[user_addr] = self.os._get_next_color(uio)
-            elif action == "logout":
-                if user_addr in self.os.network_users:
-                    del self.os.network_users[user_addr] # Remove user
-                # Remove color for this network user from all local interactive users
-                for uio in self.os.users.contexts.values():
-                    if not uio.bot and user_addr in uio.user_colors:
-                        del uio.user_colors[user_addr]
-                # Also remove from rooms dict if they were in one
-                if user_addr in self.os.network_rooms:
-                    del self.os.network_rooms[user_addr]
-            elif action == "state_update":
-                if user_addr in self.os.network_users:
-                    paused = message.get('paused')
-                    if paused is not None:
-                        self.os.network_users[user_addr]['paused'] = paused
-
-        elif msg_type == "room_update":
-            action = message.get("action")
-            host = message.get("host")
-            room_name = message.get("name")
-
-            if not all([action, host, room_name]):
-                return # Malformed message
-
-            # Find all users associated with the host that sent the update
-            users_on_host = [
-                user_addr for user_addr in self.os.network_users
-                if user_addr.endswith(f'.{host}')
-            ]
-
-            if action == "open":
-                for user_addr in users_on_host:
-                    self.os.network_rooms[user_addr] = room_name
-            elif action == "close":
-                for user_addr in users_on_host:
-                    if user_addr in self.os.network_rooms:
-                        del self.os.network_rooms[user_addr]
-
-        elif msg_type == "state_sync":
-            # This handles the initial sync of users and room state from a new peer
-            host = message.get("host")
-            users = message.get("users", [])
-            room_info = message.get("room", {})
-
-            if not host: # users list can be empty, but host is required
-                return # Malformed sync message
-
-            # Sync users
-            for user in users:
-                user_addr = f"{user}.{host}"
-                if user_addr not in self.os.network_users:
-                    self.os.network_users[user_addr] = {} # Add the user
-
-            # Sync room state for those users
-            room_name = room_info.get('name')
-            if room_name:
-                users_on_host = [u_addr for u_addr in self.os.network_users if u_addr.endswith(f'.{host}')]
-                for user_addr in users_on_host:
-                    self.os.network_rooms[user_addr] = room_name
-
-        if self.os.chat:
-            await self.os.chat._broadcast_room_state_update()
-        await self.broadcast_color_updates()
 
     # --------------------------------------------------------------------------
     # MESHING-SPECIFIC METHODS
