@@ -52,7 +52,7 @@ async def iosend(io, data):
     Passes a direct reference to the static `trip` function. The Engagement
     class is responsible for calling it with a client and prompt.
     """
-    engagement = io.os.chat.engagements.get(io.user)
+    engagement = io.os.chat.engagements.get(io.session.user)
     if not engagement:
         return
     engagement.append(data, trip)
@@ -63,7 +63,7 @@ async def iosender(io, data, model):
     Uses a lambda to create a function that has the 'model' argument
     pre-filled. The Engagement class will later call this with (client, prompt).
     """
-    engagement = io.os.chat.engagements.get(io.user)
+    engagement = io.os.chat.engagements.get(io.session.user)
     if not engagement:
         return
     model_specific_trip = lambda client, prompt: trip(client, prompt, model=model)
@@ -71,7 +71,7 @@ async def iosender(io, data, model):
 
 async def iorecv(io, prompt=None):
     """Receives data from the engagement input buffer. Unchanged."""
-    engagement = io.os.chat.engagements.get(io.user)
+    engagement = io.os.chat.engagements.get(io.session.user)
     if not engagement:
         return None
     data = await engagement.input()
