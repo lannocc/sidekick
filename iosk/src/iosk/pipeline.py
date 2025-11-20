@@ -144,6 +144,12 @@ class CommandPipelineExecutor:
             io.add_history_entry(full_history_entry.rstrip('\n') + '\n')
         # --- End Implementation ---
 
+        # --- GlassBox Proposal: Section 3.1.4 ---
+        # After any command finishes, check for subscribers and broadcast the new state.
+        if self.os.port:
+            await self.os.port.broadcast_context_update(io)
+        # --- End Hook ---
+
         return success
 
     async def _execute_single_command(self, io: 'Context', argv: List[str]) -> bool:
