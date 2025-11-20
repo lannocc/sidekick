@@ -281,6 +281,53 @@
         promptExpandedState = newState;
     }
 
+    // --- New function for Prompt Analysis ---
+    function analyzePrompt(originalContent) {
+        if (typeof originalContent !== 'string') {
+            return { type: 'unknown', content: '', prompt: null, strippedContent: '' };
+        }
+
+        // 1. Strip leading blank lines (or lines with only whitespace)
+        const content = originalContent.replace(/^(\s*[\r\n])+/, '');
+
+        // 2. Info message
+        if (content.startsWith(':: ')) {
+            return { type: 'info', content, strippedContent: content.substring(3), prompt: null };
+        }
+
+        // 3. Error message
+        if (content.startsWith('!! ')) {
+            return { type: 'error', content, strippedContent: content.substring(3), prompt: null };
+        }
+
+        // 4. Command
+        const commandMatch = content.match(/^(\[.*?\] \$ )(.*)/s);
+        if (commandMatch) {
+            return { type: 'command', content, prompt: commandMatch[1], strippedContent: commandMatch[2] };
+        }
+
+        // 5. Comment
+        const commentMatch = content.match(/^(\[.*?\] # )(.*)/s);
+        if (commentMatch) {
+            return { type: 'comment', content, prompt: commentMatch[1], strippedContent: commentMatch[2] };
+        }
+
+        // 6. Chat sent
+        const chatSentMatch = content.match(/^(\[.*?\] >> )(.*)/s);
+        if (chatSentMatch) {
+            return { type: 'chat-sent', content, prompt: chatSentMatch[1], strippedContent: chatSentMatch[2] };
+        }
+        
+        // 7. Chat received
+        const chatReceivedMatch = content.match(/^(\[.*?\] << )(.*)/s);
+        if (chatReceivedMatch) {
+            return { type: 'chat-received', content, prompt: chatReceivedMatch[1], strippedContent: chatReceivedMatch[2] };
+        }
+
+        // Fallback for unknown prompt types
+        return { type: 'unknown', content, strippedContent: content, prompt: null };
+    }
+
     // --- New functions for Prompt Management ---
     function sendInspectorCommand(command) {
         if (!consoleWs || consoleWs.readyState !== WebSocket.OPEN) return;
@@ -559,6 +606,10 @@
         padding: 10px;
         background-color: var(--window-bg);
     }
+    .prompt-content pre {
+        margin: 0;
+        white-space: pre-wrap;
+    }
 
     /* New styles for header controls */
     .header-controls {
@@ -727,6 +778,17 @@
         width: 16px;
         height: 16px;
         align-self: center;
+    }
+
+    /* New styles for prompt types */
+    .prompt-content.info {
+        background-color: rgba(52, 152, 219, 0.1); /* Faded blue */
+        border-left: 3px solid var(--ansi-bright-blue);
+        font-style: italic;
+    }
+    .prompt-content.error {
+        background-color: rgba(231, 76, 60, 0.1); /* Faded red */
+        border-left: 3px solid var(--ansi-bright-red);
     }
 </style>
 
@@ -946,6 +1008,7 @@
 
                 <div class="prompts-list-container" style="margin-top: 10px;">
                     {#each contextData.aiContext.sessionHistory as entry (entry.number)}
+                        {@const analysis = analyzePrompt(entry.content)}
                         <div class="prompt-entry">
                             <div class="prompt-header" on:click={() => {
                                 promptExpandedState[entry.number] = !promptExpandedState[entry.number];
@@ -964,12 +1027,12 @@
                                 />
                                 <span class="prompt-number">Prompt #{entry.number}</span>
                                 {#if !promptExpandedState[entry.number]}
-                                    <span class="prompt-preview">{@html parseAnsi(getFirstLine(entry.content))}</span>
+                                    <span class="prompt-preview">{@html parseAnsi(getFirstLine(analysis.content))}</span>
                                 {/if}
                             </div>
                             {#if promptExpandedState[entry.number]}
-                                <div class="prompt-content">
-                                    <pre style="margin: 0; white-space: pre-wrap;">{@html parseAnsi(entry.content)}</pre>
+                                <div class="prompt-content" class:info={analysis.type === 'info'} class:error={analysis.type === 'error'}>
+                                    <pre>{#if analysis.prompt}<span>{@html parseAnsi(analysis.prompt)}</span>{/if}{@html parseAnsi(analysis.strippedContent)}</pre>
                                 </div>
                             {/if}
                         </div>
