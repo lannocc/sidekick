@@ -6,6 +6,7 @@
     import { onDestroy } from 'svelte';
     import { contextUpdates } from './ioskEvents.js';
     import { windows } from './windows.js';
+    import IoskContextInspector from './IoskContextInspector.svelte';
 
     // --- Component Props ---
     export let groupId; // The window group ID for this component instance
