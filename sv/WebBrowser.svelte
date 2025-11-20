@@ -23,7 +23,7 @@
     // --- Settings Modal State ---
     let showSettings = false;
     let settingsModel = { defaultUrl: '' };
-    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
+    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0, notice: { mode: 'global' } };
 
     // Update the central window store for Dash saving
     $: if (id !== undefined && groupId !== undefined) {
@@ -88,6 +88,11 @@
         // Due to same-origin policy, we cannot reliably get the iframe's current location
         // if it navigates internally (e.g., user clicks a link).
         // The address bar will show the last URL we explicitly set. This is a limitation.
+        
+        // SENTINEL INTEGRATION
+        if (!get(windows).find(w => w.id === groupId)?.isActive) {
+            windows.notifyActivity(groupId, id, { summary: `Page loaded: ${currentUrl.substring(0, 50)}`});
+        }
     }
 
     // --- Settings Logic ---
@@ -99,6 +104,9 @@
         settingsModel = {
             defaultUrl: currentWindowSettings.defaultUrl || currentUrl
         };
+        
+        const defaultNoticeSettings = { mode: 'global', color: '#f39c12', sound: '' };
+        const savedNoticeSettings = currentWindowSettings.notice || {};
 
         // Populate window settings for the modal
         windowSettingsForModal = {
@@ -108,6 +116,8 @@
             width: currentWindowSettings.width ?? width,
             height: currentWindowSettings.height ?? height,
             defaultZoom: currentWindowSettings.defaultZoom ?? 1.0,
+            // SENTINEL: Load notice settings, ensuring defaults are present for binding
+            notice: { ...defaultNoticeSettings, ...savedNoticeSettings },
         };
 
         showSettings = true;
@@ -288,6 +298,29 @@
                             <input type="number" bind:value={windowSettingsForModal.defaultZoom} min="0.5" max="3" step="0.1" style="width: 80px;">
                         </label>
                     </div>
+                </fieldset>
+
+                <fieldset>
+                    <legend>Activity Notice</legend>
+                    <div class="radio-group">
+                        <label><input type="radio" bind:group={windowSettingsForModal.notice.mode} value="global"> Global Default</label>
+                        <label><input type="radio" bind:group={windowSettingsForModal.notice.mode} value="enabled"> Override</label>
+                        <label><input type="radio" bind:group={windowSettingsForModal.notice.mode} value="disabled"> Disabled</label>
+                    </div>
+                    {#if windowSettingsForModal.notice.mode === 'enabled'}
+                        <div class="form-grid" style="padding-left: 0; margin-top: 10px; grid-template-columns: auto 1fr; align-items: center;">
+                            <label>Flash Color</label>
+                            <input type="color" bind:value={windowSettingsForModal.notice.color} style="width: 100px; height: 30px;">
+                            
+                            <label>Notice Sound</label>
+                            <select bind:value={windowSettingsForModal.notice.sound} style="width: 100%; padding: 5px; background-color: var(--console-bg); color: var(--title-bar-text); border: 1px solid var(--border-color);">
+                                <option value="">System Default</option>
+                                <option value="ding.wav">Ding</option>
+                                <option value="alert.wav">Alert</option>
+                                <option value="none">None</option>
+                            </select>
+                        </div>
+                    {/if}
                 </fieldset>
 
                 <div class="buttons">
