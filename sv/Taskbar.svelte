@@ -5,14 +5,17 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow } from './windows.js';
-    import { dashActive } from './desktopStore.js';
+    import { dashActive, unreadNoticeCount } from './desktopStore.js';
     import Clock from './Clock.svelte';
+    import NotificationCenter from './NotificationCenter.svelte';
 
     let showMenu = false; // For Start menu
     let startButton;
 
     let showWindowsMenu = false; // For Windows list menu
     let windowsButton;
+    
+    let showNotificationCenter = false;
 
     let screenWidth;
 
@@ -146,10 +149,16 @@
 </script>
 
 <style>
+    @keyframes notice-glow {
+        50% { border-color: var(--notice-color); box-shadow: 0 0 10px 2px var(--notice-color); }
+    }
+    .task-item.noticing {
+        animation: notice-glow 1.2s ease-in-out;
+    }
     .taskbar { height: 40px; background-color: var(--taskbar-bg); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 10px; flex-shrink: 0; position: relative; z-index: 20000; }
     .taskbar-left, .taskbar-right { display: flex; align-items: center; gap: 8px; position: relative; z-index: 10; }
     .taskbar-center { position: absolute; left: 50%; transform: translateX(-50%); z-index: 10; }
-    .task-item { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; cursor: pointer; max-width: 250px; position: absolute; top: 50%; transform: translateY(-50%); transition: left 0.3s ease-out; z-index: 1; display: flex; align-items: center; justify-content: center; }
+    .task-item { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; cursor: pointer; max-width: 250px; position: absolute; top: 50%; transform: translateY(-50%); transition: left 0.3s ease-out, border-color 0.2s ease-in-out; z-index: 1; display: flex; align-items: center; justify-content: center; }
     .task-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .task-item.minimized { font-style: italic; opacity: 0.7; }
     .task-item.active { border-bottom: 2px solid #27c93f; padding-bottom: 1px; z-index: 2; }
@@ -179,6 +188,9 @@
     .start-button::after, .windows-list-button::after { content: ''; position: absolute; bottom: 0px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
     .start-button::after { right: 5px; }
     .windows-list-button::after { left: 5px; }
+    .clock-button { background: none; border: none; color: inherit; padding: 0 10px; cursor: pointer; position: relative; border-radius: 4px; height: 30px; display: flex; align-items: center; }
+    .clock-button:hover { background-color: var(--taskbar-button-hover-bg); }
+    .notice-badge { position: absolute; top: 0px; right: 0px; background-color: #e74c3c; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; font-weight: bold; display: flex; align-items: center; justify-content: center; line-height: 1; border: 1px solid var(--taskbar-bg); }
 
     /* New styles for tab representation */
     .task-item-layout { display: flex; align-items: center; gap: 4px; overflow: hidden; width: 100%; justify-content: center; }
@@ -216,10 +228,11 @@
             class="task-item"
             class:minimized={win.minimized}
             class:active={win.isActive}
+            class:noticing={!!win.notice}
             title={activeTab?.title}
             on:click={() => { if ($dashActive) dashActive.set(false); handleTaskClick(win); }}
             use:measure={win.id}
-            style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'};"
+            style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'}; --notice-color: {win.notice?.color};"
         >
             {#if win.tabs.length > 1}
                 <div class="task-item-layout">
@@ -243,7 +256,17 @@
         </button>
     {/each}
 
-    <div class="taskbar-center" bind:this={centerSectionEl}><Clock /></div>
+    <div class="taskbar-center" bind:this={centerSectionEl}>
+        <button class="clock-button" on:click={() => showNotificationCenter = !showNotificationCenter}>
+            <Clock />
+            {#if $unreadNoticeCount > 0}
+                <span class="notice-badge">{$unreadNoticeCount}</span>
+            {/if}
+        </button>
+    </div>
+    {#if showNotificationCenter}
+        <NotificationCenter on:close={() => showNotificationCenter = false} />
+    {/if}
     <div class="taskbar-right" bind:this={rightSectionEl}>
         <button class="quick-launch-button" on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); launchIosk(); }} title="IOSK Connection">$+</button>
         <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }}>SKY</button>
