@@ -22,15 +22,39 @@
 
     // --- State for the main inspector window ---
     let activeTab = 'overview';
+    // State for tracking detached (popped-out) tabs
     let detachedTabs = {
         overview: null,
         environment: null,
         history: null,
-        aiContext: null,
-        prompts: null, // New tab for Session History
         telemetry: null,
+        preamble: null,
+        memoryBanks: null,
+        prompts: null,
+        postamble: null,
         json: null,
     };
+    
+    // --- Data structure for rendering tab rows ---
+    const tabRows = [
+        [
+            { id: 'overview', name: 'Overview' },
+            { id: 'environment', name: 'Environment' },
+            { id: 'history', name: 'Commands' },
+            { id: 'telemetry', name: 'Telemetry' },
+        ],
+        [
+            { id: 'preamble', name: 'Preamble' },
+            { id: 'memoryBanks', name: 'Banks' },
+            { id: 'prompts', name: 'Prompts' },
+            { id: 'postamble', name: 'Postamble' },
+        ],
+        [
+            { id: 'json', name: 'JSON' },
+        ]
+    ];
+
+
     // --- State for Token Telemetry ---
     let tokenTooltip = { visible: false, x: 0, y: 0 };
 
@@ -108,8 +132,12 @@
 
     function popOutTab(viewName) {
         if (!contextData) return;
+        // Find the display name for the title from our tabRows structure
+        const tabInfo = tabRows.flat().find(t => t.id === viewName);
+        const titleName = tabInfo ? tabInfo.name : (viewName.charAt(0).toUpperCase() + viewName.slice(1));
+        
         const newWindow = windows.addWindow(IoskContextInspector, {
-            title: `${viewName.charAt(0).toUpperCase() + viewName.slice(1)} - ${targetUser}`,
+            title: `${titleName} - ${targetUser}`,
             consoleId: consoleId,
             targetUser: targetUser,
             consoleWs: consoleWs,
@@ -345,12 +373,26 @@
         padding-bottom: 5px;
         flex-grow: 1; /* Allow title to take up space */
     }
-    .tabs {
+    
+    /* --- NEW Tab Layout Styles --- */
+    .tabs-container {
         display: flex;
-        background-color: var(--title-bar-bg);
+        flex-direction: column;
         border-bottom: 1px solid var(--border-color);
         flex-shrink: 0;
     }
+    .tabs-row {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .tabs-row-1 { background-color: var(--title-bar-bg); }
+    .tabs-row-2 { background-color: var(--console-bg); }
+    .tabs-row-3 { 
+        background-color: var(--window-bg);
+        border-top: 1px dotted var(--border-color);
+    }
+
     .tab-button {
         padding: 8px 16px;
         background: none;
@@ -358,7 +400,6 @@
         color: var(--title-bar-text);
         cursor: pointer;
         border-bottom: 2px solid transparent;
-        margin-bottom: -1px; /* Overlap the container border */
         outline: none;
     }
     .tab-button:hover {
@@ -731,27 +772,30 @@
             {/if}
         </div>
 
-        <div class="tabs">
-            {#each Object.keys(detachedTabs) as tabName, i (tabName)}
-                {@const name = ['Overview', 'Environment', 'Commands', 'Session', 'Prompts', 'Telemetry', 'JSON'][i]}
-                <div class="tab-button-container">
-                    <button class="tab-button" class:active={activeTab === tabName} on:click={() => activeTab = tabName}>
-                        {name}{#if detachedTabs[tabName]} ⇲{/if}
-                    </button>
-                    <button
-                        class="pop-out-button"
-                        title={detachedTabs[tabName] ? 'Focus popped-out window' : 'Pop out to new window'}
-                        on:click|stopPropagation={() => {
-                            const info = detachedTabs[tabName];
-                            if (info) {
-                                windows.setActiveTab(info.groupId, info.tabId);
-                            } else {
-                                popOutTab(tabName);
-                            }
-                        }}
-                    >
-                        ⇲
-                    </button>
+        <div class="tabs-container">
+            {#each tabRows as tabs, rowIndex}
+                <div class="tabs-row tabs-row-{rowIndex + 1}">
+                    {#each tabs as tab (tab.id)}
+                        <div class="tab-button-container">
+                            <button class="tab-button" class:active={activeTab === tab.id} on:click={() => activeTab = tab.id}>
+                                {tab.name}{#if detachedTabs[tab.id]} ⇲{/if}
+                            </button>
+                            <button
+                                class="pop-out-button"
+                                title={detachedTabs[tab.id] ? 'Focus popped-out window' : 'Pop out to new window'}
+                                on:click|stopPropagation={() => {
+                                    const info = detachedTabs[tab.id];
+                                    if (info) {
+                                        windows.setActiveTab(info.groupId, info.tabId);
+                                    } else {
+                                        popOutTab(tab.id);
+                                    }
+                                }}
+                            >
+                                ⇲
+                            </button>
+                        </div>
+                    {/each}
                 </div>
             {/each}
         </div>
@@ -833,57 +877,42 @@
                     <p>No command history.</p>
                  {/if}
             </div>
-        {:else if detachedView === 'aiContext'}
-            <div class="section">
-                <details open>
-                    <summary>Preamble</summary>
-                    <pre class="content-box">{contextData.aiContext.preamble || '(empty)'}</pre>
-                </details>
+        {:else if detachedView === 'preamble'}
+             <div class="section">
+                <h2 class="section-title">AI Preamble</h2>
+                <pre class="content-box">{contextData.aiContext?.preamble || '(empty)'}</pre>
             </div>
+        {:else if detachedView === 'memoryBanks'}
             <div class="section">
-                <details open>
-                    <summary class="summary-with-controls">
-                        <span>Memory Banks ({contextData.aiContext.banks.length})</span>
-                        {#if contextData.aiContext.banks.length > 0}
-                            <span class="expand-collapse-controls">
-                                <button on:click|preventDefault|stopPropagation={() => toggleAllBanks(true)}>Expand All</button>
-                                <button on:click|preventDefault|stopPropagation={() => toggleAllBanks(false)}>Collapse All</button>
-                            </span>
-                        {/if}
-                    </summary>
-                    <div class="content-box">
+                <div class="section-title-with-controls">
+                    <h2 class="section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">
+                        Memory Banks ({contextData.aiContext?.banks?.length ?? 0})
+                    </h2>
+                    {#if contextData.aiContext?.banks?.length > 0}
+                        <div class="expand-collapse-controls">
+                            <button on:click={() => toggleAllBanks(true)}>Expand All</button>
+                            <button on:click={() => toggleAllBanks(false)}>Collapse All</button>
+                        </div>
+                    {/if}
+                </div>
+    
+                {#if contextData.aiContext?.banks?.length > 0}
+                    <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px;">
                         {#each contextData.aiContext.banks as bank (bank.name)}
                             <details bind:open={bankExpandedState[bank.name]}>
                                 <summary>{bank.name}</summary>
                                 <pre class="content-box" style="background-color: var(--console-bg); margin-top: 5px;">{bank.content}</pre>
                             </details>
-                        {:else}
-                            No banks loaded.
                         {/each}
                     </div>
-                </details>
+                {:else}
+                    <p class="waiting-text" style="padding-top: 10px;">No banks loaded.</p>
+                {/if}
             </div>
-            <!-- Placeholder for moved session history. -->
-            <div class="section">
-                <details open>
-                    <summary>Session Prompts</summary>
-                    <div class="content-box">
-                        <p>Session history prompts are in the 'Prompts' tab.</p>
-                        <button 
-                            style="margin-top: 10px; padding: 5px 10px; cursor: pointer; background: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); border-radius: 3px;"
-                            on:click={() => {
-                                const info = detachedTabs['prompts'];
-                                if (info) {
-                                    windows.setActiveTab(info.groupId, info.tabId);
-                                } else {
-                                    activeTab = 'prompts';
-                                }
-                            }}
-                        >
-                            View Prompts Tab
-                        </button>
-                    </div>
-                </details>
+        {:else if detachedView === 'postamble'}
+             <div class="section">
+                <h2 class="section-title">AI Postamble</h2>
+                <pre class="content-box">{contextData.aiContext?.postamble || '(empty)'}</pre>
             </div>
         {:else if detachedView === 'prompts'}
             <div class="section">
