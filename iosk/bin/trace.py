@@ -80,4 +80,3 @@ async def iocall(io, argv):
     # Case 4: Too many arguments
     await io.error("!! trace: too many arguments. Use 'trace --help' for usage.")
     return False
-

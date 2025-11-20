@@ -31,11 +31,11 @@ async def iocall(io, argv):
     user = argv[0]
     command_for_suio = argv[1:]
 
-    if user not in io.os.users:
+    if user not in io.os.users.contexts:
         await io.error(f'!! user not logged in: {user}')
         return False
 
-    suio = io.os.users[user]
+    suio = io.os.users.contexts[user]
 
     # Pass the standard input from the current context (`io`)
     # to the target user's context (`suio`). The kernel's `call`

@@ -24,7 +24,7 @@ async def iocall(io, argv):
     numbers_to_forget = set()
     # The current prompt number is the *next* one to be used.
     # The highest existing number is one less.
-    max_prompt_number = io.prompt_number - 1
+    max_prompt_number = io.session.prompt_number - 1
 
     for arg in argv:
         try:
@@ -50,18 +50,18 @@ async def iocall(io, argv):
         await io.print(":: No valid entries specified to forget.")
         return True
 
-    original_count = len(io.session_history)
+    original_count = len(io.session.session_history)
 
     # --- BEGIN FIX ---
     # Filter the history in-place by assigning to a slice. This modifies the
     # list object shared by the parent context, rather than just reassigning
     # a local variable in this forked context.
-    io.session_history[:] = [
-        entry for entry in io.session_history if entry.number not in numbers_to_forget
+    io.session.session_history[:] = [
+        entry for entry in io.session.session_history if entry.number not in numbers_to_forget
     ]
     # --- END FIX ---
 
-    removed_count = original_count - len(io.session_history)
+    removed_count = original_count - len(io.session.session_history)
 
     if removed_count == 0:
         await io.print(":: No matching prompt entries found to forget.")
@@ -70,7 +70,7 @@ async def iocall(io, argv):
     # After modifying history, a full recalculation is necessary.
     io.recalculate_token_stats()
 
-    new_token_count = io.token_stats.get('history_tokens', 0)
+    new_token_count = io.session.token_stats.get('history_tokens', 0)
 
     await io.print(f":: {removed_count} entries forgotten. History is now {new_token_count} tokens.")
 

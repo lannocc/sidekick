@@ -20,12 +20,11 @@ async def iocall(io, argv):
         await io.print(DOCSTRING)
         return True
 
-    # Get the persisted stats from the user's context (cumulative, last trip)
-    stats = io.token_stats
+    # DO NOT RECALCULATE; this command is for information only
+    #io.recalculate_token_stats()
 
-    # Calculate the current context stats (banked, history, caching)
-    # This ensures the displayed context size is up-to-date, not from the last trip.
-    current_context_stats = await io.os._calculate_context_tokens(io)
+    # Get the fully updated stats from the user's session.
+    stats = io.session.token_stats
 
     # Prepare data for printing
     lines = [
@@ -33,9 +32,9 @@ async def iocall(io, argv):
         ("Cumulative Output", stats['cumulative_output_bytes'], stats['cumulative_output_tokens']),
         ("Last Trip Input", stats['last_trip_input_bytes'], stats['last_trip_input_tokens']),
         ("Last Trip Output", stats['last_trip_output_bytes'], stats['last_trip_output_tokens']),
-        ("Banked Memory", current_context_stats['banked_bytes'], current_context_stats['banked_tokens']),
-        ("Session History", current_context_stats['history_bytes'], current_context_stats['history_tokens']),
-        ("Caching Context", current_context_stats['caching_context_bytes'], current_context_stats['caching_context_tokens']),
+        ("Banked Memory", stats['banked_bytes'], stats['banked_tokens']),
+        ("Session History", stats['history_bytes'], stats['history_tokens']),
+        ("Caching Context", stats['caching_context_bytes'], stats['caching_context_tokens']),
     ]
 
     # Find max label length for alignment

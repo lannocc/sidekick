@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+from sk.iosk.util import format_timedelta
 
 DOCSTRING = """Provide a single, non-interactive snapshot of system activity.
 
@@ -10,33 +11,6 @@ Displays a summary of system status and a list of running processes,
 sorted by runtime in descending order. This is a one-shot command
 and does not update in real-time.
 """
-
-def format_uptime(td):
-    """Formats uptime timedelta similar to standard `top` command."""
-    days = td.days
-    hours, remainder = divmod(td.seconds, 3600)
-    minutes, _ = divmod(remainder, 60)
-
-    if days > 0:
-        day_str = f"{days} day{'s' if days > 1 else ''}"
-        return f"{day_str}, {hours}:{minutes:02d}"
-    
-    if hours > 0:
-        return f"{hours}:{minutes:02d}"
-
-    if minutes > 0:
-        return f"{minutes} min"
-        
-    return f"{td.seconds}s"
-
-def format_timedelta_for_top(td):
-    """Formats a timedelta into a MM:SS string for process runtime."""
-    total_seconds = int(td.total_seconds())
-    minutes, seconds = divmod(total_seconds, 60)
-    # Standard top shows HHH:MM:SS if hours are involved, or MM:SS.cc
-    # For simplicity here, we will just show minutes and seconds.
-    # Large minute counts are acceptable (e.g., 75:30)
-    return f"{minutes}:{seconds:02d}"
 
 async def iocall(io, argv):
     """
@@ -52,11 +26,11 @@ async def iocall(io, argv):
     # Uptime calculation
     uptime = "unknown"
     if io.os.started:
-        uptime = format_uptime(now - io.os.started)
+        uptime = format_timedelta(now - io.os.started, style='uptime')
 
     # User and process counts
-    total_users = len(io.os.users)
-    process_table = io.os.process_table
+    total_users = len(io.os.users.contexts)
+    process_table = io.os.proc.process_table
     total_procs = len(process_table)
     
     # --- 2. Print Summary ---
@@ -86,7 +60,7 @@ async def iocall(io, argv):
     for proc, runtime in sorted_processes:
         pid_str = str(proc.pid)
         user_str = proc.user
-        time_str = format_timedelta_for_top(runtime)
+        time_str = format_timedelta(runtime, style='top_process')
         cmd_str = proc.command_str
         
         display_data.append((pid_str, user_str, time_str, cmd_str))

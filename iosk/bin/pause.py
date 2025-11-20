@@ -1,5 +1,4 @@
-from datetime import datetime # Added import
-import shlex
+from sk.iosk.util import dispatch_remote_if_needed
 
 async def iocall(io, argv):
     """Pause a bot user's AI engagement.
@@ -21,40 +20,27 @@ async def iocall(io, argv):
         await io.error("!! pause: too many arguments.")
         return False
 
+    # Check for and handle remote dispatch
+    dispatched, result = await dispatch_remote_if_needed(io, 'pause', argv)
+    if dispatched:
+        return result
+    argv = result  # Update argv with hostname stripped if necessary
+
     if argv:
         target_user = argv[0]
-        if '.' in target_user:
-            parts = target_user.rsplit('.', 1)
-            if len(parts) == 2:
-                potential_user, potential_host = parts
-
-                is_remote_request = (
-                    io.os.port and
-                    potential_host != io.os.hostname and
-                    potential_host in io.os.port.routing_table
-                )
-
-                if is_remote_request:
-                    command_str = f"pause {shlex.quote(potential_user)}"
-                    await io.print(f":: dispatching to {potential_host}: {command_str}")
-                    return await io.os.port.stream_remote_exec(potential_host, command_str, io)
-
-                if potential_host == io.os.hostname:
-                    # It's explicitly for the local host, so strip the host part
-                    target_user = potential_user
     else:
-        target_user = io.user
+        target_user = io.session.user
 
     # --- Local Execution ---
 
     # Validation
-    if target_user not in io.os.users:
+    if target_user not in io.os.users.contexts:
         await io.error(f"!! pause: user '{target_user}' not found.")
         return False
 
-    target_io = io.os.users[target_user]
+    target_io = io.os.users.contexts[target_user]
 
-    if not target_io.bot:
+    if not target_io.session.bot:
         await io.error(f"!! pause: cannot pause console user '{target_user}'.")
         return False
 
@@ -63,36 +49,9 @@ async def iocall(io, argv):
         await io.error(f"!! pause: no active engagement for bot user '{target_user}'.")
         return False
 
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S') # Get current date and time
-
-    if target_io.paused:
+    if target_io.session.paused:
         await io.print(f":: user '{target_user}' is already paused.")
         return True
 
-    # Pause the user by setting the flag on their context
-    target_io.paused = True
-
-    # Broadcast the state change to network peers
-    if io.os.port:
-        await io.os.port.broadcast_to_peers({
-            'type': 'user_update',
-            'action': 'state_update',
-            'user': target_user,
-            'host': io.os.hostname,
-            'paused': True
-        })
-
-    # Broadcast the state change to local clients
-    if io.os.chat:
-        await io.os.chat._broadcast_room_state_update()
-
-    confirmation_message = f":: user '{target_user}' has been paused at {current_time}."
-    await io.print(confirmation_message)
-
-    # If another user is pausing the target, inform the target user.
-    if io.user != target_user:
-        await target_io.print(confirmation_message)
-
-    await io.os.system.print(f":: {io.user} paused user '{target_user}'")
-
-    return True
+    # Use the new centralized method in UserManager to set the state and broadcast.
+    return await io.os.users.set_user_pause_state(io, target_user, paused=True)

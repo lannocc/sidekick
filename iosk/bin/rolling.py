@@ -28,7 +28,7 @@ async def iocall(io, argv):
         await io.print(DOCSTRING.strip())
         return True
 
-    config = io.rolling_config
+    config = io.session.rolling_config
 
     if len(argv) == 0:
         # Display current status

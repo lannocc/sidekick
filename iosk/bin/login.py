@@ -26,14 +26,14 @@ async def iocall(io, argv):
         return False
 
     new_username = argv[0]
-    current_user = io.user
+    current_user = io.session.user
     current_device = io.dev
 
     if new_username == current_user:
         await io.print(":: You are already logged in as that user.")
         return True
 
-    if new_username in io.os.users:
+    if new_username in io.os.users.contexts:
         await io.error(f"!! login: user '{new_username}' is already logged in.")
         return False
 
@@ -73,4 +73,3 @@ async def iocall(io, argv):
 
     # The iocall returns, and the original user's interactive loop continues.
     return True
-

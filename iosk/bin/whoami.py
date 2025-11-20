@@ -16,7 +16,7 @@ async def iocall(io, argv):
 
     if not argv:
         # Default behavior: no arguments, print username
-        await io.print(io.user)
+        await io.print(io.session.user)
         return True
 
     if len(argv) == 1 and argv[0] == '-d':
@@ -31,4 +31,3 @@ async def iocall(io, argv):
     # Handle invalid arguments
     await io.error(f"!! whoami: invalid argument '{' '.join(argv)}'. Use 'whoami --help' for usage.")
     return False
-

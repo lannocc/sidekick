@@ -43,7 +43,7 @@ async def iocall(io, argv):
     network_users = io.os.network_users
     network_rooms = getattr(io.os, 'network_rooms', {})
 
-    current_running_user = io.user
+    current_running_user = io.session.user
     local_hostname = io.os.hostname
 
     if not network_users:
@@ -119,4 +119,3 @@ async def iocall(io, argv):
         await io.print(f":: {count} user{'s' if count != 1 else ''} found across the mesh.")
 
     return True
-

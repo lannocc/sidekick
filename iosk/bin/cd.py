@@ -1,4 +1,3 @@
-# bin/cd.py
 import os
 import posixpath
 
@@ -20,7 +19,7 @@ async def iocall(io, argv):
 
     if not argv:
         # No arguments, change to user's home directory
-        target_path_input = f'/home/{io.user}'
+        target_path_input = f'/home/{io.session.user}'
     elif len(argv) == 1:
         target_path_input = argv[0]
     else:

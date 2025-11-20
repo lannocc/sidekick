@@ -12,7 +12,7 @@ async def iocall(io, argv):
         await io.print(iocall.__doc__)
         return True
 
-    if not io.os.users:
+    if not io.os.users.contexts:
         # This case is unlikely if the user running `who` is logged in,
         # but it is good practice to handle it.
         await io.print(":: no users are logged in.")
@@ -23,10 +23,10 @@ async def iocall(io, argv):
     max_dev_len = 0
 
     # First pass: gather data and calculate column widths
-    for user_io in io.os.users.values():
-        user = user_io.user
+    for user_io in io.os.users.contexts.values():
+        user = user_io.session.user
         device = user_io.dev
-        login_time = user_io.login_time
+        login_time = user_io.session.login_time
 
         users_data.append((user, device, login_time))
 
@@ -45,4 +45,3 @@ async def iocall(io, argv):
         await io.print(f"{user:<{max_user_len}}{device:<{max_dev_len}}{time_str}")
 
     return True
-

@@ -24,39 +24,39 @@ async def iocall(io, argv):
         await io.error("!! reset: too many arguments. Usage: reset [username]")
         return False
 
-    target_user_name = argv[0] if argv else io.user
+    target_user_name = argv[0] if argv else io.session.user
 
     # --- Permission Check ---
-    if target_user_name != io.user and not io.su:
+    if target_user_name != io.session.user and not io.session.su:
         await io.error("!! reset: permission denied. Only superusers can reset other users.")
         return False
 
     # --- Target User Validation ---
-    if target_user_name not in io.os.users:
+    if target_user_name not in io.os.users.contexts:
         await io.error(f"!! reset: user '{target_user_name}' not found.")
         return False
 
-    target_io = io.os.users[target_user_name]
+    target_io = io.os.users.contexts[target_user_name]
 
     await io.print(f":: resetting session for user '{target_user_name}'...")
 
     # Inform the target user if they were reset by someone else
-    if io.user != target_user_name:
-        await target_io.print(f":: your session has been reset by administrator '{io.user}'.")
+    if io.session.user != target_user_name:
+        await target_io.print(f":: your session has been reset by administrator '{io.session.user}'.")
 
     # --- 1. Clear all session state ---
 
     # --- History Proposal Implementation ---
     # Clear structured chat history, reset prompt number and rolling config
-    target_io.session_history.clear()
-    target_io.prompt_number = 1
-    target_io.rolling_config = {'enabled': False, 'mode': None, 'limit': 0}
+    target_io.session.session_history.clear()
+    target_io.session.prompt_number = 1
+    target_io.session.rolling_config = {'enabled': False, 'mode': None, 'limit': 0}
     # target_io.session.seek(0) # REPLACED
     # target_io.session.truncate(0) # REPLACED
     # --- End Implementation ---
 
     # Clear engagement buffers (for bots)
-    if target_io.bot and target_user_name in io.os.chat.engagements:
+    if target_io.session.bot and target_user_name in io.os.chat.engagements:
         engagement = io.os.chat.engagements[target_user_name]
         engagement.buf = None
         engagement.last_buf = None
@@ -64,13 +64,13 @@ async def iocall(io, argv):
         engagement.waiting = False
 
     # Clear command history, banks, env vars, and aliases
-    target_io.history.clear()
-    target_io.banks.clear()
+    target_io.session.history.clear()
+    target_io.session.banks.clear()
     target_io.env.clear()
-    target_io.aliases.clear()
+    target_io.session.aliases.clear()
 
     # Reset token counts and preamble cache
-    target_io.preamble_cache = None
+    target_io.session.preamble_cache = None
     # --- History Proposal Implementation ---
     # Trigger a full recalculation of token stats after clearing everything.
     target_io.recalculate_token_stats()

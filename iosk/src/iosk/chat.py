@@ -3,6 +3,7 @@
 # @%@~LICENSE~@%@
 
 from .io import print_flush as print
+from . import util
 
 import tiktoken
 #from google.api_core.exceptions import ResourceExhausted
@@ -48,10 +49,10 @@ class AIMessenger:
                     paused = False # NEW: default paused state
                     if host == self.os.hostname:
                         # It's a local user; get the 'is_bot' status from the live context.
-                        if user in self.os.users:
-                            user_io = self.os.users[user] # Get context once
-                            is_bot = user_io.bot
-                            paused = user_io.paused # NEW: get paused state
+                        if user in self.os.users.contexts:
+                            user_io = self.os.users.contexts[user] # Get context once
+                            is_bot = user_io.session.bot
+                            paused = user_io.session.paused # NEW: get paused state
                     else:
                         # It's a remote user; get the 'is_bot' status from the cached network state.
                         user_info = self.os.network_users.get(user_addr, {})
@@ -83,9 +84,9 @@ class AIMessenger:
                 await self.os.exec(io, preamble_path)
             if io.pre:
                 io.pre.seek(0)
-                io.preamble_cache = io.pre.read()
+                io.session.preamble_cache = io.pre.read()
             else:
-                io.preamble_cache = ""
+                io.session.preamble_cache = ""
         finally:
             io.stage_normal()
 
@@ -123,13 +124,13 @@ class AIMessenger:
         return io
 
     async def leave(self, io):
-        await self.remove_from_room(io.user)
+        await self.remove_from_room(io.session.user)
 
-        if io.user in self.engagements:
-            self.engagements[io.user].enabled = False
-            del self.engagements[io.user]
+        if io.session.user in self.engagements:
+            self.engagements[io.session.user].enabled = False
+            del self.engagements[io.session.user]
 
-        msg = f':: {io.user} has left the chat'
+        msg = f':: {io.session.user} has left the chat'
         return await self.os.logout(io, disconnect=msg)
 
     async def send(self, from_user, msg, sys=False):
@@ -137,8 +138,8 @@ class AIMessenger:
 
         # --- System Message Handling (Broadcast to all local users) ---
         if sys:
-            for user, uio in self.os.users.items():
-                if uio.paused: continue
+            for user, uio in self.os.users.contexts.items():
+                if uio.session.paused: continue
                 # System messages should be part of a bot's context.
                 # They are added to history for all users to be forgettable.
                 uio.add_history_entry(msg + '\n')
@@ -194,10 +195,10 @@ class AIMessenger:
                 # Send to local users
                 for user in local_recipients:
                     if user == from_user: continue
-                    if user in self.os.users:
-                        uio = self.os.users[user]
-                        if not uio.paused:
-                            prompt_num = uio.prompt_number
+                    if user in self.os.users.contexts:
+                        uio = self.os.users.contexts[user]
+                        if not uio.session.paused:
+                            prompt_num = uio.session.prompt_number
                             # Use canonical sender address for consistency
                             history_msg = f'\a\n[{remote_from_addr} -> me #{prompt_num} {now}] << {actual_msg}'
                             # Add to history for all users, which increments their prompt_number.
@@ -205,12 +206,12 @@ class AIMessenger:
 
                             # Prepare a potentially colored version for display.
                             display_msg = history_msg
-                            if not uio.bot and uio.user_colors:
-                                sender_color = uio.user_colors.get(remote_from_addr, '')
+                            if not uio.session.bot and uio.session.user_colors:
+                                sender_color = uio.session.user_colors.get(remote_from_addr, '')
                                 if sender_color:
-                                    reset = self.os.ANSI_RESET
-                                    bold = self.os.ANSI_BOLD
-                                    me_color = uio.user_colors.get(f"{uio.user}.{self.os.hostname}", self.os.BRIGHT_WHITE)
+                                    reset = util.ANSI_RESET
+                                    bold = util.ANSI_BOLD
+                                    me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", util.COLOR_MAP['bright_white'])
                                     colored_sender = f'{bold}{sender_color}{remote_from_addr}{reset}'
                                     bold_me = f'{bold}{me_color}me{reset}'
                                     colored_msg = f'{sender_color}{actual_msg}{reset}'
@@ -218,9 +219,9 @@ class AIMessenger:
                             await uio.print(display_msg)
 
                 # Send confirmation to sender
-                sender_io = self.os.users.get(from_user)
+                sender_io = self.os.users.contexts.get(from_user)
                 if sender_io:
-                    prompt_num = sender_io.prompt_number
+                    prompt_num = sender_io.session.prompt_number
                     recipient_str = ', '.join(recipients)
                     history_msg = f'\n[me -> {recipient_str} #{prompt_num} {now}] << {actual_msg}'
                     # Add to the sender's own history.
@@ -228,15 +229,15 @@ class AIMessenger:
 
                     # Prepare a potentially colored version for display.
                     display_msg = history_msg
-                    if not sender_io.bot and sender_io.user_colors:
-                        reset = self.os.ANSI_RESET
-                        bold = self.os.ANSI_BOLD
-                        me_color = sender_io.user_colors.get(f"{from_user}.{self.os.hostname}", self.os.BRIGHT_WHITE)
+                    if not sender_io.session.bot and sender_io.session.user_colors:
+                        reset = util.ANSI_RESET
+                        bold = util.ANSI_BOLD
+                        me_color = sender_io.session.user_colors.get(f"{from_user}.{self.os.hostname}", util.COLOR_MAP['bright_white'])
                         bold_me = f'{bold}{me_color}me{reset}'
                         colored_recipients = []
                         for r_addr in recipients:
                             r_key = r_addr if '.' in r_addr else f"{r_addr}.{self.os.hostname}"
-                            r_color = sender_io.user_colors.get(r_key, '')
+                            r_color = sender_io.session.user_colors.get(r_key, '')
                             colored_recipients.append(
                                 f'{bold}{r_color}{r_addr}{reset}' if r_color else r_addr
                             )
@@ -254,9 +255,9 @@ class AIMessenger:
 
             # Broadcast to local participants
             for user in self.local_room_participants:
-                if user in self.os.users:
-                    uio = self.os.users[user]
-                    prompt_num = uio.prompt_number
+                if user in self.os.users.contexts:
+                    uio = self.os.users.contexts[user]
+                    prompt_num = uio.session.prompt_number
                     # Create the canonical message string for history.
                     history_msg = f'\n[{remote_from_addr} #{prompt_num} {now}] << {msg}'
                     # Add to this user's history, incrementing their prompt_number.
@@ -264,11 +265,11 @@ class AIMessenger:
 
                     # Prepare a potentially colored version for display.
                     display_msg = history_msg
-                    if not uio.bot and uio.user_colors:
-                        color = uio.user_colors.get(remote_from_addr, '')
+                    if not uio.session.bot and uio.session.user_colors:
+                        color = uio.session.user_colors.get(remote_from_addr, '')
                         if color:
-                            reset = self.os.ANSI_RESET
-                            bold = self.os.ANSI_BOLD
+                            reset = util.ANSI_RESET
+                            bold = util.ANSI_BOLD
                             colored_sender = f'{bold}{color}{remote_from_addr}{reset}'
                             colored_msg = f'{color}{msg}{reset}'
                             display_msg = f'\n[{colored_sender} #{prompt_num} {now}] << {colored_msg}'
@@ -285,7 +286,7 @@ class AIMessenger:
             await self.os.port.broadcast_to_peers(payload)
         else:
             # No active room, inform the user
-            sender_io = self.os.users.get(from_user)
+            sender_io = self.os.users.contexts.get(from_user)
             if sender_io:
                 await sender_io.error("!! No active room. Use 'room <name>' to start one.")
 
@@ -297,8 +298,8 @@ class AIMessenger:
             return False
 
         self.active_room = room_name
-        self.room_owner = io.user
-        self.local_room_participants = set(self.os.users.keys())
+        self.room_owner = io.session.user
+        self.local_room_participants = set(self.os.users.contexts.keys())
 
         # Update the kernel's network_rooms state for local users
         for user in self.local_room_participants:
@@ -315,13 +316,13 @@ class AIMessenger:
             await self.os.create(io, owner_file)
             # This is a bit awkward. create+write would be better.
             with open(self.os.box(owner_file), 'w') as f:
-                f.write(io.user)
+                f.write(io.session.user)
 
         self.room_topic = await self.os.get(io, topic_file)
         motd = await self.os.get(io, motd_file)
 
         # Announce room opening to system logs and mesh
-        open_msg = f":: room '{room_name}' opened on '{self.os.hostname}' by '{io.user}'"
+        open_msg = f":: room '{room_name}' opened on '{self.os.hostname}' by '{io.session.user}'"
         await self.os.system.print(open_msg)
 
         await io.print(f":: room '{room_name}' opened.")
@@ -346,7 +347,7 @@ class AIMessenger:
             await io.error("!! No room is currently active.")
             return False
 
-        if not io.su and io.user != self.room_owner:
+        if not io.session.su and io.session.user != self.room_owner:
             await io.error(f"!! Permission denied. Only the owner ('{self.room_owner}') or a superuser can close the room.")
             return False
 
@@ -356,7 +357,7 @@ class AIMessenger:
         closed_room_name = self.active_room
 
         # Announce room closing to system logs and mesh
-        close_msg = f":: room '{closed_room_name}' closed on '{self.os.hostname}' by '{io.user}'"
+        close_msg = f":: room '{closed_room_name}' closed on '{self.os.hostname}' by '{io.session.user}'"
         await self.os.system.print(close_msg)
 
         # Update the kernel's network_rooms state for local users
@@ -386,10 +387,10 @@ class AIMessenger:
             await target_io.error("!! Cannot join: no room is active.")
             return False
 
-        self.local_room_participants.add(target_io.user)
+        self.local_room_participants.add(target_io.session.user)
 
         # Update network_rooms for the new user
-        user_addr = f"{target_io.user}.{self.os.hostname}"
+        user_addr = f"{target_io.session.user}.{self.os.hostname}"
         self.os.network_rooms[user_addr] = self.active_room
 
         motd_file = join('/var/room', self.active_room, 'motd')
@@ -397,10 +398,10 @@ class AIMessenger:
         if motd:
             await target_io.print(motd)
 
-        arrival_msg = f":: {target_io.user} has joined the room."
+        arrival_msg = f":: {target_io.session.user} has joined the room."
         for user in self.local_room_participants:
-            if user != target_io.user and user in self.os.users:
-                await self.os.users[user].print(arrival_msg)
+            if user != target_io.session.user and user in self.os.users.contexts:
+                await self.os.users.contexts[user].print(arrival_msg)
 
         await self._broadcast_room_state_update()
         return True
@@ -417,7 +418,7 @@ class AIMessenger:
             # Announce departure
             departure_msg = f":: {user_name} has left the room."
             for user in self.local_room_participants:
-                await self.os.users[user].print(departure_msg)
+                await self.os.users.contexts[user].print(departure_msg)
             
             await self._broadcast_room_state_update()
 
@@ -431,20 +432,20 @@ class AIMessenger:
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
                 for user in self.local_room_participants:
-                    if user in self.os.users:
-                        uio = self.os.users[user]
-                        prompt_num = uio.prompt_number
+                    if user in self.os.users.contexts:
+                        uio = self.os.users.contexts[user]
+                        prompt_num = uio.session.prompt_number
                         # Create the canonical message string for history.
                         history_msg = f'\n[{from_addr} #{prompt_num} {now}] << {content}'
                         uio.add_history_entry(history_msg + '\n')
 
                         # Prepare a potentially colored version for display.
                         display_msg = history_msg
-                        if not uio.bot and uio.user_colors:
-                            color = uio.user_colors.get(from_addr, '')
+                        if not uio.session.bot and uio.session.user_colors:
+                            color = uio.session.user_colors.get(from_addr, '')
                             if color:
-                                reset = self.os.ANSI_RESET
-                                bold = self.os.ANSI_BOLD
+                                reset = util.ANSI_RESET
+                                bold = util.ANSI_BOLD
                                 colored_sender = f'{bold}{color}{from_addr}{reset}'
                                 colored_content = f'{color}{content}{reset}'
                                 display_msg = f'\n[{colored_sender} #{prompt_num} {now}] << {colored_content}'
@@ -457,21 +458,21 @@ class AIMessenger:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
             for user in to_users:
-                if user in self.os.users:
-                    uio = self.os.users[user]
-                    prompt_num = uio.prompt_number
+                if user in self.os.users.contexts:
+                    uio = self.os.users.contexts[user]
+                    prompt_num = uio.session.prompt_number
                     # Create the canonical message for history.
                     history_msg = f'\a\n[{from_addr} -> me #{prompt_num} {now}] << {content}'
                     uio.add_history_entry(history_msg + '\n')
 
                     # Prepare a potentially colored version for display.
                     display_msg = history_msg
-                    if not uio.bot and uio.user_colors:
-                        sender_color = uio.user_colors.get(from_addr, '')
+                    if not uio.session.bot and uio.session.user_colors:
+                        sender_color = uio.session.user_colors.get(from_addr, '')
                         if sender_color:
-                            reset = self.os.ANSI_RESET
-                            bold = self.os.ANSI_BOLD
-                            me_color = uio.user_colors.get(f"{uio.user}.{self.os.hostname}", self.os.BRIGHT_WHITE)
+                            reset = util.ANSI_RESET
+                            bold = util.ANSI_BOLD
+                            me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", util.COLOR_MAP['bright_white'])
                             colored_sender = f'{bold}{sender_color}{from_addr}{reset}'
                             bold_me = f'{bold}{me_color}me{reset}'
                             colored_content = f'{sender_color}{content}{reset}'
@@ -533,7 +534,7 @@ class Engagement:
         last_trip = datetime.now()
 
         while self.enabled:
-            if self.io and self.io.paused:
+            if self.io and self.io.session.paused:
                 await asyncio.sleep(1.0) # Check every second if still paused
                 continue
 
@@ -588,12 +589,12 @@ class Engagement:
 
             if prompt:
                 # Retrieve cached preamble
-                pre = self.io.preamble_cache or ""
+                pre = self.io.session.preamble_cache or ""
 
                 # solid banking
                 banking = ''
-                if self.io.banks:
-                    for bank_acct, data in self.io.banks.items():
+                if self.io.session.banks:
+                    for bank_acct, data in self.io.session.banks.items():
                         banking += '\n' + data + '\n'
 
                 # Execute postamble
@@ -611,12 +612,10 @@ class Engagement:
 
 
                 if banking:
-                    banking = '' \
-                        + '\n=== CORE RULES/MEMORY BEGIN ===\n' \
-                        + 'THIS SECTION IS MOST IMPORTANT, I MUST ALWAYS ' \
-                        + 'REMEMBER:\n' \
-                        + banking \
-                        + '\n=== END   CORE RULES/MEMORY ===\n'
+                    banking = (util.AI_MEM_HEADER
+                               + util.AI_MEM_PROMPT
+                               + banking
+                               + util.AI_MEM_FOOTER)
 
                 # Determine the correct prompt character for the AI's context
                 # This mirrors the logic in kernel.interactive
@@ -625,12 +624,12 @@ class Engagement:
                 else:
                     prompt_char = '$'
 
-                prompt_text_for_trip = pre + banking \
-                   + '\n=== IOSK PERSONAL CHAT HISTORY BEGIN ===\n' \
-                   + prompt \
-                   + '\n=== END   IOSK PERSONAL CHAT HISTORY ===\n' \
-                   + '\n' + post \
-                   + f'\n[{self.io.user} #{self.io.prompt_number} {self.io.pwd}] {prompt_char} '
+                prompt_text_for_trip = (pre + banking
+                   + util.AI_HISTORY_HEADER
+                   + prompt
+                   + util.AI_HISTORY_FOOTER
+                   + '\n' + post
+                   + f'\n[{self.io.session.user} #{self.io.session.prompt_number} {self.io.pwd}] {prompt_char} ')
 
                 # --- BEGIN FIX ---
                 # This entire block of code was for a redundant and incorrect telemetry
@@ -650,7 +649,7 @@ class Engagement:
                     prompt_tokens = len(prompt_text_for_trip) // 4 # Fallback estimate
 
                 # Await readiness (waits for cooldowns and throttles if TPM is high)
-                await self.io.os.await_device_readiness(self.io.user, self.io.dev, prompt_tokens)
+                await self.io.os.await_device_readiness(self.io.session.user, self.io.dev, prompt_tokens)
 
                 client = await self.io.os.get_device_client(self.io, self.io.dev)
 
@@ -666,7 +665,7 @@ class Engagement:
                         except ClientError as e:
                             if "429" in str(e):
                                 # This is a rate limit error, handle it reactively
-                                await self.io.os.system.error(f':: API rate limit hit for {self.io.user} on {self.io.dev}: {e}')
+                                await self.io.os.system.error(f':: API rate limit hit for {self.io.session.user} on {self.io.dev}: {e}')
                                 await self.io.print(":: API rate limit hit. Analyzing cooldown...")
 
                                 # Parse delay from error message, with a fallback
@@ -680,17 +679,17 @@ class Engagement:
                                 asyncio.create_task(self.io.os.enforce_cooldown(self.io.dev, delay))
 
                                 # Wait for the cooldown to complete before retrying.
-                                await self.io.os.await_device_readiness(self.io.user, self.io.dev, 0)
+                                await self.io.os.await_device_readiness(self.io.session.user, self.io.dev, 0)
 
                                 # Continue to the next attempt in the retry loop
                                 continue
                             else:
                                 # Some other unrecoverable ClientError, fail fast
-                                await self.io.os.system.error(f'!! Unhandled Google ClientError for {self.io.user}: {e}')
+                                await self.io.os.system.error(f'!! Unhandled Google ClientError for {self.io.session.user}: {e}')
                                 reply = None # ensure reply is None
                                 break # exit retry loop
                         except Exception as e:
-                            await self.io.os.system.error(f'!! trip (attempt {attempt+1}) for {self.io.user}: {e}')
+                            await self.io.os.system.error(f'!! trip (attempt {attempt+1}) for {self.io.session.user}: {e}')
                             traceback.print_exc()
                             reply = None # ensure reply is None
                             if attempt < 2: # if not the last attempt
@@ -735,7 +734,7 @@ class Engagement:
         if lang == 'diff':
             ext = '.diff'
 
-        filename_stem = f'{self.io.user}-{self.io.os.BOOT}-{self.io.cid}-{self.CODE}'
+        filename_stem = f'{self.io.session.user}-{self.io.os.BOOT}-{self.io.cid}-{self.CODE}'
         filename = f'{filename_stem}{ext}'
         virtual_path = join(self.io.CODE, filename)
         host_path = self.io.os.box(virtual_path)

@@ -171,7 +171,7 @@ async def iocall(io, argv):
             prompt_tokens = len(full_prompt) // 4 # Fallback estimate
 
         # Step 3: Await device readiness (handles cooldowns and proactive throttling).
-        await io.os.await_device_readiness(io.user, device_path, prompt_tokens)
+        await io.os.await_device_readiness(io.session.user, device_path, prompt_tokens)
 
         # Step 4: Get the client from the kernel.
         client = await io.os.get_device_client(io, device_path)
@@ -204,7 +204,7 @@ async def iocall(io, argv):
                     asyncio.create_task(io.os.enforce_cooldown(device_path, delay))
 
                     # Wait for the cooldown to complete before retrying.
-                    await io.os.await_device_readiness(io.user, device_path, 0)
+                    await io.os.await_device_readiness(io.session.user, device_path, 0)
 
                     # Continue to the next attempt in the retry loop.
                     continue

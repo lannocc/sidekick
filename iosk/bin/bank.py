@@ -44,7 +44,7 @@ async def iocall(io, argv):
                 # Unlike file-based banking, we don't execute piped content, just capture it.
                 await io.print(content)
             finally:
-                # This call finalizes the capture, moving the content into io.banks
+                # This call finalizes the capture, moving the content into io.session.banks
                 io.stage_normal()
 
             await io.print(f":: content piped into memory bank '{bank_key}'")
@@ -89,13 +89,12 @@ async def iocall(io, argv):
             await io.error(f'!! bank: error executing skrip {resolved_path}: {e}')
             return False
         finally:
-            io.stage_normal() # This stores the captured output in io.banks
+            io.stage_normal() # This stores the captured output in io.session.banks
 
         await io.print(f":: memory bank loaded from '{resolved_path}' (executed)")
     else:
         # --- NO SHEBANG: Load the raw content directly ---
-        io.banks[resolved_path] = content
+        io.session.banks[resolved_path] = content
         await io.print(f":: memory bank loaded from '{resolved_path}' (raw content)")
 
     return True
-

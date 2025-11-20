@@ -66,7 +66,7 @@ async def iocall(io, argv):
             return any_match
         else:
             # Fallback to default search path if no stdin
-            default_home = f'/home/{io.user}'
+            default_home = f'/home/{io.session.user}'
             if await io.os.exists(io, default_home):
                 paths = [default_home]
             else:
@@ -129,4 +129,3 @@ async def iocall(io, argv):
                     any_errors = True
 
     return not any_errors
-
