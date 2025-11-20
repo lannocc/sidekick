@@ -59,7 +59,7 @@ class _ClientUpdateEventHandler(FileSystemEventHandler):
         asyncio.run_coroutine_threadsafe(coro, self.loop)
 
 
-async def handle_forward_request(port_manager: "PortManager", message: Dict[str, Any]):
+async def handle_forward_request(port_manager: "PortManager", _websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     final_destination = message.get('final_destination')
     payload = message.get('payload')
     if not final_destination or payload is None:
@@ -69,12 +69,12 @@ async def handle_forward_request(port_manager: "PortManager", message: Dict[str,
     await port_manager.route_message(final_destination, payload)
 
 
-async def handle_peer_update(port_manager: "PortManager", conn_meta: "Connection", message: Dict[str, Any]):
+async def handle_peer_update(port_manager: "PortManager", _websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     from_peer_hostname = conn_meta.hostname
     await port_manager._handle_peer_update(message, from_peer=from_peer_hostname)
 
 
-async def handle_state_gossip(port_manager: "PortManager", conn_meta: "Connection", message: Dict[str, Any], message_str: str):
+async def handle_state_gossip(port_manager: "PortManager", _websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], message_str: str):
     """Handles messages that update shared state and need to be forwarded."""
     # 1. Process locally first
     await _process_network_state_update(port_manager, message)
@@ -93,25 +93,25 @@ handle_room_state_update = handle_state_gossip
 handle_user_colors_update = handle_state_gossip
 
 
-async def handle_state_sync(port_manager: "PortManager", message: Dict[str, Any]):
+async def handle_state_sync(port_manager: "PortManager", _websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     await _process_network_state_update(port_manager, message)
 
 
-async def handle_system_broadcast(port_manager: "PortManager", message: Dict[str, Any]):
+async def handle_system_broadcast(port_manager: "PortManager", _websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     msg_content = message.get("message")
     if msg_content:
         await port_manager.os.system.print(msg_content)
 
 
-async def handle_remote_exec_request(port_manager: "PortManager", websocket: "WebSocketServerProtocol", message: Dict[str, Any]):
+async def handle_remote_exec_request(port_manager: "PortManager", websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     await port_manager._handle_remote_exec(websocket, message)
 
 
-async def handle_remote_exec_response(port_manager: "PortManager", message: Dict[str, Any]):
+async def handle_remote_exec_response(port_manager: "PortManager", _websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     await port_manager._handle_remote_exec_response(message)
 
 
-async def handle_room_message(port_manager: "PortManager", conn_meta: "Connection", message: Dict[str, Any], message_str: str):
+async def handle_room_message(port_manager: "PortManager", _websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], message_str: str):
     msg_id = message.get("msg_id")
     if msg_id:
         if msg_id in port_manager.seen_message_ids:
@@ -132,18 +132,18 @@ async def handle_room_message(port_manager: "PortManager", conn_meta: "Connectio
         await asyncio.gather(*aws, return_exceptions=True)
 
 
-async def handle_direct_message(port_manager: "PortManager", message: Dict[str, Any]):
+async def handle_direct_message(port_manager: "PortManager", _websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     await port_manager.os.chat.handle_network_message(message)
 
 
-async def handle_client_input(port_manager: "PortManager", conn_meta: "Connection", message: Dict[str, Any]):
+async def handle_client_input(port_manager: "PortManager", _websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     if conn_meta.type == 'client' and conn_meta.username:
         await port_manager.os.handle_client_input(conn_meta.username, message.get("data", ""))
     else:
         log.warning("Received client_input from non-client connection.")
 
 
-async def handle_room_action(port_manager: "PortManager", conn_meta: "Connection", message: Dict[str, Any]):
+async def handle_room_action(port_manager: "PortManager", _websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     if conn_meta.type == 'client' and conn_meta.username:
         action = message.get("action")
         if action == "join":
@@ -158,7 +158,7 @@ async def handle_room_action(port_manager: "PortManager", conn_meta: "Connection
         log.warning("Received room_action from non-client connection.")
 
 
-async def handle_exec_command(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any]):
+async def handle_exec_command(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     if conn_meta.type == 'client' and conn_meta.username:
         io_context = port_manager.os.users.contexts.get(conn_meta.username)
         if io_context:
@@ -167,7 +167,7 @@ async def handle_exec_command(port_manager: "PortManager", websocket: "WebSocket
         log.warning("Received exec_command from non-client connection.")
 
 
-async def handle_fs_list(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any]):
+async def handle_fs_list(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     if conn_meta.type == 'client' and conn_meta.username:
         path = message.get("path", "/")
         requesterId = message.get("requesterId")
@@ -179,7 +179,7 @@ async def handle_fs_list(port_manager: "PortManager", websocket: "WebSocketServe
         log.warning("Received fs_list from non-client connection.")
 
 
-async def handle_fs_read(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any]):
+async def handle_fs_read(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     if conn_meta.type == 'client' and conn_meta.username:
         io_context = port_manager.os.users.contexts.get(conn_meta.username)
         if io_context:
@@ -188,7 +188,7 @@ async def handle_fs_read(port_manager: "PortManager", websocket: "WebSocketServe
         log.warning("Received fs_read from non-client or malformed request.")
 
 
-async def handle_fs_watch_start(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any]):
+async def handle_fs_watch_start(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     if conn_meta.type == 'client' and conn_meta.username:
         path = message.get("path")
         io_context = port_manager.os.users.contexts.get(conn_meta.username)
@@ -196,13 +196,13 @@ async def handle_fs_watch_start(port_manager: "PortManager", websocket: "WebSock
             await port_manager._handle_fs_watch_start(websocket, io_context, path)
 
 
-async def handle_fs_watch_stop(port_manager: "PortManager", websocket: "WebSocketServerProtocol", message: Dict[str, Any]):
+async def handle_fs_watch_stop(port_manager: "PortManager", websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     path = message.get("path")
     if path:
         await port_manager._handle_fs_watch_stop(websocket, path)
 
 
-async def handle_fs_tail_start(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any]):
+async def handle_fs_tail_start(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     if conn_meta.type == 'client' and conn_meta.username:
         path = message.get("path")
         io_context = port_manager.os.users.contexts.get(conn_meta.username)
@@ -210,7 +210,7 @@ async def handle_fs_tail_start(port_manager: "PortManager", websocket: "WebSocke
             await port_manager._handle_fs_tail_start(websocket, io_context, path)
 
 
-async def handle_fs_tail_stop(port_manager: "PortManager", websocket: "WebSocketServerProtocol", message: Dict[str, Any]):
+async def handle_fs_tail_stop(port_manager: "PortManager", websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
     path = message.get("path")
     if path:
         await port_manager._handle_fs_tail_stop(websocket, path)
