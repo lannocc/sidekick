@@ -235,15 +235,15 @@ async def _process_network_state_update(port_manager: "PortManager", message: di
             port_manager.os.network_users[user_addr] = {'is_bot': is_bot, 'paused': paused} # Add user
             # Assign color for this network user to all local interactive users
             for uio in port_manager.os.users.contexts.values():
-                if not uio.bot and user_addr not in uio.user_colors:
-                    uio.user_colors[user_addr] = port_manager.os._get_next_color(uio)
+                if not uio.session.bot and user_addr not in uio.session.user_colors:
+                    uio.session.user_colors[user_addr] = port_manager.os._get_next_color(uio)
         elif action == "logout":
             if user_addr in port_manager.os.network_users:
                 del port_manager.os.network_users[user_addr] # Remove user
             # Remove color for this network user from all local interactive users
             for uio in port_manager.os.users.contexts.values():
-                if not uio.bot and user_addr in uio.user_colors:
-                    del uio.user_colors[user_addr]
+                if not uio.session.bot and user_addr in uio.session.user_colors:
+                    del uio.session.user_colors[user_addr]
             # Also remove from rooms dict if they were in one
             if user_addr in port_manager.os.network_rooms:
                 del port_manager.os.network_rooms[user_addr]

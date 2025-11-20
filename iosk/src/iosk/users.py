@@ -2,7 +2,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from .io import Context, Capture
+from .io import Context, Capture, UserSessionState
 
 import asyncio
 from datetime import datetime
@@ -29,8 +29,8 @@ class UserManager:
 
     def _get_next_color(self, io: Context) -> str:
         """Cycles through the USER_COLORS list to pick a color."""
-        color = self.USER_COLORS[io.color_idx % len(self.USER_COLORS)]
-        io.color_idx += 1
+        color = self.USER_COLORS[io.session.color_idx % len(self.USER_COLORS)]
+        io.session.color_idx += 1
         return color
     
     async def set_user_pause_state(self, io: Context, target_user: str, paused: bool):
@@ -45,7 +45,7 @@ class UserManager:
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         # Set the state
-        target_io.paused = paused
+        target_io.session.paused = paused
 
         # Broadcast the state change to network peers
         if self.os.port:
@@ -67,40 +67,40 @@ class UserManager:
 
         # Inform the target user. If unpausing, always inform. If pausing, only
         # inform if another user is performing the action.
-        if not paused or io.user != target_user:
+        if not paused or io.session.user != target_user:
              await target_io.print(confirmation_message)
 
         # Log to system log
-        await self.os.system.print(f":: {io.user} {verb} user '{target_user}'")
+        await self.os.system.print(f":: {io.session.user} {verb} user '{target_user}'")
 
         return True
 
     def _initialize_user_context(self, user: str, device: str) -> Context:
-        """Creates and initializes a new user context object."""
+        """Creates and initializes a new user context object and its session state."""
         io = self.os.system.fork()
+        session = UserSessionState()
+        io.session = session
 
-        # Common attributes
-        io.login_time = datetime.now()
-        io.banks = {}
-        io.history = []
-        io.session_history = []
-        io.prompt_number = 1
+        # Populate session state
+        session.login_time = datetime.now()
+        session.user = user
+
+        # Common per-context attributes
         io.base = True
-        io.user = user
         io.dev = device
         io.log = Capture.log(self.os, f'{self.os.USER_LOG}/{user}', True)
 
-        # Type-specific attributes
+        # Type-specific session attributes
         is_console_user = (device == self.os.CONSOLE_DEV)
         is_network_user = device.startswith('network:')
 
         if is_network_user:
-            io.su = False
-            io.bot = False
+            session.su = False
+            session.bot = False
             io.network_input_queue = asyncio.Queue()
         else: # Covers console and other device (bot) users
-            io.su = is_console_user
-            io.bot = not is_console_user
+            session.su = is_console_user
+            session.bot = not is_console_user
             # network_input_queue is not needed
 
         self.contexts[user] = io
@@ -108,7 +108,7 @@ class UserManager:
 
     async def run_post_login_setup(self, io: Context):
         """Runs startup scripts and other setup after a user is fully logged in."""
-        if not io or not io.user:
+        if not io or not io.session.user:
             return
 
         # Display MOTD if not joining a room.
@@ -165,10 +165,10 @@ class UserManager:
         # --- Color Initialization ---
         # Part 1: If the new user is interactive, set up THEIR color map.
         # Bots do not need their own color map as they don't "see" colors.
-        if not io.bot:
+        if not io.session.bot:
             # This user is interactive, set up their color map with user.host keys.
             # 1a. Assign self-color (white)
-            io.user_colors[user_addr] = self.BRIGHT_WHITE
+            io.session.user_colors[user_addr] = self.BRIGHT_WHITE
 
             # 1b. Populate this new user's map with all other known users.
             all_other_users = list(self.os.network_users.keys())
@@ -178,13 +178,13 @@ class UserManager:
                     all_other_users.append(f"{u}.{self.os.hostname}")
 
             for other_addr in all_other_users:
-                 io.user_colors[other_addr] = self._get_next_color(io)
+                 io.session.user_colors[other_addr] = self._get_next_color(io)
 
         # Part 2: Add the new user (bot or not) to all existing interactive users' maps.
         # This allows interactive users to see and set colors for bots.
         for other_io in self.contexts.values():
-            if other_io.user != user and not other_io.bot:
-                other_io.user_colors[user_addr] = self._get_next_color(other_io)
+            if other_io.session.user != user and not other_io.session.bot:
+                other_io.session.user_colors[user_addr] = self._get_next_color(other_io)
 
         # --- CWD and Home Directory Initialization ---
         if user == 'root':
@@ -232,7 +232,7 @@ class UserManager:
             else: await io.print(connect)
 
         # MODIFIED: Update local network_users and then broadcast
-        self.os.network_users[user_addr] = {'is_bot': io.bot, 'paused': io.paused}
+        self.os.network_users[user_addr] = {'is_bot': io.session.bot, 'paused': io.session.paused}
 
         # Announce user login to network peers
         if self.os.port:
@@ -242,8 +242,8 @@ class UserManager:
                 'action': 'login',
                 'user': user,
                 'host': self.os.hostname,
-                'is_bot': io.bot,
-                'paused': io.paused
+                'is_bot': io.session.bot,
+                'paused': io.session.paused
             })
             # Announce user login to the entire mesh system log
             await self.os.port.broadcast_to_peers({
@@ -270,7 +270,7 @@ class UserManager:
 
                     # --- History Proposal Implementation ---
                     # Construct the prompt with the new prompt number and format.
-                    prompt_str = f'[{io.user} #{io.prompt_number} {io.pwd}] {prompt_char} '
+                    prompt_str = f'[{io.session.user} #{io.session.prompt_number} {io.pwd}] {prompt_char} '
                     # --- End Implementation ---
 
                     while (text := await io.input(prompt=prompt_str)) is None:
@@ -310,7 +310,7 @@ class UserManager:
 
                             # The `history` command uses io.history. We must store the original line.
                             if command_to_run:
-                                io.history.append(original_command_line)
+                                io.session.history.append(original_command_line)
 
                             # The `call` function handles adding the command and output
                             # to the AI's session_history. We pass it the command to execute
@@ -320,7 +320,7 @@ class UserManager:
                             if self.os.chat:
                                 # The chat system is responsible for creating history entries
                                 # and displaying the message for all participants (including the sender).
-                                await self.os.chat.send(io.user, line)
+                                await self.os.chat.send(io.session.user, line)
                             else:
                                 await io.print(line)
 
@@ -335,22 +335,22 @@ class UserManager:
                 continue
 
     async def logout(self, io:Context, disconnect=None):
-        if io.user not in self.contexts:
-            await self.os.system.error(f'!! not logged in: {io.user}')
+        if io.session.user not in self.contexts:
+            await self.os.system.error(f'!! not logged in: {io.session.user}')
             return False
 
-        logout_msg = f":: user '{io.user}' logged off from '{self.os.hostname}'"
+        logout_msg = f":: user '{io.session.user}' logged off from '{self.os.hostname}'"
         await self.os.system.print(logout_msg)
 
-        user_to_logout = io.user
+        user_to_logout = io.session.user
         user_addr_to_logout = f"{user_to_logout}.{self.os.hostname}"
         user_is_network_client = io.dev.startswith('network:')
         del self.contexts[user_to_logout]
 
         # --- Color Cleanup ---
         for remaining_io in self.contexts.values():
-            if not remaining_io.bot and user_addr_to_logout in remaining_io.user_colors:
-                del remaining_io.user_colors[user_addr_to_logout]
+            if not remaining_io.session.bot and user_addr_to_logout in remaining_io.session.user_colors:
+                del remaining_io.session.user_colors[user_addr_to_logout]
 
         if disconnect:
             if self.os.chat: await self.os.chat.send(user_to_logout, disconnect, sys=True)
@@ -399,10 +399,10 @@ class UserManager:
 
         # --- Color Initialization (for network user) ---
         # Part 1: If the new user is interactive, set up THEIR color map.
-        if not io.bot:
+        if not io.session.bot:
             # This user is interactive, set up their color map with user.host keys.
             # 1a. Assign self-color (white)
-            io.user_colors[user_addr] = self.BRIGHT_WHITE
+            io.session.user_colors[user_addr] = self.BRIGHT_WHITE
 
             # 1b. Populate this new user's map with all other known users.
             all_other_users = list(self.os.network_users.keys())
@@ -411,12 +411,12 @@ class UserManager:
                     all_other_users.append(f"{u}.{self.os.hostname}")
 
             for other_addr in all_other_users:
-                 io.user_colors[other_addr] = self._get_next_color(io)
+                 io.session.user_colors[other_addr] = self._get_next_color(io)
 
         # Part 2: Add the new user (bot or not) to all existing interactive users' maps.
         for other_io in self.contexts.values():
-            if other_io.user != username and not other_io.bot:
-                other_io.user_colors[user_addr] = self._get_next_color(other_io)
+            if other_io.session.user != username and not other_io.session.bot:
+                other_io.session.user_colors[user_addr] = self._get_next_color(other_io)
 
         if username == 'root':
             home_dir_virtual = '/root'
@@ -449,7 +449,7 @@ class UserManager:
         io.motd_cache = await self.os.fs.get_motd(io)
 
         # MODIFIED: Update local network_users and then broadcast
-        self.os.network_users[user_addr] = {'is_bot': io.bot, 'paused': io.paused}
+        self.os.network_users[user_addr] = {'is_bot': io.session.bot, 'paused': io.session.paused}
 
         if self.os.port:
             await self.os.port.broadcast_color_updates()
@@ -458,8 +458,8 @@ class UserManager:
                 'action': 'login',
                 'user': username,
                 'host': self.os.hostname,
-                'is_bot': io.bot,
-                'paused': io.paused
+                'is_bot': io.session.bot,
+                'paused': io.session.paused
             })
             await self.os.port.broadcast_to_peers({
                 'type': 'system_broadcast',
