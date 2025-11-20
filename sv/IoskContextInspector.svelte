@@ -27,7 +27,7 @@
             consoleWs.send(JSON.stringify({ type: 'ui_context_unsubscribe', targetUser }));
         }
     });
-    
+
     // --- Helper Functions (copied from IoskConsole.svelte for consistency) ---
     const ansiCodeToCssVar = {
         '30': 'var(--ansi-black)', '31': 'var(--ansi-red)', '32': 'var(--ansi-green)', '33': 'var(--ansi-yellow)',
@@ -246,8 +246,9 @@
             <button class="tab-button" class:active={activeTab === 'overview'} on:click={() => activeTab = 'overview'}>Overview</button>
             <button class="tab-button" class:active={activeTab === 'environment'} on:click={() => activeTab = 'environment'}>Environment</button>
             <button class="tab-button" class:active={activeTab === 'history'} on:click={() => activeTab = 'history'}>Commands</button>
-            <button class="tab-button" class:active={activeTab === 'aiContext'} on:click={() => activeTab = 'aiContext'}>Prompt</button>
+            <button class="tab-button" class:active={activeTab === 'aiContext'} on:click={() => activeTab = 'aiContext'}>Session</button>
             <button class="tab-button" class:active={activeTab === 'telemetry'} on:click={() => activeTab = 'telemetry'}>Telemetry</button>
+            <button class="tab-button" class:active={activeTab === 'json'} on:click={() => activeTab = 'json'}>JSON</button>
         </div>
 
         <div class="tab-content">
@@ -257,10 +258,10 @@
                     <div class="key-value-grid">
                         <span class="key">Login Time:</span>
                         <span class="value">{formatDate(contextData.loginTime)}</span>
-                        
+
                         <span class="key">Bot:</span>
                         <span class="value">{contextData.isBot ? 'Yes' : 'No'}</span>
-                        
+
                         <span class="key">Super User:</span>
                         <span class="value">{contextData.isSuperUser ? 'Yes' : 'No'}</span>
                     </div>
@@ -356,9 +357,15 @@
                         {/each}
                     </div>
                 </div>
+            {:else if activeTab === 'json'}
+                <div class="section">
+                    <h2 class="section-title">Raw Context Data</h2>
+                    <pre class="content-box">{JSON.stringify(contextData, null, 2)}</pre>
+                </div>
             {/if}
         </div>
     {:else}
         <p class="waiting-text">Waiting for context data for {targetUser}...</p>
     {/if}
 </div>
+
