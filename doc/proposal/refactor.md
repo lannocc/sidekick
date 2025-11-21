@@ -95,7 +95,7 @@ Extract this common logic into a new, single helper function `_get_formatted_fil
 The UI and logic for the "Default Window Position & Size" settings modal are duplicated across multiple components: `IoskConsole.svelte`, `IoskFileExplorer.svelte`, `WebBrowser.svelte`, `Settings.svelte`, and `Window.svelte`. This makes simple UI changes to the modal a tedious, multi-file effort.
 
 **Proposed Solution:**
-Create a new, reusable component: `sv/WindowSettingsModal.svelte`.
+Create a new, reusable component: `sv/popup/WindowSettingsModal.svelte`.
 -   This component will accept the `componentName` and current window geometry as props.
 -   It will manage its own internal state for the form fields.
 -   On "Save", it will use the `windowSettings` store directly to save the settings for the given component name and then dispatch a `close` event.
