@@ -10,7 +10,7 @@ import LocalTerminal from './LocalTerminal.svelte';
 import LocalFileExplorer from './LocalFileExplorer.svelte';
 import Ask from './Ask.svelte';
 import IoskWatch from './IoskWatch.svelte';
-import IoskContextInspector from './IoskContextInspector.svelte';
+import IoskUserInspector from './IoskUserInspector.svelte';
 import { desktopSettings, windowSettings, notificationHistory, unreadNoticeCount } from './desktop.js';
 
 let windowGroupIdCounter = 0;
@@ -34,7 +34,7 @@ const componentMap = {
     'LocalFileExplorer': LocalFileExplorer,
     'Ask': Ask,
     'IoskWatch': IoskWatch,
-    'IoskContextInspector': IoskContextInspector,
+    'IoskUserInspector': IoskUserInspector,
 };
 
 function createWindowManager() {
@@ -659,12 +659,12 @@ export function newIoskWatch(consoleTabId, pwd) {
 }
 
 
-export function newIoskContextInspector(consoleTabId, targetUser, consoleWs) {
+export function newIoskUserInspector(consoleTabId, targetUser, consoleWs) {
     const allWindows = get(windows);
 
     // Find if an inspector for this user from this console already exists
     const existingInspectorTab = allWindows.flatMap(g => g.tabs).find(t =>
-        t.componentName === 'IoskContextInspector' && !t.isDetached && t.consoleId === consoleTabId && t.targetUser === targetUser
+        t.componentName === 'IoskUserInspector' && !t.isDetached && t.consoleId === consoleTabId && t.targetUser === targetUser
     );
 
     if (existingInspectorTab) {
@@ -682,8 +682,8 @@ export function newIoskContextInspector(consoleTabId, targetUser, consoleWs) {
         return;
     }
 
-    const title = `Context - ${targetUser}`;
-    windows.addWindow(IoskContextInspector, {
+    const title = `Inspector - ${targetUser}`;
+    windows.addWindow(IoskUserInspector, {
         title,
         consoleId: consoleTabId,
         targetUser: targetUser,

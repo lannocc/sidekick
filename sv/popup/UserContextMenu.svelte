@@ -76,7 +76,7 @@
         </button>
     {:else}
         <button class="menu-item" on:click={() => dispatchAndClose('inspectContext', user)}>
-          Context
+            Inspector
         </button>
         <div class="menu-separator"></div>
         <button class="menu-item" on:click={() => dispatchAndClose('privateChat', user)}>
@@ -86,7 +86,7 @@
             View Log
         </button>
         <button class="menu-item" on:click={() => showColorPicker = true}>
-          Color
+            Color
         </button>
         <div class="menu-separator"></div>
         <button class="menu-item close-item" on:click={() => dispatchAndClose('detach')}>

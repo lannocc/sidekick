@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch, newIoskContextInspector } from './windows.js';
+    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch, newIoskUserInspector } from './windows.js';
     import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents, contextUpdates } from './iosk.js';
     import { desktopSettings, windowSettings } from './desktop.js';
     import RoomsMenu from './popup/RoomsMenu.svelte';
@@ -327,7 +327,7 @@
 
     function inspectUserContext(targetUser) {
       // Open the new window component
-      newIoskContextInspector(id, targetUser, ws);
+      newIoskUserInspector(id, targetUser, ws);
 
       // Subscribe to updates
       if (ws && ws.readyState === WebSocket.OPEN) {

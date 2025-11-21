@@ -8,7 +8,7 @@
     import { parseAnsi } from './ansi.js'
     import { contextUpdates } from './iosk.js';
     import { windows } from './windows.js';
-    import IoskContextInspector from './IoskContextInspector.svelte';
+    import IoskUserInspector from './IoskUserInspector.svelte';
 
     // --- Component Props ---
     export let id; // The window tab ID for this component instance
@@ -165,7 +165,7 @@
         const tabInfo = tabRows.flat().find(t => t.id === viewName);
         const titleName = tabInfo ? tabInfo.name : (viewName.charAt(0).toUpperCase() + viewName.slice(1));
         
-        const newWindow = windows.addWindow(IoskContextInspector, {
+        const newWindow = windows.addWindow(IoskUserInspector, {
             title: `${titleName} - ${targetUser}`,
             consoleId: consoleId,
             targetUser: targetUser,
