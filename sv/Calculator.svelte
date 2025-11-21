@@ -4,8 +4,11 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
+    import { windows } from './windows.js';
 
     export let isActive;
+    export let id;
+    export let groupId;
 
     let display = '0';
     let currentInput = '';
@@ -83,6 +86,11 @@
             } else {
                 // Limit precision to avoid long floating point numbers
                 display = String(parseFloat(result.toPrecision(12)));
+            }
+
+            // SENTINEL NOTIFICATION: Trigger for completed calculation
+            if (groupId && id) {
+                windows.notifyActivity(groupId, id, { summary: `Result: ${display}` });
             }
 
         } catch (e) {
@@ -236,4 +244,3 @@
         <button class="btn" on:click={appendDecimal}>.</button>
     </div>
 </div>
-
