@@ -78,6 +78,7 @@
     function calculate() {
         let result;
         let prev, curr, op;
+        let calculationString;
 
         if (operator) { // Normal calculation
             if (previousInput === '') return;
@@ -88,6 +89,7 @@
             prev = parseFloat(previousInput);
             curr = parseFloat(currentInput);
             op = operator;
+            calculationString = `${previousInput} ${op} ${currentInput}`;
 
             lastOperand = currentInput;
             lastOperator = op;
@@ -97,6 +99,7 @@
             prev = parseFloat(currentInput);
             curr = parseFloat(lastOperand);
             op = lastOperator;
+            calculationString = `${currentInput} ${op} ${lastOperand}`;
             previousInput = currentInput; 
         } else {
             return; // Nothing to do
@@ -123,8 +126,8 @@
                 display = String(parseFloat(result.toPrecision(12)));
             }
 
-            if (groupId && id) {
-                windows.notifyActivity(groupId, id, { summary: `Result: ${display}` }, true);
+            if (groupId && id && calculationString) {
+                windows.notifyActivity(groupId, id, { summary: `${calculationString} = ${display}` }, true);
             }
 
         } catch (e) {

@@ -1,34 +1,20 @@
 <script>
-    import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+    import { onMount } from 'svelte';
     import { notificationHistory, unreadNoticeCount } from './desktop.js';
     import { windows } from './windows.js';
 
-    const dispatch = createEventDispatcher();
-    let self; // ref to the component's root element
+    export let isActive;
+    export let id;
+    export let groupId;
 
     onMount(() => {
         // As per proposal, reset count on mount
         unreadNoticeCount.set(0);
-
-        // Handle clicks outside the component to close it
-        const handleClickOutside = (event) => {
-            if (self && !self.contains(event.target) && !event.target.closest('.clock-button')) {
-                 dispatch('close');
-            }
-        };
-        
-        // Use a timeout to avoid the initial click that opened it from immediately closing it
-        setTimeout(() => window.addEventListener('click', handleClickOutside), 0);
-
-        return () => {
-            window.removeEventListener('click', handleClickOutside);
-        };
     });
 
     function handleItemClick(notification) {
         windows.focusWindow(notification.groupId);
         windows.setActiveTab(notification.groupId, notification.tabId);
-        dispatch('close');
     }
 
     function clearHistory() {
@@ -45,19 +31,10 @@
 
 <style>
     .notification-center {
-        position: absolute;
-        bottom: 45px; /* Position above the taskbar */
-        left: 50%;
-        transform: translateX(-50%);
-        width: 350px;
-        max-height: 400px;
-        background-color: var(--window-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        box-shadow: 0 -5px 15px rgba(0,0,0,0.2);
-        z-index: 19000;
         display: flex;
         flex-direction: column;
+        height: 100%;
+        background-color: var(--window-bg);
         color: var(--taskbar-text);
         overflow: hidden;
     }
@@ -97,7 +74,7 @@
         padding: 10px 12px;
         border-bottom: 1px solid var(--border-color);
         cursor: pointer;
-        transition: background-color 0.15s ease;
+        transition: background-color: 0.15s ease;
         gap: 10px;
         align-items: center;
     }
@@ -150,7 +127,7 @@
     }
 </style>
 
-<div class="notification-center" bind:this={self}>
+<div class="notification-center">
     <div class="header">
         <h3>Notifications</h3>
         <button on:click={clearHistory} title="Clear all notifications">Clear All</button>

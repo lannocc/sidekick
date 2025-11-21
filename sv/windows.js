@@ -11,6 +11,7 @@ import LocalFileExplorer from './LocalFileExplorer.svelte';
 import Ask from './Ask.svelte';
 import IoskWatch from './IoskWatch.svelte';
 import IoskUserInspector from './IoskUserInspector.svelte';
+import NotificationCenter from './NotificationCenter.svelte';
 import { desktopSettings, windowSettings, notificationHistory, unreadNoticeCount } from './desktop.js';
 
 let windowGroupIdCounter = 0;
@@ -35,6 +36,7 @@ const componentMap = {
     'Ask': Ask,
     'IoskWatch': IoskWatch,
     'IoskUserInspector': IoskUserInspector,
+    'NotificationCenter': NotificationCenter,
 };
 
 function findOptimalPosition(props, allWindows, currentWindowId) {
@@ -716,6 +718,22 @@ export function newCalculator(props = {}) {
 }
 export function newSettings(props = {}) {
     windows.addWindow(Settings, { title: 'Settings', width: 420, height: 711, ...props });
+}
+export function newNotificationCenter(props = {}) {
+    const allWindows = get(windows);
+    const existingNCTab = allWindows.flatMap(g => g.tabs).find(t =>
+        t.componentName === 'NotificationCenter'
+    );
+
+    if (existingNCTab) {
+        const group = allWindows.find(g => g.tabs.some(t => t.id === existingNCTab.id));
+        if (group.minimized) windows.toggleMinimize(group.id);
+        else windows.focusWindow(group.id);
+        windows.setActiveTab(group.id, existingNCTab.id);
+        return;
+    }
+
+    windows.addWindow(NotificationCenter, { title: 'Notifications', width: 350, height: 400, ...props });
 }
 export function newIoskFileExplorer(consoleTabId, consoleTitle, props = {}) {
     const title = `Files - ${consoleTitle || `Console ${consoleTabId}`}`;

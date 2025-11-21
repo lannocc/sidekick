@@ -4,10 +4,9 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow } from './windows.js';
+    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter } from './windows.js';
     import { dashActive, unreadNoticeCount } from './desktop.js';
     import Clock from './Clock.svelte';
-    import NotificationCenter from './NotificationCenter.svelte';
 
     let showMenu = false; // For Start menu
     let startButton;
@@ -15,8 +14,6 @@
     let showWindowsMenu = false; // For Windows list menu
     let windowsButton;
     
-    let showNotificationCenter = false;
-
     let screenWidth;
 
     // Elements for layout calculation
@@ -257,16 +254,13 @@
     {/each}
 
     <div class="taskbar-center" bind:this={centerSectionEl}>
-        <button class="clock-button" on:click={() => showNotificationCenter = !showNotificationCenter}>
+        <button class="clock-button" on:click={(e) => { if ($dashActive) dashActive.set(false); newNotificationCenter({ sourceEvent: e }); }}>
             <Clock />
             {#if $unreadNoticeCount > 0}
                 <span class="notice-badge">{$unreadNoticeCount}</span>
             {/if}
         </button>
     </div>
-    {#if showNotificationCenter}
-        <NotificationCenter on:close={() => showNotificationCenter = false} />
-    {/if}
     <div class="taskbar-right" bind:this={rightSectionEl}>
         <button class="quick-launch-button" on:click|stopPropagation={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">$+</button>
         <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }}>SKY</button>
