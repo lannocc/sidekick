@@ -128,7 +128,7 @@ The main `IoskConsole.svelte` component will become a container that conditional
 Multiple components that depend on an IOSK connection (`IoskFileExplorer`, `IoskFileViewer`, `IoskWatch`, etc.) contain similar reactive logic (`$: if (consoleConnection && $windows) { ... }`) to find a valid `consoleId` after a Dash restore if their original connection is lost.
 
 **Proposed Solution:**
-Create a new store in a file like `sv/consoleManager.js`.
+Create a new store in `sv/iosk.js`.
 -   This store will listen to the `windows` store and maintain an internal map of all active, connected `IoskConsole` tabs.
 -   It will expose a function, e.g., `findConsole(connectionDetails)`, that components can call.
 -   The reactive blocks in each component will be replaced by a simpler call to this manager, centralizing the logic for finding a compatible, active console session.

@@ -6,7 +6,7 @@
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
     import { consoleCommands, privateMessages } from './iosk.js';
-    import { windows } from './windows.js';
+    import { windows, activeConsoles } from './windows.js';
     import { parseAnsi } from './ansi.js';
 
     export let id;
@@ -32,18 +32,12 @@
 
     // Reactive logic to find console after a Dash restore
     $: if (consoleConnection && $windows) {
-        if (!consoleId) {
-            const compatibleConsoleTab = $windows.flatMap(w => w.tabs).find(t =>
-                t.componentName === 'IoskConsole' &&
-                t.isConsoleConnected &&
-                t.consoleConnection &&
-                t.consoleConnection.url === consoleConnection.url &&
-                t.consoleConnection.user === consoleConnection.user
-            );
-
-            if (compatibleConsoleTab) {
-                consoleId = compatibleConsoleTab.id;
-            }
+        const myConsoleTab = $windows.flatMap(w => w.tabs).find(t => t.id === consoleId);
+        
+        if (!myConsoleTab || !myConsoleTab.isConsoleConnected) {
+            const key = `${consoleConnection.user}@${consoleConnection.url}`;
+            const compatibleConsole = $activeConsoles.get(key);
+            consoleId = compatibleConsole ? compatibleConsole.id : null;
         }
     }
 
@@ -141,4 +135,3 @@
         </form>
     </div>
 </div>
-

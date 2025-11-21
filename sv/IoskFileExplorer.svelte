@@ -6,7 +6,7 @@
     import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
     import { fileSystemRequests, fileSystemResponses, fileSystemWatchEvents } from './iosk.js';
-    import { newIoskFileViewer, windows } from './windows.js';
+    import { newIoskFileViewer, windows, activeConsoles } from './windows.js';
     import { windowSettings } from './desktop.js';
 
     // --- Component Props & State ---
@@ -142,33 +142,22 @@
     }
 
     $: if (consoleConnection && $windows) {
-        // Check if our current consoleId is still valid
-        const currentConsole = $windows.find(w => w.id === consoleId);
-        if (!currentConsole || !currentConsole.isConsoleConnected) {
-            // If not, clear it.
-            if (consoleId) {
-                consoleId = null;
-                errorMessage = 'Connection lost. Waiting for reconnection...';
-                items = [];
-            }
-        }
+        // Find our current console tab to check its status
+        const myConsoleTab = $windows.flatMap(g => g.tabs).find(t => t.id === consoleId);
+        
+        // If our console is gone or disconnected, we need to find a new one.
+        if (!myConsoleTab || !myConsoleTab.isConsoleConnected) {
+            const key = `${consoleConnection.user}@${consoleConnection.url}`;
+            const compatibleConsole = $activeConsoles.get(key);
 
-        // If we don't have a consoleId, try to find one
-        if (!consoleId) {
-            const compatibleConsoleTab = $windows.flatMap(w => w.tabs).find(t =>
-                t.componentName === 'IoskConsole' &&
-                t.isConsoleConnected &&
-                t.consoleConnection &&
-                t.consoleConnection.url === consoleConnection.url &&
-                t.consoleConnection.user === consoleConnection.user
-            );
-
-            if (compatibleConsoleTab) {
-                // Found one!
-                consoleId = compatibleConsoleTab.id;
+            if (compatibleConsole) {
+                // We found a valid, running console to reconnect to.
+                consoleId = compatibleConsole.id;
+                errorMessage = '';
                 requestPath(currentPath);
             } else {
-                // Still no connection.
+                // No console available for our connection details.
+                consoleId = null;
                 errorMessage = 'No active IOSK connection available. Waiting for connection...';
                 items = [];
             }

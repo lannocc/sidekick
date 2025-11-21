@@ -7,7 +7,7 @@
     import { get } from 'svelte/store';
     import { fileSystemRequests, fileSystemResponses, fileSystemTailEvents } from './iosk.js';
     import { marked } from 'marked';
-    import { windows } from './windows.js';
+    import { windows, activeConsoles } from './windows.js';
 
     // Highlight.js for syntax highlighting
     import hljs from 'highlight.js/lib/core';
@@ -56,34 +56,18 @@
 
 
     $: if (consoleConnection && $windows) {
-        // Check if our current consoleId is still valid
-        const currentConsole = $windows.find(w => w.id === consoleId);
-        if (!currentConsole || !currentConsole.isConsoleConnected) {
-            // If not, clear it.
-            if (consoleId) {
-                consoleId = null;
-                isLoading = false;
-                errorMessage = 'Connection lost. Waiting for reconnection...';
-                content_b64 = '';
-            }
-        }
+        const myConsoleTab = $windows.flatMap(w => w.tabs).find(t => t.id === consoleId);
 
-        // If we don't have a consoleId, try to find one
-        if (!consoleId) {
-            const compatibleConsoleTab = $windows.flatMap(w => w.tabs).find(t =>
-                t.componentName === 'IoskConsole' &&
-                t.isConsoleConnected &&
-                t.consoleConnection &&
-                t.consoleConnection.url === consoleConnection.url &&
-                t.consoleConnection.user === consoleConnection.user
-            );
+        if (!myConsoleTab || !myConsoleTab.isConsoleConnected) {
+            const key = `${consoleConnection.user}@${consoleConnection.url}`;
+            const compatibleConsole = $activeConsoles.get(key);
 
-            if (compatibleConsoleTab) {
-                // Found one!
-                consoleId = compatibleConsoleTab.id;
+            if (compatibleConsole) {
+                consoleId = compatibleConsole.id;
+                errorMessage = '';
                 initialRequest();
             } else {
-                // Still no connection.
+                consoleId = null;
                 isLoading = false;
                 errorMessage = 'No active IOSK connection available. Waiting for connection...';
                 content_b64 = '';

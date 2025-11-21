@@ -3,7 +3,7 @@
     import { onMount, onDestroy, tick } from 'svelte';
     import { get } from 'svelte/store';
     import { fileSystemRequests, fileSystemResponses } from './iosk.js';
-    import { windows } from './windows.js';
+    import { windows, activeConsoles } from './windows.js';
     import { parseAnsi } from './ansi.js';
 
     export let id; // tab id
@@ -32,27 +32,20 @@
 
     // --- Dash Restore Logic ---
     $: if (consoleConnection && $windows) {
-        // Find a console if ours is missing
-        const consoleTab = $windows.flatMap(w => w.tabs).find(t => t.id === consoleId);
-        if (!consoleTab || !consoleTab.isConsoleConnected) {
-            const compatibleConsoleTab = $windows.flatMap(w => w.tabs).find(t =>
-                t.componentName === 'IoskConsole' &&
-                t.isConsoleConnected &&
-                t.consoleConnection &&
-                t.consoleConnection.url === consoleConnection.url &&
-                t.consoleConnection.user === consoleConnection.user
-            );
+        const myConsoleTab = $windows.flatMap(w => w.tabs).find(t => t.id === consoleId);
+        
+        if (!myConsoleTab || !myConsoleTab.isConsoleConnected) {
+            const key = `${consoleConnection.user}@${consoleConnection.url}`;
+            const compatibleConsole = $activeConsoles.get(key);
 
-            if (compatibleConsoleTab) {
-                if (consoleId !== compatibleConsoleTab.id) {
-                    consoleId = compatibleConsoleTab.id;
-                }
+            if (compatibleConsole) {
+                consoleId = compatibleConsole.id;
                 statusMessage = '';
                 if (watchState === 'watching') {
-                    // if it was watching when saved, restart it
                     startWatching();
                 }
             } else {
+                consoleId = null;
                 statusMessage = 'Waiting for IOSK connection...';
             }
         }
@@ -229,4 +222,3 @@
         <div class="status-message">{statusMessage}</div>
     {/if}
 </div>
-

@@ -1,4 +1,4 @@
-import { writable, get } from 'svelte/store';
+import { writable, get, readable } from 'svelte/store';
 import IoskConsole from './IoskConsole.svelte';
 import Calculator from './Calculator.svelte';
 import Settings from './Settings.svelte';
@@ -542,6 +542,25 @@ function createWindowManager() {
 }
 
 export const windows = createWindowManager();
+
+export const activeConsoles = readable(new Map(), set => {
+    const unsubscribe = windows.subscribe(allWindows => {
+        const newActiveConsoles = new Map();
+        for (const group of allWindows) {
+            for (const tab of group.tabs) {
+                if (tab.componentName === 'IoskConsole' && tab.isConsoleConnected && tab.consoleConnection) {
+                    const key = `${tab.consoleConnection.user}@${tab.consoleConnection.url}`;
+                    if (!newActiveConsoles.has(key)) {
+                        newActiveConsoles.set(key, tab);
+                    }
+                }
+            }
+        }
+        set(newActiveConsoles);
+    });
+
+    return () => unsubscribe();
+});
 
 export const instanceRegistry = {
     instances: new Map(),
