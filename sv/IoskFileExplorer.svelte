@@ -294,11 +294,15 @@
 
         // Files are always clickable, opening a viewer
         if (item.type === 'file') {
-            const filePath = item.path || (currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`);
+            // In nested or column views, the item MUST have a full path.
+            // In flat view, we construct it from the current path.
+            const filePath = (nestedView || columnsEnabled)
+                ? item.path
+                : (currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`);
             newIoskFileViewer(consoleId, filePath);
         }
-        // Directories are clickable for navigation when NOT in a nested view OR when in columns view
-        else if (item.type === 'dir' && (!nestedView || columnsEnabled)) {
+        // Directories are clickable for navigation in certain views
+        else if (item.type === 'dir' && (!nestedView || columnsEnabled || (nestedView && viewMode === 'tiles'))) {
             if (isWatching) {
                 sendWatchRequest('fs_watch_stop', currentPath);
                 isWatching = false;
@@ -697,6 +701,9 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
+    .nested-dir-name:hover {
+        filter: brightness(1.2);
+    }
     .nested-dir-content-grid {
         flex-grow: 1;
         display: grid;
@@ -897,12 +904,16 @@
             {#if currentPath !== '/' || columnFiles.length > 0}
                 <div class="column files-column">
                     <div class="column-header"
-                         on:click={() => handleItemClick({name: '..', type: 'dir'})}
-                         title="Parent Directory"
-                         style:background-color={getTileColor({name: '..', type: 'dir'}, colorMode)}>
+                         on:click={currentPath !== '/' ? () => handleItemClick({name: '..', type: 'dir'}) : undefined}
+                         title={currentPath !== '/' ? 'Parent Directory' : 'Root Directory'}
+                         style:background-color={getTileColor({name: '..', type: 'dir'}, colorMode)}
+                         style:cursor={currentPath !== '/' ? 'pointer' : 'default'}
+                    >
                         <span class="column-item-icon">🗂️</span>
                         <span class="column-item-name">{currentPath}</span>
-                        <span class="column-header-nav-up">..</span>
+                        <span class="column-header-nav-up">
+                            {#if currentPath !== '/'}..{/if}
+                        </span>
                     </div>
                     <div class="column-content">
                         {#if viewMode === 'list'}
@@ -981,7 +992,13 @@
         <!-- REGULAR OR NESTED VIEW (COLUMNS DISABLED) -->
         {#if viewMode === 'list'}
             <div class="item-list">
-              {#if nestedView}
+                {#if nestedView}
+                    {#if currentPath !== '/'}
+                        <div class="item" on:click={() => handleItemClick({name: '..', type: 'dir'})} title="Parent Directory">
+                            <span class="item-icon">🗂️</span>
+                            <span class="item-name">..</span>
+                        </div>
+                    {/if}
                     {#each treeItems as item (item.path)}
                         <svelte:self treeNode={item} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
                     {/each}
@@ -1007,6 +1024,15 @@
         {:else if viewMode === 'tiles'}
             <div class="tile-grid">
                 {#if nestedView}
+                    {#if currentPath !== '/'}
+                        <div class="tile-item"
+                             on:click={() => handleItemClick({name: '..', type: 'dir'})}
+                             title="Parent Directory"
+                             style:background-color={getTileColor({name: '..', type: 'dir'}, colorMode)}>
+                            <div class="tile-icon">🗂️</div>
+                            <div class="tile-name">..</div>
+                        </div>
+                    {/if}
                      {#each treeItems as item (item.path)}
                         {#if item.type === 'file'}
                              <div class="tile-item"
@@ -1026,7 +1052,7 @@
                                 class:new={itemChangeStatus[item.path] === 'new'}
                               class:modified={itemChangeStatus[item.path] === 'modified'}
                                 class:removed={itemChangeStatus[item.path] === 'removed'}>
-                                <div class="nested-dir-name" style:background-color={getTileColor(item, colorMode)}>{item.name}</div>
+                                <div class="nested-dir-name" style:background-color={getTileColor(item, colorMode)} style:cursor="pointer" on:click={() => handleItemClick(item)}>{item.name}</div>
                                 <div class="nested-dir-content-grid">
                                     {#if item.children && item.children.length > 0}
                                         {#each item.children as child (child.path)}
@@ -1134,7 +1160,7 @@
                 class:new={itemChangeStatus[treeNode.path] === 'new'}
                 class:modified={itemChangeStatus[treeNode.path] === 'modified'}
                 class:removed={itemChangeStatus[treeNode.path] === 'removed'}>
-                <div class="nested-dir-name" style:background-color={getTileColor(treeNode, colorMode)}>{treeNode.name}</div>
+                <div class="nested-dir-name" style:background-color={getTileColor(treeNode, colorMode)} style:cursor="pointer" on:click={() => handleItemClick(treeNode)}>{treeNode.name}</div>
                 <div class="nested-dir-content-grid">
                     {#if treeNode.children && treeNode.children.length > 0}
                         {#each treeNode.children as child (child.path)}
