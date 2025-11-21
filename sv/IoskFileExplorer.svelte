@@ -50,7 +50,9 @@
     // --- Column View Panning State ---
     let columnsContainer;
     let isPanning = false;
-    let panStartX, panScrollLeftStart;
+    let panStartX, panScrollLeftStart, panStartY;
+    let scrollableColumns = [];
+
 
     // --- Settings Modal State ---
     let showSettings = false;
@@ -335,16 +337,36 @@
         isPanning = true;
         columnsContainer.style.cursor = 'grabbing';
         columnsContainer.style.userSelect = 'none';
+
+        // Horizontal pan state
         panStartX = event.clientX;
         panScrollLeftStart = columnsContainer.scrollLeft;
+
+        // Vertical pan state
+        panStartY = event.clientY;
+        scrollableColumns = [];
+        const columnContentElements = columnsContainer.querySelectorAll('.column-content');
+        columnContentElements.forEach(el => {
+            if (el.scrollHeight > el.clientHeight) { // Only consider columns with actual overflow
+                scrollableColumns.push({ element: el, initialScrollTop: el.scrollTop });
+            }
+        });
+
         window.addEventListener('mousemove', handlePanMove);
         window.addEventListener('mouseup', handlePanEnd);
     }
 
     function handlePanMove(event) {
         if (!isPanning) return;
+        // Horizontal pan
         const dx = event.clientX - panStartX;
         columnsContainer.scrollLeft = panScrollLeftStart - dx;
+
+        // Vertical pan
+        const dy = event.clientY - panStartY;
+        scrollableColumns.forEach(({ element, initialScrollTop }) => {
+            element.scrollTop = initialScrollTop - dy;
+        });
     }
 
     function handlePanEnd(event) {
@@ -352,6 +374,7 @@
         isPanning = false;
         columnsContainer.style.cursor = 'grab';
         columnsContainer.style.userSelect = 'auto';
+        scrollableColumns = []; // Clear stored elements
         window.removeEventListener('mousemove', handlePanMove);
         window.removeEventListener('mouseup', handlePanEnd);
     }
