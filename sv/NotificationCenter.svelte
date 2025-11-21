@@ -31,6 +31,10 @@
         dispatch('close');
     }
 
+    function clearHistory() {
+        notificationHistory.set([]);
+    }
+
     function formatTime(date) {
         if (!(date instanceof Date)) {
             date = new Date(date);
@@ -69,6 +73,20 @@
         margin: 0;
         font-size: 1em;
         font-weight: 500;
+    }
+    .header button {
+        background: var(--taskbar-button-bg);
+        border: 1px solid var(--border-color);
+        color: var(--taskbar-text);
+        padding: 2px 6px;
+        font-size: 0.8em;
+        border-radius: 3px;
+        cursor: pointer;
+        opacity: 0.7;
+    }
+    .header button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+        opacity: 1;
     }
     .history-list {
         overflow-y: auto;
@@ -135,6 +153,7 @@
 <div class="notification-center" bind:this={self}>
     <div class="header">
         <h3>Notifications</h3>
+        <button on:click={clearHistory} title="Clear all notifications">Clear All</button>
     </div>
     <div class="history-list">
         {#each $notificationHistory as notification (notification.id)}
