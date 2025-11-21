@@ -47,6 +47,10 @@ These commands are generally available to users within the IOSK environment. Mos
     *   Usage: `$ clear` or `$ clear --help`
     *   Notes: For bot users, this command clears the entire chat session history, leaving only the `clear` command itself as the first and only entry. This effectively provides a clean slate for the bot's context. For interactive console/terminal users, this command clears the screen using ANSI escape sequences.
     *   Status: Working.
+*   **clbank**: Clear a specific memory bank.
+    *   Usage: `$ clbank <path components...>` or `$ clbank --help`
+    *   Notes: Removes a named memory bank from the user's session. The path resolution is identical to the 'bank' command: absolute paths (e.g., `/path/to/file`), relative paths from the current directory (e.g., `./file`), or paths treated as being under `/bank` (e.g., `role devops`). It also checks for a `.md` extension for symmetry with `bank`.
+    *   Status: Working.
 *   **clroom**: Close the active chat room.
     *   Usage: `$ clroom` or `$ clroom --help`
     *   Notes: Closes the single active chat room on the local system. This command can typically only be run by the room's owner or a superuser.
