@@ -242,9 +242,10 @@
     $: if (id !== undefined && groupId !== undefined) {
         windows.updateTabProps(groupId, id, {
             isConsoleConnected: isConnected,
-           consoleConnection: isConnected ? { url: wsUrl, user: username } : null,
-           wsUrl,
-           username
+            consoleConnection: isConnected ? { url: wsUrl, user: username } : null,
+            wsUrl,
+            username,
+            isSettingsModalOpen: showSettings
         });
     }
 

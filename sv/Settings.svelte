@@ -5,7 +5,11 @@
 <script>
     import { get } from 'svelte/store';
     import { desktopSettings, windowSettings } from './desktop.js';
+    import { windows } from './windows.js';
     import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
+
+    export let id;
+    export let groupId;
 
     let settings;
     const unsubscribe = desktopSettings.subscribe(value => {
@@ -52,6 +56,10 @@
     export let x, y, width, height;
 
     let showSettings = false;
+
+    $: if (id !== undefined && groupId !== undefined) {
+        windows.updateTabProps(groupId, id, { isSettingsModalOpen: showSettings });
+    }
 
     export function showSettingsDialog() {
         showSettings = true;
@@ -280,4 +288,3 @@
     {componentName}
     {x} {y} {width} {height}
 />
-
