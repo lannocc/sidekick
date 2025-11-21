@@ -872,18 +872,18 @@
     <div class="path-bar">
         <span class="path-text">{currentPath}</span>
         <div class="controls-group">
-            {#if viewMode === 'tiles' || columnsEnabled}
-                <div class="color-mode-selector">
-                    <label title="Color by file type">
-                        <input type="radio" bind:group={colorMode} value={'type'}> Type
-                    </label>
-                    <label title="Color by modification time">
-                        <input type="radio" bind:group={colorMode} value={'age'}> Age
-                    </label>
-                </div>
-            {/if}
+            <div class="color-mode-selector">
+                <label title="Color by file type">
+                    <input type="radio" bind:group={colorMode} value={'type'}> Type
+                </label>
+                <label title="Color by modification time">
+                    <input type="radio" bind:group={colorMode} value={'age'}> Age
+                </label>
+            </div>
             <div class="view-mode-selector">
                 <button class="view-button" class:active={columnsEnabled} on:click={toggleColumnsView} title="Toggle Columns View">◫</button>
+            </div>
+            <div class="view-mode-selector">
                 <button class="view-button" class:active={viewMode === 'list'} on:click={() => switchViewMode('list')} title="List View">☰</button>
                 <button class="view-button" class:active={viewMode === 'tiles'} on:click={() => switchViewMode('tiles')} title="Tiles View">⊞</button>
             </div>
@@ -1007,6 +1007,7 @@
                         <div class="item"
                              on:click={() => handleItemClick(item)}
                              title={item.name}
+                             style="color: {getTileColor(item, colorMode)}"
                              class:new={itemChangeStatus[item.name] === 'new'}
                              class:modified={itemChangeStatus[item.name] === 'modified'}
                              class:removed={itemChangeStatus[item.name] === 'removed'}>
@@ -1117,6 +1118,7 @@
     {#if viewMode === 'list'}
         <div class="tree-node-container" style="--level: {treeLevel}">
             <div class="item tree-item" on:click={() => { if (treeNode.type === 'dir') toggleNode(treeNode.path); else handleItemClick(treeNode); }}
+                 style="color: {getTileColor(treeNode, colorMode)}"
                  class:new={itemChangeStatus[treeNode.path] === 'new'}
                  class:modified={itemChangeStatus[treeNode.path] === 'modified'}
                  class:removed={itemChangeStatus[treeNode.path] === 'removed'}>
