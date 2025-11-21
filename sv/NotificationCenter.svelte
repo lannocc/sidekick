@@ -8,15 +8,19 @@
     export let id;
     export let groupId;
 
+    // --- State ---
     let currentView = 'chronological'; // 'chronological' or 'grouped'
-    let expandedGroups = {};
+    let expandedNotifications = {}; // For collapsible items
+    let selectedNotifications = new Set(); // For selection
+    let activeGroupId = null; // For grouped view tabs
 
+    // --- Lifecycle ---
     onMount(() => {
         // As per proposal, reset count on mount
         unreadNoticeCount.set(0);
     });
 
-    // Reactive computation for grouped view
+    // --- Reactive Computations ---
     $: groupedNotifications = (() => {
         if (!$notificationHistory || $notificationHistory.length === 0) return [];
 
@@ -32,27 +36,95 @@
         // Map to an array of group objects for the template
         return Object.values(groups).map(notifications => {
             const mostRecent = notifications[0]; // History is already sorted newest first
+            const tab = get(windows).flatMap(g => g.tabs).find(t => t.id === mostRecent.tabId);
             return {
                 groupId: mostRecent.groupId,
-                title: mostRecent.icon,
+                title: tab?.title || mostRecent.icon,
                 count: notifications.length,
                 notifications,
             };
         });
     })();
 
+    // Set initial active group or reset if it disappears
+    $: if (currentView === 'grouped') {
+        if (groupedNotifications.length > 0) {
+            const groupExists = groupedNotifications.some(g => g.groupId === activeGroupId);
+            if (!groupExists) {
+                activeGroupId = groupedNotifications[0].groupId;
+            }
+        } else {
+            activeGroupId = null;
+        }
+    }
+
+    $: activeGroup = activeGroupId ? groupedNotifications.find(g => g.groupId === activeGroupId) : null;
+
+    // Clear selection when view or active group changes
+    $: if (currentView) {
+        selectedNotifications = new Set();
+        expandedNotifications = {};
+    }
+    $: if (activeGroupId) {
+        selectedNotifications = new Set();
+        expandedNotifications = {};
+    }
+
+    // --- Handlers ---
     function handleItemClick(notification) {
         windows.focusWindow(notification.groupId);
         windows.setActiveTab(notification.groupId, notification.tabId);
     }
 
-    function toggleGroup(groupId) {
-        expandedGroups[groupId] = !expandedGroups[groupId];
+    function toggleExpand(notificationId) {
+        expandedNotifications[notificationId] = !expandedNotifications[notificationId];
+    }
+
+    function toggleSelection(notificationId) {
+        if (selectedNotifications.has(notificationId)) {
+            selectedNotifications.delete(notificationId);
+        } else {
+            selectedNotifications.add(notificationId);
+        }
+        selectedNotifications = selectedNotifications;
+    }
+
+    function selectAll() {
+        deselectAll(); // Clear first
+        let idsToSelect = [];
+        if (currentView === 'chronological') {
+            idsToSelect = $notificationHistory.map(n => n.id);
+        } else if (activeGroup) {
+            idsToSelect = activeGroup.notifications.map(n => n.id);
+        }
+        selectedNotifications = new Set(idsToSelect);
+    }
+
+    function deselectAll() {
+        selectedNotifications = new Set();
+    }
+
+    function clearSingle(notificationId, event) {
+        event.stopPropagation();
+        notificationHistory.update(h => h.filter(n => n.id !== notificationId));
+        selectedNotifications.delete(notificationId);
+        selectedNotifications = selectedNotifications;
+    }
+
+    function clearSelected() {
+        if (selectedNotifications.size === 0) return;
+        if (confirm(`Are you sure you want to clear ${selectedNotifications.size} selected notifications?`)) {
+            notificationHistory.update(h => h.filter(n => !selectedNotifications.has(n.id)));
+            deselectAll();
+        }
     }
 
     function clearHistory() {
-        notificationHistory.set([]);
-        expandedGroups = {};
+        if (confirm('Are you sure you want to clear all notifications? This cannot be undone.')) {
+            notificationHistory.set([]);
+            deselectAll();
+            expandedNotifications = {};
+        }
     }
 
     function formatTime(date) {
@@ -61,6 +133,12 @@
         }
         return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     }
+
+    function getFirstLine(text) {
+        if (!text || typeof text !== 'string') return '';
+        const newlineIndex = text.indexOf('\n');
+        return newlineIndex === -1 ? text : text.substring(0, newlineIndex);
+    }
 </script>
 
 <style>
@@ -68,55 +146,46 @@
         display: flex;
         flex-direction: column;
         height: 100%;
-        background-color: var(--window-bg);
-        color: var(--taskbar-text);
+        background-color: var(--console-bg);
+        color: var(--console-text);
+        font-family: monospace;
+        font-size: 14px;
         overflow: hidden;
     }
     .header {
+        padding: 10px;
+        flex-shrink: 0;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 8px 12px;
         border-bottom: 1px solid var(--border-color);
-        flex-shrink: 0;
-        gap: 10px;
     }
-    .header h3 {
+    h1 {
+        font-size: 1.2em;
         margin: 0;
-        font-size: 1em;
-        font-weight: 500;
+        color: var(--title-bar-text);
+        flex-grow: 1;
     }
-    .header button {
-        background: var(--taskbar-button-bg);
-        border: 1px solid var(--border-color);
-        color: var(--taskbar-text);
-        padding: 2px 6px;
-        font-size: 0.8em;
-        border-radius: 3px;
-        cursor: pointer;
-        opacity: 0.7;
+    .header-controls {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-left: 15px;
     }
-    .header button:hover {
-        background-color: var(--taskbar-button-hover-bg);
-        opacity: 1;
-    }
-
-    /* Styles for view switcher */
     .view-switcher {
         display: flex;
         background: var(--taskbar-button-bg);
         border-radius: 3px;
         border: 1px solid var(--border-color);
         overflow: hidden;
-        margin-left: auto; /* Push it to the left of the 'Clear All' button */
     }
     .view-switcher button {
         background: transparent;
         border: none;
         color: var(--taskbar-text);
-        padding: 2px 8px;
+        padding: 4px 10px;
         cursor: pointer;
-        font-size: 0.8em;
+        font-size: 0.9em;
         opacity: 0.7;
         border-left: 1px solid var(--border-color);
     }
@@ -125,7 +194,7 @@
     }
     .view-switcher button.active {
         background-color: var(--taskbar-button-hover-bg);
-        color: #3498db;
+        color: var(--ansi-bright-blue);
         opacity: 1;
     }
     .view-switcher button:hover:not(.active) {
@@ -133,176 +202,272 @@
         opacity: 0.9;
     }
 
-    .history-list {
-        overflow-y: auto;
-        flex-grow: 1;
-    }
-    .notification-item {
-        display: flex;
-        padding: 10px 12px;
-        border-bottom: 1px solid var(--border-color);
-        cursor: pointer;
-        transition: background-color: 0.15s ease;
-        gap: 10px;
-        align-items: center;
-    }
-    .notification-item:last-child {
-        border-bottom: none;
-    }
-    .notification-item:hover {
-        background-color: var(--taskbar-button-hover-bg);
-    }
-    .icon {
-        flex-shrink: 0;
-        width: 40px;
-        height: 40px;
-        background-color: var(--taskbar-button-bg);
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.7em;
-        text-align: center;
-        overflow-wrap: break-word;
-        padding: 2px;
-        box-sizing: border-box;
-    }
-    .content {
-        flex-grow: 1;
+    /* Tab styles for Group View */
+    .tabs-container {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        overflow: hidden;
+        border-bottom: 1px solid var(--border-color);
+        flex-shrink: 0;
     }
-    .summary {
-        margin: 0;
-        font-size: 0.9em;
-        line-height: 1.3;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+    .tabs-row {
+        display: flex;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        background-color: #012133;
     }
-    .timestamp {
-        font-size: 0.75em;
-        opacity: 0.7;
-        align-self: flex-start;
-    }
-    .empty-state {
-        padding: 40px 20px;
-        text-align: center;
-        color: #7f8c8d;
-    }
-    .empty-state .icon {
-        font-size: 2.5em;
-        margin: 0 auto 10px;
-        opacity: 0.5;
-        width: auto;
-        height: auto;
+    .tab-button {
+        padding: 8px 16px;
         background: none;
+        border: none;
+        color: var(--title-bar-text);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        outline: none;
+    }
+    .tab-button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .tab-button.active {
+        color: var(--ansi-bright-blue);
+        border-bottom-color: var(--ansi-bright-blue);
     }
 
-    /* Grouped View Styles */
-    .group-item {
-        border-bottom: 1px solid var(--border-color);
+    /* List Styles */
+    .list-container {
+        overflow-y: auto;
+        flex-grow: 1;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .notification-entry {
+        border: 1px solid var(--border-color);
+        border-left: 4px solid var(--ansi-bright-blue);
+        border-radius: 3px;
         overflow: hidden;
     }
-    .group-item:last-child {
-        border-bottom: none;
-    }
-    .group-header {
+    .notification-header {
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 10px 12px;
+        padding: 8px;
         cursor: pointer;
         background-color: var(--title-bar-bg);
         user-select: none;
-        transition: background-color 0.15s ease;
+        overflow: hidden;
     }
-    .group-header:hover {
+    .notification-header:hover {
         background-color: var(--taskbar-button-hover-bg);
     }
-    .group-expander {
-        font-size: 0.7em;
-        width: 10px;
-        text-align: center;
+    .notification-delete-button {
+        background: none; border: none; color: var(--title-bar-text); cursor: pointer;
+        font-size: 1.5em; line-height: 1; padding: 0 8px 0 0; opacity: 0.5;
+        font-weight: bold; align-self: center;
     }
-    .group-title {
-        font-weight: 500;
-        flex-grow: 1;
+    .notification-delete-button:hover {
+        opacity: 1;
+        color: var(--ansi-red);
     }
-    .group-count {
-        font-size: 0.8em;
-        background-color: var(--taskbar-button-bg);
-        padding: 2px 6px;
-        border-radius: 10px;
-        min-width: 12px;
-        text-align: center;
+    .icon {
+        flex-shrink: 0;
+        width: 24px; height: 24px;
+        background-color: var(--taskbar-button-bg); border-radius: 4px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.6em; text-align: center; overflow-wrap: break-word;
+        padding: 2px; box-sizing: border-box;
     }
-    .group-content {
+    .timestamp {
+        font-size: 0.85em; opacity: 0.7; align-self: center;
+    }
+    .notification-preview {
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        opacity: 0.9; flex-grow: 1; min-width: 0;
+        padding: 2px 8px; border-radius: 3px; cursor: pointer;
+    }
+    .notification-preview:hover {
+        text-decoration: underline;
+        color: var(--ansi-bright-cyan);
+    }
+    .notification-content {
+        padding: 10px 15px;
         background-color: var(--window-bg);
-        /* No padding here, notification items have their own */
+        white-space: pre-wrap;
+        word-break: break-all;
+        cursor: pointer;
+    }
+     .notification-content:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .notification-select-checkbox {
+        margin-left: auto; cursor: pointer; width: 16px; height: 16px; align-self: center;
     }
 
+    /* Action Bar Styles */
+    .action-bar {
+        flex-shrink: 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px;
+        background-color: var(--title-bar-bg);
+        border-top: 1px solid var(--border-color);
+    }
+    .action-bar button {
+        background-color: var(--taskbar-button-bg);
+        border: 1px solid var(--border-color); color: var(--title-bar-text);
+        padding: 4px 8px; border-radius: 3px; cursor: pointer;
+        margin-left: 5px; font-size: 0.9em;
+    }
+    .action-bar button:hover:not(:disabled) {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .action-bar button:disabled {
+        opacity: 0.5; cursor: not-allowed;
+    }
+    .action-bar .clear-button {
+        background-color: var(--ansi-red); border-color: #e74c3c; color: white;
+    }
+    .action-bar .clear-button:hover:not(:disabled) {
+        background-color: #e74c3c;
+    }
+
+    .empty-state {
+        padding: 40px 20px; text-align: center; color: #7f8c8d;
+        margin: auto;
+    }
+    .empty-state .icon {
+        font-size: 2.5em; margin: 0 auto 10px; opacity: 0.5;
+        width: auto; height: auto; background: none;
+    }
 </style>
 
 <div class="notification-center">
     <div class="header">
-        <h3>Notifications</h3>
-        <div class="view-switcher">
-            <button class:active={currentView === 'chronological'} on:click={() => currentView = 'chronological'} title="List all notifications chronologically">
-                List
-            </button>
-            <button class:active={currentView === 'grouped'} on:click={() => currentView = 'grouped'} title="Group notifications by window">
-                Group
-            </button>
+        <h1>Notifications</h1>
+        <div class="header-controls">
+            <div class="view-switcher">
+                <button class:active={currentView === 'chronological'} on:click={() => currentView = 'chronological'} title="List all notifications chronologically">
+                    List
+                </button>
+                <button class:active={currentView === 'grouped'} on:click={() => currentView = 'grouped'} title="Group notifications by window">
+                    Group
+                </button>
+            </div>
         </div>
-        <button on:click={clearHistory} title="Clear all notifications">Clear All</button>
     </div>
-    <div class="history-list">
-        {#if currentView === 'chronological'}
-            {#each $notificationHistory as notification (notification.id)}
-                <div class="notification-item" on:click={() => handleItemClick(notification)} title="Click to focus window">
-                    <div class="icon" title={notification.icon}>{notification.icon}</div>
-                    <div class="content">
-                        <p class="summary" title={notification.summary}>{notification.summary}</p>
-                        <span class="timestamp">{formatTime(notification.timestamp)}</span>
-                    </div>
-                </div>
-            {:else}
-                <div class="empty-state">
-                    <div class="icon">🔕</div>
-                    <p>All caught up!</p>
-                </div>
-            {/each}
-        {:else if currentView === 'grouped'}
-            {#each groupedNotifications as group (group.groupId)}
-                <div class="group-item">
-                    <div class="group-header" on:click={() => toggleGroup(group.groupId)}>
-                        <span class="group-expander">{expandedGroups[group.groupId] ? '▼' : '►'}</span>
-                        <span class="group-title">{group.title}</span>
-                        <span class="group-count">{group.count}</span>
-                    </div>
-                    {#if expandedGroups[group.groupId]}
-                        <div class="group-content" transition:slide|local>
-                            {#each group.notifications as notification (notification.id)}
-                                <div class="notification-item" on:click={() => handleItemClick(notification)} title="Click to focus window">
-                                    <div class="icon" title={notification.icon}>{notification.icon}</div>
-                                    <div class="content">
-                                        <p class="summary" title={notification.summary}>{notification.summary}</p>
-                                        <span class="timestamp">{formatTime(notification.timestamp)}</span>
-                                    </div>
-                                </div>
-                            {/each}
+
+    {#if currentView === 'chronological'}
+        {#if $notificationHistory.length > 0}
+            <div class="list-container">
+                {#each $notificationHistory as notification (notification.id)}
+                    <div class="notification-entry">
+                        <div class="notification-header" on:click={() => toggleExpand(notification.id)}>
+                             <button class="notification-delete-button" title="Clear notification" on:click={(e) => clearSingle(notification.id, e)}>
+                                &times;
+                            </button>
+                            <div class="icon" title={notification.icon}>{notification.icon}</div>
+                            <span class="timestamp">{formatTime(notification.timestamp)}</span>
+                            {#if !expandedNotifications[notification.id]}
+                                <span class="notification-preview" on:click|stopPropagation={() => handleItemClick(notification)} title={notification.summary}>
+                                    {getFirstLine(notification.summary)}
+                                </span>
+                            {/if}
+                            <input
+                                type="checkbox"
+                                class="notification-select-checkbox"
+                                title="Select notification"
+                                checked={selectedNotifications.has(notification.id)}
+                                on:click|stopPropagation
+                                on:change={() => toggleSelection(notification.id)}
+                            />
                         </div>
-                    {/if}
-                </div>
-            {:else}
-                <div class="empty-state">
-                    <div class="icon">🔕</div>
-                    <p>All caught up!</p>
-                </div>
-            {/each}
+                        {#if expandedNotifications[notification.id]}
+                            <div class="notification-content" on:click={() => handleItemClick(notification)} transition:slide|local>
+                                {notification.summary}
+                            </div>
+                        {/if}
+                    </div>
+                {/each}
+            </div>
+        {:else}
+            <div class="empty-state">
+                <div class="icon">🔕</div>
+                <p>All caught up!</p>
+            </div>
         {/if}
-    </div>
+    {:else if currentView === 'grouped'}
+        {#if groupedNotifications.length > 0}
+            <div class="tabs-container">
+                <div class="tabs-row">
+                    {#each groupedNotifications as group (group.groupId)}
+                         <button class="tab-button" class:active={activeGroupId === group.groupId} on:click={() => activeGroupId = group.groupId}>
+                            {group.title} ({group.count})
+                        </button>
+                    {/each}
+                </div>
+            </div>
+            <div class="list-container">
+                {#if activeGroup}
+                    {#each activeGroup.notifications as notification (notification.id)}
+                         <div class="notification-entry">
+                            <div class="notification-header" on:click={() => toggleExpand(notification.id)}>
+                                 <button class="notification-delete-button" title="Clear notification" on:click={(e) => clearSingle(notification.id, e)}>
+                                    &times;
+                                </button>
+                                <div class="icon" title={notification.icon}>{notification.icon}</div>
+                                <span class="timestamp">{formatTime(notification.timestamp)}</span>
+                                {#if !expandedNotifications[notification.id]}
+                                    <span class="notification-preview" on:click|stopPropagation={() => handleItemClick(notification)} title={notification.summary}>
+                                        {getFirstLine(notification.summary)}
+                                    </span>
+                                {/if}
+                                <input
+                                    type="checkbox"
+                                    class="notification-select-checkbox"
+                                    title="Select notification"
+                                    checked={selectedNotifications.has(notification.id)}
+                                    on:click|stopPropagation
+                                    on:change={() => toggleSelection(notification.id)}
+                                />
+                            </div>
+                            {#if expandedNotifications[notification.id]}
+                                <div class="notification-content" on:click={() => handleItemClick(notification)} transition:slide|local>
+                                    {notification.summary}
+                                </div>
+                            {/if}
+                        </div>
+                    {/each}
+                {/if}
+            </div>
+        {:else}
+            <div class="empty-state">
+                <div class="icon">🔕</div>
+                <p>All caught up!</p>
+            </div>
+        {/if}
+    {/if}
+
+    <!-- Action Bar -->
+    {#if true} <!-- @const must be direct child of #if or similar -->
+      {@const list = currentView === 'chronological' ? $notificationHistory : activeGroup?.notifications}
+      {#if list && list.length > 0}
+          <div class="action-bar">
+              <div class="action-buttons">
+                  <button class="clear-button" on:click={clearHistory}>Clear All</button>
+                  <button
+                      class="clear-button"
+                      disabled={selectedNotifications.size === 0}
+                      on:click={clearSelected}
+                  >
+                      Clear ({selectedNotifications.size})
+                  </button>
+              </div>
+              <div class="selection-controls">
+                  <button on:click={deselectAll}>Deselect All</button>
+                  <button on:click={selectAll}>Select All</button>
+              </div>
+          </div>
+      {/if}
+    {/if}
 </div>
