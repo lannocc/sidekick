@@ -133,10 +133,18 @@
     }
 
     function clearHistory() {
-        if (confirm('Are you sure you want to clear all notifications? This cannot be undone.')) {
-            notificationHistory.set([]);
-            deselectAll();
-            expandedNotifications = {};
+        if (currentView === 'grouped') {
+            if (!activeGroup) return;
+            if (confirm(`Are you sure you want to clear all ${activeGroup.count} notifications for "${activeGroup.title}"? This cannot be undone.`)) {
+                const groupNotificationIds = new Set(activeGroup.notifications.map(n => n.id));
+                notificationHistory.update(h => h.filter(n => !groupNotificationIds.has(n.id)));
+            }
+        } else { // 'chronological' view
+            if (confirm('Are you sure you want to clear all notifications? This cannot be undone.')) {
+                notificationHistory.set([]);
+                deselectAll();
+                expandedNotifications = {};
+            }
         }
     }
 
@@ -319,8 +327,10 @@
         margin: 0 5px;
     }
     .timestamp {
-        font-size: 0.85em; opacity: 0.7; align-self: center;
+        font-size: 0.85em; opacity: 0.9; align-self: center;
         white-space: nowrap;
+        padding-left: 5px;
+        color: var(--ansi-bright-yellow);
     }
     .notification-preview {
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -504,7 +514,9 @@
       {#if list && list.length > 0}
           <div class="action-bar">
               <div class="action-buttons">
-                  <button class="clear-button" on:click={clearHistory}>Clear All</button>
+                  <button class="clear-button" on:click={clearHistory}>
+                      {currentView === 'grouped' ? 'Clear Group' : 'Clear All'}
+                  </button>
                   <button
                       class="clear-button"
                       disabled={selectedNotifications.size === 0}
