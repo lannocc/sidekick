@@ -19,16 +19,12 @@
     let selectedNotifications = new Set(); // For selection
     let activeGroupId = null; // For grouped view tabs
     let detachedGroups = {}; // For tracking popped-out groups
-    let previousNotificationId = null; // For self-notification
 
     // --- Lifecycle ---
     onMount(() => {
         // As per proposal, reset count on mount
         if (!isDetached) {
             unreadNoticeCount.set(0);
-        }
-        if ($notificationHistory.length > 0) {
-            previousNotificationId = $notificationHistory[0].id;
         }
     });
 
@@ -72,22 +68,6 @@
 
     $: activeGroup = activeGroupId ? groupedNotifications.find(g => g.groupId === activeGroupId) : null;
     $: detachedGroup = isDetached ? groupedNotifications.find(g => g.groupId === detachedGroupId) : null;
-
-    // Self-notification logic. If a new notification arrives, create a notification about it.
-    $: if (!isDetached && $notificationHistory.length > 0) {
-        const newestNotification = $notificationHistory[0];
-        if (newestNotification.id !== previousNotificationId) {
-            previousNotificationId = newestNotification.id;
-
-            // Do not self-notify if the new notification is for this Notification Center instance.
-            // This prevents a recursive loop.
-            if (newestNotification.tabId !== id) {
-                windows.notifyActivity(groupId, id, {
-                    summary: `New notification from ${newestNotification.icon}: ${getFirstLine(newestNotification.summary)}`,
-                }, true); // `force: true` ensures notification is logged even if NC window is active.
-            }
-        }
-    }
 
     // Clear selection when view or active group changes
     $: if (currentView) {
