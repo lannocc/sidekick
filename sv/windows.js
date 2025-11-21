@@ -44,11 +44,12 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
 
     const { width, height, sourceEvent, sourceTabId } = props;
     const taskbarHeight = 40; // Assume taskbar is 40px at the top.
+    const desktopMargin = 10; // Margin from viewport edges.
     const desktop = {
-        x: 0,
-        y: taskbarHeight,
-        width: window.innerWidth,
-        height: window.innerHeight - taskbarHeight
+        x: desktopMargin,
+        y: taskbarHeight + desktopMargin,
+        width: window.innerWidth - (desktopMargin * 2),
+        height: window.innerHeight - taskbarHeight - (desktopMargin * 2)
     };
 
     const obstacles = allWindows.filter(w => !w.minimized).map(w => ({
@@ -68,10 +69,16 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
     };
 
     const clampToDesktop = (pos) => {
-        let newX = Math.max(desktop.x, pos.x);
-        let newY = Math.max(desktop.y, pos.y);
-        if (newX + width > desktop.width) newX = desktop.width - width;
-        if (newY + height > desktop.height) newY = desktop.height - height;
+        // Defines the boundaries for the window's top-left corner
+        const minX = desktop.x;
+        const minY = desktop.y;
+        const maxX = desktop.x + desktop.width - width;
+        const maxY = desktop.y + desktop.height - height;
+
+        // Clamp the proposed position within the valid range
+        let newX = Math.max(minX, Math.min(pos.x, maxX));
+        let newY = Math.max(minY, Math.min(pos.y, maxY));
+
         return { x: newX, y: newY };
     };
 
