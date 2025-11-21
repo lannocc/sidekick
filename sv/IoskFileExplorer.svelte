@@ -35,7 +35,7 @@
     let isWatching = false;
     let unsubscribeWatchEvents;
     let previousItemsMap = new Map();
-    let itemChangeStatus = {}; // { [itemName]: 'new' | 'modified' | 'removed' }
+    export let itemChangeStatus = {}; // { [itemKey]: 'new' | 'modified' | 'removed' }
     let changeClearTimeout;
 
     // --- View State ---
@@ -138,7 +138,7 @@
     $: if (consoleConnection && $windows) {
         // Find our current console tab to check its status
         const myConsoleTab = $windows.flatMap(g => g.tabs).find(t => t.id === consoleId);
-        
+
         // If our console is gone or disconnected, we need to find a new one.
         if (!myConsoleTab || !myConsoleTab.isConsoleConnected) {
             const key = `${consoleConnection.user}@${consoleConnection.url}`;
@@ -181,10 +181,6 @@
         nestedView = !nestedView;
 
         // Changing nesting mode requires a refetch to get recursive vs. non-recursive data.
-        // Also, disable watch mode as it's complex with nested views.
-        if (isWatching) {
-            toggleWatch();
-        }
         items = [];
         treeItems = [];
         if (viewMode === 'list') {
@@ -293,8 +289,8 @@
     }
 
     function handleItemClick(item) {
-        // In flat view, ignore clicks on items being removed by watch
-        if (!nestedView && itemChangeStatus[item.name] === 'removed') return;
+        const keyFn = i => (nestedView || columnsEnabled) ? i.path : i.name;
+        if (itemChangeStatus[keyFn(item)] === 'removed') return;
 
         // Files are always clickable, opening a viewer
         if (item.type === 'file') {
@@ -390,20 +386,21 @@
                     previousItemsMap.clear();
                 } else if (listing) {
                     let finalListing = [...listing];
+                    const keyFn = item => (nestedView || columnsEnabled) ? item.path : item.name;
 
                     if (isWatching && previousItemsMap.size > 0) {
-                        const newItemsMap = new Map(listing.map(item => [item.name, item]));
+                        const newItemsMap = new Map(listing.map(item => [keyFn(item), item]));
                         const newChangeStatus = {};
-                        newItemsMap.forEach((newItem, name) => {
-                            if (!previousItemsMap.has(name)) newChangeStatus[name] = 'new';
+                        newItemsMap.forEach((newItem, key) => {
+                            if (!previousItemsMap.has(key)) newChangeStatus[key] = 'new';
                             else {
-                                const oldItem = previousItemsMap.get(name);
-                                if (newItem.mtime !== oldItem.mtime || newItem.size !== oldItem.size) newChangeStatus[name] = 'modified';
+                                const oldItem = previousItemsMap.get(key);
+                                if (newItem.mtime !== oldItem.mtime || newItem.size !== oldItem.size) newChangeStatus[key] = 'modified';
                             }
                         });
-                        previousItemsMap.forEach((oldItem, name) => {
-                            if (name !== '..' && !newItemsMap.has(name)) {
-                                newChangeStatus[name] = 'removed';
+                        previousItemsMap.forEach((oldItem, key) => {
+                            if (key !== '..' && !newItemsMap.has(key)) {
+                                newChangeStatus[key] = 'removed';
                                 finalListing.push(oldItem);
                             }
                         });
@@ -417,12 +414,12 @@
                            itemChangeStatus = { ...itemChangeStatus, ...newChangeStatus };
                            clearTimeout(changeClearTimeout);
                            changeClearTimeout = setTimeout(() => {
-                               items = items.filter(item => itemChangeStatus[item.name] !== 'removed');
+                               items = items.filter(item => itemChangeStatus[keyFn(item)] !== 'removed');
                                itemChangeStatus = {};
                            }, 1500);
                         }
                     }
-                    previousItemsMap = new Map(listing.map(item => [item.name, item]));
+                    previousItemsMap = new Map(listing.map(item => [keyFn(item), item]));
                     currentPath = path;
 
                     if (!nestedView && !columnsEnabled) {
@@ -783,9 +780,9 @@
         to { transform: scale(0) rotate(90deg); opacity: 0; box-shadow: none; }
     }
 
-    .tile-item.new { animation: green-pop-tile 1.2s ease-out; }
-    .tile-item.modified { animation: blue-pulse-tile 1.2s ease-in-out; }
-    .tile-item.removed {
+    .tile-item.new, .nested-dir-container.new { animation: green-pop-tile 1.2s ease-out; }
+    .tile-item.modified, .nested-dir-container.modified { animation: blue-pulse-tile 1.2s ease-in-out; }
+    .tile-item.removed, .nested-dir-container.removed {
         animation: red-implode-tile 1s ease-in forwards;
         pointer-events: none;
     }
@@ -802,9 +799,9 @@
         from { background-color: rgba(231, 76, 60, 0.5); opacity: 1; }
         to { background-color: rgba(231, 76, 60, 0); transform: translateX(-30px); opacity: 0; }
     }
-    .item.new { animation: green-flash-list 1.5s ease-out; }
-    .item.modified { animation: blue-flash-list 1.5s ease-out; }
-    .item.removed {
+    .item.new, .column-content-item.new { animation: green-flash-list 1.5s ease-out; }
+    .item.modified, .column-content-item.modified { animation: blue-flash-list 1.5s ease-out; }
+    .item.removed, .column-content-item.removed {
         animation: red-flash-list 1s ease-out forwards;
         pointer-events: none;
     }
@@ -847,7 +844,7 @@
             </div>
              <button class="watch-button" class:active={columnsEnabled} on:click={toggleColumnsView} title="Toggle Columns View">◫</button>
              <button class="watch-button" class:active={nestedView} on:click={toggleNestedView} title="Toggle Nested View">Nested</button>
-            <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates" disabled={nestedView}>
+            <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates">
                 {isWatching ? 'Watching' : 'Watch'} 👀
             </button>
         </div>
@@ -860,9 +857,9 @@
         <!-- REGULAR LIST/TILES VIEW (COLUMNS DISABLED) -->
         {#if viewMode === 'list'}
             <div class="item-list">
-                {#if nestedView}
+              {#if nestedView}
                     {#each treeItems as item (item.path)}
-                        <svelte:self treeNode={item} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes />
+                        <svelte:self treeNode={item} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} />
                     {/each}
                 {:else}
                     {#each items as item (item.name)}
@@ -875,7 +872,7 @@
                             <span class="item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
                             <span class="item-name">{item.name}</span>
                             <span class="item-size">
-                                {#if item.type === 'file' && item.size >= 0}
+                          {#if item.type === 'file' && item.size >= 0}
                                     {item.size}
                                 {/if}
                             </span>
@@ -891,19 +888,25 @@
                              <div class="tile-item"
                                  on:click={() => handleItemClick(item)}
                                  title={item.name}
-                                 style:background-color={getTileColor(item, colorMode)}>
+                                 style:background-color={getTileColor(item, colorMode)}
+                                 class:new={itemChangeStatus[item.path] === 'new'}
+                                 class:modified={itemChangeStatus[item.path] === 'modified'}
+                                 class:removed={itemChangeStatus[item.path] === 'removed'}>
                                 <div class="tile-icon">📄</div>
                                 <div class="tile-name">{item.name}</div>
                             </div>
                         {:else if item.type === 'dir'}
                             <div class="nested-dir-container"
                                 title={item.name}
-                                style:border-color={getTileColor(item, colorMode)}>
+                                style:border-color={getTileColor(item, colorMode)}
+                                class:new={itemChangeStatus[item.path] === 'new'}
+                              class:modified={itemChangeStatus[item.path] === 'modified'}
+                                class:removed={itemChangeStatus[item.path] === 'removed'}>
                                 <div class="nested-dir-name" style:background-color={getTileColor(item, colorMode)}>{item.name}</div>
                                 <div class="nested-dir-content-grid">
                                     {#if item.children && item.children.length > 0}
                                         {#each item.children as child (child.path)}
-                                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes />
+                                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} />
                                         {/each}
                                     {/if}
                                 </div>
@@ -930,7 +933,7 @@
                         </div>
                     {/each}
                 {/if}
-            </div>
+      </div>
         {/if}
     {:else}
         <!-- COLUMNS VIEW (ENABLED) -->
@@ -948,7 +951,10 @@
                     <div class="column-content">
                         {#if viewMode === 'list'}
                              {#each columnFiles as file (file.path)}
-                                <div class="column-content-item" on:click={() => handleItemClick(file)} title={file.name} style="color: {getTileColor(file, colorMode)}">
+                                <div class="column-content-item" on:click={() => handleItemClick(file)} title={file.name} style="color: {getTileColor(file, colorMode)}"
+                                     class:new={itemChangeStatus[file.path] === 'new'}
+                                     class:modified={itemChangeStatus[file.path] === 'modified'}
+                                     class:removed={itemChangeStatus[file.path] === 'removed'}>
                                     <span class="column-item-icon">📄</span>
                                     <span class="column-item-name">{file.name}</span>
                                 </div>
@@ -958,7 +964,10 @@
                                 <div class="tile-item nested-tile"
                                      on:click={() => handleItemClick(file)}
                                      title={file.name}
-                                     style:background-color={getTileColor(file, colorMode)}>
+                                     style:background-color={getTileColor(file, colorMode)}
+                                     class:new={itemChangeStatus[file.path] === 'new'}
+                                     class:modified={itemChangeStatus[file.path] === 'modified'}
+                                     class:removed={itemChangeStatus[file.path] === 'removed'}>
                                     <div class="tile-icon">📄</div>
                                     <div class="tile-name">{file.name}</div>
                                 </div>
@@ -979,18 +988,24 @@
                         <div class="column-content">
                              {#if viewMode === 'list'}
                                 {#each item.children as child (child.path)}
-                                    <div class="column-content-item" on:click={() => handleItemClick(child)} title={child.name} style="color: {getTileColor(child, colorMode)}">
+                                    <div class="column-content-item" on:click={() => handleItemClick(child)} title={child.name} style="color: {getTileColor(child, colorMode)}"
+                                         class:new={itemChangeStatus[child.path] === 'new'}
+                                         class:modified={itemChangeStatus[child.path] === 'modified'}
+                                         class:removed={itemChangeStatus[child.path] === 'removed'}>
                                         <span class="column-item-icon">{child.type === 'dir' ? '🗂️' : '📄'}</span>
-                                        <span class="column-item-name">{child.name}</span>
+                                  <span class="column-item-name">{child.name}</span>
                                     </div>
                                 {/each}
                              {:else} <!-- tiles -->
                                 {#each item.children as child (child.path)}
-                                    <div class="tile-item nested-tile" on:click={() => handleItemClick(child)} title={child.name} style:background-color={getTileColor(child, colorMode)}>
+                                    <div class="tile-item nested-tile" on:click={() => handleItemClick(child)} title={child.name} style:background-color={getTileColor(child, colorMode)}
+                                         class:new={itemChangeStatus[child.path] === 'new'}
+                                         class:modified={itemChangeStatus[child.path] === 'modified'}
+                                         class:removed={itemChangeStatus[child.path] === 'removed'}>
                                         <div class="tile-icon">{child.type === 'dir' ? '🗂️' : '📄'}</div>
                                         <div class="tile-name">{child.name}</div>
                                     </div>
-                                {/each}
+                          {/each}
                              {/if}
                         </div>
                     {/if}
@@ -1028,7 +1043,10 @@
     <!-- RECURSIVE TEMPLATE for Nested Views -->
     {#if viewMode === 'list'}
         <div class="tree-node-container" style="--level: {treeLevel}">
-            <div class="item tree-item" on:click={() => { if (treeNode.type === 'dir') toggleNode(treeNode.path); else handleItemClick(treeNode); }}>
+            <div class="item tree-item" on:click={() => { if (treeNode.type === 'dir') toggleNode(treeNode.path); else handleItemClick(treeNode); }}
+                 class:new={itemChangeStatus[treeNode.path] === 'new'}
+                 class:modified={itemChangeStatus[treeNode.path] === 'modified'}
+                 class:removed={itemChangeStatus[treeNode.path] === 'removed'}>
                 <span class="tree-node-expander">
                     {#if treeNode.type === 'dir' && treeNode.children.length > 0}
                         {expandedNodes.has(treeNode.path) ? '▼' : '►'}
@@ -1036,7 +1054,7 @@
                 </span>
                 <span class="item-icon">{treeNode.type === 'dir' ? '🗂️' : '📄'}</span>
                 <span class="item-name">{treeNode.name}</span>
-                 <span class="item-size">
+                 <span class="item">
                     {#if treeNode.type === 'file' && treeNode.size >= 0}
                         {treeNode.size}
                     {/if}
@@ -1044,7 +1062,7 @@
             </div>
             {#if treeNode.children && treeNode.children.length > 0 && expandedNodes.has(treeNode.path)}
                 {#each treeNode.children as child}
-                    <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes />
+                    <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} />
                 {/each}
             {/if}
         </div>
@@ -1053,19 +1071,25 @@
             <div class="tile-item nested-tile"
                 on:click={() => handleItemClick(treeNode)}
                 title={treeNode.name}
-                style:background-color={getTileColor(treeNode, colorMode)}>
+                style:background-color={getTileColor(treeNode, colorMode)}
+                class:new={itemChangeStatus[treeNode.path] === 'new'}
+                class:modified={itemChangeStatus[treeNode.path] === 'modified'}
+                class:removed={itemChangeStatus[treeNode.path] === 'removed'}>
                 <div class="tile-icon">📄</div>
                 <div class="tile-name">{treeNode.name}</div>
             </div>
         {:else if treeNode.type === 'dir'}
             <div class="nested-dir-container"
                 title={treeNode.name}
-                style:border-color={getTileColor(treeNode, colorMode)}>
+                style:border-color={getTileColor(treeNode, colorMode)}
+                class:new={itemChangeStatus[treeNode.path] === 'new'}
+                class:modified={itemCngeStatus[treeNode.path] === 'modified'}
+                class:removed={itemChangeStatus[treeNode.path] === 'removed'}>
                 <div class="nested-dir-name" style:background-color={getTileColor(treeNode, colorMode)}>{treeNode.name}</div>
                 <div class="nested-dir-content-grid">
                     {#if treeNode.children && treeNode.children.length > 0}
                         {#each treeNode.children as child (child.path)}
-                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes />
+                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} />
                         {/each}
                     {/if}
                 </div>
@@ -1073,3 +1097,4 @@
         {/if}
     {/if}
 {/if}
+
