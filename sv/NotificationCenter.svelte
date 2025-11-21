@@ -105,6 +105,18 @@
         selectedNotifications = new Set();
     }
 
+    function expandAll() {
+        const list = currentView === 'chronological' ? $notificationHistory : activeGroup?.notifications;
+        if (!list) return;
+        const newExpanded = { ...expandedNotifications };
+        list.forEach(n => newExpanded[n.id] = true);
+        expandedNotifications = newExpanded;
+    }
+
+    function collapseAll() {
+        expandedNotifications = {};
+    }
+
     function clearSingle(notificationId, event) {
         event.stopPropagation();
         notificationHistory.update(h => h.filter(n => n.id !== notificationId));
@@ -135,14 +147,40 @@
         return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     }
 
+    function formatFullTime(date) {
+        if (!(date instanceof Date)) {
+            date = new Date(date);
+        }
+        return date.toLocaleString();
+    }
+
     function getFirstLine(text) {
         if (!text || typeof text !== 'string') return '';
         const newlineIndex = text.indexOf('\n');
         return newlineIndex === -1 ? text : text.substring(0, newlineIndex);
     }
+
+    // --- Color logic ---
+    const groupColors = [
+        '--ansi-bright-blue',
+        '--ansi-bright-green',
+        '--ansi-bright-cyan',
+        '--ansi-bright-magenta',
+        '--ansi-bright-yellow',
+        '--ansi-bright-red',
+    ];
+
+    function getColorForGroup(groupId) {
+        if (groupId == null) return groupColors[0];
+        return groupColors[groupId % groupColors.length];
+    }
 </script>
 
 <style>
+    :global(:root) {
+        --ansi-red: #c0392b; --ansi-green: #27ae60; --ansi-yellow: #f1c40f; --ansi-blue: #2980b9; --ansi-magenta: #8e44ad; --ansi-cyan: #16a085;
+        --ansi-bright-red: #e74c3c; --ansi-bright-green: #2ecc71; --ansi-bright-yellow: #f39c12; --ansi-bright-blue: #3498db; --ansi-bright-magenta: #9b59b6; --ansi-bright-cyan: #1abc9c;
+    }
     .notification-center {
         display: flex;
         flex-direction: column;
@@ -244,7 +282,8 @@
     }
     .notification-entry {
         border: 1px solid var(--border-color);
-        border-left: 4px solid var(--ansi-bright-blue);
+        border-left-width: 4px;
+        border-left-style: solid;
         border-radius: 3px;
         overflow: hidden;
     }
@@ -252,7 +291,7 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 8px;
+        padding: 10px 8px;
         cursor: pointer;
         background-color: var(--title-bar-bg);
         user-select: none;
@@ -277,9 +316,11 @@
         display: flex; align-items: center; justify-content: center;
         font-size: 0.6em; text-align: center; overflow-wrap: break-word;
         padding: 2px; box-sizing: border-box;
+        margin: 0 5px;
     }
     .timestamp {
         font-size: 0.85em; opacity: 0.7; align-self: center;
+        white-space: nowrap;
     }
     .notification-preview {
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -362,13 +403,17 @@
         {#if $notificationHistory.length > 0}
             <div class="list-container">
                 {#each $notificationHistory as notification (notification.id)}
-                    <div class="notification-entry">
+                    <div class="notification-entry" style="border-left-color: var({getColorForGroup(notification.groupId)})">
                         <div class="notification-header" on:click={() => toggleExpand(notification.id)}>
                              <button class="notification-delete-button" title="Clear notification" on:click={(e) => clearSingle(notification.id, e)}>
                                 &times;
                             </button>
                             <div class="icon" title={notification.icon}>{notification.icon}</div>
-                            <span class="timestamp">{formatTime(notification.timestamp)}</span>
+                            {#if expandedNotifications[notification.id]}
+                                <span class="timestamp">{formatFullTime(notification.timestamp)}</span>
+                            {:else}
+                                <span class="timestamp">{formatTime(notification.timestamp)}</span>
+                            {/if}
                             {#if !expandedNotifications[notification.id]}
                                 <span class="notification-preview" on:click|stopPropagation={() => handleItemClick(notification)} title={notification.summary}>
                                     {getFirstLine(notification.summary)}
@@ -411,13 +456,17 @@
             <div class="list-container">
                 {#if activeGroup}
                     {#each activeGroup.notifications as notification (notification.id)}
-                         <div class="notification-entry">
+                         <div class="notification-entry" style="border-left-color: var({getColorForGroup(notification.groupId)})">
                             <div class="notification-header" on:click={() => toggleExpand(notification.id)}>
                                  <button class="notification-delete-button" title="Clear notification" on:click={(e) => clearSingle(notification.id, e)}>
                                     &times;
                                 </button>
                                 <div class="icon" title={notification.icon}>{notification.icon}</div>
-                                <span class="timestamp">{formatTime(notification.timestamp)}</span>
+                                {#if expandedNotifications[notification.id]}
+                                    <span class="timestamp">{formatFullTime(notification.timestamp)}</span>
+                                {:else}
+                                    <span class="timestamp">{formatTime(notification.timestamp)}</span>
+                                {/if}
                                 {#if !expandedNotifications[notification.id]}
                                     <span class="notification-preview" on:click|stopPropagation={() => handleItemClick(notification)} title={notification.summary}>
                                         {getFirstLine(notification.summary)}
@@ -467,6 +516,8 @@
               <div class="selection-controls">
                   <button on:click={deselectAll}>Deselect All</button>
                   <button on:click={selectAll}>Select All</button>
+                  <button on:click={collapseAll} title="Collapse all visible notifications">Collapse All</button>
+                  <button on:click={expandAll} title="Expand all visible notifications">Expand All</button>
               </div>
           </div>
       {/if}
