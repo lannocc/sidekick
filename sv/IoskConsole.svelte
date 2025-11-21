@@ -76,6 +76,12 @@
     let roomsButton;
     let attachButton;
 
+    // --- Users Panel State ---
+    let usersPanelWidth = 260;
+    let isUsersPanelCollapsed = false;
+    let isResizing = false;
+
+
     // --- Helper functions for telemetry display ---
     function abbreviateNumber(num) {
         if (num == null) return '';
@@ -100,6 +106,37 @@
         const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+
+    function startResize(event) {
+        isResizing = true;
+        const initialResizeX = event.clientX;
+        const initialResizeWidth = usersPanelWidth;
+
+        function handleResize(e) {
+            if (!isResizing) return;
+            const dx = e.clientX - initialResizeX;
+            const newWidth = initialResizeWidth - dx;
+
+            // Clamp width. Don't let it get too small (collapsing is for that) or too large.
+            if (newWidth > 150 && newWidth < 800) {
+                usersPanelWidth = newWidth;
+            }
+        }
+
+        function stopResize() {
+            isResizing = false;
+            window.removeEventListener('mousemove', handleResize);
+            window.removeEventListener('mouseup', stopResize);
+            document.body.classList.remove('resizing');
+        }
+
+        // Prevent default to avoid text selection issues
+        event.preventDefault();
+        
+        document.body.classList.add('resizing');
+        window.addEventListener('mousemove', handleResize);
+        window.addEventListener('mouseup', stopResize);
     }
 
     // --- Computed properties for user lists ---
@@ -793,6 +830,10 @@
 </script>
 
 <style>
+    :global(body.resizing) {
+        cursor: col-resize !important;
+        user-select: none;
+    }
     :global(:root) { /* Define ANSI colors so they can be themed */
         --ansi-black: #2c3e50;
         --ansi-red: #c0392b;
@@ -839,8 +880,58 @@
     .input-area { display: flex; padding: 4px 8px; background-color: var(--title-bar-bg); border-top: 1px solid var(--border-color); flex-shrink: 0; }
     .input-area span { color: var(--console-prompt); padding-right: 5px; white-space: pre; }
     .input-area input { flex-grow: 1; background: transparent; border: none; outline: none; color: var(--console-input); font-family: inherit; font-size: inherit; }
-    .users-panel { width: 260px; flex-shrink: 0; border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
-    .panel-header { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    .users-panel {
+        width: var(--panel-width, 260px);
+        flex-shrink: 0;
+        border-left: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        transition: width 0.15s ease-out;
+    }
+    .users-panel.collapsed {
+        width: 32px;
+    }
+    .users-panel-resizer {
+        position: absolute;
+        top: 0;
+        left: -3px;
+        width: 6px;
+        height: 100%;
+        cursor: col-resize;
+        z-index: 10;
+    }
+    .panel-header {
+        padding: 4px 8px;
+        background-color: var(--title-bar-bg);
+        border-bottom: 1px solid var(--border-color);
+        font-weight: bold;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+    .panel-header-controls {
+        display: flex;
+        align-items: center;
+        margin-left: auto;
+    }
+    .collapse-toggle-button {
+        background: none;
+        border: none;
+        color: var(--title-bar-text);
+        cursor: pointer;
+        font-size: 1.4em;
+        padding: 0 4px;
+        line-height: 1;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+        height: 100%;
+    }
+    .collapse-toggle-button:hover {
+        opacity: 1;
+    }
     .panel-header .attach-button {
         background-color: #9b59b6;
         border: 1px solid #8e44ad;
@@ -851,6 +942,7 @@
         border-radius: 3px;
         position: relative;
         padding-right: 15px;
+        margin-right: 4px;
     }
     .panel-header .attach-button:hover {
         background-color: #8e44ad;
@@ -990,84 +1082,98 @@
         </div>
 
         {#if roomName}
-        <div class="users-panel">
+        <div class="users-panel" style="--panel-width: {usersPanelWidth}px" class:collapsed={isUsersPanelCollapsed}>
+            {#if !isUsersPanelCollapsed}
+                <div class="users-panel-resizer" on:mousedown={startResize}></div>
+            {/if}
             <div class="panel-header">
-                <span>Users</span>
-                <button class="attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
-            </div>
-            <div class="user-list">
-                {#each localUsers as participant (participant.name)}
-                    <div
-                        class="user-item"
-                        title={participant.name}
-                        on:contextmenu={(e) => handleUserRightClick(e, participant.name)}
-                        on:click={() => openPrivateChat(participant.name)}
-                    >
-                        <span class="user-name-display" class:paused={participant.paused} style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
-                        {#if participant.is_bot}
-                            <span class="user-item-filler"></span>
-                            {#if userTokenStats[participant.name]}
-                                {@const stats = userTokenStats[participant.name]}
-                                <div class="token-count-wrapper"
-                                     on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
-                                     on:mouseleave={hideTokenTooltip}>
-                                    <span class="last-trip-token-count" title="Last trip input tokens">
-                                        {abbreviateNumber(stats.last_trip_input_tokens)}
-                                    </span>
-                                    <span style="color: var(--ansi-bright-black); margin: 0 3px;">/</span>
-                                    <span class="token-count" title="Cumulative input tokens">
-                                        {abbreviateNumber(stats.cumulative_input_tokens)}
-                                    </span>
-                                </div>
-                            {/if}
-                            <button
-                                class="pause-resume-button"
-                                on:click|stopPropagation={() => togglePause(participant)}
-                                title={participant.paused ? `Resume ${participant.displayName}` : `Pause ${participant.displayName}`}
-                            >
-                                {participant.paused ? '▶' : '⏸'}
-                            </button>
-                        {/if}
-                    </div>
-                {/each}
-                {#if localUsers.length > 0 && remoteUsers.length > 0}
-                    <div class="menu-separator" style="margin: 4px 0;"></div>
+                {#if !isUsersPanelCollapsed}
+                    <span>Users</span>
                 {/if}
-                {#each remoteUsers as participant (participant.name)}
-                    <div
-                        class="user-item"
-                        title={participant.name}
-                        on:contextmenu={(e) => handleUserRightClick(e, participant.name)}
-                        on:click={() => openPrivateChat(participant.name)}
-                    >
-                        <span class="user-name-display" class:paused={participant.paused} style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
-                        {#if participant.is_bot}
-                            <span class="user-item-filler"></span>
-                            {#if userTokenStats[participant.name]}
-                                {@const stats = userTokenStats[participant.name]}
-                                 <div class="token-count-wrapper"
-                                     on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
-                                     on:mouseleave={hideTokenTooltip}>
-                                    <span class="last-trip-token-count" title="Last trip input tokens">
-                                        {abbreviateNumber(stats.last_trip_input_tokens)}
-                                    </span>
-                                    <span style="color: var(--ansi-bright-black); margin: 0 3px;">/</span>
-                                    <span class="token-count" title="Cumulative input tokens">
-                                        {abbreviateNumber(stats.cumulative_input_tokens)}
-                                    </span>
-                                </div>
-                            {/if}
-                            <button
-                                class="pause-resume-button"
-                                on:click|stopPropagation={() => togglePause(participant)}
-                                title={participant.paused ? `Resume ${participant.displayName}` : `Pause ${participant.displayName}`}
-                            >
-                                {participant.paused ? '▶' : '⏸'}
-                            </button>
-                        {/if}
-                    </div>
-                {/each}
+                <div class="panel-header-controls">
+                    {#if !isUsersPanelCollapsed}
+                        <button class="attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
+                    {/if}
+                    <button class="collapse-toggle-button" on:click={() => isUsersPanelCollapsed = !isUsersPanelCollapsed} title={isUsersPanelCollapsed ? 'Expand' : 'Collapse'}>
+                        {isUsersPanelCollapsed ? '❮' : '❯'}
+                    </button>
+                </div>
             </div>
+            {#if !isUsersPanelCollapsed}
+                <div class="user-list">
+                    {#each localUsers as participant (participant.name)}
+                        <div
+                            class="user-item"
+                            title={participant.name}
+                            on:contextmenu={(e) => handleUserRightClick(e, participant.name)}
+                            on:click={() => openPrivateChat(participant.name)}
+                        >
+                            <span class="user-name-display" class:paused={participant.paused} style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
+                            {#if participant.is_bot}
+                                <span class="user-item-filler"></span>
+                                {#if userTokenStats[participant.name]}
+                                    {@const stats = userTokenStats[participant.name]}
+                                    <div class="token-count-wrapper"
+                                         on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
+                                         on:mouseleave={hideTokenTooltip}>
+                                        <span class="last-trip-token-count" title="Last trip input tokens">
+                                            {abbreviateNumber(stats.last_trip_input_tokens)}
+                                        </span>
+                                        <span style="color: var(--ansi-bright-black); margin: 0 3px;">/</span>
+                                        <span class="token-count" title="Cumulative input tokens">
+                                            {abbreviateNumber(stats.cumulative_input_tokens)}
+                                        </span>
+                                    </div>
+                                {/if}
+                                <button
+                                    class="pause-resume-button"
+                                    on:click|stopPropagation={() => togglePause(participant)}
+                                    title={participant.paused ? `Resume ${participant.displayName}` : `Pause ${participant.displayName}`}
+                                >
+                                    {participant.paused ? '▶' : '⏸'}
+                                </button>
+                            {/if}
+                        </div>
+                    {/each}
+                    {#if localUsers.length > 0 && remoteUsers.length > 0}
+                        <div class="menu-separator" style="margin: 4px 0;"></div>
+                    {/if}
+                    {#each remoteUsers as participant (participant.name)}
+                        <div
+                            class="user-item"
+                            title={participant.name}
+                            on:contextmenu={(e) => handleUserRightClick(e, participant.name)}
+                            on:click={() => openPrivateChat(participant.name)}
+                        >
+                            <span class="user-name-display" class:paused={participant.paused} style="color: {colorNameToCss[userColors[participant.name]] || 'inherit'}">{participant.displayName}</span>
+                            {#if participant.is_bot}
+                                <span class="user-item-filler"></span>
+                                {#if userTokenStats[participant.name]}
+                                    {@const stats = userTokenStats[participant.name]}
+                                     <div class="token-count-wrapper"
+                                         on:mouseenter={(e) => showTokenTooltip(e, participant.name)}
+                                         on:mouseleave={hideTokenTooltip}>
+                                        <span class="last-trip-token-count" title="Last trip input tokens">
+                                            {abbreviateNumber(stats.last_trip_input_tokens)}
+                                        </span>
+                                        <span style="color: var(--ansi-bright-black); margin: 0 3px;">/</span>
+                                        <span class="token-count" title="Cumulative input tokens">
+                                            {abbreviateNumber(stats.cumulative_input_tokens)}
+                                        </span>
+                                    </div>
+                                {/if}
+                                <button
+                                    class="pause-resume-button"
+                                    on:click|stopPropagation={() => togglePause(participant)}
+                                    title={participant.paused ? `Resume ${participant.displayName}` : `Pause ${participant.displayName}`}
+                                >
+                                    {participant.paused ? '▶' : '⏸'}
+                                </button>
+                            {/if}
+                        </div>
+                    {/each}
+                </div>
+            {/if}
         </div>
         {/if}
     </div>
