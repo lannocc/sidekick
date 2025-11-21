@@ -8,7 +8,7 @@
     import { fileSystemRequests, fileSystemResponses, fileSystemWatchEvents } from './iosk.js';
     import { newIoskFileViewer, windows, activeConsoles } from './windows.js';
     import { windowSettings } from './desktop.js';
-    import WindowSettingsFields from './popup/WindowSettingsFields.svelte';
+    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
 
     // --- Component Props & State ---
     export let id; // Window ID, passed from Window.svelte
@@ -48,7 +48,6 @@
     // --- Settings Modal State ---
     let showSettings = false;
     let settingsModel = { usePwd: true, path: '/' };
-    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0, defaultZoom: 1.0 };
 
     const dispatch = createEventDispatcher();
 
@@ -106,34 +105,18 @@
             settingsModel = { usePwd: true, path: '/' };
         }
 
-        // Populate window settings for the modal
-        const currentWindowSettings = allSettings[componentName] || { positioning: 'auto' };
-        windowSettingsForModal = {
-            positioning: currentWindowSettings.positioning || 'auto',
-            x: currentWindowSettings.x ?? x,
-            y: currentWindowSettings.y ?? y,
-            width: currentWindowSettings.width ?? width,
-            height: currentWindowSettings.height ?? height,
-            defaultZoom: currentWindowSettings.defaultZoom ?? 1.0,
-        };
-
         showSettings = true;
     }
 
-    function handleSaveSettings() {
+    function handleSaveComponentSettings() {
         const componentSettings = {
             initialPath: settingsModel.usePwd ? '.' : (settingsModel.path || '/')
         };
 
         windowSettings.update(all => ({
             ...all,
-            [componentName]: { ...componentSettings, ...windowSettingsForModal }
+            [componentName]: { ...all[componentName], ...componentSettings }
         }));
-        showSettings = false;
-    }
-
-    function handleCancelSettings() {
-        showSettings = false;
     }
 
     // Whenever the current path changes, update the central window store
@@ -796,37 +779,30 @@
         </div>
     {/if}
 
-    <!-- Settings Modal Markup -->
-    {#if showSettings}
-        <div class="modal-overlay" on:click|self={handleCancelSettings}>
-            <div class="modal-content" on:keydown|stopPropagation on:keyup|stopPropagation on:keypress|stopPropagation>
-                <h3>File Explorer Settings</h3>
-                <fieldset>
-                    <legend>Initial Directory</legend>
-                    <label>
-                        <input type="radio" bind:group={settingsModel.usePwd} value={true}>
-                        Current working directory (.)
-                    </label>
-                    <label>
-                        <input type="radio" bind:group={settingsModel.usePwd} value={false}>
-                        Specific path
-                    </label>
-                    {#if !settingsModel.usePwd}
-                    <div class="path-input-container">
-                        <input type="text" bind:value={settingsModel.path} placeholder="e.g., /home/user">
-                    </div>
-                    {/if}
-                </fieldset>
-
-                <WindowSettingsFields bind:settings={windowSettingsForModal} />
-
-                <div class="buttons">
-                    <button on:click={handleCancelSettings}>Cancel</button>
-                    <button class="save-button" on:click={handleSaveSettings}>Save Default</button>
-                </div>
+    <WindowSettingsModal
+        bind:show={showSettings}
+        title="File Explorer Settings"
+        {componentName}
+        {x} {y} {width} {height}
+        on:save={handleSaveComponentSettings}
+    >
+        <fieldset>
+            <legend>Initial Directory</legend>
+            <label>
+                <input type="radio" bind:group={settingsModel.usePwd} value={true}>
+                Current working directory (.)
+            </label>
+            <label>
+                <input type="radio" bind:group={settingsModel.usePwd} value={false}>
+                Specific path
+            </label>
+            {#if !settingsModel.usePwd}
+            <div class="path-input-container">
+                <input type="text" bind:value={settingsModel.path} placeholder="e.g., /home/user">
             </div>
-        </div>
-    {/if}
+            {/if}
+        </fieldset>
+    </WindowSettingsModal>
 </div>
 {:else}
     <!-- RECURSIVE TEMPLATE for Nested Views -->

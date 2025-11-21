@@ -19,6 +19,16 @@
     let modalSettings = {};
     let firstInput; // Can be bound by parent through the slot
 
+    const noticeSounds = [
+        { value: '', name: 'System Default' },
+        { value: 'ding.wav', name: 'Ding' },
+        { value: 'beep.wav', name: 'Beep' },
+        { value: 'good_bell.wav', name: 'Good Bell' },
+        { value: 'key.wav', name: 'Key' },
+        { value: 'short_beep.wav', name: 'Short Beep' },
+        { value: 'none', name: 'None' },
+    ];
+
     const dispatch = createEventDispatcher();
 
     // When the modal is shown, initialize its internal state from the store and props
@@ -36,8 +46,12 @@
             defaultZoom: currentSettings.defaultZoom ?? 1.0,
             notice: {
                 mode: currentSettings.notice?.mode || 'global',
-                color: currentSettings.notice?.color || noticeDefaults.visual.color,
-                sound: currentSettings.notice?.sound || noticeDefaults.audio.sound,
+                visual: {
+                    color: currentSettings.notice?.visual?.color || noticeDefaults.visual.color,
+                },
+                audio: {
+                    sound: currentSettings.notice?.audio?.sound || noticeDefaults.audio.sound,
+                }
             }
         };
         tick().then(() => {
@@ -152,14 +166,13 @@
             {#if modalSettings.notice.mode === 'enabled'}
                 <div class="notice-grid">
                     <label>Flash Color</label>
-                    <input type="color" bind:value={modalSettings.notice.color} style="width: 100px; height: 30px;">
+                    <input type="color" bind:value={modalSettings.notice.visual.color} style="width: 100px; height: 30px;">
 
                     <label>Notice Sound</label>
-                    <select bind:value={modalSettings.notice.sound}>
-                        <option value="">System Default</option>
-                        <option value="ding.wav">Ding</option>
-                        <option value="alert.wav">Alert</option>
-                        <option value="none">None</option>
+                    <select bind:value={modalSettings.notice.audio.sound}>
+                        {#each noticeSounds as sound}
+                            <option value={sound.value}>{sound.name}</option>
+                        {/each}
                     </select>
                 </div>
             {/if}

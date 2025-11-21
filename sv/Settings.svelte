@@ -5,7 +5,7 @@
 <script>
     import { get } from 'svelte/store';
     import { desktopSettings, windowSettings } from './desktop.js';
-    import WindowSettingsFields from './popup/WindowSettingsFields.svelte';
+    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
 
     let settings;
     const unsubscribe = desktopSettings.subscribe(value => {
@@ -52,35 +52,10 @@
     export let x, y, width, height;
 
     let showSettings = false;
-    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0, defaultZoom: 1.0 };
 
     export function showSettingsDialog() {
-        const allSettings = get(windowSettings);
-        const currentSettings = allSettings[componentName] || { positioning: 'auto' };
-
-        windowSettingsForModal = {
-            positioning: currentSettings.positioning || 'auto',
-            x: currentSettings.x ?? x,
-            y: currentSettings.y ?? y,
-            width: currentSettings.width ?? width,
-            height: currentSettings.height ?? height,
-            defaultZoom: currentSettings.defaultZoom ?? 1.0,
-        };
         showSettings = true;
     }
-
-    function handleSaveSettings() {
-        windowSettings.update(allSettings => ({
-            ...allSettings,
-            [componentName]: windowSettingsForModal
-        }));
-        showSettings = false;
-    }
-
-    function handleCancelSettings() {
-        showSettings = false;
-    }
-
 </script>
 
 <style>
@@ -299,15 +274,10 @@
     </fieldset>
 </div>
 
-{#if showSettings}
-    <div class="modal-overlay" on:click|self={handleCancelSettings}>
-        <div class="modal-content" on:click|stopPropagation>
-            <h3>Settings Window</h3>
-            <WindowSettingsFields bind:settings={windowSettingsForModal} />
-            <div class="buttons">
-                <button on:click={handleCancelSettings}>Cancel</button>
-                <button class="save-button" on:click={handleSaveSettings}>Save Defaults</button>
-            </div>
-        </div>
-    </div>
-{/if}
+<WindowSettingsModal
+    bind:show={showSettings}
+    title="Settings Window"
+    {componentName}
+    {x} {y} {width} {height}
+/>
+

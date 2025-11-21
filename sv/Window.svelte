@@ -14,7 +14,7 @@
     import Settings from './Settings.svelte';
     import Calculator from './Calculator.svelte';
     import IoskPrivateChat from './IoskPrivateChat.svelte';
-    import WindowSettingsFields from './popup/WindowSettingsFields.svelte';
+    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
 
     // Group properties
     export let id;
@@ -52,12 +52,6 @@
     let tabsContainerEl;
     let titleBarEl;
 
-    let showGenericSettingsModal = false;
-    let windowSettingsForModal = {
-        positioning: 'auto', x: 0, y: 0, width: 0, height: 0, defaultZoom: 1.0,
-        notice: { mode: 'global', visual: { color: '#f39c12' }, audio: { sound: 'ding.wav' } }
-    };
-
     // React to drag/resize requests from other components (like Desktop's content area)
     $: if ($dragRequest && $dragRequest.id === id) {
         const request = $dragRequest;
@@ -79,6 +73,8 @@
         }
     }
 
+    let showGenericSettingsModal = false;
+
     function openSettings() {
         showOptionsMenu = false;
         const instance = instanceRegistry.get(activeTabId);
@@ -86,32 +82,8 @@
         if (componentsWithCustomSettings.includes(componentName) && instance && typeof instance.showSettingsDialog === 'function') {
             instance.showSettingsDialog();
         } else {
-            const allSettings = get(windowSettings);
-            const currentSettings = allSettings[componentName] || {};
-            const noticeDefaults = get(desktopSettings).noticeDefaults;
-
-            windowSettingsForModal = {
-                positioning: currentSettings.positioning || 'auto',
-                x: currentSettings.x ?? x, y: currentSettings.y ?? y,
-                width: currentSettings.width ?? width, height: currentSettings.height ?? height,
-                defaultZoom: currentSettings.defaultZoom ?? 1.0,
-                notice: {
-                    mode: currentSettings.notice?.mode || 'global',
-                    visual: {
-                        color: currentSettings.notice?.visual?.color || noticeDefaults.visual.color,
-                    },
-                    audio: {
-                        sound: currentSettings.notice?.audio?.sound || noticeDefaults.audio.sound,
-                    }
-                }
-            };
             showGenericSettingsModal = true;
         }
-    }
-
-    function saveGenericWindowSettings() {
-        windowSettings.update(allSettings => ({ ...allSettings, [componentName]: windowSettingsForModal }));
-        showGenericSettingsModal = false;
     }
 
     function handleWindowClick(event) {
@@ -542,42 +514,11 @@
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
 
-    {#if showGenericSettingsModal}
-        <div class="modal-overlay" on:click|self={() => showGenericSettingsModal = false}>
-            <div class="modal-content" on:click|stopPropagation>
-                <h3>Window Settings: {title}</h3>
-                <WindowSettingsFields bind:settings={windowSettingsForModal} />
-                <fieldset>
-                    <legend>Activity Notice</legend>
-                    <div class="radio-group">
-                        <label><input type="radio" bind:group={windowSettingsForModal.notice.mode} value="global"> Global Default</label>
-                        <label><input type="radio" bind:group={windowSettingsForModal.notice.mode} value="enabled"> Override</label>
-                        <label><input type="radio" bind:group={windowSettingsForModal.notice.mode} value="disabled"> Disabled</label>
-                    </div>
-                    {#if windowSettingsForModal.notice.mode === 'enabled'}
-                        <div class="form-grid">
-                            <label style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;">
-                                <span>Flash Color</span>
-                                <input type="color" bind:value={windowSettingsForModal.notice.visual.color}>
-                            </label>
-                            <label style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;">
-                                <span>Notice Sound</span>
-                                <select class="select-input" bind:value={windowSettingsForModal.notice.audio.sound} style="width: 120px;">
-                                    <option value="ding.wav">Ding</option>
-                                    <option value="beep.wav">Beep</option>
-                                    <option value="good_bell.wav">Good Bell</option>
-                                    <option value="key.wav">Key</option>
-                                    <option value="none">None</option>
-                                </select>
-                            </label>
-                        </div>
-                    {/if}
-                </fieldset>
-                <div class="buttons">
-                    <button on:click={() => showGenericSettingsModal = false}>Cancel</button>
-                    <button class="save-button" on:click={saveGenericWindowSettings}>Save Defaults</button>
-                </div>
-            </div>
-        </div>
-    {/if}
+    <WindowSettingsModal
+        bind:show={showGenericSettingsModal}
+        title="Window Settings: {title}"
+        {componentName}
+        {x} {y} {width} {height}
+        showNoticeSettings={true}
+    />
 </div>

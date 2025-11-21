@@ -11,7 +11,7 @@
     import RoomsMenu from './popup/RoomsMenu.svelte';
     import AttachMenu from './popup/AttachMenu.svelte';
     import UserContextMenu from './popup/UserContextMenu.svelte';
-    import WindowSettingsFields from './popup/WindowSettingsFields.svelte';
+    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
     import { parseAnsi, stripAnsi } from './ansi.js';
 
     export let id; // Unique ID from the window manager
@@ -147,10 +147,7 @@
     let ws = null;
     const PREAMBLE = "SK1:";
 
-    // --- Settings Modal State ---
     let showSettings = false;
-    let settingsUrl, settingsUsername;
-    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0, defaultZoom: 1.0 };
 
     // --- Event bus subscriptions ---
     let requestUnsubscribe;
@@ -380,57 +377,32 @@
 
     // --- Functions ---
     export function showSettingsDialog() {
-        settingsUrl = wsUrl;
-        settingsUsername = username;
-
-        const allSettings = get(windowSettings);
-        const currentSettings = allSettings[componentName] || { positioning: 'auto' };
-        windowSettingsForModal = {
-            positioning: currentSettings.positioning || 'auto',
-            x: currentSettings.x ?? x,
-            y: currentSettings.y ?? y,
-            width: currentSettings.width ?? width,
-            height: currentSettings.height ?? height,
-            defaultZoom: currentSettings.defaultZoom ?? 1.0,
-        };
-
         showSettings = true;
-        tick().then(() => settingsUrlInput?.focus());
     }
 
-    function handleSaveSettings() {
-        wsUrl = settingsUrl;
-        username = settingsUsername;
-        // Also update the local values for the connection form to keep them in sync
-        localWsUrl = settingsUrl;
-        localUsername = settingsUsername;
+    let settingsUrl, settingsUsername;
+    $: if (showSettings) {
+        settingsUrl = wsUrl;
+        settingsUsername = username;
+    }
 
+    function handleSaveComponentSettings() {
         windowSettings.update(allSettings => {
             const existingSettings = allSettings[componentName] || {};
             return {
                 ...allSettings,
                 [componentName]: {
                     ...existingSettings,
-                    ...windowSettingsForModal,
                     defaultUrl: settingsUrl,
                     defaultUsername: settingsUsername
                 }
             };
         });
 
-        showSettings = false;
-    }
-
-    function handleCancelSettings() {
-        showSettings = false;
-    }
-
-    function handleSettingsKeydown(e) {
-        if (e.key === 'Escape') handleCancelSettings();
-        else if (e.key === 'Enter') {
-            e.preventDefault();
-            handleSaveSettings();
-        }
+        wsUrl = settingsUrl;
+        username = settingsUsername;
+        localWsUrl = settingsUrl;
+        localUsername = settingsUsername;
     }
 
     function requestFsList(path) {
@@ -1098,28 +1070,22 @@
         {/if}
     </div>
 
-    {#if showSettings}
-        <div class="modal-overlay" on:click|self={handleCancelSettings} on:keydown={handleSettingsKeydown}>
-            <div class="modal-content">
-                <h3>Settings</h3>
-                <div class="form-group">
-                    <label for="url-setting-{id}">Default URL</label>
-                    <input id="url-setting-{id}" type="text" bind:this={settingsUrlInput} bind:value={settingsUrl}>
-                </div>
-                <div class="form-group">
-                    <label for="user-setting-{id}">Default Username</label>
-                    <input id="user-setting-{id}" type="text" bind:value={settingsUsername}>
-                </div>
-
-                <WindowSettingsFields bind:settings={windowSettingsForModal} />
-
-                <div class="buttons">
-                    <button on:click={handleCancelSettings}>Cancel</button>
-                    <button class="save-button" on:click={handleSaveSettings}>Save Defaults</button>
-                </div>
-            </div>
+    <WindowSettingsModal
+        bind:show={showSettings}
+        title="Console Settings"
+        {componentName}
+        {x} {y} {width} {height}
+        on:save={handleSaveComponentSettings}
+    >
+        <div class="form-group">
+            <label for="url-setting-{id}">Default URL</label>
+            <input id="url-setting-{id}" type="text" bind:value={settingsUrl}>
         </div>
-    {/if}
+        <div class="form-group">
+            <label for="user-setting-{id}">Default Username</label>
+            <input id="user-setting-{id}" type="text" bind:value={settingsUsername}>
+        </div>
+    </WindowSettingsModal>
 
     {#if userContextMenu.visible}
         <UserContextMenu

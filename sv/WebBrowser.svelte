@@ -6,7 +6,7 @@
     import { get } from 'svelte/store';
     import { windows } from './windows.js';
     import { windowSettings } from './desktop.js';
-    import WindowSettingsFields from './popup/WindowSettingsFields.svelte';
+    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
 
     export let id; // Window ID
     export let groupId;
@@ -24,7 +24,6 @@
     // --- Settings Modal State ---
     let showSettings = false;
     let settingsModel = { defaultUrl: '' };
-    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0, notice: { mode: 'global' }, defaultZoom: 1.0 };
 
     // Update the central window store for Dash saving
     $: if (id !== undefined && groupId !== undefined) {
@@ -105,47 +104,25 @@
         settingsModel = {
             defaultUrl: currentWindowSettings.defaultUrl || currentUrl
         };
-        
-        const defaultNoticeSettings = { mode: 'global', color: '#f39c12', sound: '' };
-        const savedNoticeSettings = currentWindowSettings.notice || {};
-
-        // Populate window settings for the modal
-        windowSettingsForModal = {
-            positioning: currentWindowSettings.positioning || 'auto',
-            x: currentWindowSettings.x ?? x,
-            y: currentWindowSettings.y ?? y,
-            width: currentWindowSettings.width ?? width,
-            height: currentWindowSettings.height ?? height,
-            defaultZoom: currentWindowSettings.defaultZoom ?? 1.0,
-            // SENTINEL: Load notice settings, ensuring defaults are present for binding
-            notice: { ...defaultNoticeSettings, ...savedNoticeSettings },
-        };
 
         showSettings = true;
     }
 
 
-    function handleSaveSettings() {
+    function handleSaveComponentSettings() {
         const componentSettings = {
             defaultUrl: settingsModel.defaultUrl.trim() || "about:blank"
         };
         windowSettings.update(all => {
-            // Get existing settings for this component to avoid overwriting unrelated properties.
             const existingSettings = all[componentName] || {};
             return {
                 ...all,
                 [componentName]: {
                     ...existingSettings,
-                    ...windowSettingsForModal,
                     ...componentSettings
                 }
             };
         });
-        showSettings = false;
-    }
-
-    function handleCancelSettings() {
-        showSettings = false;
     }
 
 </script>
@@ -262,49 +239,20 @@
         {/if}
     </div>
 
-    <!-- Settings Modal Markup -->
-    {#if showSettings}
-        <div class="modal-overlay" on:click|self={handleCancelSettings}>
-            <div class="modal-content" on:keydown|stopPropagation on:keyup|stopPropagation on:keypress|stopPropagation>
-                <h3>Web Browser Settings</h3>
-                <fieldset>
-                    <legend>Default URL</legend>
-                    <label>
-                        <span>Initial Page when opening a new browser</span>
-                        <input type="text" bind:value={settingsModel.defaultUrl} placeholder="e.g., about:blank">
-                    </label>
-                </fieldset>
-
-                <WindowSettingsFields bind:settings={windowSettingsForModal} />
-
-                <fieldset>
-                    <legend>Activity Notice</legend>
-                    <div class="radio-group">
-                        <label><input type="radio" bind:group={windowSettingsForModal.notice.mode} value="global"> Global Default</label>
-                        <label><input type="radio" bind:group={windowSettingsForModal.notice.mode} value="enabled"> Override</label>
-                        <label><input type="radio" bind:group={windowSettingsForModal.notice.mode} value="disabled"> Disabled</label>
-                    </div>
-                    {#if windowSettingsForModal.notice.mode === 'enabled'}
-                        <div class="form-grid" style="padding-left: 0; margin-top: 10px; grid-template-columns: auto 1fr; align-items: center;">
-                            <label>Flash Color</label>
-                            <input type="color" bind:value={windowSettingsForModal.notice.color} style="width: 100px; height: 30px;">
-                            
-                            <label>Notice Sound</label>
-                            <select bind:value={windowSettingsForModal.notice.sound} style="width: 100%; padding: 5px; background-color: var(--console-bg); color: var(--title-bar-text); border: 1px solid var(--border-color);">
-                                <option value="">System Default</option>
-                                <option value="ding.wav">Ding</option>
-                                <option value="alert.wav">Alert</option>
-                                <option value="none">None</option>
-                            </select>
-                        </div>
-                    {/if}
-                </fieldset>
-
-                <div class="buttons">
-                    <button on:click={handleCancelSettings}>Cancel</button>
-                    <button class="save-button" on:click={handleSaveSettings}>Save Default</button>
-                </div>
-            </div>
-        </div>
-    {/if}
+    <WindowSettingsModal
+        bind:show={showSettings}
+        title="Web Browser Settings"
+        {componentName}
+        {x} {y} {width} {height}
+        showNoticeSettings={true}
+        on:save={handleSaveComponentSettings}
+    >
+        <fieldset>
+            <legend>Default URL</legend>
+            <label>
+                <span>Initial Page when opening a new browser</span>
+                <input type="text" bind:value={settingsModel.defaultUrl} placeholder="e.g., about:blank">
+            </label>
+        </fieldset>
+    </WindowSettingsModal>
 </div>
