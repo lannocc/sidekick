@@ -27,6 +27,7 @@
         { value: 'key.wav', name: 'Key' },
         { value: 'short_beep.wav', name: 'Short Beep' },
         { value: 'none', name: 'None' },
+        { value: 'custom', name: 'Custom URL' },
     ];
 
     const dispatch = createEventDispatcher();
@@ -50,7 +51,8 @@
                     color: currentSettings.notice?.visual?.color || noticeDefaults.visual.color,
                 },
                 audio: {
-                    sound: currentSettings.notice?.audio?.sound || noticeDefaults.audio.sound,
+                    sound: currentSettings.notice?.audio?.sound || '', // Default to 'System Default'
+                    url: currentSettings.notice?.audio?.url || noticeDefaults.audio.url || ''
                 }
             }
         };
@@ -68,6 +70,13 @@
         windowSettings.update(all => {
             const existing = all[componentName] || {};
             const { positioning, x, y, width, height, defaultZoom, notice } = modalSettings;
+
+            // Don't save an empty string for sound, let it be inherited from global.
+            // However, `none` and `custom` are explicit choices that should be saved.
+            if (notice.audio.sound === '') {
+                delete notice.audio.sound;
+                delete notice.audio.url;
+            }
 
             const newNoticeSettings = showNoticeSettings ? { notice } : {};
 
@@ -99,6 +108,28 @@
         }
     }
 
+    function testNoticeSound() {
+        const audioSettings = modalSettings.notice.audio;
+        let soundToPlay = audioSettings.sound;
+        let urlToPlay = audioSettings.url;
+
+        // If "System Default" is selected, grab the actual default from desktopSettings
+        if (soundToPlay === '') {
+            const defaults = get(desktopSettings).noticeDefaults;
+            soundToPlay = defaults.audio.sound;
+            urlToPlay = defaults.audio.url;
+        }
+
+        if (!soundToPlay || soundToPlay === 'none') return;
+
+        const src = soundToPlay === 'custom' ? urlToPlay : `/assets/${soundToPlay}`;
+        if (src) {
+            try {
+                new Audio(src).play().catch(e => console.error("Audio play failed:", e));
+            } catch (e) { alert("Could not play audio. Check URL or console for errors."); }
+        }
+    }
+
 </script>
 
 <style>
@@ -118,8 +149,16 @@
     .radio-group { display: flex; gap: 15px; }
     .notice-grid { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px 12px; padding-left: 0; }
     .notice-grid > label { grid-column: 1; }
-    .notice-grid > input, .notice-grid > select { grid-column: 2; }
-    .notice-grid select { padding: 5px; background-color: var(--console-bg); color: var(--title-bar-text); border: 1px solid var(--border-color); }
+    .notice-grid > input, .notice-grid > div, .notice-grid > select { grid-column: 2; }
+    .notice-grid select { padding: 5px; background-color: var(--console-bg); color: var(--title-bar-text); border: 1px solid var(--border-color); border-radius: 3px; }
+
+    .sound-control-wrapper { display: flex; align-items: center; }
+    .sound-control-wrapper select { flex-grow: 1; }
+    .test-button { background: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--taskbar-text); padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-left: 10px; }
+    .test-button:hover:not(:disabled) { background-color: var(--taskbar-button-hover-bg); }
+    .test-button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .options-group { padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
+    .text-input { background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; width: 100%; box-sizing: border-box; }
 </style>
 
 {#if show}
@@ -169,12 +208,22 @@
                     <input type="color" bind:value={modalSettings.notice.visual.color} style="width: 100px; height: 30px;">
 
                     <label>Notice Sound</label>
-                    <select bind:value={modalSettings.notice.audio.sound}>
-                        {#each noticeSounds as sound}
-                            <option value={sound.value}>{sound.name}</option>
-                        {/each}
-                    </select>
+                    <div class="sound-control-wrapper">
+                         <select bind:value={modalSettings.notice.audio.sound}>
+                            {#each noticeSounds as sound}
+                                <option value={sound.value}>{sound.name}</option>
+                            {/each}
+                        </select>
+                        <button class="test-button" on:click={testNoticeSound} title="Test Sound" disabled={(modalSettings.notice.audio.sound === '' ? get(desktopSettings).noticeDefaults.audio.sound : modalSettings.notice.audio.sound) === 'none'}>▶</button>
+                    </div>
                 </div>
+                {#if modalSettings.notice.audio.sound === 'custom'}
+                <div class="options-group">
+                    <label>
+                        <input class="text-input" type="text" bind:value={modalSettings.notice.audio.url} placeholder="Enter Sound URL...">
+                    </label>
+                </div>
+                {/if}
             {/if}
         </fieldset>
         {/if}
