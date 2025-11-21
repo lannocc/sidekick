@@ -2,7 +2,7 @@
 # @%@~LICENSE~@%@
 
 from . import config
-from .ai import google, openai
+from .ai import AIClient
 from .util import get_md_code_block, print_flush as print
 
 import tiktoken
@@ -73,15 +73,15 @@ def ask_question(prompt=None, file=None, attachment_content="", mdlang=None,
         print()
         print("...waiting for reply...")
 
-    ai_provider = openai if use_openai else google
+    ai_client = AIClient(use_openai=use_openai)
 
     start_time = time.monotonic()
     if file:
-        answer = ai_provider.prompt_with_file_for_text(full_text, file, chatter=chatter,
+        answer = ai_client.prompt_with_file_for_text(full_text, file, chatter=chatter,
                                               model=model)
 
     else:
-        answer = ai_provider.prompt_for_text(full_text, chatter=chatter, model=model)
+        answer = ai_client.prompt_for_text(full_text, chatter=chatter, model=model)
     end_time = time.monotonic()
     turnaround_time = end_time - start_time
 
