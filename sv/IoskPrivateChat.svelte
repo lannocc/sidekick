@@ -7,6 +7,7 @@
     import { get } from 'svelte/store';
     import { consoleCommands, privateMessages } from './iosk.js';
     import { windows } from './windows.js';
+    import { parseAnsi } from './ansi.js';
 
     export let id;
     export let groupId;
@@ -44,41 +45,6 @@
                 consoleId = compatibleConsoleTab.id;
             }
         }
-    }
-
-    const ansiCodeToCssVar = {
-        '30': 'var(--ansi-black)', '31': 'var(--ansi-red)', '32': 'var(--ansi-green)', '33': 'var(--ansi-yellow)',
-        '34': 'var(--ansi-blue)', '35': 'var(--ansi-magenta)', '36': 'var(--ansi-cyan)', '37': 'var(--ansi-white)',
-        '90': 'var(--ansi-bright-black)', '91': 'var(--ansi-bright-red)', '92': 'var(--ansi-bright-green)', '93': 'var(--ansi-bright-yellow)',
-        '94': 'var(--ansi-bright-blue)', '95': 'var(--ansi-bright-magenta)', '96': 'var(--ansi-bright-cyan)', '97': 'var(--ansi-bright-white)',
-    };
-
-    function parseAnsi(text) {
-        if (typeof text !== 'string') return '';
-        const ansiRegex = /\u001b\[(\d+)m/g;
-        let openSpan = false;
-        
-        let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-        let html = sanitizedText.replace(ansiRegex, (match, code) => {
-            let newHtml = '';
-            if (openSpan) {
-                newHtml += '</span>';
-                openSpan = false;
-            }
-            if (code === '0') {
-                // Reset code, just close the span
-            } else if (ansiCodeToCssVar[code]) {
-                newHtml += `<span style="color: ${ansiCodeToCssVar[code]}">`;
-                openSpan = true;
-            }
-            return newHtml;
-        });
-
-        if (openSpan) {
-            html += '</span>';
-        }
-        return html;
     }
 
     async function focusInput() {
@@ -149,10 +115,6 @@
 </script>
 
 <style>
-    :global(:root) {
-        --ansi-black: #2c3e50; --ansi-red: #c0392b; --ansi-green: #27ae60; --ansi-yellow: #f1c40f; --ansi-blue: #2980b9; --ansi-magenta: #8e44ad; --ansi-cyan: #16a085; --ansi-white: #bdc3c7;
-        --ansi-bright-black: #95a5a6; --ansi-bright-red: #e74c3c; --ansi-bright-green: #2ecc71; --ansi-bright-yellow: #f39c12; --ansi-bright-blue: #3498db; --ansi-bright-magenta: #9b59b6; --ansi-bright-cyan: #1abc9c; --ansi-bright-white: #ecf0f1;
-    }
     .chat-container { display: flex; flex-direction: column; height: 100%; font-family: monospace; background-color: var(--console-bg); color: var(--console-text); font-size: 14px; user-select: text; }
     .messages { flex-grow: 1; overflow-y: auto; padding: 8px; }
     .message { margin-bottom: 8px; line-height: 1.4; }
@@ -179,3 +141,4 @@
         </form>
     </div>
 </div>
+

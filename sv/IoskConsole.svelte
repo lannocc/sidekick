@@ -11,6 +11,7 @@
     import RoomsMenu from './menu/RoomsMenu.svelte';
     import AttachMenu from './menu/AttachMenu.svelte';
     import UserContextMenu from './menu/UserContextMenu.svelte';
+    import { parseAnsi, stripAnsi } from './ansi.js';
 
     export let id; // Unique ID from the window manager
     export let groupId;
@@ -165,47 +166,6 @@
         'bright_yellow': 'var(--ansi-bright-yellow)', 'bright_blue': 'var(--ansi-bright-blue)', 'bright_magenta': 'var(--ansi-bright-magenta)',
         'bright_cyan': 'var(--ansi-bright-cyan)', 'bright_white': 'var(--ansi-bright-white)',
     };
-
-    const ansiCodeToCssVar = {
-        '30': 'var(--ansi-black)', '31': 'var(--ansi-red)', '32': 'var(--ansi-green)', '33': 'var(--ansi-yellow)',
-        '34': 'var(--ansi-blue)', '35': 'var(--ansi-magenta)', '36': 'var(--ansi-cyan)', '37': 'var(--ansi-white)',
-        '90': 'var(--ansi-bright-black)', '91': 'var(--ansi-bright-red)', '92': 'var(--ansi-bright-green)', '93': 'var(--ansi-bright-yellow)',
-        '94': 'var(--ansi-bright-blue)', '95': 'var(--ansi-bright-magenta)', '96': 'var(--ansi-bright-cyan)', '97': 'var(--ansi-bright-white)',
-    };
-
-    function parseAnsi(text) {
-        if (typeof text !== 'string') return '';
-        const ansiRegex = /\u001b\[(\d+)m/g;
-        let openSpan = false;
-
-        let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-        let html = sanitizedText.replace(ansiRegex, (match, code) => {
-            let newHtml = '';
-            if (openSpan) {
-                newHtml += '</span>';
-                openSpan = false;
-            }
-            if (code === '0') {
-                // Reset code, just close the span
-            } else if (ansiCodeToCssVar[code]) {
-                newHtml += `<span style="color: ${ansiCodeToCssVar[code]}">`;
-                openSpan = true;
-            }
-            return newHtml;
-        });
-
-        if (openSpan) {
-            html += '</span>';
-        }
-        return html;
-    }
-
-    function stripAnsi(text) {
-        if (typeof text !== 'string') return '';
-        const ansiRegex = /\u001b\[\d+m/g;
-        return text.replace(ansiRegex, '');
-    }
 
 
     // --- Lifecycle and Reactive Statements ---
@@ -1097,7 +1057,7 @@
                                 on:click|stopPropagation={() => togglePause(participant)}
                                 title={participant.paused ? `Resume ${participant.displayName}` : `Pause ${participant.displayName}`}
                             >
-                                {participant.paused ? '▶️' : '⏸️'}
+                                {participant.paused ? '▶' : '⏸'}
                             </button>
                         {/if}
                     </div>
@@ -1134,7 +1094,7 @@
                                 on:click|stopPropagation={() => togglePause(participant)}
                                 title={participant.paused ? `Resume ${participant.displayName}` : `Pause ${participant.displayName}`}
                             >
-                                {participant.paused ? '▶️' : '⏸️'}
+                                {participant.paused ? '▶' : '⏸'}
                             </button>
                         {/if}
                     </div>
@@ -1223,3 +1183,4 @@
         </div>
     {/if}
 </div>
+
