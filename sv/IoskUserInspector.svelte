@@ -1076,24 +1076,22 @@
                     <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px;">
                         {#each contextData.aiContext.banks as bank (bank.name)}
                             <details bind:open={bankExpandedState[bank.name]}>
-                                <summary class="summary-with-controls">
-                                    <span style="word-break: break-all;">{bank.name}</span>
-                                    <div style="display: flex; align-items: center; gap: 10px; padding-left: 10px; flex-shrink: 0;">
-                                        <button
-                                            class="prompt-delete-button"
-                                            title="Clear bank: {bank.name}"
-                                            on:click|preventDefault|stopPropagation={() => clearSingleBank(bank.name)}>
-                                            &times;
-                                        </button>
-                                        <input
-                                            type="checkbox"
-                                            class="prompt-select-checkbox"
-                                            title="Select bank: {bank.name}"
-                                            checked={selectedBanks.has(bank.name)}
-                                            on:click|stopPropagation
-                                            on:change={() => toggleBankSelection(bank.name)}
-                                        />
-                                    </div>
+                                <summary class="prompt-header">
+                                    <button
+                                        class="prompt-delete-button"
+                                        title="Clear bank: {bank.name}"
+                                        on:click|preventDefault|stopPropagation={() => clearSingleBank(bank.name)}>
+                                        &times;
+                                    </button>
+                                    <span style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{bank.name}</span>
+                                    <input
+                                        type="checkbox"
+                                        class="prompt-select-checkbox"
+                                        title="Select bank: {bank.name}"
+                                        checked={selectedBanks.has(bank.name)}
+                                        on:click|stopPropagation
+                                        on:change={() => toggleBankSelection(bank.name)}
+                                    />
                                 </summary>
                                 <pre class="content-box" style="background-color: var(--console-bg); margin-top: 5px;">{bank.content}</pre>
                             </details>
