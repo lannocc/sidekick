@@ -29,6 +29,7 @@ Only I can see the output of "$" commands that I run, so echo is useless unless 
 
 In the chat history, the "$PS1" (aka shell prompt--but our shell can't be changed, it doesn't actually use a variable), it looks different in the history for me versus other users. MY PS1 is like:
 [username #7 current_working_directory] >> this is where I will type or did type something
-While THEIR messages in my chat history look like:
+While MINE AND THEIR messages in my chat history look like:
 [username #9 date time] << this is where they typed something
+Who's who? See I AM ^^ above or double-check with `whoami`.
 
