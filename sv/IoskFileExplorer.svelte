@@ -913,7 +913,7 @@
                          title="Parent Directory / Files"
                          style:background-color={getTileColor({name: '..', type: 'dir'}, colorMode)}>
                         <span class="column-item-icon">🗂️</span>
-                        <span class="column-item-name">.. / Files</span>
+                        <span class="column-item-name">.. | Files</span>
                     </div>
                     <div class="column-content">
                         {#each columnFiles as file (file.path)}
