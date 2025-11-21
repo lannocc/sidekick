@@ -308,7 +308,7 @@
                 if (currentPath === '/') return;
                 newPath = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
             } else {
-                newPath = currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`;
+                newPath = item.path || (currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`);
             }
             requestPath(newPath);
         }
@@ -672,7 +672,7 @@
         cursor: grab;
     }
     .column {
-        flex: 0 0 200px; /* Don't grow, don't shrink, base width 200px */
+        flex: 0 0 160px; /* Don't grow, don't shrink, base width 160px */
         display: flex;
         flex-direction: column;
         background-color: var(--taskbar-button-bg);
@@ -681,7 +681,7 @@
         overflow: hidden; /* To keep children within rounded corners */
     }
     .column-header {
-        padding: 4px 8px;
+        padding: 4px 6px;
         font-weight: bold;
         cursor: pointer;
         color: white;
@@ -702,7 +702,7 @@
         padding: 4px;
     }
     .column-content-item {
-        padding: 2px 8px;
+        padding: 2px 6px;
         border-radius: 2px;
         cursor: pointer;
         display: flex;
@@ -890,6 +890,17 @@
         </div>
     {:else if viewMode === 'columns'}
         <div class="columns-view" bind:this={columnsContainer} on:mousedown={handlePanStart} on:wheel={handleWheelScroll}>
+            {#if currentPath !== '/'}
+                <div class="column">
+                    <div class="column-header" 
+                         on:click={() => handleItemClick({name: '..', type: 'dir'})} 
+                         title="Parent Directory"
+                         style:background-color={getTileColor({name: '..', type: 'dir'}, colorMode)}>
+                        <span class="column-item-icon">🗂️</span>
+                        <span class="column-item-name">..</span>
+                    </div>
+                </div>
+            {/if}
             {#each treeItems as item (item.path)}
                 <div class="column">
                     <div class="column-header" on:click={() => handleItemClick(item)} title={item.name} style:background-color={getTileColor(item, colorMode)}>
@@ -899,7 +910,7 @@
                     {#if item.type === 'dir' && item.children && item.children.length > 0}
                         <div class="column-content">
                             {#each item.children as child (child.path)}
-                                <div class="column-content-item" on:click={() => handleItemClick(child)} title={child.name}>
+                                <div class="column-content-item" on:click={() => handleItemClick(child)} title={child.name} style="color: {getTileColor(child, colorMode)}">
                                     <span class="column-item-icon">{child.type === 'dir' ? '🗂️' : '📄'}</span>
                                     <span class="column-item-name">{child.name}</span>
                                 </div>
