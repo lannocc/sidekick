@@ -6,7 +6,7 @@
     import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { windows, dragState, instanceRegistry, dragRequest } from './windows.js';
-    import { desktopSettings, windowSettings } from './desktopStore.js';
+    import { desktopSettings, windowSettings } from './desktop.js';
     import IoskConsole from './IoskConsole.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
     import IoskFileViewer from './IoskFileViewer.svelte';

@@ -2,7 +2,7 @@
 <script>
     import { onMount, onDestroy, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
+    import { fileSystemRequests, fileSystemResponses } from './iosk.js';
     import { windows } from './windows.js';
 
     // --- Color Handling ---

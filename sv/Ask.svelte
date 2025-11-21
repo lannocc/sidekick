@@ -5,9 +5,9 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { connect, sendMessage, askOutput, askError, askExit, connectionStatus, askStatsResponse } from './localBackendStore.js';
+    import { connect, sendMessage, askOutput, askError, askExit, connectionStatus, askStatsResponse } from './local.js';
     import { newLocalFileExplorer, windows } from './windows.js';
-    import { fileSelection } from './ioskEvents.js';
+    import { fileSelection } from './iosk.js';
 
     export let id; // tab id
     export let groupId;

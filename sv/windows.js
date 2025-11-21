@@ -11,7 +11,7 @@ import LocalFileExplorer from './LocalFileExplorer.svelte';
 import Ask from './Ask.svelte';
 import IoskWatch from './IoskWatch.svelte';
 import IoskContextInspector from './IoskContextInspector.svelte';
-import { desktopSettings, windowSettings, notificationHistory, unreadNoticeCount } from './desktopStore.js';
+import { desktopSettings, windowSettings, notificationHistory, unreadNoticeCount } from './desktop.js';
 
 let windowGroupIdCounter = 0;
 let tabIdCounter = 0;

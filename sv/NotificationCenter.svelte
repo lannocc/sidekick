@@ -1,6 +1,6 @@
 <script>
     import { onMount, onDestroy, createEventDispatcher } from 'svelte';
-    import { notificationHistory, unreadNoticeCount } from './desktopStore.js';
+    import { notificationHistory, unreadNoticeCount } from './desktop.js';
     import { windows } from './windows.js';
 
     const dispatch = createEventDispatcher();

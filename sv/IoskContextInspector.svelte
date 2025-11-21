@@ -5,7 +5,7 @@
 <script>
     import { onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { contextUpdates } from './ioskEvents.js';
+    import { contextUpdates } from './iosk.js';
     import { windows } from './windows.js';
     import IoskContextInspector from './IoskContextInspector.svelte';
 

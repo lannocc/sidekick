@@ -5,9 +5,9 @@
 <script>
     import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
-    import { fileSystemRequests, fileSystemResponses, fileSystemWatchEvents } from './ioskEvents.js';
+    import { fileSystemRequests, fileSystemResponses, fileSystemWatchEvents } from './iosk.js';
     import { newIoskFileViewer, windows } from './windows.js';
-    import { windowSettings } from './desktopStore.js';
+    import { windowSettings } from './desktop.js';
 
     // --- Component Props & State ---
     export let id; // Window ID, passed from Window.svelte

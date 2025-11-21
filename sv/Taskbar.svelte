@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow } from './windows.js';
-    import { dashActive, unreadNoticeCount } from './desktopStore.js';
+    import { dashActive, unreadNoticeCount } from './desktop.js';
     import Clock from './Clock.svelte';
     import NotificationCenter from './NotificationCenter.svelte';
 

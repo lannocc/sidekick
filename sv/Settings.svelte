@@ -4,7 +4,7 @@
 -->
 <script>
     import { get } from 'svelte/store';
-    import { desktopSettings, windowSettings } from './desktopStore.js';
+    import { desktopSettings, windowSettings } from './desktop.js';
 
     let settings;
     const unsubscribe = desktopSettings.subscribe(value => {

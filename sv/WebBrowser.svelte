@@ -5,7 +5,7 @@
 <script>
     import { get } from 'svelte/store';
     import { windows } from './windows.js';
-    import { windowSettings } from './desktopStore.js';
+    import { windowSettings } from './desktop.js';
 
     export let id; // Window ID
     export let groupId;

@@ -5,7 +5,7 @@
 <script>
     import { windows, newSettings, dragRequest } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive } from './desktopStore.js';
+    import { desktopSettings, dashActive } from './desktop.js';
     import Dash from './Dash.svelte';
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';

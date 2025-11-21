@@ -6,8 +6,11 @@
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
     import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch, newIoskContextInspector } from './windows.js';
-    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents, contextUpdates } from './ioskEvents.js';
-    import { desktopSettings, windowSettings } from './desktopStore.js';
+    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents, contextUpdates } from './iosk.js';
+    import { desktopSettings, windowSettings } from './desktop.js';
+    import RoomsMenu from './menu/RoomsMenu.svelte';
+    import AttachMenu from './menu/AttachMenu.svelte';
+    import UserContextMenu from './menu/UserContextMenu.svelte';
 
     export let id; // Unique ID from the window manager
     export let groupId;
@@ -41,8 +44,6 @@
     let showAttachMenu = false;
     let attachDevices = [];
     let attachUsers = [];
-    let selectedDevice = null;
-    let selectedUser = null;
     let isLoadingDevices = false;
     let isLoadingUsers = false;
 
@@ -51,8 +52,7 @@
         visible: false,
         x: 0,
         y: 0,
-        user: null,
-        showColorPicker: false
+        user: null
     };
 
     // --- State for Token Telemetry ---
@@ -317,12 +317,11 @@
             x: event.clientX,
             y: event.clientY,
             user: participant,
-            showColorPicker: false
         };
     }
 
     function closeUserContextMenu() {
-        userContextMenu = { visible: false, x: 0, y: 0, user: null, showColorPicker: false };
+        userContextMenu = { visible: false, x: 0, y: 0, user: null };
     }
 
     function sendSystemCommand(systemCommand) {
@@ -379,7 +378,8 @@
       closeUserContextMenu();
     }
 
-    function setColorForUser(colorName) {
+    function handleSetColor(event) {
+        const colorName = event.detail;
         if (!userContextMenu.user) return;
         const commandToRun = `$ color -u ${userContextMenu.user} ${colorName}`;
         sendSystemCommand(commandToRun);
@@ -795,9 +795,10 @@
 
     export function toggleAttachMenu() {
         showAttachMenu = !showAttachMenu;
+    }
+
+    function requestAttachData() {
         if (showAttachMenu) {
-            selectedDevice = null;
-            selectedUser = null;
             if (attachDevices.length === 0) {
                 isLoadingDevices = true;
                 requestAllDevices();
@@ -809,19 +810,12 @@
         }
     }
 
-    function handleDeviceClick(item) {
-        selectedDevice = item.displayName;
-    }
-
-    function handleUserClick(item) {
-        selectedUser = item.name;
-    }
-
-    function performAttach() {
-        if (!selectedDevice) return;
-        const commandToRun = selectedUser
-            ? `$ attach ${selectedDevice} ${selectedUser}`
-            : `$ attach ${selectedDevice}`;
+    function handleAttach(event) {
+        const { device, user } = event.detail;
+        if (!device) return;
+        const commandToRun = user
+            ? `$ attach ${device} ${user}`
+            : `$ attach ${device}`;
         output = [...output, {type: 'prompt', content: currentPrompt + commandToRun}];
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
@@ -986,29 +980,7 @@
     .modal-content button:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-content .save-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .modal-content .save-button:hover { background-color: #1a9c2a; }
-    .rooms-menu { position: absolute; top: 45px; left: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 100; display: flex; flex-direction: column; min-width: 180px; max-height: 250px; overflow-y: auto; }
-    .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border-color); }
-    .menu-item:last-child { border-bottom: none; }
-    .menu-item:hover:not(:disabled) { background-color: var(--taskbar-button-hover-bg); }
-    .menu-item:disabled { color: #7f8c8d; cursor: not-allowed; font-style: italic; }
-    .menu-item-empty { padding: 8px 12px; color: #7f8c8d; font-style: italic; }
-    .menu-separator { height: 3px; background-color: var(--border-color); margin: 0; }
-    .close-item { color: #e74c3c; }
-    .close-item:hover { background-color: #c0392b; color: white; }
-    .attach-menu { position: absolute; top: 45px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 100; display: flex; width: 600px; height: 300px; flex-direction: column; }
-    .attach-panels { display: flex; flex-grow: 1; overflow: hidden; }
-    .attach-panel { width: 35%; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
-    .attach-panel:first-child { width: 65%; }
-    .attach-panel:last-child { border-right: none; }
-    .panel-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
-    .list-item { padding: 4px 8px; cursor: pointer; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .list-item:hover { background-color: var(--taskbar-button-hover-bg); }
-    .list-item.selected { background-color: #3498db; color: white; }
-    .attach-footer { padding: 8px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; flex-shrink: 0; }
-    .attach-footer button { background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 4px 8px; cursor: pointer; border-radius: 3px; }
-    .attach-footer button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .attach-footer button.primary { background-color: #27c93f; border-color: #1a9c2a; color: white; }
-    .path-header { font-size: 0.9em; color: #95a5a6; padding: 2px 8px; flex-shrink: 0; }
+
     fieldset { border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-top: 15px; }
     legend { color: var(--title-bar-text); padding: 0 5px; }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-left: 20px; }
@@ -1031,37 +1003,7 @@
     .pause-resume-button:hover {
         opacity: 1;
     }
-
-    .user-context-menu {
-        position: fixed;
-        background-color: var(--window-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 4px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        z-index: 200; /* Above console content */
-        display: flex;
-        flex-direction: column;
-        padding: 4px;
-        min-width: 120px;
-    }
-    .color-picker-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 4px;
-        padding: 4px;
-    }
-    .color-swatch {
-        width: 24px;
-        height: 24px;
-        border: 1px solid var(--border-color);
-        border-radius: 3px;
-        cursor: pointer;
-        background: none; /* remove default button background */
-    }
-    .color-swatch:hover {
-        border-color: var(--taskbar-button-hover-bg);
-        transform: scale(1.1);
-    }
+    .menu-separator { height: 3px; background-color: var(--border-color); margin: 0; }
 </style>
 
 <div class="console-container">
@@ -1083,79 +1025,23 @@
     </form>
 
     {#if showRoomsMenu}
-        <div class="rooms-menu">
-            {#each availableRooms as room (room.name)}
-                <button class="menu-item" on:click={() => joinRoom(room.name)} disabled={room.name === roomName} title={room.topic || 'No topic'}>
-                    {room.name}
-                </button>
-            {:else}
-                <span class="menu-item-empty">No rooms available</span>
-            {/each}
-            {#if roomName}
-                <div class="menu-separator"></div>
-                <button class="menu-item close-item" on:click={closeRoom}>
-                    Close '{roomName}'
-                </button>
-            {/if}
-        </div>
+        <RoomsMenu
+            {availableRooms}
+            currentRoomName={roomName}
+            on:join={e => joinRoom(e.detail)}
+            on:close={closeRoom}
+        />
     {/if}
 
     {#if showAttachMenu}
-        <div class="attach-menu">
-            <div class="attach-panels">
-                <div class="attach-panel">
-                    <div class="panel-header">Device</div>
-                    <div class="panel-list">
-                        {#if isLoadingDevices}
-                            <div class="list-item">Loading...</div>
-                        {:else}
-                            {#each attachDevices as item (item.fullPath)}
-                                <div
-                                    class="list-item"
-                                    class:selected={selectedDevice === item.displayName}
-                                    on:click={() => handleDeviceClick(item)}
-                                    title={item.displayName}
-                                >
-                                    {item.type === 'dir' ? '🗂️' : '🔌'} {item.displayName}
-                                </div>
-                            {:else}
-                                <div class="list-item">(empty)</div>
-                            {/each}
-                        {/if}
-                    </div>
-                </div>
-                <div class="attach-panel">
-                    <div class="panel-header">User (Optional)</div>
-                    <div class="path-header">/home</div>
-                     <div class="panel-list">
-                        {#if isLoadingUsers}
-                            <div class="list-item">Loading...</div>
-                        {:else}
-                            {#each attachUsers as item (item.name)}
-                                <div
-                                    class="list-item"
-                                    class:selected={selectedUser === item.name}
-                                    on:click={() => handleUserClick(item)}
-                                    title={item.name}
-                                >
-                                    👤 {item.name}
-                                </div>
-                          {:else}
-                                <div class="list-item">(no users found)</div>
-                            {/each}
-                        {/if}
-                    </div>
-                </div>
-            </div>
-            <div class="attach-footer">
-                <button
-                    class="primary"
-                    disabled={!selectedDevice}
-                    on:click={performAttach}>
-                    Attach
-                </button>
-            </div>
-        </div>
+        <AttachMenu
+            {isLoadingDevices}
+            {attachDevices}
+            {isLoadingUsers}
+            {attachUsers}
+            on:requestData={requestAttachData}
+            on:attach={handleAttach}
+        />
     {/if}
 
     <div class="main-flex-area">
@@ -1306,46 +1192,17 @@
     {/if}
 
     {#if userContextMenu.visible}
-        <div
-            class="user-context-menu"
-            style="top: {userContextMenu.y}px; left: {userContextMenu.x}px;"
-            on:click|stopPropagation
-        >
-            {#if userContextMenu.showColorPicker}
-                <div class="color-picker-grid">
-                    {#each Object.entries(colorNameToCss) as [name, cssVar] (name)}
-                        <button
-                            class="color-swatch"
-                            style="background-color: {cssVar}"
-                            title={name.replace(/_/g, ' ')}
-                            on:click={() => setColorForUser(name)}
-                        ></button>
-                    {/each}
-                </div>
-                <div class="menu-separator"></div>
-                <button class="menu-item" on:click={() => userContextMenu.showColorPicker = false}>
-                    &larr; Back
-                </button>
-            {:else}
-                <button class="menu-item" on:click={() => inspectUserContext(userContextMenu.user)}>
-                  Context
-                </button>
-                <div class="menu-separator"></div>
-                <button class="menu-item" on:click={() => openPrivateChat(userContextMenu.user)}>
-                    Private Chat
-                </button>
-                <button class="menu-item" on:click={viewUserLog}>
-                    View Log
-                </button>
-                <button class="menu-item" on:click={() => userContextMenu.showColorPicker = true}>
-                  Color
-                </button>
-                <div class="menu-separator"></div>
-                <button class="menu-item close-item" on:click={handleDetachUser}>
-                    Detach
-                </button>
-            {/if}
-        </div>
+        <UserContextMenu
+            x={userContextMenu.x}
+            y={userContextMenu.y}
+            user={userContextMenu.user}
+            {colorNameToCss}
+            on:inspectContext={e => inspectUserContext(e.detail)}
+            on:privateChat={e => openPrivateChat(e.detail)}
+            on:viewLog={viewUserLog}
+            on:setColor={handleSetColor}
+            on:detach={handleDetachUser}
+        />
     {/if}
 
     {#if tokenTooltip.visible && tokenTooltip.user && userTokenStats[tokenTooltip.user]}

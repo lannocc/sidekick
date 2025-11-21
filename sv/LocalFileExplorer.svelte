@@ -4,9 +4,9 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { connect, sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus } from './localBackendStore.js';
+    import { connect, sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus } from './local.js';
     import { newAskWindow, windows } from './windows.js';
-    import { fileSelection } from './ioskEvents.js';
+    import { fileSelection } from './iosk.js';
 
     export let id;
     export let groupId;

@@ -3,7 +3,7 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { dashActive, dashLayouts, dashCycleIndex } from './desktopStore.js';
+    import { dashActive, dashLayouts, dashCycleIndex } from './desktop.js';
     import { windows } from './windows.js';
     import { get } from 'svelte/store';
     import { onMount, onDestroy } from 'svelte';

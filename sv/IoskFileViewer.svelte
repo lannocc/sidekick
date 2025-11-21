@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { fileSystemRequests, fileSystemResponses, fileSystemTailEvents } from './ioskEvents.js';
+    import { fileSystemRequests, fileSystemResponses, fileSystemTailEvents } from './iosk.js';
     import { marked } from 'marked';
     import { windows } from './windows.js';
 

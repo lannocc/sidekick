@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { consoleCommands, privateMessages } from './ioskEvents.js';
+    import { consoleCommands, privateMessages } from './iosk.js';
     import { windows } from './windows.js';
 
     export let id;
