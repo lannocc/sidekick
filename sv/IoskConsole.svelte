@@ -554,7 +554,8 @@
                                     if (cleanOutput.trim() && !bellTriggered) {
                                         const isInputFocused = document.activeElement === commandInput;
                                         if (!isActive && !isInputFocused) {
-                                            windows.notifyActivity(groupId, id, { summary: 'New console output' });
+                                            const notificationSummary = stripAnsi(cleanOutput.trim()).split('\n')[0];
+                                            windows.notifyActivity(groupId, id, { summary: notificationSummary });
                                         }
                                     }
                                 }
