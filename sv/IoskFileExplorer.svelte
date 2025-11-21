@@ -39,11 +39,16 @@
     let changeClearTimeout;
 
     // --- View State ---
-    let viewMode = 'list'; // 'list' or 'tiles'
+    let viewMode = 'list'; // 'list', 'tiles', or 'columns'
     let colorMode = 'type'; // 'type' or 'age'
     let nestedView = false; // 'nested' or 'flat'
     let treeItems = []; // Hierarchical data for nested views
     let expandedNodes = new Set(); // Stores paths of expanded dirs in nested LIST view
+
+    // --- Column View Panning State ---
+    let columnsContainer;
+    let isPanning = false;
+    let panStartX, panScrollLeftStart;
 
     // --- Settings Modal State ---
     let showSettings = false;
@@ -151,11 +156,18 @@
     // --- View Mode Logic ---
     function switchViewMode(newMode) {
         if (viewMode === newMode) return;
-        const wasNestedList = viewMode === 'list' && nestedView;
+        const oldMode = viewMode;
         viewMode = newMode;
-        // If switching away from nested list view, its recursive data is incompatible
-        // with other views. We must refetch a flat list.
-        if (wasNestedList) {
+
+        // The data we need depends on whether the view is recursive.
+        // `columns` view is always recursive, other views depend on `nestedView`.
+        const oldRecursive = nestedView || oldMode === 'columns';
+        const newRecursive = nestedView || newMode === 'columns';
+
+        // If the data requirement changes, we must refetch.
+        if (oldRecursive !== newRecursive) {
+            items = [];
+            treeItems = [];
             requestPath(currentPath);
         }
     }
@@ -225,7 +237,8 @@
         return roots;
     }
 
-    $: if (nestedView) {
+    // Tree data is needed for any nested view or for columns view
+    $: if (nestedView || viewMode === 'columns') {
         treeItems = buildTree(items, currentPath);
     }
 
@@ -263,8 +276,8 @@
             command: {
                 type: 'fs_list',
                 path,
-                // Request recursive listing if in any nested view
-                recursive: nestedView
+                // Request recursive listing if in any nested view or in columns view
+                recursive: nestedView || viewMode === 'columns'
             }
         };
         fileSystemRequests.set({ ...request, timestamp: Date.now() });
@@ -280,8 +293,8 @@
             const filePath = item.path || (currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`);
             newIoskFileViewer(consoleId, filePath);
         }
-        // Directories are only clickable for navigation when NOT in a nested view
-        else if (item.type === 'dir' && !nestedView) {
+        // Directories are clickable for navigation when NOT in a nested view OR when in columns view
+        else if (item.type === 'dir' && (!nestedView || viewMode === 'columns')) {
             if (isWatching) {
                 sendWatchRequest('fs_watch_stop', currentPath);
                 isWatching = false;
@@ -299,10 +312,43 @@
             }
             requestPath(newPath);
         }
-        // In nested views (both list and tile), clicking a directory does nothing here.
-        // The list view's expand/collapse is handled separately in its on:click directive.
+        // In nested list view, clicking a directory toggles expand/collapse (handled in template)
     }
 
+    // --- Column View Pan/Scroll Handlers ---
+    function handleWheelScroll(event) {
+        if (event.shiftKey && columnsContainer) {
+            event.preventDefault();
+            columnsContainer.scrollLeft += event.deltaY;
+        }
+    }
+
+    function handlePanStart(event) {
+        if (event.button !== 1 || !columnsContainer) return; // Middle mouse button
+        event.preventDefault();
+        isPanning = true;
+        columnsContainer.style.cursor = 'grabbing';
+        columnsContainer.style.userSelect = 'none';
+        panStartX = event.clientX;
+        panScrollLeftStart = columnsContainer.scrollLeft;
+        window.addEventListener('mousemove', handlePanMove);
+        window.addEventListener('mouseup', handlePanEnd);
+    }
+
+    function handlePanMove(event) {
+        if (!isPanning) return;
+        const dx = event.clientX - panStartX;
+        columnsContainer.scrollLeft = panScrollLeftStart - dx;
+    }
+
+    function handlePanEnd(event) {
+        if (event.button !== 1 || !isPanning) return;
+        isPanning = false;
+        columnsContainer.style.cursor = 'grab';
+        columnsContainer.style.userSelect = 'auto';
+        window.removeEventListener('mousemove', handlePanMove);
+        window.removeEventListener('mouseup', handlePanEnd);
+    }
 
     onMount(() => {
         unsubscribeResponses = fileSystemResponses.subscribe(response => {
@@ -350,7 +396,7 @@
                     previousItemsMap = new Map(listing.map(item => [item.name, item]));
                     currentPath = path;
 
-                    if (!nestedView) {
+                    if (!nestedView && viewMode !== 'columns') {
                         const parentDir = { name: '..', type: 'dir', size: -1, mtime: -1 };
                         const sortedItems = finalListing.sort((a, b) => {
                             if (a.type === b.type) return a.name.localeCompare(b.name);
@@ -358,7 +404,7 @@
                         });
                         items = (path !== '/') ? [parentDir, ...sortedItems] : sortedItems;
                     } else {
-                        items = finalListing; // For nested view, store flat list for tree processing
+                        items = finalListing; // For nested/columns view, store flat list for tree processing
                     }
                 }
             }
@@ -380,6 +426,9 @@
         if (unsubscribeResponses) unsubscribeResponses();
         if (unsubscribeWatchEvents) unsubscribeWatchEvents();
         clearTimeout(changeClearTimeout);
+        // Clean up pan listeners as a safeguard
+        window.removeEventListener('mousemove', handlePanMove);
+        window.removeEventListener('mouseup', handlePanEnd);
     });
 </script>
 
@@ -613,6 +662,67 @@
         max-height: 1.4em;
     }
 
+    /* Column View Styles */
+    .columns-view {
+        flex-grow: 1;
+        display: flex;
+        overflow: auto;
+        padding: 8px;
+        gap: 8px;
+        cursor: grab;
+    }
+    .column {
+        flex: 0 0 200px; /* Don't grow, don't shrink, base width 200px */
+        display: flex;
+        flex-direction: column;
+        background-color: var(--taskbar-button-bg);
+        border-radius: 4px;
+        border: 1px solid var(--border-color);
+        overflow: hidden; /* To keep children within rounded corners */
+    }
+    .column-header {
+        padding: 4px 8px;
+        font-weight: bold;
+        cursor: pointer;
+        color: white;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .column-header:hover {
+        filter: brightness(1.2);
+    }
+    .column-content {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: 4px;
+    }
+    .column-content-item {
+        padding: 2px 8px;
+        border-radius: 2px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .column-content-item:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .column-item-icon {
+        flex-shrink: 0;
+    }
+    .column-item-name {
+        flex-grow: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
 
     /* --- Animation styles for Watch updates --- */
     @keyframes green-pop-tile {
@@ -680,7 +790,7 @@
     <div class="path-bar">
         <span class="path-text">{currentPath}</span>
         <div class="controls-group">
-            {#if viewMode === 'tiles'}
+            {#if viewMode === 'tiles' || viewMode === 'columns'}
                 <div class="color-mode-selector">
                     <label title="Color by file type">
                         <input type="radio" bind:group={colorMode} value={'type'}> Type
@@ -693,6 +803,7 @@
             <div class="view-mode-selector">
                 <button class="view-button" class:active={viewMode === 'list'} on:click={() => switchViewMode('list')} title="List View">☰</button>
                 <button class="view-button" class:active={viewMode === 'tiles'} on:click={() => switchViewMode('tiles')} title="Tiles View">⊞</button>
+                <button class="view-button" class:active={viewMode === 'columns'} on:click={() => switchViewMode('columns')} title="Columns View">◫</button>
             </div>
              <button class="watch-button" class:active={nestedView} on:click={toggleNestedView} title="Toggle Nested View">Nested</button>
             <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates" disabled={nestedView}>
@@ -776,6 +887,27 @@
                     </div>
                 {/each}
             {/if}
+        </div>
+    {:else if viewMode === 'columns'}
+        <div class="columns-view" bind:this={columnsContainer} on:mousedown={handlePanStart} on:wheel={handleWheelScroll}>
+            {#each treeItems as item (item.path)}
+                <div class="column">
+                    <div class="column-header" on:click={() => handleItemClick(item)} title={item.name} style:background-color={getTileColor(item, colorMode)}>
+                        <span class="column-item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
+                        <span class="column-item-name">{item.name}</span>
+                    </div>
+                    {#if item.type === 'dir' && item.children && item.children.length > 0}
+                        <div class="column-content">
+                            {#each item.children as child (child.path)}
+                                <div class="column-content-item" on:click={() => handleItemClick(child)} title={child.name}>
+                                    <span class="column-item-icon">{child.type === 'dir' ? '🗂️' : '📄'}</span>
+                                    <span class="column-item-name">{child.name}</span>
+                                </div>
+                            {/each}
+                        </div>
+                    {/if}
+                </div>
+            {/each}
         </div>
     {/if}
 
