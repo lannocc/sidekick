@@ -44,6 +44,8 @@
     let nestedView = false; // 'nested' or 'flat'
     let treeItems = []; // Hierarchical data for nested views
     let expandedNodes = new Set(); // Stores paths of expanded dirs in nested LIST view
+    let columnFiles = []; // For columns view
+    let columnDirs = [];  // For columns view
 
     // --- Column View Panning State ---
     let columnsContainer;
@@ -240,6 +242,10 @@
     // Tree data is needed for any nested view or for columns view
     $: if (nestedView || viewMode === 'columns') {
         treeItems = buildTree(items, currentPath);
+        if (viewMode === 'columns') {
+            columnFiles = treeItems.filter(item => item.type === 'file');
+            columnDirs = treeItems.filter(item => item.type === 'dir');
+        }
     }
 
     // --- Data Fetching & Watch ---
@@ -680,6 +686,15 @@
         border: 1px solid var(--border-color);
         overflow: hidden; /* To keep children within rounded corners */
     }
+    .column.files-column {
+        flex: 0 0 328px; /* 2 * 160px width + 8px gap */
+    }
+    .files-column .column-content {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+        gap: 4px;
+        align-content: start;
+    }
     .column-header {
         padding: 4px 6px;
         font-weight: bold;
@@ -890,18 +905,32 @@
         </div>
     {:else if viewMode === 'columns'}
         <div class="columns-view" bind:this={columnsContainer} on:mousedown={handlePanStart} on:wheel={handleWheelScroll}>
-            {#if currentPath !== '/'}
-                <div class="column">
+            <!-- New combined '..' and Files Column -->
+            {#if currentPath !== '/' || columnFiles.length > 0}
+                <div class="column files-column">
                     <div class="column-header" 
                          on:click={() => handleItemClick({name: '..', type: 'dir'})} 
-                         title="Parent Directory"
+                         title="Parent Directory / Files"
                          style:background-color={getTileColor({name: '..', type: 'dir'}, colorMode)}>
                         <span class="column-item-icon">🗂️</span>
-                        <span class="column-item-name">..</span>
+                        <span class="column-item-name">.. / Files</span>
+                    </div>
+                    <div class="column-content">
+                        {#each columnFiles as file (file.path)}
+                            <div class="tile-item nested-tile" 
+                                 on:click={() => handleItemClick(file)}
+                                 title={file.name}
+                                 style:background-color={getTileColor(file, colorMode)}>
+                                <div class="tile-icon">📄</div>
+                                <div class="tile-name">{file.name}</div>
+                            </div>
+                        {/each}
                     </div>
                 </div>
             {/if}
-            {#each treeItems as item (item.path)}
+
+            <!-- Directory Columns -->
+            {#each columnDirs as item (item.path)}
                 <div class="column">
                     <div class="column-header" on:click={() => handleItemClick(item)} title={item.name} style:background-color={getTileColor(item, colorMode)}>
                         <span class="column-item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
