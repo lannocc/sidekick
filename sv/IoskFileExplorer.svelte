@@ -302,7 +302,7 @@
             newIoskFileViewer(consoleId, filePath);
         }
         // Directories are clickable for navigation in certain views
-        else if (item.type === 'dir' && (!nestedView || columnsEnabled || (nestedView && viewMode === 'tiles'))) {
+        else if (item.type === 'dir' && (item.name === '..' || !nestedView || columnsEnabled || (nestedView && viewMode === 'tiles'))) {
             if (isWatching) {
                 sendWatchRequest('fs_watch_stop', currentPath);
                 isWatching = false;
@@ -883,10 +883,10 @@
                 </div>
             {/if}
             <div class="view-mode-selector">
+                <button class="view-button" class:active={columnsEnabled} on:click={toggleColumnsView} title="Toggle Columns View">◫</button>
                 <button class="view-button" class:active={viewMode === 'list'} on:click={() => switchViewMode('list')} title="List View">☰</button>
                 <button class="view-button" class:active={viewMode === 'tiles'} on:click={() => switchViewMode('tiles')} title="Tiles View">⊞</button>
             </div>
-             <button class="watch-button" class:active={columnsEnabled} on:click={toggleColumnsView} title="Toggle Columns View">◫</button>
              <button class="watch-button" class:active={nestedView} on:click={toggleNestedView} title="Toggle Nested View">Nested</button>
             <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates">
                 {isWatching ? 'Watching' : 'Watch'} 👀
