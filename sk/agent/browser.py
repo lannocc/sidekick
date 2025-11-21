@@ -8,8 +8,6 @@ from ..util import print_flush, delay, open_browser, take_screenshot#, \
 from ..util import play_ding, play_click, play_scratch, play_key, play_typing
 from .common import create_action_prompter
 
-import pyautogui
-
 import subprocess
 
 
@@ -170,6 +168,7 @@ def get_screen_region(region_description, chatter=False):
 
 
 def mouse_click_region(region):
+    import pyautogui
     x1, y1, x2, y2 = region
 
     pyautogui.moveTo(x1, y1, duration=1)
@@ -215,6 +214,7 @@ class Actions(ActionsBase):
 
     def do_type(self, context, text_to_type=None, text_from_ai=None,
                 where_to_focus=None, quiet=False, chatter=False):
+        import pyautogui
         if not (text_to_type or text_from_ai):
             print(' !! need text_to_type or text_from_ai !!')
             return None
@@ -253,6 +253,7 @@ class Actions(ActionsBase):
         return FileResult(file)
 
     def do_key(self, context, special_keys, quiet=False, chatter=False):
+        import pyautogui
         for key in special_keys.split(' '):
             play_key()
             pyautogui.press(key)
