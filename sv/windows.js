@@ -733,7 +733,7 @@ export function newNotificationCenter(props = {}) {
         return;
     }
 
-    windows.addWindow(NotificationCenter, { title: 'Notifications', width: 350, height: 400, ...props });
+    windows.addWindow(NotificationCenter, { title: 'Notifications', width: 475, height: 475, ...props });
 }
 export function newIoskFileExplorer(consoleTabId, consoleTitle, props = {}) {
     const title = `Files - ${consoleTitle || `Console ${consoleTabId}`}`;
