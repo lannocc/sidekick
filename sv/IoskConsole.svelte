@@ -78,8 +78,20 @@
 
     // --- Users Panel State ---
     let usersPanelWidth = 260;
-    let isUsersPanelCollapsed = false;
+    let isUsersPanelCollapsed = true;
     let isResizing = false;
+
+    let prevRoomName = null;
+    $: {
+        if (roomName && !prevRoomName) {
+            // Just joined a room
+            isUsersPanelCollapsed = false;
+        } else if (!roomName && prevRoomName) {
+            // Just left a room
+            isUsersPanelCollapsed = true;
+        }
+        prevRoomName = roomName;
+    }
 
 
     // --- Helper functions for telemetry display ---
@@ -960,6 +972,17 @@
         right: 5px;
     }
     .user-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
+    .collapsed-user-count {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-grow: 1;
+        color: var(--title-bar-text);
+        font-weight: bold;
+        font-size: 1.1em;
+        cursor: default;
+        user-select: none;
+    }
     .user-item { padding: 2px 6px; cursor: pointer; border-radius: 2px; display: flex; align-items: center; }
     .user-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .user-name-display { flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1081,7 +1104,7 @@
             {/if}
         </div>
 
-        {#if roomName}
+        {#if isConnected}
         <div class="users-panel" style="--panel-width: {usersPanelWidth}px" class:collapsed={isUsersPanelCollapsed}>
             {#if !isUsersPanelCollapsed}
                 <div class="users-panel-resizer" on:mousedown={startResize}></div>
@@ -1172,6 +1195,10 @@
                             {/if}
                         </div>
                     {/each}
+                </div>
+            {:else}
+                <div class="collapsed-user-count" title="{roomParticipants.length} users">
+                    {roomParticipants.length}
                 </div>
             {/if}
         </div>
