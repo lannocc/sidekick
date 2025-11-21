@@ -37,6 +37,97 @@ const componentMap = {
     'IoskUserInspector': IoskUserInspector,
 };
 
+function findOptimalPosition(props, allWindows, currentWindowId) {
+    if (typeof window === 'undefined') {
+        return { x: 50, y: 50 }; // SSR fallback
+    }
+
+    const { width, height, sourceEvent, sourceTabId } = props;
+    const taskbarHeight = 40; // Assume taskbar is 40px at the top.
+    const desktop = {
+        x: 0,
+        y: taskbarHeight,
+        width: window.innerWidth,
+        height: window.innerHeight - taskbarHeight
+    };
+
+    const obstacles = allWindows.filter(w => !w.minimized).map(w => ({
+        x: w.x, y: w.y, width: w.width, height: w.height
+    }));
+
+    const checkCollision = (rect) => {
+        for (const obs of obstacles) {
+            if (rect.x < obs.x + obs.width &&
+                rect.x + rect.width > obs.x &&
+                rect.y < obs.y + obs.height &&
+                rect.y + rect.height > obs.y) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const clampToDesktop = (pos) => {
+        let newX = Math.max(desktop.x, pos.x);
+        let newY = Math.max(desktop.y, pos.y);
+        if (newX + width > desktop.width) newX = desktop.width - width;
+        if (newY + height > desktop.height) newY = desktop.height - height;
+        return { x: newX, y: newY };
+    };
+
+    if (sourceTabId) {
+        const sourceGroup = allWindows.find(g => g.tabs.some(t => t.id === sourceTabId));
+        if (sourceGroup) {
+            const sourceRect = { x: sourceGroup.x, y: sourceGroup.y, width: sourceGroup.width, height: sourceGroup.height };
+            const positions = [
+                { x: sourceRect.x + sourceRect.width + 10, y: sourceRect.y }, // Right
+                { x: sourceRect.x, y: sourceRect.y + sourceRect.height + 10 }, // Below
+                { x: sourceRect.x - width - 10, y: sourceRect.y }, // Left
+                { x: sourceRect.x + sourceRect.width - width, y: sourceRect.y + sourceRect.height + 10 },
+                { x: sourceRect.x, y: sourceRect.y - height - 10 }, // Above
+            ];
+
+            for (const pos of positions) {
+                const clampedPos = clampToDesktop(pos);
+                if (!checkCollision({ ...clampedPos, width, height })) {
+                    return clampedPos;
+                }
+            }
+        }
+    }
+
+    let startPoint = sourceEvent ? { x: sourceEvent.clientX, y: sourceEvent.clientY } : { x: desktop.x + 100, y: desktop.y + 100 };
+
+    let clamped = clampToDesktop({ x: startPoint.x - width / 2, y: startPoint.y - height / 2 });
+    if (!checkCollision({ ...clamped, width, height })) {
+        return clamped;
+    }
+
+    // Spiral search outwards if preferred positions are taken
+    let x = startPoint.x, y = startPoint.y;
+    let step = 30, leg = 0, armLength = 1, count = 0;
+    for (let i = 0; i < 200; i++) {
+        clamped = clampToDesktop({ x: x - width / 2, y: y - height / 2 });
+        if (!checkCollision({ ...clamped, width, height })) {
+            return clamped;
+        }
+        switch (leg) {
+            case 0: x += step; break;
+            case 1: y += step; break;
+            case 2: x -= step; break;
+            case 3: y -= step; break;
+        }
+        if (++count >= armLength) {
+            count = 0;
+            leg = (leg + 1) % 4;
+            if (leg % 2 === 0) armLength++;
+        }
+    }
+
+    return clampToDesktop({ x: 50 + (currentWindowId % 10) * 20, y: 50 + (currentWindowId % 10) * 20 });
+}
+
+
 function createWindowManager() {
     const { subscribe, update } = writable([]);
 
@@ -52,6 +143,28 @@ function createWindowManager() {
         const savedSettings = allWindowSettings[componentName];
         const useSavedPosition = savedSettings && savedSettings.positioning === 'manual';
 
+        const newWindowWidth = useSavedPosition ? savedSettings.width : (groupProps.width ?? defaults.width);
+        const newWindowHeight = useSavedPosition ? savedSettings.height : (groupProps.height ?? defaults.height);
+        let newX, newY;
+
+        if (useSavedPosition) {
+            newX = savedSettings.x;
+            newY = savedSettings.y;
+        } else if (groupProps.x != null && groupProps.y != null) {
+            newX = groupProps.x;
+            newY = groupProps.y;
+        } else {
+            const placementProps = {
+                width: newWindowWidth,
+                height: newWindowHeight,
+                sourceEvent: props.sourceEvent,
+                sourceTabId: props.consoleId || props.sourceTabId,
+            };
+            const pos = findOptimalPosition(placementProps, get(windows), windowGroupIdCounter + 1);
+            newX = pos.x;
+            newY = pos.y;
+        }
+
         const newTab = {
             id: ++tabIdCounter,
             component: component,
@@ -63,10 +176,10 @@ function createWindowManager() {
 
         const newWindowGroup = {
             id: ++windowGroupIdCounter,
-            x: useSavedPosition ? savedSettings.x : (groupProps.x ?? 50 + (windowGroupIdCounter % 10) * 20),
-            y: useSavedPosition ? savedSettings.y : (groupProps.y ?? 50 + (windowGroupIdCounter % 10) * 20),
-            width: useSavedPosition ? savedSettings.width : (groupProps.width ?? defaults.width),
-            height: useSavedPosition ? savedSettings.height : (groupProps.height ?? defaults.height),
+            x: newX,
+            y: newY,
+            width: newWindowWidth,
+            height: newWindowHeight,
             zIndex: 100,
             minimized: false,
             maximized: false,
@@ -578,7 +691,7 @@ export const instanceRegistry = {
 
 // --- Window Creation Functions ---
 
-export function newIoskConnection() {
+export function newIoskConnection(props = {}) {
     const allWindowSettings = get(windowSettings);
     const componentSettings = allWindowSettings['IoskConsole'];
     const globalSettings = get(desktopSettings);
@@ -587,29 +700,30 @@ export function newIoskConnection() {
         title: 'IOSK Connection',
         wsUrl: componentSettings?.defaultUrl ?? globalSettings.ioskUrl,
         username: componentSettings?.defaultUsername ?? globalSettings.ioskUsername,
+        ...props,
     });
 }
-export function newCalculator() {
-    windows.addWindow(Calculator, { title: 'Calculator', width: 320, height: 450 });
+export function newCalculator(props = {}) {
+    windows.addWindow(Calculator, { title: 'Calculator', width: 320, height: 450, ...props });
 }
-export function newSettings() {
-    windows.addWindow(Settings, { title: 'Settings', width: 400, height: 550 });
+export function newSettings(props = {}) {
+    windows.addWindow(Settings, { title: 'Settings', width: 400, height: 550, ...props });
 }
-export function newIoskFileExplorer(consoleTabId, consoleTitle) {
+export function newIoskFileExplorer(consoleTabId, consoleTitle, props = {}) {
     const title = `Files - ${consoleTitle || `Console ${consoleTabId}`}`;
     const explorerSettings = get(windowSettings)['IoskFileExplorer'];
-    windows.addWindow(IoskFileExplorer, { title, consoleId: consoleTabId, initialPath: explorerSettings?.initialPath || '.', width: 400, height: 500 });
+    windows.addWindow(IoskFileExplorer, { title, consoleId: consoleTabId, initialPath: explorerSettings?.initialPath || '.', width: 400, height: 500, ...props });
 }
-export function newIoskFileViewer(consoleTabId, path) {
+export function newIoskFileViewer(consoleTabId, path, props = {}) {
     const title = path.split('/').pop() || path;
-    windows.addWindow(IoskFileViewer, { title: `View - ${title}`, consoleId: consoleTabId, path: path, width: 700, height: 500 });
+    windows.addWindow(IoskFileViewer, { title: `View - ${title}`, consoleId: consoleTabId, path: path, width: 700, height: 500, ...props });
 }
-export function newWebBrowser() {
+export function newWebBrowser(props = {}) {
     const browserSettings = get(windowSettings)['WebBrowser'];
     const initialUrl = browserSettings?.defaultUrl || (typeof window !== 'undefined' ? window.location.origin : 'about:blank');
-    windows.addWindow(WebBrowser, { title: 'Web Browser', initialUrl, width: 1024, height: 768 });
+    windows.addWindow(WebBrowser, { title: 'Web Browser', initialUrl, width: 1024, height: 768, ...props });
 }
-export function newIoskPrivateChat(consoleTabId, localUser, remoteUser) {
+export function newIoskPrivateChat(consoleTabId, localUser, remoteUser, props = {}) {
     const allWindows = get(windows);
     const existingChatTab = allWindows.flatMap(g => g.tabs).find(t =>
         t.componentName === 'IoskPrivateChat' && t.consoleId === consoleTabId && t.remoteUser === remoteUser
@@ -624,11 +738,11 @@ export function newIoskPrivateChat(consoleTabId, localUser, remoteUser) {
     }
 
     const title = remoteUser.split('.')[0];
-    windows.addWindow(IoskPrivateChat, { title: `Chat with ${title}`, consoleId: consoleTabId, localUser, remoteUser, width: 450, height: 400 });
+    windows.addWindow(IoskPrivateChat, { title: `Chat with ${title}`, consoleId: consoleTabId, localUser, remoteUser, width: 450, height: 400, ...props });
 }
 
-export function newLocalTerminal() {
-    windows.addWindow(LocalTerminal, { title: 'Local Terminal', width: 800, height: 500 });
+export function newLocalTerminal(props = {}) {
+    windows.addWindow(LocalTerminal, { title: 'Local Terminal', width: 800, height: 500, ...props });
 }
 
 export function newLocalFileExplorer(props = {}) {
@@ -636,11 +750,11 @@ export function newLocalFileExplorer(props = {}) {
     windows.addWindow(LocalFileExplorer, { ...defaultProps, ...props });
 }
 
-export function newAskWindow(initialFiles = []) {
-    windows.addWindow(Ask, { title: 'Ask', initialFiles, width: 900, height: 600 });
+export function newAskWindow(initialFiles = [], props = {}) {
+    windows.addWindow(Ask, { title: 'Ask', initialFiles, width: 900, height: 600, ...props });
 }
 
-export function newIoskWatch(consoleTabId, pwd) {
+export function newIoskWatch(consoleTabId, pwd, props = {}) {
     const allWindows = get(windows);
     const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
     if (!consoleTab || !consoleTab.isConsoleConnected) {
@@ -654,12 +768,13 @@ export function newIoskWatch(consoleTabId, pwd) {
         consoleConnection: consoleTab.consoleConnection, // Pass this for Dash restore
         initialPwd: pwd,
         width: 700,
-        height: 400
+        height: 400,
+        ...props,
     });
 }
 
 
-export function newIoskUserInspector(consoleTabId, targetUser, consoleWs) {
+export function newIoskUserInspector(consoleTabId, targetUser, consoleWs, props = {}) {
     const allWindows = get(windows);
 
     // Find if an inspector for this user from this console already exists
@@ -691,5 +806,6 @@ export function newIoskUserInspector(consoleTabId, targetUser, consoleWs) {
         consoleConnection: consoleTab.consoleConnection, // For dash restore
         width: 700,
         height: 700,
+        ...props,
     });
 }

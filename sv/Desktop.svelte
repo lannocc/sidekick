@@ -19,6 +19,7 @@
         visible: false,
         x: 0,
         y: 0,
+        sourceEvent: null,
     };
     
     // --- Focus Follows Mouse Logic ---
@@ -99,6 +100,7 @@
             visible: true,
             x: event.clientX,
             y: event.clientY,
+            sourceEvent: event,
         };
     }
 
@@ -108,7 +110,7 @@
 
     function openSettingsMenu() {
         closeContextMenu();
-        newSettings();
+        newSettings({ sourceEvent: contextMenu.sourceEvent });
     }
 
     function handleFocusOut(event, tab) {
