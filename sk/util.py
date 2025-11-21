@@ -178,6 +178,35 @@ def get_directory_tree_as_text(path, indent='', markdown=False, count=False, dir
     return text
 
 
+def _get_formatted_file_content(full_path):
+    """Reads a file and formats its content with a header and code block."""
+    item = os.path.basename(full_path)
+    hint = 'python' if item.endswith('.py') else \
+           'svelte' if item.endswith('.svelte') else \
+           'markdown' if item.endswith('.md') else \
+           'rst' if item.endswith('.rst') else \
+           'html' if item.endswith('.html') else \
+           'css' if item.endswith('.css') else \
+           'javascript' if item.endswith('.js') else \
+           'json' if item.endswith('.json') else \
+           'config' if item.endswith('.conf') or item.endswith('.theme') else \
+           'bat' if item.endswith('.bat') else \
+           'shell' if item.endswith('.sh') or item.endswith('.bash') else \
+           'text' if item.endswith('.txt') else ''
+
+    text = f'\n>>> BEGIN FILE {full_path}:\n'
+    text += f'```{hint}\n'
+    try:
+        with open(full_path, 'r', encoding='utf-8') as file:
+            text += file.read()
+    except Exception:
+        print(f'ERROR READING FILE: {full_path}')
+        raise
+    text += '```\n'
+    text += '<<< END FILE\n\n'
+    return text
+
+
 def get_directory_contents_as_text(path):
     from binaryornot.check import is_binary
 
@@ -193,71 +222,15 @@ def get_directory_contents_as_text(path):
 
         if os.path.isdir(full_path):
             text += get_directory_contents_as_text(full_path)
-
         else:
-            hint = 'python' if item.endswith('.py') else \
-                   'svelte' if item.endswith('.svelte') else \
-                   'markdown' if item.endswith('.md') else \
-                   'rst' if item.endswith('.rst') else \
-                   'html' if item.endswith('.html') else \
-                   'css' if item.endswith('.css') else \
-                   'javascript' if item.endswith('.js') else \
-                   'json' if item.endswith('.json') else \
-                   'config' if item.endswith('.conf') \
-                        or item.endswith('.theme') else \
-                   'bat' if item.endswith('.bat') else \
-                   'shell' if item.endswith('.sh') else \
-                   'bash' if item.endswith('.bash') else \
-                   'text' if item.endswith('.txt') else None
-
-            if not hint:
-                if is_binary(full_path): continue # not text
-                elif item.endswith('.pdf'): continue # also not text
-                else: hint = ''
-
-            text += f'\n>>> BEGIN FILE {full_path}:\n'
-            text += f'```{hint}\n'
-            try:
-                with open(full_path, 'r') as file:
-                    text += file.read()
-                    #text += '\n'
-            except:
-                print(f'ERROR READING FILE: {full_path}')
-                raise
-            text += '```\n'
-            text += '<<< END FILE\n\n'
+            if is_binary(full_path) or item.endswith('.pdf'):
+                continue
+            text += _get_formatted_file_content(full_path)
 
     return text
 
 
 def package_directory(path, label='project'): # path can be a str or list of str
-    def _get_formatted_file_content(full_path):
-        item = os.path.basename(full_path)
-        hint = 'python' if item.endswith('.py') else \
-               'svelte' if item.endswith('.svelte') else \
-               'markdown' if item.endswith('.md') else \
-               'rst' if item.endswith('.rst') else \
-               'html' if item.endswith('.html') else \
-               'css' if item.endswith('.css') else \
-               'javascript' if item.endswith('.js') else \
-               'json' if item.endswith('.json') else \
-               'config' if item.endswith('.conf') or item.endswith('.theme') else \
-               'bat' if item.endswith('.bat') else \
-               'shell' if item.endswith('.sh') or item.endswith('.bash') else \
-               'text' if item.endswith('.txt') else ''
-
-        text = f'\n>>> BEGIN FILE {full_path}:\n'
-        text += f'```{hint}\n'
-        try:
-            with open(full_path, 'r', encoding='utf-8') as file:
-                text += file.read()
-        except Exception:
-            print(f'ERROR READING FILE: {full_path}')
-            raise
-        text += '```\n'
-        text += '<<< END FILE\n\n'
-        return text
-
     import tiktoken
     fd, name = tempfile.mkstemp(prefix='sidekick-package-', suffix='.txt')
 
@@ -390,4 +363,3 @@ def play_scratch():
 
 def play_thinking():
     play('assets/three_tones.wav')
-
