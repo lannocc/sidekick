@@ -90,7 +90,7 @@
 
             // SENTINEL NOTIFICATION: Trigger for completed calculation
             if (groupId && id) {
-                windows.notifyActivity(groupId, id, { summary: `Result: ${display}` });
+                windows.notifyActivity(groupId, id, { summary: `Result: ${display}` }, true);
             }
 
         } catch (e) {

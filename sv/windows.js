@@ -597,11 +597,11 @@ function createWindowManager() {
         unreadNoticeCount.update(n => n + 1);
     };
 
-    const notifyActivity = (groupId, tabId, payload = {}) => {
+    const notifyActivity = (groupId, tabId, payload = {}, force = false) => {
         update(windows => {
             const group = windows.find(g => g.id === groupId);
-            if (!group || group.isActive) {
-                return windows; // Don't notify for active windows
+            if (!group || (group.isActive && !force)) {
+                return windows; // Don't notify for active windows unless forced
             }
     
             const tab = group.tabs.find(t => t.id === tabId);
