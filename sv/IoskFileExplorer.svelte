@@ -712,6 +712,9 @@
     .column.files-column {
         flex: 0 0 328px; /* 2 * 160px width + 8px gap */
     }
+    .columns-view.tile-mode .column:not(.files-column) {
+        flex: 0 0 174px; /* Wider to fit two 80px tiles + gap + padding */
+    }
     .columns-view.tile-mode .column-content {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
