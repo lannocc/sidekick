@@ -40,9 +40,9 @@
 
     // --- View State ---
     let viewMode = 'list'; // 'list' or 'tiles'
-    let columnsEnabled = false;
+    export let columnsEnabled = false;
     let colorMode = 'type'; // 'type' or 'age'
-    let nestedView = false; // 'nested' or 'flat'
+    export let nestedView = false; // 'nested' or 'flat'
     let treeItems = []; // Hierarchical data for nested views
     let expandedNodes = new Set(); // Stores paths of expanded dirs in nested LIST view
     let columnFiles = []; // For columns view
@@ -373,6 +373,40 @@
         scrollableColumns = []; // Clear stored elements
         window.removeEventListener('mousemove', handlePanMove);
         window.removeEventListener('mouseup', handlePanEnd);
+    }
+
+    function getMaxExpandedDepth(node) {
+        // The children of `node` are at level 0 inside the column.
+        // We need to find the maximum depth of any expanded path starting from them.
+        if (!node.children || node.children.length === 0) return 0;
+
+        // Recursive helper to find the max depth in a subtree
+        function findMax(currentNode, currentLevel) {
+            // If the node isn't expanded or has no children, this path's depth is the current level.
+            if (!expandedNodes.has(currentNode.path) || !currentNode.children || currentNode.children.length === 0) {
+                return currentLevel;
+            }
+
+            // Otherwise, check children's depths.
+            let maxChildLevel = currentLevel;
+            for (const child of currentNode.children) {
+                const childMaxLevel = findMax(child, currentLevel + 1);
+                if (childMaxLevel > maxChildLevel) {
+                    maxChildLevel = childMaxLevel;
+                }
+            }
+            return maxChildLevel;
+        }
+
+        let maxDepth = 0;
+        for (const child of node.children) {
+            // Each child's path starts at level 0 within the column.
+            const childMaxDepth = findMax(child, 0);
+            if (childMaxDepth > maxDepth) {
+                maxDepth = childMaxDepth;
+            }
+        }
+        return maxDepth;
     }
 
     onMount(() => {
@@ -856,13 +890,100 @@
         <div class="error-message">{errorMessage}</div>
     {/if}
 
-    {#if !columnsEnabled}
-        <!-- REGULAR LIST/TILES VIEW (COLUMNS DISABLED) -->
+    {#if columnsEnabled}
+        <!-- COLUMNS VIEW (ENABLED) -->
+        <div class="columns-view" bind:this={columnsContainer} on:mousedown={handlePanStart} on:wheel={handleWheelScroll} class:tile-mode={viewMode === 'tiles'}>
+            <!-- Combined '..' and Files Column -->
+            {#if currentPath !== '/' || columnFiles.length > 0}
+                <div class="column files-column">
+                    <div class="column-header"
+                         on:click={() => handleItemClick({name: '..', type: 'dir'})}
+                         title="Parent Directory"
+                         style:background-color={getTileColor({name: '..', type: 'dir'}, colorMode)}>
+                        <span class="column-item-icon">🗂️</span>
+                        <span class="column-item-name">{currentPath}</span>
+                        <span class="column-header-nav-up">..</span>
+                    </div>
+                    <div class="column-content">
+                        {#if viewMode === 'list'}
+                             {#each columnFiles as file (file.path)}
+                                <div class="column-content-item" on:click={() => handleItemClick(file)} title={file.name} style="color: {getTileColor(file, colorMode)}"
+                                     class:new={itemChangeStatus[file.path] === 'new'}
+                                     class:modified={itemChangeStatus[file.path] === 'modified'}
+                                     class:removed={itemChangeStatus[file.path] === 'removed'}>
+                                    <span class="column-item-icon">📄</span>
+                                    <span class="column-item-name">{file.name}</span>
+                                </div>
+                            {/each}
+                        {:else} <!-- tiles -->
+                            {#each columnFiles as file (file.path)}
+                                <div class="tile-item nested-tile"
+                                     on:click={() => handleItemClick(file)}
+                                     title={file.name}
+                                     style:background-color={getTileColor(file, colorMode)}
+                                     class:new={itemChangeStatus[file.path] === 'new'}
+                                     class:modified={itemChangeStatus[file.path] === 'modified'}
+                                     class:removed={itemChangeStatus[file.path] === 'removed'}>
+                                    <div class="tile-icon">📄</div>
+                                    <div class="tile-name">{file.name}</div>
+                                </div>
+                            {/each}
+                        {/if}
+                    </div>
+                </div>
+            {/if}
+
+            <!-- Directory Columns -->
+            {#each columnDirs as item (item.path)}
+                {@const isNestedListColumn = nestedView && viewMode === 'list'}
+                {@const maxDepth = isNestedListColumn ? getMaxExpandedDepth(item) : 0}
+                {@const columnWidth = 160 + maxDepth * 20}
+                <div class="column" style={isNestedListColumn ? `flex-basis: ${columnWidth}px;` : ''}>
+                    <div class="column-header" on:click={() => handleItemClick(item)} title={item.name} style:background-color={getTileColor(item, colorMode)}>
+                        <span class="column-item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
+                        <span class="column-item-name">{item.name}</span>
+                    </div>
+                    {#if item.type === 'dir' && item.children && item.children.length > 0}
+                        <div class="column-content">
+                             {#if nestedView}
+                                {#each item.children as child (child.path)}
+                                    <svelte:self treeNode={child} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
+                                {/each}
+                             {:else}
+                                {#if viewMode === 'list'}
+                                    {#each item.children as child (child.path)}
+                                        <div class="column-content-item" on:click={() => handleItemClick(child)} title={child.name} style="color: {getTileColor(child, colorMode)}"
+                                             class:new={itemChangeStatus[child.path] === 'new'}
+                                             class:modified={itemChangeStatus[child.path] === 'modified'}
+                                             class:removed={itemChangeStatus[child.path] === 'removed'}>
+                                            <span class="column-item-icon">{child.type === 'dir' ? '🗂️' : '📄'}</span>
+                                            <span class="column-item-name">{child.name}</span>
+                                        </div>
+                                    {/each}
+                                {:else} <!-- tiles -->
+                                    {#each item.children as child (child.path)}
+                                        <div class="tile-item nested-tile" on:click={() => handleItemClick(child)} title={child.name} style:background-color={getTileColor(child, colorMode)}
+                                             class:new={itemChangeStatus[child.path] === 'new'}
+                                             class:modified={itemChangeStatus[child.path] === 'modified'}
+                                             class:removed={itemChangeStatus[child.path] === 'removed'}>
+                                            <div class="tile-icon">{child.type === 'dir' ? '🗂️' : '📄'}</div>
+                                            <div class="tile-name">{child.name}</div>
+                                        </div>
+                                    {/each}
+                                {/if}
+                             {/if}
+                        </div>
+                    {/if}
+                </div>
+            {/each}
+        </div>
+    {:else}
+        <!-- REGULAR OR NESTED VIEW (COLUMNS DISABLED) -->
         {#if viewMode === 'list'}
             <div class="item-list">
               {#if nestedView}
                     {#each treeItems as item (item.path)}
-                        <svelte:self treeNode={item} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} />
+                        <svelte:self treeNode={item} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
                     {/each}
                 {:else}
                     {#each items as item (item.name)}
@@ -909,7 +1030,7 @@
                                 <div class="nested-dir-content-grid">
                                     {#if item.children && item.children.length > 0}
                                         {#each item.children as child (child.path)}
-                                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} />
+                                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
                                         {/each}
                                     {/if}
                                 </div>
@@ -938,84 +1059,6 @@
                 {/if}
       </div>
         {/if}
-    {:else}
-        <!-- COLUMNS VIEW (ENABLED) -->
-        <div class="columns-view" bind:this={columnsContainer} on:mousedown={handlePanStart} on:wheel={handleWheelScroll} class:tile-mode={viewMode === 'tiles'}>
-            <!-- Combined '..' and Files Column -->
-            {#if currentPath !== '/' || columnFiles.length > 0}
-                <div class="column files-column">
-                    <div class="column-header"
-                         on:click={() => handleItemClick({name: '..', type: 'dir'})}
-                         title="Parent Directory"
-                         style:background-color={getTileColor({name: '..', type: 'dir'}, colorMode)}>
-                        <span class="column-item-icon">🗂️</span>
-                        <span class="column-item-name">{currentPath}</span>
-                        <span class="column-header-nav-up">..</span>
-                    </div>
-                    <div class="column-content">
-                        {#if viewMode === 'list'}
-                             {#each columnFiles as file (file.path)}
-                                <div class="column-content-item" on:click={() => handleItemClick(file)} title={file.name} style="color: {getTileColor(file, colorMode)}"
-                                     class:new={itemChangeStatus[file.path] === 'new'}
-                                     class:modified={itemChangeStatus[file.path] === 'modified'}
-                                     class:removed={itemChangeStatus[file.path] === 'removed'}>
-                                    <span class="column-item-icon">📄</span>
-                                    <span class="column-item-name">{file.name}</span>
-                                </div>
-                            {/each}
-                        {:else} <!-- tiles -->
-                            {#each columnFiles as file (file.path)}
-                                <div class="tile-item nested-tile"
-                                     on:click={() => handleItemClick(file)}
-                                     title={file.name}
-                                     style:background-color={getTileColor(file, colorMode)}
-                                     class:new={itemChangeStatus[file.path] === 'new'}
-                                     class:modified={itemChangeStatus[file.path] === 'modified'}
-                                     class:removed={itemChangeStatus[file.path] === 'removed'}>
-                                    <div class="tile-icon">📄</div>
-                                    <div class="tile-name">{file.name}</div>
-                                </div>
-                            {/each}
-                        {/if}
-                    </div>
-                </div>
-            {/if}
-
-            <!-- Directory Columns -->
-            {#each columnDirs as item (item.path)}
-                <div class="column">
-                    <div class="column-header" on:click={() => handleItemClick(item)} title={item.name} style:background-color={getTileColor(item, colorMode)}>
-                        <span class="column-item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
-                        <span class="column-item-name">{item.name}</span>
-                    </div>
-                    {#if item.type === 'dir' && item.children && item.children.length > 0}
-                        <div class="column-content">
-                             {#if viewMode === 'list'}
-                                {#each item.children as child (child.path)}
-                                    <div class="column-content-item" on:click={() => handleItemClick(child)} title={child.name} style="color: {getTileColor(child, colorMode)}"
-                                         class:new={itemChangeStatus[child.path] === 'new'}
-                                         class:modified={itemChangeStatus[child.path] === 'modified'}
-                                         class:removed={itemChangeStatus[child.path] === 'removed'}>
-                                        <span class="column-item-icon">{child.type === 'dir' ? '🗂️' : '📄'}</span>
-                                  <span class="column-item-name">{child.name}</span>
-                                    </div>
-                                {/each}
-                             {:else} <!-- tiles -->
-                                {#each item.children as child (child.path)}
-                                    <div class="tile-item nested-tile" on:click={() => handleItemClick(child)} title={child.name} style:background-color={getTileColor(child, colorMode)}
-                                         class:new={itemChangeStatus[child.path] === 'new'}
-                                         class:modified={itemChangeStatus[child.path] === 'modified'}
-                                         class:removed={itemChangeStatus[child.path] === 'removed'}>
-                                        <div class="tile-icon">{child.type === 'dir' ? '🗂️' : '📄'}</div>
-                                        <div class="tile-name">{child.name}</div>
-                                    </div>
-                          {/each}
-                             {/if}
-                        </div>
-                    {/if}
-                </div>
-            {/each}
-        </div>
     {/if}
 
     <WindowSettingsModal
@@ -1058,15 +1101,17 @@
                 </span>
                 <span class="item-icon">{treeNode.type === 'dir' ? '🗂️' : '📄'}</span>
                 <span class="item-name">{treeNode.name}</span>
-                 <span class="item">
-                    {#if treeNode.type === 'file' && treeNode.size >= 0}
-                        {treeNode.size}
-                    {/if}
-                </span>
+                 {#if !(columnsEnabled && nestedView)}
+                     <span class="item-size">
+                        {#if treeNode.type === 'file' && treeNode.size >= 0}
+                            {treeNode.size}
+                        {/if}
+                    </span>
+                 {/if}
             </div>
             {#if treeNode.children && treeNode.children.length > 0 && expandedNodes.has(treeNode.path)}
                 {#each treeNode.children as child}
-                    <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} />
+                    <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
                 {/each}
             {/if}
         </div>
@@ -1087,13 +1132,13 @@
                 title={treeNode.name}
                 style:border-color={getTileColor(treeNode, colorMode)}
                 class:new={itemChangeStatus[treeNode.path] === 'new'}
-                class:modified={itemCngeStatus[treeNode.path] === 'modified'}
+                class:modified={itemChangeStatus[treeNode.path] === 'modified'}
                 class:removed={itemChangeStatus[treeNode.path] === 'removed'}>
                 <div class="nested-dir-name" style:background-color={getTileColor(treeNode, colorMode)}>{treeNode.name}</div>
                 <div class="nested-dir-content-grid">
                     {#if treeNode.children && treeNode.children.length > 0}
                         {#each treeNode.children as child (child.path)}
-                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} />
+                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
                         {/each}
                     {/if}
                 </div>
@@ -1101,4 +1146,3 @@
         {/if}
     {/if}
 {/if}
-
