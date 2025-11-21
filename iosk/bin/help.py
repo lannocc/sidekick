@@ -66,6 +66,7 @@ User/Device/Memory Management:
     $ bank          - load a skrip into user core memory by executing it
     $ banks         - list user memory accounts currently banked
     $ bankrupt      - clear all user core memory banks (see also: reset)
+    $ clbank        - clear a specific user core memory bank
     $ clear         - clear the session history for bots or the screen for console users
     $ color         - view or set user colors for chat messages
     $ colors        - display the chat colors for all connected users

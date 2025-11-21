@@ -1,6 +1,6 @@
 # Proposal: Advanced Session History Management
 
-**Status**: Proposed
+**Status**: Implemented
 
 ### Introduction
 

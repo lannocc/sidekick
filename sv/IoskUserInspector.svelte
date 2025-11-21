@@ -65,8 +65,9 @@
     let bankExpandedState = {};
     let promptExpandedState = {};
 
-    // --- State for prompt management ---
+    // --- State for item management ---
     let selectedPrompts = new Set();
+    let selectedBanks = new Set();
 
 
     const unsubscribeStore = contextUpdates.subscribe(update => {
@@ -135,18 +136,33 @@
         }
     }
 
-    // Reactive pruning of selected prompts if they disappear from the history
-    $: if (contextData && contextData.aiContext && contextData.aiContext.sessionHistory) {
-        const existingPromptNumbers = new Set(contextData.aiContext.sessionHistory.map(e => e.number));
-        let changed = false;
-        for (const selected of selectedPrompts) {
-            if (!existingPromptNumbers.has(selected)) {
-                selectedPrompts.delete(selected);
-                changed = true;
+    // Reactive pruning of selected items if they disappear from the context
+    $: if (contextData && contextData.aiContext) {
+        if (contextData.aiContext.sessionHistory) {
+            const existingPromptNumbers = new Set(contextData.aiContext.sessionHistory.map(e => e.number));
+            let changed = false;
+            for (const selected of selectedPrompts) {
+                if (!existingPromptNumbers.has(selected)) {
+                    selectedPrompts.delete(selected);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                selectedPrompts = selectedPrompts;
             }
         }
-        if (changed) {
-            selectedPrompts = selectedPrompts; // Trigger reactivity
+        if (contextData.aiContext.banks) {
+            const existingBankNames = new Set(contextData.aiContext.banks.map(b => b.name));
+            let changed = false;
+            for (const selected of selectedBanks) {
+                if (!existingBankNames.has(selected)) {
+                    selectedBanks.delete(selected);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                selectedBanks = selectedBanks;
+            }
         }
     }
 
@@ -319,14 +335,58 @@
         // Fallback for unknown prompt types
         return { type: 'unknown', content, strippedContent: content, prompt: null };
     }
-
-    // --- New functions for Prompt Management ---
+    
+    // --- Universal function for sending commands from the inspector ---
     function sendInspectorCommand(command) {
         if (!consoleWs || consoleWs.readyState !== WebSocket.OPEN) return;
         const user = contextData ? contextData.user : targetUser;
-        consoleWs.send(JSON.stringify({ type: 'client_input', data: '$ su ' + user + ' ' + command + '\n' }));
+        // Use `su` to execute the command as the target user
+        consoleWs.send(JSON.stringify({ type: 'client_input', data: `$ su ${user} ${command}\n` }));
     }
 
+    // --- Functions for Memory Bank Management ---
+    function clearSingleBank(bankName) {
+        // Quote bank name to handle spaces or special characters
+        sendInspectorCommand(`clbank '${bankName}'`);
+    }
+
+    function toggleBankSelection(bankName) {
+        if (selectedBanks.has(bankName)) {
+            selectedBanks.delete(bankName);
+        } else {
+            selectedBanks.add(bankName);
+        }
+        selectedBanks = selectedBanks; // trigger reactivity
+    }
+
+    function selectAllBanks() {
+        if (!contextData || !contextData.aiContext || !contextData.aiContext.banks) return;
+        selectedBanks = new Set(contextData.aiContext.banks.map(b => b.name));
+    }
+
+    function deselectAllBanks() {
+        selectedBanks = new Set();
+    }
+
+    function clearSelectedBanks() {
+        if (selectedBanks.size === 0) return;
+        if (confirm(`Are you sure you want to clear ${selectedBanks.size} selected banks? This cannot be undone.`)) {
+            // Send multiple clbank commands separated by a semicolon
+            const commands = Array.from(selectedBanks).map(name => `clbank '${name}'`).join('; ');
+            sendInspectorCommand(commands);
+            selectedBanks = new Set(); // Clear selection after sending
+        }
+    }
+
+    function bankrupt() {
+        if (confirm('Are you sure you want to clear ALL memory banks (bankrupt)? This cannot be undone.')) {
+            sendInspectorCommand('bankrupt');
+            selectedBanks = new Set(); // Clear selection as well
+        }
+    }
+
+
+    // --- Functions for Prompt Management ---
     function forgetSinglePrompt(number) {
         sendInspectorCommand(`forget ${number}`);
     }
@@ -992,12 +1052,47 @@
                         </div>
                     {/if}
                 </div>
+
+                {#if contextData.aiContext?.banks?.length > 0}
+                    <div class="prompts-action-bar">
+                        <div class="action-buttons">
+                            <button class="clear-button" on:click={bankrupt}>Bankrupt</button>
+                            <button
+                                class="forget-button"
+                                disabled={selectedBanks.size === 0}
+                                on:click={clearSelectedBanks}
+                            >
+                                Clear ({selectedBanks.size})
+                            </button>
+                        </div>
+                        <div class="selection-controls">
+                            <button on:click={deselectAllBanks}>Deselect All</button>
+                            <button on:click={selectAllBanks}>Select All</button>
+                        </div>
+                    </div>
+                {/if}
     
                 {#if contextData.aiContext?.banks?.length > 0}
                     <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px;">
                         {#each contextData.aiContext.banks as bank (bank.name)}
                             <details bind:open={bankExpandedState[bank.name]}>
-                                <summary>{bank.name}</summary>
+                                <summary class="prompt-header">
+                                    <button
+                                        class="prompt-delete-button"
+                                        title="Clear bank: {bank.name}"
+                                        on:click|preventDefault|stopPropagation={() => clearSingleBank(bank.name)}>
+                                        &times;
+                                    </button>
+                                    <span style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{bank.name}</span>
+                                    <input
+                                        type="checkbox"
+                                        class="prompt-select-checkbox"
+                                        title="Select bank: {bank.name}"
+                                        checked={selectedBanks.has(bank.name)}
+                                        on:click|stopPropagation
+                                        on:change={() => toggleBankSelection(bank.name)}
+                                    />
+                                </summary>
                                 <pre class="content-box" style="background-color: var(--console-bg); margin-top: 5px;">{bank.content}</pre>
                             </details>
                         {/each}
