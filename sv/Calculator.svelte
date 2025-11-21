@@ -183,6 +183,7 @@
                 break;
             case 'Backspace':
                 backspace();
+                buttonKey = 'Backspace';
                 break;
             default:
                 handled = false;
@@ -278,7 +279,8 @@
 <div class="calculator" bind:this={calculatorEl}>
     <div class="display">{display}</div>
     <div class="buttons">
-        <button class="btn clear span-2" on:click={clear} data-key="C">C</button>
+        <button class="btn clear" on:click={clear} data-key="C">C</button>
+        <button class="btn" on:click={backspace} data-key="Backspace">⌫</button>
         <button class="btn operator" on:click={() => chooseOperator('÷')} data-key="÷">÷</button>
         <button class="btn operator" on:click={() => chooseOperator('*')} data-key="*">*</button>
 
