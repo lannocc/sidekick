@@ -689,7 +689,7 @@ export function newIoskUserInspector(consoleTabId, targetUser, consoleWs) {
         targetUser: targetUser,
         consoleWs: consoleWs, // Pass the WebSocket instance
         consoleConnection: consoleTab.consoleConnection, // For dash restore
-        width: 600,
+        width: 700,
         height: 700,
     });
 }
