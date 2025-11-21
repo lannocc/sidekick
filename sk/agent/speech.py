@@ -4,6 +4,7 @@
 from ..ai import google as ai
 from ..action import ActionsBase
 from ..util import print_flush, play_scratch
+from .common import create_action_prompter
 
 import platform
 
@@ -45,17 +46,6 @@ Take the following prompt and select one or more actions from the list of availa
 
 PROMPT:
 '''
-
-
-def prompt_for_action(text, quiet=False, chatter=False):
-    if not quiet: print(f'      >> {text}')
-
-    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text,
-                                 chatter=chatter)
-    if not quiet: print(f'      << {actions}')
-
-    actions = Actions(actions)
-    return actions
 
 
 def speak_linux(text, lang='en'):
@@ -141,9 +131,5 @@ class Actions(ActionsBase):
         speak(what_to_say)
         return what_to_say
 
-    def do_help(self, context, prompt, quiet=False, chatter=False):
-        play_scratch()
-        from . import just_do_it
-        return just_do_it(context, prompt, for_help=True, quiet=quiet,
-                          chatter=chatter)
 
+prompt_for_action = create_action_prompter(PRE_PROMPT, META_PROMPT, Actions)

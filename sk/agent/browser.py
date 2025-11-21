@@ -6,6 +6,7 @@ from ..action import ActionsBase, FileResult
 from ..util import print_flush, delay, open_browser, take_screenshot#, \
                    #extract_and_save_region
 from ..util import play_ding, play_click, play_scratch, play_key, play_typing
+from .common import create_action_prompter
 
 import pyautogui
 
@@ -55,17 +56,6 @@ Take the following prompt and select one or more actions from the list of availa
 
 PROMPT:
 '''
-
-
-def prompt_for_action(text, quiet=False, chatter=False):
-    if not quiet: print(f'      >> {text}')
-
-    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text,
-                                 chatter=chatter)
-    if not quiet: print(f'      << {actions}')
-
-    actions = Actions(actions)
-    return actions
 
 
 def resolve_url(text, quiet=False, chatter=False):
@@ -274,9 +264,5 @@ class Actions(ActionsBase):
 
         return FileResult(file)
 
-    def do_help(self, context, prompt, quiet=False, chatter=False):
-        play_scratch()
-        from . import just_do_it
-        return just_do_it(context, prompt, for_help=True, quiet=quiet,
-                          chatter=chatter)
 
+prompt_for_action = create_action_prompter(PRE_PROMPT, META_PROMPT, Actions)

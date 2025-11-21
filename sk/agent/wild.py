@@ -4,6 +4,7 @@
 from ..ai import google as ai
 from ..action import ActionsBase
 from ..util import play_scratch, play_thinking
+from .common import create_action_prompter
 
 
 PRE_PROMPT = '''
@@ -30,17 +31,6 @@ PROMPT:
 '''
 
 
-def prompt_for_action(text, quiet=False, chatter=False):
-    if not quiet: print(f'      >> {text}')
-
-    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text,
-                                 chatter=chatter)
-    if not quiet: print(f'      << {actions}')
-
-    actions = Actions(actions)
-    return actions
-
-
 class Actions(ActionsBase):
     def do_prompt(self, context, prompt_for_ai, quiet=False, chatter=False):
         play_thinking()
@@ -53,9 +43,5 @@ class Actions(ActionsBase):
         if not quiet: print(f'   <<< {reply}')
         return reply
 
-    def do_help(self, context, prompt, quiet=False, chatter=False):
-        play_scratch()
-        play_scratch()
-        play_scratch()
-        return None
 
+prompt_for_action = create_action_prompter(PRE_PROMPT, META_PROMPT, Actions)

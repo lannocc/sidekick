@@ -3,6 +3,7 @@
 
 from ..ai import google as ai
 from ..action import ActionsBase
+from .common import create_action_prompter
 
 
 PRE_PROMPT = '''
@@ -50,17 +51,6 @@ PROMPT:
 '''
 
 
-def prompt_for_action(text, quiet=False, chatter=False):
-    if not quiet: print(f'      >> {text}')
-
-    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text,
-                                 chatter=chatter)
-    if not quiet: print(f'      << {actions}')
-
-    actions = Actions(actions)
-    return actions
-
-
 class Actions(ActionsBase):
     def do_move(self, context, source, destination, quiet=False, chatter=False):
         pass # FIXME
@@ -74,6 +64,5 @@ class Actions(ActionsBase):
     def do_folder(self, context, parent, name, quiet=False, chatter=False):
         pass # FIXME
 
-    def do_help(self, context, prompt, quiet=False, chatter=False):
-        pass # FIXME
 
+prompt_for_action = create_action_prompter(PRE_PROMPT, META_PROMPT, Actions)
