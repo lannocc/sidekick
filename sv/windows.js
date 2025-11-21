@@ -574,7 +574,8 @@ function createWindowManager() {
     };
 
     const playNoticeSound = (audioSettings) => {
-        const src = audioSettings.url ? audioSettings.url : `/assets/${audioSettings.sound}`;
+        if (!audioSettings.sound || audioSettings.sound === 'none') return;
+        const src = audioSettings.sound === 'custom' ? audioSettings.url : `/assets/${audioSettings.sound}`;
         try {
             new Audio(src).play().catch(e => console.error("Notice audio play failed:", e));
         } catch (e) {
@@ -707,7 +708,7 @@ export function newCalculator(props = {}) {
     windows.addWindow(Calculator, { title: 'Calculator', width: 320, height: 450, ...props });
 }
 export function newSettings(props = {}) {
-    windows.addWindow(Settings, { title: 'Settings', width: 400, height: 550, ...props });
+    windows.addWindow(Settings, { title: 'Settings', width: 420, height: 711, ...props });
 }
 export function newIoskFileExplorer(consoleTabId, consoleTitle, props = {}) {
     const title = `Files - ${consoleTitle || `Console ${consoleTabId}`}`;

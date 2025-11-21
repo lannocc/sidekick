@@ -35,6 +35,7 @@
         { value: 'short_beep.wav', name: 'Short Beep' },
         { value: 'three_tones.wav', name: 'Three Tones' },
         { value: 'none', name: 'None' },
+        { value: 'custom', name: 'Custom URL' },
     ];
 
     function handleUpdate() {
@@ -50,6 +51,17 @@
             } catch (e) { alert("Could not play audio. Check URL or console for errors."); }
         }
      }
+
+    function testNoticeSound() {
+        const audioSettings = settings.noticeDefaults.audio;
+        if (!audioSettings.sound || audioSettings.sound === 'none') return;
+        let src = audioSettings.sound === 'custom' ? audioSettings.url : `/assets/${audioSettings.sound}`;
+        if (src) {
+            try {
+                new Audio(src).play().catch(e => console.error("Audio play failed:", e));
+            } catch (e) { alert("Could not play audio. Check URL or console for errors."); }
+        }
+    }
 
     // --- Settings Modal Logic ---
     export let componentName;
@@ -271,12 +283,22 @@
             </label>
             <label class="color-picker-label">
                 <span>Notice Sound</span>
-                <select class="select-input" bind:value={settings.noticeDefaults.audio.sound} on:change={handleUpdate}>
-                    {#each noticeSounds as sound}
-                        <option value={sound.value}>{sound.name}</option>
-                    {/each}
-                </select>
+                <div>
+                    <select class="select-input" bind:value={settings.noticeDefaults.audio.sound} on:change={handleUpdate}>
+                        {#each noticeSounds as sound}
+                            <option value={sound.value}>{sound.name}</option>
+                        {/each}
+                    </select>
+                    <button class="test-button" on:click={testNoticeSound} title="Test Sound" disabled={settings.noticeDefaults.audio.sound === 'none'}>▶</button>
+                </div>
             </label>
+            {#if settings.noticeDefaults.audio.sound === 'custom'}
+                <div class="options-group">
+                    <label>
+                        <input class="text-input" type="text" bind:value={settings.noticeDefaults.audio.url} on:input={handleUpdate} placeholder="Enter Sound URL...">
+                    </label>
+                </div>
+            {/if}
         </div>
         {/if}
     </fieldset>
