@@ -6,7 +6,7 @@
     import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { windows, dragState, instanceRegistry, dragRequest } from './windows.js';
-    import { desktopSettings, windowSettings } from './desktopStore.js';
+    import { desktopSettings, windowSettings } from './desktop.js';
     import IoskConsole from './IoskConsole.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
     import IoskFileViewer from './IoskFileViewer.svelte';
@@ -14,6 +14,7 @@
     import Settings from './Settings.svelte';
     import Calculator from './Calculator.svelte';
     import IoskPrivateChat from './IoskPrivateChat.svelte';
+    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
 
     // Group properties
     export let id;
@@ -25,7 +26,7 @@
     export let minimized;
     export let maximized;
     export let isActive;
-    export let isFlashing;
+    export let notice;
     export let tabs;
     export let activeTabId;
 
@@ -51,9 +52,6 @@
     let tabsContainerEl;
     let titleBarEl;
 
-    let showGenericSettingsModal = false;
-    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
-
     // React to drag/resize requests from other components (like Desktop's content area)
     $: if ($dragRequest && $dragRequest.id === id) {
         const request = $dragRequest;
@@ -75,6 +73,8 @@
         }
     }
 
+    let showGenericSettingsModal = false;
+
     function openSettings() {
         showOptionsMenu = false;
         const instance = instanceRegistry.get(activeTabId);
@@ -82,21 +82,8 @@
         if (componentsWithCustomSettings.includes(componentName) && instance && typeof instance.showSettingsDialog === 'function') {
             instance.showSettingsDialog();
         } else {
-            const allSettings = get(windowSettings);
-            const currentSettings = allSettings[componentName] || { positioning: 'auto' };
-            windowSettingsForModal = {
-                positioning: currentSettings.positioning || 'auto',
-                x: currentSettings.x ?? x, y: currentSettings.y ?? y,
-                width: currentSettings.width ?? width, height: currentSettings.height ?? height,
-                defaultZoom: currentSettings.defaultZoom ?? 1.0,
-            };
             showGenericSettingsModal = true;
         }
-    }
-
-    function saveGenericWindowSettings() {
-        windowSettings.update(allSettings => ({ ...allSettings, [componentName]: windowSettingsForModal }));
-        showGenericSettingsModal = false;
     }
 
     function handleWindowClick(event) {
@@ -383,11 +370,11 @@
 </script>
 
 <style>
-    @keyframes flash-animation {
-        50% { border-color: #f39c12; box-shadow: 0 0 20px 5px rgba(243, 156, 18, 0.7); }
+    @keyframes notice-glow {
+        50% { border-color: var(--notice-color); box-shadow: 0 0 20px 5px var(--notice-color); }
     }
-    .window-frame.active.flashing, .window-frame:not(.active).flashing {
-        animation: flash-animation 0.5s ease-in-out;
+    .window-frame.noticing {
+        animation: notice-glow 1.2s ease-in-out;
     }
     .window-frame { position: absolute; border: 1px solid var(--border-color); background-color: transparent; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; min-width: 250px; min-height: 150px; transition: border-color 0.2s ease-in-out; pointer-events: none; }
     .window-frame:not(.active) { border-color: #7f8c8d; }
@@ -453,13 +440,11 @@
     .modal-content button:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-content .save-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .modal-content .save-button:hover { background-color: #1a9c2a; }
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-left: 20px; }
-    .form-grid label { display: flex; align-items: center; gap: 5px; }
-    .form-grid input { width: 80px; background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
+    .select-input { background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:flashing={isFlashing} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" style:--notice-color={notice?.color} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
     <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id}>
         <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
@@ -529,39 +514,11 @@
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
 
-    {#if showGenericSettingsModal}
-        <div class="modal-overlay" on:click|self={() => showGenericSettingsModal = false}>
-            <div class="modal-content" on:click|stopPropagation>
-                <h3>Window Settings: {title}</h3>
-                <fieldset>
-                    <legend>Default Position & Size</legend>
-                    <div class="radio-group">
-                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="auto"> Auto</label>
-                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="manual"> Manual</label>
-                    </div>
-                    {#if windowSettingsForModal.positioning === 'manual'}
-                        <div class="form-grid">
-                            <label>X: <input type="number" bind:value={windowSettingsForModal.x}></label>
-                            <label>Y: <input type="number" bind:value={windowSettingsForModal.y}></label>
-                            <label>Width: <input type="number" bind:value={windowSettingsForModal.width}></label>
-                            <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
-                        </div>
-                    {/if}
-                </fieldset>
-                <fieldset>
-                    <legend>Appearance</legend>
-                    <div class="form-grid">
-                        <label style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;">
-                            <span>Default Zoom</span>
-                            <input type="number" bind:value={windowSettingsForModal.defaultZoom} min="0.5" max="3" step="0.1" style="width: 80px;">
-                        </label>
-                    </div>
-                </fieldset>
-                <div class="buttons">
-                    <button on:click={() => showGenericSettingsModal = false}>Cancel</button>
-                    <button class="save-button" on:click={saveGenericWindowSettings}>Save Defaults</button>
-                </div>
-            </div>
-        </div>
-    {/if}
+    <WindowSettingsModal
+        bind:show={showGenericSettingsModal}
+        title="Window Settings: {title}"
+        {componentName}
+        {x} {y} {width} {height}
+        showNoticeSettings={true}
+    />
 </div>

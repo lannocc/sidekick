@@ -37,6 +37,11 @@ class ActionsBase:
 
         return result
 
+    def do_help(self, context, prompt, quiet=False, chatter=False):
+        from ..agent import just_do_it
+        return just_do_it(context, prompt, for_help=True, quiet=quiet,
+                          chatter=chatter)
+
 
 class Context:
     def __init__(self, file_path=None):
@@ -47,4 +52,3 @@ class Context:
 class FileResult:
     def __init__(self, path_name):
         self.path_name = path_name
-

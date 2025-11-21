@@ -4,9 +4,10 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { connect, sendMessage, askOutput, askError, askExit, connectionStatus, askStatsResponse } from './localBackendStore.js';
-    import { newLocalFileExplorer } from './windows.js';
-    import { fileSelection } from './ioskEvents.js';
+    import { get } from 'svelte/store';
+    import { connect, sendMessage, askOutput, askError, askExit, connectionStatus, askStatsResponse } from './local.js';
+    import { newLocalFileExplorer, windows } from './windows.js';
+    import { fileSelection } from './iosk.js';
 
     export let id; // tab id
     export let groupId;
@@ -100,6 +101,12 @@
                 isRunning = false;
                 exitCode = msg.code;
                 output = [...output, { stream: 'system', data: `--- Process finished with exit code ${msg.code} ---` }];
+                
+                // SENTINEL INTEGRATION
+                if (!get(windows).find(w => w.id === groupId)?.isActive) {
+                    windows.notifyActivity(groupId, id, { summary: `Ask task finished with exit code ${msg.code}` });
+                }
+
                 setTimeout(scrollToBottom, 0);
             }
         });

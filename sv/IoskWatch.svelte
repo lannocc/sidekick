@@ -1,45 +1,10 @@
 <!-- sv/IoskWatch.svelte -->
 <script>
     import { onMount, onDestroy, tick } from 'svelte';
-    import { fileSystemRequests, fileSystemResponses } from './ioskEvents.js';
-    import { windows } from './windows.js';
-
-    // --- Color Handling ---
-    const ansiCodeToCssVar = {
-        '30': 'var(--ansi-black)', '31': 'var(--ansi-red)', '32': 'var(--ansi-green)', '33': 'var(--ansi-yellow)',
-        '34': 'var(--ansi-blue)', '35': 'var(--ansi-magenta)', '36': 'var(--ansi-cyan)', '37': 'var(--ansi-white)',
-        '90': 'var(--ansi-bright-black)', '91': 'var(--ansi-bright-red)', '92': 'var(--ansi-bright-green)', '93': 'var(--ansi-bright-yellow)',
-        '94': 'var(--ansi-bright-blue)', '95': 'var(--ansi-bright-magenta)', '96': 'var(--ansi-bright-cyan)', '97': 'var(--ansi-bright-white)',
-    };
-
-    function parseAnsi(text) {
-        if (typeof text !== 'string') return '';
-        const ansiRegex = /\u001b\[(\d*)m/g; // Use * to also match ESC[m (empty code)
-        let openSpan = false;
-        
-        let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-        let html = sanitizedText.replace(ansiRegex, (match, code) => {
-            let newHtml = '';
-            if (openSpan) {
-                newHtml += '</span>';
-                openSpan = false;
-            }
-            // An empty code or a '0' are both reset codes
-            if (code === '0' || code === '') {
-                // This is a reset code, we just closed the span.
-            } else if (ansiCodeToCssVar[code]) {
-                newHtml += `<span style="color: ${ansiCodeToCssVar[code]}">`;
-                openSpan = true;
-            }
-            return newHtml;
-        });
-
-        if (openSpan) {
-            html += '</span>';
-        }
-        return html;
-    }
+    import { get } from 'svelte/store';
+    import { fileSystemRequests, fileSystemResponses } from './iosk.js';
+    import { windows, activeConsoles } from './windows.js';
+    import { parseAnsi } from './ansi.js';
 
     export let id; // tab id
     export let groupId;
@@ -67,27 +32,20 @@
 
     // --- Dash Restore Logic ---
     $: if (consoleConnection && $windows) {
-        // Find a console if ours is missing
-        const consoleTab = $windows.flatMap(w => w.tabs).find(t => t.id === consoleId);
-        if (!consoleTab || !consoleTab.isConsoleConnected) {
-            const compatibleConsoleTab = $windows.flatMap(w => w.tabs).find(t =>
-                t.componentName === 'IoskConsole' &&
-                t.isConsoleConnected &&
-                t.consoleConnection &&
-                t.consoleConnection.url === consoleConnection.url &&
-                t.consoleConnection.user === consoleConnection.user
-            );
+        const myConsoleTab = $windows.flatMap(w => w.tabs).find(t => t.id === consoleId);
+        
+        if (!myConsoleTab || !myConsoleTab.isConsoleConnected) {
+            const key = `${consoleConnection.user}@${consoleConnection.url}`;
+            const compatibleConsole = $activeConsoles.get(key);
 
-            if (compatibleConsoleTab) {
-                if (consoleId !== compatibleConsoleTab.id) {
-                    consoleId = compatibleConsoleTab.id;
-                }
+            if (compatibleConsole) {
+                consoleId = compatibleConsole.id;
                 statusMessage = '';
                 if (watchState === 'watching') {
-                    // if it was watching when saved, restart it
                     startWatching();
                 }
             } else {
+                consoleId = null;
                 statusMessage = 'Waiting for IOSK connection...';
             }
         }
@@ -113,7 +71,14 @@
                     output = data.error;
                     stopWatching();
                 } else {
-                    output = data.output;
+                    const newOutput = data.output;
+                    // SENTINEL NOTIFICATION: Trigger if output has changed on an inactive window
+                    if (newOutput !== output) {
+                        if (!get(windows).find(w => w.id === groupId)?.isActive) {
+                            windows.notifyActivity(groupId, id, { summary: `Watch output for '${command}' changed` });
+                        }
+                    }
+                    output = newOutput;
                 }
             }
         });

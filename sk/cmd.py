@@ -3,6 +3,8 @@
 
 from . import config
 from .util import print_flush, package_directory, take_screenshot
+from .ask import ask_question
+from .task import do_task
 
 from binaryornot.check import is_binary
 import tiktoken
@@ -12,6 +14,45 @@ from datetime import datetime
 
 print = print_flush
 ENCODING = tiktoken.get_encoding('cl100k_base')
+
+
+def _prepare_attachment(shot, file, package, quiet):
+    """Handles screenshot, file, and package attachments, ensuring only one is used."""
+    attachment_content = ""
+    final_file_path = file
+
+    if sum([1 for item in [shot, file, package] if item]) > 1:
+        print('!!! only one of screenshot OR file OR package at a time !!!')
+        return None, None
+
+    if shot:
+        final_file_path, _, _ = take_screenshot() # w, h are unused
+        if not quiet:
+            print(f'SAVED SCREENSHOT to: {final_file_path}')
+
+    elif package:
+        final_file_path, counts = package_directory(package)
+        if not quiet:
+            print(f'PACKAGED to: {final_file_path}')
+            if isinstance(counts, list):
+                # Assuming counts has same length as package
+                for i, count_str in enumerate(counts):
+                    print(count_str)
+                    print(package[i])
+            else:
+                print(counts)
+            print()
+
+    # After potential modification, check final_file_path
+    if final_file_path and os.path.exists(final_file_path) and not is_binary(final_file_path):
+        try:
+            with open(final_file_path, 'r', encoding='utf-8') as f:
+                attachment_content = f.read()
+        except Exception as e:
+            print(f"!!! could not read file {final_file_path}: {e}")
+            return None, None
+
+    return final_file_path, attachment_content
 
 
 def main(args, called=''):
@@ -164,12 +205,17 @@ def main(args, called=''):
                 print(f'!!! path not found or is not a regular file/directory: {path}')
                 return
 
+        final_file_path, attachment_content = _prepare_attachment(shot, file, pkg or None, quiet)
+        if final_file_path is None and attachment_content is None:
+            # Error occurred and was printed in helper
+            return
+
         prompt = None # Prompt is now handled interactively or via pipe
         if task:
-            do_task(prompt, shot=shot, file=file, package=pkg or None, quiet=quiet,
+            do_task(prompt, file=final_file_path, attachment_content=attachment_content, quiet=quiet,
                          chatter=chatter, model=model)
         else:
-            ask_question(prompt, shot=shot, file=file, package=pkg or None,
+            ask_question(prompt, file=final_file_path, attachment_content=attachment_content,
                            mdlang=lang, mdsave=save, work_file=save_work, quiet=quiet,
                            chatter=chatter, model=model, use_openai=use_openai)
         return
@@ -192,254 +238,6 @@ def main(args, called=''):
     cmd_details[0](args)
 
 
-def ask_question(prompt=None, shot=False, file=None, package=None, mdlang=None,
-                 mdsave=None, work_file=None, quiet=False, chatter=False,
-                 model=config.GEMINI_MODEL_QUICK_2, use_openai=False):
-    from .ai import google, openai
-    from .util import get_md_code_block
-    import sys
-    import time
-
-    if not quiet:
-        print('Ask a Question')
-        print()
-
-    attachment_content = ""
-
-    if shot or file or package:
-        if sum([ 1 for item in [ shot, file, package ] if item ]) > 1:
-            print('!!! only one of screenshot OR file OR package at a time !!!')
-            return
-
-        if shot:
-            file, w, h = take_screenshot()
-            if not quiet: print(f'SAVED SCREENSHOT to: {file}')
-
-        elif package:
-            file, counts = package_directory(package)
-            if not quiet:
-                print(f'PACKAGED to: {file}')
-                if isinstance(counts, list):
-                    for i, c in enumerate(counts):
-                        print(c)
-                        print(package[i])
-                else: print(counts)
-                print()
-
-    if file and not is_binary(file):
-        with open(file, 'r', encoding='utf-8') as f:
-            attachment_content = f.read()
-        attachment_bytes = len(attachment_content.encode('utf-8'))
-        attachment_tokens = len(ENCODING.encode(attachment_content))
-        if not quiet:
-            print(f'SUBTOTAL Bytes: {attachment_bytes:,}')
-            print(f'SUBTOTAL Tokens: {attachment_tokens:,}')
-            print()
-
-    if (mdlang and not mdsave) or (mdsave and not mdlang):
-        print('!!! need either both mdlang and mdsave, or neither')
-        return
-
-    # Changed: Get prompt from multi-line interactive input or pipe
-    if sys.stdin.isatty():
-        # Interactive mode
-        if not quiet:
-            print('    (Ctrl+D to finish)')
-            print()
-            print(' >> ', end='')
-        prompt = sys.stdin.read()
-    else:
-        # Piped mode
-        prompt = sys.stdin.read()
-
-    if not prompt:
-        return
-
-    full_text = attachment_content + prompt
-    total_bytes = len(full_text.encode('utf-8'))
-    total_tokens = len(ENCODING.encode(full_text))
-
-    if work_file:
-        try:
-            with open(work_file, 'a', encoding='utf-8') as f:
-                f.write("--- PROMPT ---\n")
-                f.write(prompt)
-                f.write("\n\n--- INPUT TOTALS ---\n")
-                f.write(f"Bytes: {total_bytes:,}\n")
-                f.write(f"Tokens: {total_tokens:,}\n")
-        except Exception as e:
-            print(f"!!! Error writing prompt to transcript file {work_file}: {e}")
-            # Decide if we should continue without the work file.
-            # For now, we'll disable it and proceed.
-            work_file = None
-
-    if not quiet:
-        print()
-        print(f'TOTAL INPUT Bytes: {total_bytes:,}')
-        print(f'TOTAL INPUT Tokens: {total_tokens:,}')
-        print()
-        print("...waiting for reply...")
-
-    ai_provider = openai if use_openai else google
-
-    start_time = time.monotonic()
-    if file:
-        answer = ai_provider.prompt_with_file_for_text(prompt, file, chatter=chatter,
-                                              model=model)
-
-    else:
-        answer = ai_provider.prompt_for_text(prompt, chatter=chatter, model=model)
-    end_time = time.monotonic()
-    turnaround_time = end_time - start_time
-
-    output_bytes = len(answer.encode('utf-8'))
-    output_tokens = len(ENCODING.encode(answer))
-
-    if work_file:
-        try:
-            with open(work_file, 'a', encoding='utf-8') as f:
-                f.write("\n\n--- ANSWER ---\n")
-                f.write(answer)
-                f.write("\n\n--- OUTPUT TOTALS ---\n")
-                f.write(f"Bytes: {output_bytes:,}\n")
-                f.write(f"Tokens: {output_tokens:,}\n")
-        except Exception as e:
-            print(f"!!! Error writing answer to transcript file {work_file}: {e}")
-            work_file = None # Disable further work operations on this file
-
-    summary = None
-    answer_for_display = answer
-    turnaround_summary_line = f"Turn-around time: {turnaround_time:.2f} seconds"
-
-    if work_file:
-        from . import worker
-        answer_for_display, summary = worker.do_work(prompt, answer, work_file) # worker will append summary
-        try:
-            with open(work_file, 'a', encoding='utf-8') as f:
-                f.write("\n\n--- PERFORMANCE ---\n")
-                f.write(f"{turnaround_summary_line}\n")
-        except Exception as e:
-            print(f"!!! Error writing performance to transcript file {work_file}: {e}")
-
-
-    md = None
-    if mdlang:
-        md = get_md_code_block(mdlang or None, answer)
-        if md: answer_for_display = answer.replace(md, '$$$ CODE EXTRACTED $$$')
-
-    print()
-    print(f' << {answer_for_display}')
-    print()
-
-    if mdsave:
-        if md:
-            with open(mdsave, 'w') as fout:
-                fout.write(md)
-                fout.write('\n')
-            print(f':: SAVED {mdlang} TO {mdsave}')
-
-        else:
-            print(f'!! NO CODE TO SAVE')
-
-    if summary:
-        print(summary)
-        print()
-
-    if work_file:
-        print(f':: Transcript saved to: {work_file}')
-        print()
-
-    if not quiet:
-        print(f':: Output Bytes: {output_bytes:,}')
-        print(f':: Output Tokens: {output_tokens:,}')
-        print(f':: {turnaround_summary_line}')
-        print()
-
-
-def do_task(prompt=None, shot=False, file=None, package=None, quiet=False,
-            chatter=False, model=None):
-    from . import agent
-    from .action import Context
-    from .util import play_error, play_success
-
-    if not quiet:
-        print('Perform a Task')
-        print()
-
-    attachment_content = ""
-
-    if shot or file or package:
-        if sum([ 1 for item in [ shot, file, package ] if item ]) > 1:
-            print('!!! only one of screenshot OR file OR package at a time !!!')
-            return
-
-        if shot:
-            file, w, h = take_screenshot()
-            if not quiet: print(f'SAVED SCREENSHOT to: {file}')
-
-        elif package:
-            file, counts = package_directory(package)
-            if not quiet:
-                print(f'PACKAGED to: {file}')
-                if isinstance(counts, list):
-                    for i, c in enumerate(counts):
-                        print(c)
-                        print(package[i])
-                else: print(counts)
-                print()
-
-    if file and not is_binary(file):
-        with open(file, 'r', encoding='utf-8') as f:
-            attachment_content = f.read()
-        attachment_bytes = len(attachment_content.encode('utf-8'))
-        attachment_tokens = len(ENCODING.encode(attachment_content))
-        if not quiet:
-            print(f'SUBTOTAL Bytes: {attachment_bytes:,}')
-            print(f'SUBTOTAL Tokens: {attachment_tokens:,}')
-            print()
-
-    if prompt:
-        if not quiet: print(f' >> {prompt}')
-
-    else:
-        print(' >> ', end='')
-        prompt = input()
-
-    if not prompt:
-        return
-
-    if not quiet:
-        full_text = attachment_content + prompt
-        total_bytes = len(full_text.encode('utf-8'))
-        total_tokens = len(ENCODING.encode(full_text))
-        print(f'TOTAL INPUT Bytes: {total_bytes:,}')
-        print(f'TOTAL INPUT Tokens: {total_tokens:,}')
-        print()
-
-    context = Context(file)
-
-    try:
-        result = agent.just_do_it(context, prompt, quiet=quiet, chatter=chatter)
-
-        if result is not None:
-            play_success()
-            if not quiet and result.path_name and os.path.exists(result.path_name) and not is_binary(result.path_name):
-                with open(result.path_name, 'r', encoding='utf-8') as f:
-                    result_content = f.read()
-                output_bytes = len(result_content.encode('utf-8'))
-                output_tokens = len(ENCODING.encode(result_content))
-                print()
-                print(f':: Total Output Bytes: {output_bytes:,}')
-                print(f':: Output Tokens: {output_tokens:,}')
-            return result
-
-        else:
-            play_error()
-            return None
-
-    except Exception as e:
-        play_error()
-        raise e
 
 
 def help(args):
@@ -662,4 +460,3 @@ COMMANDS = {
     'local': (local,
         'run local service for SKYBOARD'),
 }
-

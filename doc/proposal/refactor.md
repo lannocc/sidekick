@@ -71,12 +71,12 @@ All subsequent calls will be to `ai_client.prompt_for_text(...)`, removing the `
 The `sk/cmd.py` file has become a monolithic entity responsible for:
 1.  Complex command-line argument parsing for `sk`, `ask`, and `task`.
 2.  The complete implementation logic for `ask_question` and `do_task`.
-3.  The implementations for all `sk` subcommands (`tree`, `ticket`, `agent`, etc.).
+3.  The implementations for all `sk` subcommands (`tree`, `ask`, `task`, etc.).
 
 Furthermore, `ask_question` and `do_task` share nearly identical setup code for handling attachments (`-s`, `-a`, package paths).
 
 **Proposed Solution:**
-1.  **Move subcommands to a dedicated package.** Create a new directory `sk/commands/`. The logic for each subcommand (`tree`, `ticket`, etc.) will be moved into its own file (e.g., `sk/commands/tree.py`). The `sk/cmd.py` file will become a simple dispatcher that imports and calls the appropriate function from the `sk/commands/` package.
+1.  **Move bigger subcommands to separate files.** The logic for bigger subcommand (`ask` and `task`) will be moved into its own file (e.g., `sk/ask.py`).
 2.  **Extract attachment handling.** A new private helper function, `_prepare_prompt_and_attachment(...)`, will be created within `sk/cmd.py`. This function will encapsulate the shared logic for handling screenshots, file attachments, and directory packaging, returning the final `file` path and attachment content. Both `ask_question` and `do_task` will call this helper, reducing code duplication.
 
 ### 2.4. Utility Function Consolidation
@@ -95,7 +95,7 @@ Extract this common logic into a new, single helper function `_get_formatted_fil
 The UI and logic for the "Default Window Position & Size" settings modal are duplicated across multiple components: `IoskConsole.svelte`, `IoskFileExplorer.svelte`, `WebBrowser.svelte`, `Settings.svelte`, and `Window.svelte`. This makes simple UI changes to the modal a tedious, multi-file effort.
 
 **Proposed Solution:**
-Create a new, reusable component: `sv/WindowSettingsModal.svelte`.
+Create a new, reusable component: `sv/popup/WindowSettingsModal.svelte`.
 -   This component will accept the `componentName` and current window geometry as props.
 -   It will manage its own internal state for the form fields.
 -   On "Save", it will use the `windowSettings` store directly to save the settings for the given component name and then dispatch a `close` event.
@@ -128,7 +128,7 @@ The main `IoskConsole.svelte` component will become a container that conditional
 Multiple components that depend on an IOSK connection (`IoskFileExplorer`, `IoskFileViewer`, `IoskWatch`, etc.) contain similar reactive logic (`$: if (consoleConnection && $windows) { ... }`) to find a valid `consoleId` after a Dash restore if their original connection is lost.
 
 **Proposed Solution:**
-Create a new store in a file like `sv/consoleManager.js`.
+Create a new store in `sv/iosk.js`.
 -   This store will listen to the `windows` store and maintain an internal map of all active, connected `IoskConsole` tabs.
 -   It will expose a function, e.g., `findConsole(connectionDetails)`, that components can call.
 -   The reactive blocks in each component will be replaced by a simpler call to this manager, centralizing the logic for finding a compatible, active console session.

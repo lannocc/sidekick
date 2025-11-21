@@ -5,7 +5,8 @@
 <script>
     import { get } from 'svelte/store';
     import { windows } from './windows.js';
-    import { windowSettings } from './desktopStore.js';
+    import { windowSettings } from './desktop.js';
+    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
 
     export let id; // Window ID
     export let groupId;
@@ -23,12 +24,11 @@
     // --- Settings Modal State ---
     let showSettings = false;
     let settingsModel = { defaultUrl: '' };
-    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
 
     // Update the central window store for Dash saving
     $: if (id !== undefined && groupId !== undefined) {
         // This property `currentUrl` will be saved by Dash as `initialUrl` for restoration.
-        windows.updateTabProps(groupId, id, { currentUrl: currentUrl });
+        windows.updateTabProps(groupId, id, { currentUrl: currentUrl, isSettingsModalOpen: showSettings });
     }
 
     function navigate() {
@@ -88,6 +88,11 @@
         // Due to same-origin policy, we cannot reliably get the iframe's current location
         // if it navigates internally (e.g., user clicks a link).
         // The address bar will show the last URL we explicitly set. This is a limitation.
+        
+        // SENTINEL INTEGRATION
+        if (!get(windows).find(w => w.id === groupId)?.isActive) {
+            windows.notifyActivity(groupId, id, { summary: `Page loaded: ${currentUrl.substring(0, 50)}`});
+        }
     }
 
     // --- Settings Logic ---
@@ -100,41 +105,24 @@
             defaultUrl: currentWindowSettings.defaultUrl || currentUrl
         };
 
-        // Populate window settings for the modal
-        windowSettingsForModal = {
-            positioning: currentWindowSettings.positioning || 'auto',
-            x: currentWindowSettings.x ?? x,
-            y: currentWindowSettings.y ?? y,
-            width: currentWindowSettings.width ?? width,
-            height: currentWindowSettings.height ?? height,
-            defaultZoom: currentWindowSettings.defaultZoom ?? 1.0,
-        };
-
         showSettings = true;
     }
 
 
-    function handleSaveSettings() {
+    function handleSaveComponentSettings() {
         const componentSettings = {
             defaultUrl: settingsModel.defaultUrl.trim() || "about:blank"
         };
         windowSettings.update(all => {
-            // Get existing settings for this component to avoid overwriting unrelated properties.
             const existingSettings = all[componentName] || {};
             return {
                 ...all,
                 [componentName]: {
                     ...existingSettings,
-                    ...windowSettingsForModal,
                     ...componentSettings
                 }
             };
         });
-        showSettings = false;
-    }
-
-    function handleCancelSettings() {
-        showSettings = false;
     }
 
 </script>
@@ -251,50 +239,20 @@
         {/if}
     </div>
 
-    <!-- Settings Modal Markup -->
-    {#if showSettings}
-        <div class="modal-overlay" on:click|self={handleCancelSettings}>
-            <div class="modal-content" on:keydown|stopPropagation on:keyup|stopPropagation on:keypress|stopPropagation>
-                <h3>Web Browser Settings</h3>
-                <fieldset>
-                    <legend>Default URL</legend>
-                    <label>
-                        <span>Initial Page when opening a new browser</span>
-                        <input type="text" bind:value={settingsModel.defaultUrl} placeholder="e.g., about:blank">
-                    </label>
-                </fieldset>
-
-                <fieldset>
-                    <legend>Default Window Position & Size</legend>
-                    <div class="radio-group">
-                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="auto"> Auto</label>
-                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="manual"> Manual</label>
-                    </div>
-                    {#if windowSettingsForModal.positioning === 'manual'}
-                        <div class="form-grid">
-                            <label>X: <input type="number" bind:value={windowSettingsForModal.x}></label>
-                            <label>Y: <input type="number" bind:value={windowSettingsForModal.y}></label>
-                            <label>Width: <input type="number" bind:value={windowSettingsForModal.width}></label>
-                            <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
-                        </div>
-                    {/if}
-                </fieldset>
-
-                <fieldset>
-                    <legend>Appearance</legend>
-                    <div class="form-grid">
-                        <label style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; flex-direction: row;">
-                            <span>Default Zoom</span>
-                            <input type="number" bind:value={windowSettingsForModal.defaultZoom} min="0.5" max="3" step="0.1" style="width: 80px;">
-                        </label>
-                    </div>
-                </fieldset>
-
-                <div class="buttons">
-                    <button on:click={handleCancelSettings}>Cancel</button>
-                    <button class="save-button" on:click={handleSaveSettings}>Save Default</button>
-                </div>
-            </div>
-        </div>
-    {/if}
+    <WindowSettingsModal
+        bind:show={showSettings}
+        title="Web Browser Settings"
+        {componentName}
+        {x} {y} {width} {height}
+        showNoticeSettings={true}
+        on:save={handleSaveComponentSettings}
+    >
+        <fieldset>
+            <legend>Default URL</legend>
+            <label>
+                <span>Initial Page when opening a new browser</span>
+                <input type="text" bind:value={settingsModel.defaultUrl} placeholder="e.g., about:blank">
+            </label>
+        </fieldset>
+    </WindowSettingsModal>
 </div>

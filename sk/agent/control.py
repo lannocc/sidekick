@@ -4,6 +4,7 @@
 from ..ai import google as ai
 from ..action import ActionsBase
 from ..util import print_flush, delay, play_scratch
+from .common import create_action_prompter
 
 
 
@@ -38,17 +39,6 @@ PROMPT:
 '''
 
 
-def prompt_for_action(text, quiet=False, chatter=False):
-    if not quiet: print(f'      >> {text}')
-
-    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text,
-                                 chatter=chatter)
-    if not quiet: print(f'      << {actions}')
-
-    actions = Actions(actions)
-    return actions
-
-
 class Actions(ActionsBase):
     def do_delay(self, context, seconds_to_wait, quiet=False, chatter=False):
         delay(int(seconds_to_wait), quiet=quiet)
@@ -68,9 +58,5 @@ class Actions(ActionsBase):
 
         return result
 
-    def do_help(self, prompt, quiet=False, chatter=False):
-        play_scratch()
-        from . import just_do_it
-        return just_do_it(context, prompt, for_help=True, quiet=quiet,
-                          chatter=chatter)
 
+prompt_for_action = create_action_prompter(PRE_PROMPT, META_PROMPT, Actions)

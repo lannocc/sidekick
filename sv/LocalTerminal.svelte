@@ -4,13 +4,15 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { connect, sendMessage, terminalData, connectionStatus } from './localBackendStore.js';
-    import { dragRequest } from './windows.js';
+    import { get } from 'svelte/store';
+    import { connect, sendMessage, terminalData, connectionStatus } from './local.js';
+    import { dragRequest, windows } from './windows.js';
 
     import { Terminal } from '@xterm/xterm';
     import { FitAddon } from '@xterm/addon-fit';
     import 'xterm/css/xterm.css';
 
+    export let id; // Tab ID, required for Sentinel
     export let isActive;
     export let groupId;
     export let maximized;
@@ -19,6 +21,7 @@
     let term;
     let fitAddon;
     let initialTermOpenSent = false;
+    let canNotify = true; // For throttling Sentinel notifications
 
     let unsubscribeTerminalData;
     let unsubscribeStatus;
@@ -82,6 +85,12 @@
 
         unsubscribeTerminalData = terminalData.subscribe(msg => {
             if (msg && term) {
+                // SENTINEL INTEGRATION
+                if (canNotify && !get(windows).find(w => w.id === groupId)?.isActive) {
+                    windows.notifyActivity(groupId, id, { summary: 'New terminal output' });
+                    canNotify = false;
+                    setTimeout(() => { canNotify = true; }, 3000); // 3-second cooldown
+                }
                 term.write(msg.data);
             }
         });

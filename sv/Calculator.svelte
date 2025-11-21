@@ -4,19 +4,29 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
+    import { windows } from './windows.js';
 
     export let isActive;
+    export let id;
+    export let groupId;
 
     let display = '0';
     let currentInput = '';
     let previousInput = '';
     let operator = null;
+    let lastOperand = '';
+    let lastOperator = null;
+    let calculationDone = false;
+    let calculatorEl;
 
     function clear() {
         display = '0';
         currentInput = '';
         previousInput = '';
         operator = null;
+        lastOperand = '';
+        lastOperator = null;
+        calculationDone = false;
     }
 
     function backspace() {
@@ -31,6 +41,10 @@
     }
 
     function appendNumber(num) {
+        if (calculationDone) {
+            currentInput = '';
+            calculationDone = false;
+        }
         if (currentInput === '0' && num === '0') return;
         if (currentInput === '0' && num !== '0') currentInput = '';
         currentInput += num;
@@ -38,6 +52,10 @@
     }
 
     function appendDecimal() {
+        if (calculationDone) {
+            currentInput = '';
+            calculationDone = false;
+        }
         if (currentInput.includes('.')) return;
         if (currentInput === '') currentInput = '0';
         currentInput += '.';
@@ -45,26 +63,50 @@
     }
 
     function chooseOperator(op) {
+        calculationDone = false;
         if (currentInput === '' && previousInput === '') return;
         if (currentInput !== '') {
             if (previousInput !== '') {
                 calculate();
             }
-            previousInput = currentInput;
+            previousInput = display; // Use display in case it's a result
             currentInput = '';
         }
         operator = op;
     }
 
     function calculate() {
-        if (previousInput === '' || currentInput === '' || operator === null) return;
         let result;
-        const prev = parseFloat(previousInput);
-        const curr = parseFloat(currentInput);
+        let prev, curr, op;
+        let calculationString;
+
+        if (operator) { // Normal calculation
+            if (previousInput === '') return;
+            // Handle "5 * =" case
+            if (currentInput === '') {
+                currentInput = previousInput;
+            }
+            prev = parseFloat(previousInput);
+            curr = parseFloat(currentInput);
+            op = operator;
+            calculationString = `${previousInput} ${op} ${currentInput}`;
+
+            lastOperand = currentInput;
+            lastOperator = op;
+
+        } else if (lastOperator) { // Repeated calculation
+            if (currentInput === '' || lastOperand === '') return;
+            prev = parseFloat(currentInput);
+            curr = parseFloat(lastOperand);
+            op = lastOperator;
+            calculationString = `${currentInput} ${op} ${lastOperand}`;
+            previousInput = currentInput; 
+        } else {
+            return; // Nothing to do
+        }
 
         try {
-            // Using a switch is safer than eval()
-            switch (operator) {
+            switch (op) {
                 case '+': result = prev + curr; break;
                 case '-': result = prev - curr; break;
                 case '*': result = prev * curr; break;
@@ -81,8 +123,11 @@
             if (result === 'Error') {
                  display = 'Error';
             } else {
-                // Limit precision to avoid long floating point numbers
                 display = String(parseFloat(result.toPrecision(12)));
+            }
+
+            if (groupId && id && calculationString) {
+                windows.notifyActivity(groupId, id, { summary: `${calculationString} = ${display}` }, true);
             }
 
         } catch (e) {
@@ -92,6 +137,7 @@
         currentInput = display !== 'Error' ? display : '';
         previousInput = '';
         operator = null;
+        calculationDone = true;
     }
 
     function handleKeydown(e) {
@@ -100,37 +146,47 @@
 
         const key = e.key;
         let handled = true;
+        let buttonKey;
 
         switch (key) {
             case '0': case '1': case '2': case '3': case '4':
             case '5': case '6': case '7': case '8': case '9':
                 appendNumber(key);
+                buttonKey = key;
                 break;
             case '.':
                 appendDecimal();
+                buttonKey = '.';
                 break;
             case '+':
                 chooseOperator('+');
+                buttonKey = '+';
                 break;
             case '-':
                 chooseOperator('-');
+                buttonKey = '-';
                 break;
             case '*':
                 chooseOperator('*');
+                buttonKey = '*';
                 break;
             case '/':
                 chooseOperator('÷');
+                buttonKey = '÷';
                 break;
             case 'Enter':
             case '=':
                 calculate();
+                buttonKey = '=';
                 break;
             case 'Escape':
             case 'Delete':
                 clear();
+                buttonKey = 'C';
                 break;
             case 'Backspace':
                 backspace();
+                buttonKey = 'Backspace';
                 break;
             default:
                 handled = false;
@@ -139,6 +195,15 @@
 
         if (handled) {
             e.preventDefault();
+            if (buttonKey && calculatorEl) {
+                const button = calculatorEl.querySelector(`.btn[data-key="${buttonKey}"]`);
+                if (button) {
+                    button.classList.add('active');
+                    setTimeout(() => {
+                        button.classList.remove('active');
+                    }, 150);
+                }
+            }
         }
     }
 
@@ -184,10 +249,14 @@
         background-color: var(--taskbar-button-bg);
         color: var(--taskbar-text);
         cursor: pointer;
-        transition: background-color 0.2s;
+        transition: background-color 0.2s, transform 0.05s ease-in-out, filter 0.05s ease-in-out;
     }
     .btn:hover {
         background-color: var(--taskbar-button-hover-bg);
+    }
+    .btn:active, .btn.active {
+        transform: scale(0.95);
+        filter: brightness(1.2);
     }
     .btn.operator {
         background-color: #f39c12;
@@ -210,30 +279,30 @@
     }
 </style>
 
-<div class="calculator">
+<div class="calculator" bind:this={calculatorEl}>
     <div class="display">{display}</div>
     <div class="buttons">
-        <button class="btn clear span-2" on:click={clear}>C</button>
-        <button class="btn operator" on:click={() => chooseOperator('÷')}>÷</button>
-        <button class="btn operator" on:click={() => chooseOperator('*')}>*</button>
+        <button class="btn clear" on:click={clear} data-key="C">C</button>
+        <button class="btn" on:click={backspace} data-key="Backspace">⌫</button>
+        <button class="btn operator" on:click={() => chooseOperator('÷')} data-key="÷">÷</button>
+        <button class="btn operator" on:click={() => chooseOperator('*')} data-key="*">*</button>
 
-        <button class="btn" on:click={() => appendNumber('7')}>7</button>
-        <button class="btn" on:click={() => appendNumber('8')}>8</button>
-        <button class="btn" on:click={() => appendNumber('9')}>9</button>
-        <button class="btn operator" on:click={() => chooseOperator('-')}>-</button>
+        <button class="btn" on:click={() => appendNumber('7')} data-key="7">7</button>
+        <button class="btn" on:click={() => appendNumber('8')} data-key="8">8</button>
+        <button class="btn" on:click={() => appendNumber('9')} data-key="9">9</button>
+        <button class="btn operator" on:click={() => chooseOperator('-')} data-key="-">-</button>
 
-        <button class="btn" on:click={() => appendNumber('4')}>4</button>
-        <button class="btn" on:click={() => appendNumber('5')}>5</button>
-        <button class="btn" on:click={() => appendNumber('6')}>6</button>
-        <button class="btn operator" on:click={() => chooseOperator('+')}>+</button>
+        <button class="btn" on:click={() => appendNumber('4')} data-key="4">4</button>
+        <button class="btn" on:click={() => appendNumber('5')} data-key="5">5</button>
+        <button class="btn" on:click={() => appendNumber('6')} data-key="6">6</button>
+        <button class="btn operator" on:click={() => chooseOperator('+')} data-key="+">+</button>
 
-        <button class="btn" on:click={() => appendNumber('1')}>1</button>
-        <button class="btn" on:click={() => appendNumber('2')}>2</button>
-        <button class="btn" on:click={() => appendNumber('3')}>3</button>
-        <button class="btn" on:click={calculate} style="grid-row: span 2;">=</button>
+        <button class="btn" on:click={() => appendNumber('1')} data-key="1">1</button>
+        <button class="btn" on:click={() => appendNumber('2')} data-key="2">2</button>
+        <button class="btn" on:click={() => appendNumber('3')} data-key="3">3</button>
+        <button class="btn" on:click={calculate} style="grid-row: span 2;" data-key="=">=</button>
 
-        <button class="btn span-2" on:click={() => appendNumber('0')}>0</button>
-        <button class="btn" on:click={appendDecimal}>.</button>
+        <button class="btn span-2" on:click={() => appendNumber('0')} data-key="0">0</button>
+        <button class="btn" on:click={appendDecimal} data-key=".">.</button>
     </div>
 </div>
-

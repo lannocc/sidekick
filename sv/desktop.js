@@ -15,6 +15,19 @@ function loadSettings() {
         ioskUsername: 'root',
         chimeType: 'beep.wav', // filename from assets, 'none', or 'custom'
         chimeUrl: '',          // URL for custom chime
+        noticeDefaults: {
+            enabled: true,
+            visual: {
+                enabled: true,
+                color: '#f39c12', // Default: Orange
+                duration: 1200,   // ms
+            },
+            audio: {
+                enabled: true,
+                sound: 'ding.wav', // Default: Ding
+                url: '',
+            }
+        }
     };
 
     try {
@@ -112,3 +125,7 @@ windowSettings.subscribe(value => {
         console.error("Could not save window settings to localStorage", e);
     }
 });
+
+// New stores for Notification Center
+export const notificationHistory = writable([]);
+export const unreadNoticeCount = writable(0);

@@ -4,11 +4,14 @@
 -->
 <script>
     import { onDestroy } from 'svelte';
-    import { contextUpdates } from './ioskEvents.js';
+    import { get } from 'svelte/store';
+    import { parseAnsi } from './ansi.js'
+    import { contextUpdates } from './iosk.js';
     import { windows } from './windows.js';
-    import IoskContextInspector from './IoskContextInspector.svelte';
+    import IoskUserInspector from './IoskUserInspector.svelte';
 
     // --- Component Props ---
+    export let id; // The window tab ID for this component instance
     export let groupId; // The window group ID for this component instance
     export let consoleId; // The console tab ID this inspector is linked to
     export let targetUser; // The user whose context is being inspected
@@ -70,12 +73,38 @@
         // FIX: Reverted to the simpler, working logic from the .bak file.
         // The new check for `consoleId` was preventing updates from being received.
         if (update && update.targetUser === targetUser) {
+            // --- Sentinel: Store pre-update state for comparison ---
+            const oldIsPaused = contextData?.isPaused;
+            const oldHistoryLength = contextData?.aiContext?.sessionHistory?.length ?? 0;
+
             if (update.type === 'full') {
                 contextData = update.data;
             } else if (update.type === 'partial' && contextData) {
                 // Merge partial updates into the existing context.
                 // This creates a new object, triggering Svelte's reactivity.
                 contextData = { ...contextData, ...update.data };
+            }
+
+            // --- Sentinel: Check for notifiable events after update ---
+            if (contextData && !get(windows).find(w => w.id === groupId)?.isActive) {
+                let notified = false;
+                
+                // Check for new errors in session history
+                const newHistory = contextData.aiContext?.sessionHistory;
+                if (newHistory && newHistory.length > oldHistoryLength) {
+                    const newEntries = newHistory.slice(oldHistoryLength);
+                    const errorEntry = newEntries.find(entry => analyzePrompt(entry.content).type === 'error');
+                    if (errorEntry) {
+                        windows.notifyActivity(groupId, id, { summary: `Error received from ${targetUser}` });
+                        notified = true;
+                    }
+                }
+
+                // If not notified yet, check for pause state change
+                if (!notified && oldIsPaused !== undefined && contextData.isPaused !== oldIsPaused) {
+                    const summary = `${targetUser} has been ${contextData.isPaused ? 'paused' : 'resumed'}.`;
+                    windows.notifyActivity(groupId, id, { summary });
+                }
             }
         }
     });
@@ -136,7 +165,7 @@
         const tabInfo = tabRows.flat().find(t => t.id === viewName);
         const titleName = tabInfo ? tabInfo.name : (viewName.charAt(0).toUpperCase() + viewName.slice(1));
         
-        const newWindow = windows.addWindow(IoskContextInspector, {
+        const newWindow = windows.addWindow(IoskUserInspector, {
             title: `${titleName} - ${targetUser}`,
             consoleId: consoleId,
             targetUser: targetUser,
@@ -199,43 +228,6 @@
         const command = contextData.isPaused ? `unpause ${targetUser}` : `pause ${targetUser}`;
         const commandToRun = `$ ${command}`;
         consoleWs.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
-    }
-
-
-    // --- Helper Functions (copied from .bak file) ---
-    const ansiCodeToCssVar = {
-        '30': 'var(--ansi-black)', '31': 'var(--ansi-red)', '32': 'var(--ansi-green)', '33': 'var(--ansi-yellow)',
-        '34': 'var(--ansi-blue)', '35': 'var(--ansi-magenta)', '36': 'var(--ansi-cyan)', '37': 'var(--ansi-white)',
-        '90': 'var(--ansi-bright-black)', '91': 'var(--ansi-bright-red)', '92': 'var(--ansi-bright-green)', '93': 'var(--ansi-bright-yellow)',
-        '94': 'var(--ansi-bright-blue)', '95': 'var(--ansi-bright-magenta)', '96': 'var(--ansi-bright-cyan)', '97': 'var(--ansi-bright-white)',
-    };
-
-    function parseAnsi(text) {
-        if (typeof text !== 'string') return '';
-        const ansiRegex = /\u001b\[(\d+)m/g;
-        let openSpan = false;
-
-        let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-        let html = sanitizedText.replace(ansiRegex, (match, code) => {
-            let newHtml = '';
-            if (openSpan) {
-                newHtml += '</span>';
-                openSpan = false;
-            }
-            if (code === '0') {
-                // Reset code, just close the span
-            } else if (ansiCodeToCssVar[code]) {
-                newHtml += `<span style="color: ${ansiCodeToCssVar[code]}">`;
-                openSpan = true;
-            }
-            return newHtml;
-        });
-
-        if (openSpan) {
-            html += '</span>';
-        }
-        return html;
     }
 
     function formatBytes(bytes, decimals = 2) {

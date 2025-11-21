@@ -7,7 +7,7 @@
     import Desktop from './Desktop.svelte';
     import Taskbar from './Taskbar.svelte';
     import { windows } from './windows.js';
-    import { dashActive, dashLayouts, dashCycleIndex } from './desktopStore.js';
+    import { dashActive, dashLayouts, dashCycleIndex } from './desktop.js';
     import { get } from 'svelte/store';
 
     function handleKeyDown(e) {

@@ -4,7 +4,12 @@
 -->
 <script>
     import { get } from 'svelte/store';
-    import { desktopSettings, windowSettings } from './desktopStore.js';
+    import { desktopSettings, windowSettings } from './desktop.js';
+    import { windows } from './windows.js';
+    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
+
+    export let id;
+    export let groupId;
 
     let settings;
     const unsubscribe = desktopSettings.subscribe(value => {
@@ -22,6 +27,17 @@
         { value: 'custom', name: 'Custom URL' }
     ];
 
+    const noticeSounds = [
+        { value: 'ding.wav', name: 'Ding' },
+        { value: 'beep.wav', name: 'Beep' },
+        { value: 'good_bell.wav', name: 'Good Bell' },
+        { value: 'key.wav', name: 'Key' },
+        { value: 'short_beep.wav', name: 'Short Beep' },
+        { value: 'three_tones.wav', name: 'Three Tones' },
+        { value: 'none', name: 'None' },
+        { value: 'custom', name: 'Custom URL' },
+    ];
+
     function handleUpdate() {
         desktopSettings.set(settings);
     }
@@ -36,40 +52,30 @@
         }
      }
 
+    function testNoticeSound() {
+        const audioSettings = settings.noticeDefaults.audio;
+        if (!audioSettings.sound || audioSettings.sound === 'none') return;
+        let src = audioSettings.sound === 'custom' ? audioSettings.url : `/assets/${audioSettings.sound}`;
+        if (src) {
+            try {
+                new Audio(src).play().catch(e => console.error("Audio play failed:", e));
+            } catch (e) { alert("Could not play audio. Check URL or console for errors."); }
+        }
+    }
+
     // --- Settings Modal Logic ---
     export let componentName;
     export let x, y, width, height;
 
     let showSettings = false;
-    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
+
+    $: if (id !== undefined && groupId !== undefined) {
+        windows.updateTabProps(groupId, id, { isSettingsModalOpen: showSettings });
+    }
 
     export function showSettingsDialog() {
-        const allSettings = get(windowSettings);
-        const currentSettings = allSettings[componentName] || { positioning: 'auto' };
-
-        windowSettingsForModal = {
-            positioning: currentSettings.positioning || 'auto',
-            x: currentSettings.x ?? x,
-            y: currentSettings.y ?? y,
-            width: currentSettings.width ?? width,
-            height: currentSettings.height ?? height,
-            defaultZoom: currentSettings.defaultZoom ?? 1.0,
-        };
         showSettings = true;
     }
-
-    function handleSaveSettings() {
-        windowSettings.update(allSettings => ({
-            ...allSettings,
-            [componentName]: windowSettingsForModal
-        }));
-        showSettings = false;
-    }
-
-    function handleCancelSettings() {
-        showSettings = false;
-    }
-
 </script>
 
 <style>
@@ -172,10 +178,6 @@
     .modal-content button:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-content .save-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .modal-content .save-button:hover { background-color: #1a9c2a; }
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-left: 20px; }
-    .form-grid label { display: flex; align-items: center; gap: 5px; }
-    .form-grid input { width: 80px; background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
-    .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
 <div class="settings-container">
@@ -266,40 +268,45 @@
         </div>
         {/if}
     </fieldset>
-</div>
 
-{#if showSettings}
-    <div class="modal-overlay" on:click|self={handleCancelSettings}>
-        <div class="modal-content" on:click|stopPropagation>
-            <h3>Settings Window</h3>
-            <fieldset>
-                <legend>Default Window Position & Size</legend>
-                <div class="radio-group">
-                    <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="auto"> Auto</label>
-                    <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="manual"> Manual</label>
+    <fieldset>
+        <legend>Activity Notice Defaults</legend>
+        <label>
+            <input type="checkbox" bind:checked={settings.noticeDefaults.enabled} on:change={handleUpdate}>
+            Enable Notices Globally
+        </label>
+        {#if settings.noticeDefaults.enabled}
+        <div class="options-group">
+            <label class="color-picker-label">
+                <span>Flash Color</span>
+                <input type="color" bind:value={settings.noticeDefaults.visual.color} on:input={handleUpdate}>
+            </label>
+            <label class="color-picker-label">
+                <span>Notice Sound</span>
+                <div>
+                    <select class="select-input" bind:value={settings.noticeDefaults.audio.sound} on:change={handleUpdate}>
+                        {#each noticeSounds as sound}
+                            <option value={sound.value}>{sound.name}</option>
+                        {/each}
+                    </select>
+                    <button class="test-button" on:click={testNoticeSound} title="Test Sound" disabled={settings.noticeDefaults.audio.sound === 'none'}>▶</button>
                 </div>
-                {#if windowSettingsForModal.positioning === 'manual'}
-                    <div class="form-grid">
-                        <label>X: <input type="number" bind:value={windowSettingsForModal.x}></label>
-                        <label>Y: <input type="number" bind:value={windowSettingsForModal.y}></label>
-                        <label>Width: <input type="number" bind:value={windowSettingsForModal.width}></label>
-                        <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
-                    </div>
-                {/if}
-            </fieldset>
-            <fieldset>
-                <legend>Appearance</legend>
-                <div class="form-grid">
-                     <label style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;">
-                        <span>Default Zoom</span>
-                        <input type="number" bind:value={windowSettingsForModal.defaultZoom} min="0.5" max="3" step="0.1" style="width: 80px;">
+            </label>
+            {#if settings.noticeDefaults.audio.sound === 'custom'}
+                <div class="options-group">
+                    <label>
+                        <input class="text-input" type="text" bind:value={settings.noticeDefaults.audio.url} on:input={handleUpdate} placeholder="Enter Sound URL...">
                     </label>
                 </div>
-            </fieldset>
-            <div class="buttons">
-                <button on:click={handleCancelSettings}>Cancel</button>
-                <button class="save-button" on:click={handleSaveSettings}>Save Defaults</button>
-            </div>
+            {/if}
         </div>
-    </div>
-{/if}
+        {/if}
+    </fieldset>
+</div>
+
+<WindowSettingsModal
+    bind:show={showSettings}
+    title="Settings Window"
+    {componentName}
+    {x} {y} {width} {height}
+/>

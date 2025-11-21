@@ -6,8 +6,7 @@ from ..action import ActionsBase, FileResult
 from ..util import print_flush, delay, open_browser, take_screenshot#, \
                    #extract_and_save_region
 from ..util import play_ding, play_click, play_scratch, play_key, play_typing
-
-import pyautogui
+from .common import create_action_prompter
 
 import subprocess
 
@@ -55,17 +54,6 @@ Take the following prompt and select one or more actions from the list of availa
 
 PROMPT:
 '''
-
-
-def prompt_for_action(text, quiet=False, chatter=False):
-    if not quiet: print(f'      >> {text}')
-
-    actions = ai.prompt_for_json(PRE_PROMPT + META_PROMPT + text,
-                                 chatter=chatter)
-    if not quiet: print(f'      << {actions}')
-
-    actions = Actions(actions)
-    return actions
 
 
 def resolve_url(text, quiet=False, chatter=False):
@@ -180,6 +168,7 @@ def get_screen_region(region_description, chatter=False):
 
 
 def mouse_click_region(region):
+    import pyautogui
     x1, y1, x2, y2 = region
 
     pyautogui.moveTo(x1, y1, duration=1)
@@ -225,6 +214,7 @@ class Actions(ActionsBase):
 
     def do_type(self, context, text_to_type=None, text_from_ai=None,
                 where_to_focus=None, quiet=False, chatter=False):
+        import pyautogui
         if not (text_to_type or text_from_ai):
             print(' !! need text_to_type or text_from_ai !!')
             return None
@@ -263,6 +253,7 @@ class Actions(ActionsBase):
         return FileResult(file)
 
     def do_key(self, context, special_keys, quiet=False, chatter=False):
+        import pyautogui
         for key in special_keys.split(' '):
             play_key()
             pyautogui.press(key)
@@ -274,9 +265,5 @@ class Actions(ActionsBase):
 
         return FileResult(file)
 
-    def do_help(self, context, prompt, quiet=False, chatter=False):
-        play_scratch()
-        from . import just_do_it
-        return just_do_it(context, prompt, for_help=True, quiet=quiet,
-                          chatter=chatter)
 
+prompt_for_action = create_action_prompter(PRE_PROMPT, META_PROMPT, Actions)

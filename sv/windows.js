@@ -1,4 +1,4 @@
-import { writable, get } from 'svelte/store';
+import { writable, get, readable } from 'svelte/store';
 import IoskConsole from './IoskConsole.svelte';
 import Calculator from './Calculator.svelte';
 import Settings from './Settings.svelte';
@@ -10,8 +10,9 @@ import LocalTerminal from './LocalTerminal.svelte';
 import LocalFileExplorer from './LocalFileExplorer.svelte';
 import Ask from './Ask.svelte';
 import IoskWatch from './IoskWatch.svelte';
-import IoskContextInspector from './IoskContextInspector.svelte';
-import { desktopSettings, windowSettings } from './desktopStore.js';
+import IoskUserInspector from './IoskUserInspector.svelte';
+import NotificationCenter from './NotificationCenter.svelte';
+import { desktopSettings, windowSettings, notificationHistory, unreadNoticeCount } from './desktop.js';
 
 let windowGroupIdCounter = 0;
 let tabIdCounter = 0;
@@ -34,8 +35,107 @@ const componentMap = {
     'LocalFileExplorer': LocalFileExplorer,
     'Ask': Ask,
     'IoskWatch': IoskWatch,
-    'IoskContextInspector': IoskContextInspector,
+    'IoskUserInspector': IoskUserInspector,
+    'NotificationCenter': NotificationCenter,
 };
+
+function findOptimalPosition(props, allWindows, currentWindowId) {
+    if (typeof window === 'undefined') {
+        return { x: 50, y: 50 }; // SSR fallback
+    }
+
+    const { width, height, sourceEvent, sourceTabId } = props;
+    const taskbarHeight = 40; // Assume taskbar is 40px at the top.
+    const desktopMargin = 10; // Margin from viewport edges.
+    const desktop = {
+        x: desktopMargin,
+        y: taskbarHeight + desktopMargin,
+        width: window.innerWidth - (desktopMargin * 2),
+        height: window.innerHeight - taskbarHeight - (desktopMargin * 2)
+    };
+
+    const obstacles = allWindows.filter(w => !w.minimized).map(w => ({
+        x: w.x, y: w.y, width: w.width, height: w.height
+    }));
+
+    const checkCollision = (rect) => {
+        for (const obs of obstacles) {
+            if (rect.x < obs.x + obs.width &&
+                rect.x + rect.width > obs.x &&
+                rect.y < obs.y + obs.height &&
+                rect.y + rect.height > obs.y) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const clampToDesktop = (pos) => {
+        // Defines the boundaries for the window's top-left corner
+        const minX = desktop.x;
+        const minY = desktop.y;
+        const maxX = desktop.x + desktop.width - width;
+        const maxY = desktop.y + desktop.height - height;
+
+        // Clamp the proposed position within the valid range
+        let newX = Math.max(minX, Math.min(pos.x, maxX));
+        let newY = Math.max(minY, Math.min(pos.y, maxY));
+
+        return { x: newX, y: newY };
+    };
+
+    if (sourceTabId) {
+        const sourceGroup = allWindows.find(g => g.tabs.some(t => t.id === sourceTabId));
+        if (sourceGroup) {
+            const sourceRect = { x: sourceGroup.x, y: sourceGroup.y, width: sourceGroup.width, height: sourceGroup.height };
+            const positions = [
+                { x: sourceRect.x + sourceRect.width + 10, y: sourceRect.y }, // Right
+                { x: sourceRect.x, y: sourceRect.y + sourceRect.height + 10 }, // Below
+                { x: sourceRect.x - width - 10, y: sourceRect.y }, // Left
+                { x: sourceRect.x + sourceRect.width - width, y: sourceRect.y + sourceRect.height + 10 },
+                { x: sourceRect.x, y: sourceRect.y - height - 10 }, // Above
+            ];
+
+            for (const pos of positions) {
+                const clampedPos = clampToDesktop(pos);
+                if (!checkCollision({ ...clampedPos, width, height })) {
+                    return clampedPos;
+                }
+            }
+        }
+    }
+
+    let startPoint = sourceEvent ? { x: sourceEvent.clientX, y: sourceEvent.clientY } : { x: desktop.x + 100, y: desktop.y + 100 };
+
+    let clamped = clampToDesktop({ x: startPoint.x - width / 2, y: startPoint.y - height / 2 });
+    if (!checkCollision({ ...clamped, width, height })) {
+        return clamped;
+    }
+
+    // Spiral search outwards if preferred positions are taken
+    let x = startPoint.x, y = startPoint.y;
+    let step = 30, leg = 0, armLength = 1, count = 0;
+    for (let i = 0; i < 200; i++) {
+        clamped = clampToDesktop({ x: x - width / 2, y: y - height / 2 });
+        if (!checkCollision({ ...clamped, width, height })) {
+            return clamped;
+        }
+        switch (leg) {
+            case 0: x += step; break;
+            case 1: y += step; break;
+            case 2: x -= step; break;
+            case 3: y -= step; break;
+        }
+        if (++count >= armLength) {
+            count = 0;
+            leg = (leg + 1) % 4;
+            if (leg % 2 === 0) armLength++;
+        }
+    }
+
+    return clampToDesktop({ x: 50 + (currentWindowId % 10) * 20, y: 50 + (currentWindowId % 10) * 20 });
+}
+
 
 function createWindowManager() {
     const { subscribe, update } = writable([]);
@@ -52,6 +152,28 @@ function createWindowManager() {
         const savedSettings = allWindowSettings[componentName];
         const useSavedPosition = savedSettings && savedSettings.positioning === 'manual';
 
+        const newWindowWidth = useSavedPosition ? savedSettings.width : (groupProps.width ?? defaults.width);
+        const newWindowHeight = useSavedPosition ? savedSettings.height : (groupProps.height ?? defaults.height);
+        let newX, newY;
+
+        if (useSavedPosition) {
+            newX = savedSettings.x;
+            newY = savedSettings.y;
+        } else if (groupProps.x != null && groupProps.y != null) {
+            newX = groupProps.x;
+            newY = groupProps.y;
+        } else {
+            const placementProps = {
+                width: newWindowWidth,
+                height: newWindowHeight,
+                sourceEvent: props.sourceEvent,
+                sourceTabId: props.consoleId || props.sourceTabId,
+            };
+            const pos = findOptimalPosition(placementProps, get(windows), windowGroupIdCounter + 1);
+            newX = pos.x;
+            newY = pos.y;
+        }
+
         const newTab = {
             id: ++tabIdCounter,
             component: component,
@@ -63,10 +185,10 @@ function createWindowManager() {
 
         const newWindowGroup = {
             id: ++windowGroupIdCounter,
-            x: useSavedPosition ? savedSettings.x : (groupProps.x ?? 50 + (windowGroupIdCounter % 10) * 20),
-            y: useSavedPosition ? savedSettings.y : (groupProps.y ?? 50 + (windowGroupIdCounter % 10) * 20),
-            width: useSavedPosition ? savedSettings.width : (groupProps.width ?? defaults.width),
-            height: useSavedPosition ? savedSettings.height : (groupProps.height ?? defaults.height),
+            x: newX,
+            y: newY,
+            width: newWindowWidth,
+            height: newWindowHeight,
             zIndex: 100,
             minimized: false,
             maximized: false,
@@ -74,7 +196,7 @@ function createWindowManager() {
             prevX: 0, prevY: 0, prevWidth: 0, prevHeight: 0,
             tabs: [newTab],
             activeTabId: newTab.id,
-            isFlashing: false,
+            notice: null,
         };
 
         update(windows => {
@@ -372,7 +494,7 @@ function createWindowManager() {
                 prevX: 0, prevY: 0, prevWidth: 0, prevHeight: 0,
                 tabs: [tabToDetach],
                 activeTabId: tabToDetach.id,
-                isFlashing: false,
+                notice: null,
             };
             
             // 3. Add new group and update z-indices/active state
@@ -424,11 +546,95 @@ function createWindowManager() {
                 isActive: true,
                 zIndex: maxZ + 1,
                 prevX: groupData.x, prevY: groupData.y, prevWidth: groupData.width, prevHeight: groupData.height,
-                isFlashing: false,
+                notice: null,
                 tabs: tabs,
                 activeTabId: newActiveTabId,
             };
             return [...updatedWindows, newGroup];
+        });
+    };
+
+    // --- Sentinel Implementation ---
+
+    const resolveNoticeSettings = (componentName) => {
+        const globalDefaults = get(desktopSettings).noticeDefaults;
+        const allWindowOverrides = get(windowSettings);
+        const override = allWindowOverrides[componentName]?.notice;
+
+        if (!globalDefaults.enabled && override?.mode !== 'enabled') {
+            return { enabled: false };
+        }
+
+        if (override?.mode === 'disabled') {
+            return { enabled: false };
+        }
+
+        if (override?.mode === 'enabled') {
+            // Merge global and override settings. Override takes precedence.
+            return {
+                enabled: true,
+                visual: { ...globalDefaults.visual, ...override.visual },
+                audio: { ...globalDefaults.audio, ...override.audio },
+            };
+        }
+
+        // Default case: use global settings ('global' mode or no override)
+        return globalDefaults;
+    };
+
+    const playNoticeSound = (audioSettings) => {
+        if (!audioSettings.sound || audioSettings.sound === 'none') return;
+        const src = audioSettings.sound === 'custom' ? audioSettings.url : `/assets/${audioSettings.sound}`;
+        try {
+            new Audio(src).play().catch(e => console.error("Notice audio play failed:", e));
+        } catch (e) {
+            console.error("Could not play notice audio.", e);
+        }
+    };
+    
+    const logToNotificationCenter = (group, tab, payload) => {
+        const newNotification = {
+            id: Date.now(),
+            groupId: group.id,
+            tabId: tab.id,
+            timestamp: new Date(),
+            icon: tab.componentName,
+            summary: payload.summary || `Activity in ${tab.title}`,
+            read: false,
+        };
+        notificationHistory.update(history => [newNotification, ...history].slice(0, 100)); // Keep last 100
+        unreadNoticeCount.update(n => n + 1);
+    };
+
+    const notifyActivity = (groupId, tabId, payload = {}, force = false) => {
+        update(windows => {
+            const group = windows.find(g => g.id === groupId);
+            if (!group || (group.isActive && !force)) {
+                return windows; // Don't notify for active windows unless forced
+            }
+    
+            const tab = group.tabs.find(t => t.id === tabId);
+            if (!tab) return windows;
+    
+            const settings = resolveNoticeSettings(tab.componentName);
+            if (!settings.enabled) return windows;
+    
+            const noticeId = Date.now();
+            const updatedGroup = { ...group, notice: { id: noticeId, color: settings.visual.color } };
+    
+            if (settings.audio.enabled && settings.audio.sound && settings.audio.sound !== 'none') {
+                playNoticeSound(settings.audio);
+            }
+    
+            logToNotificationCenter(group, tab, payload);
+    
+            setTimeout(() => {
+                update(currentWindows => currentWindows.map(w =>
+                    (w.id === groupId && w.notice?.id === noticeId) ? { ...w, notice: null } : w
+                ));
+            }, settings.visual.duration);
+    
+            return windows.map(w => w.id === groupId ? updatedGroup : w);
         });
     };
 
@@ -454,10 +660,30 @@ function createWindowManager() {
         reorderTab,
         detachTabToNewWindow,
         restoreWindow,
+        notifyActivity,
     };
 }
 
 export const windows = createWindowManager();
+
+export const activeConsoles = readable(new Map(), set => {
+    const unsubscribe = windows.subscribe(allWindows => {
+        const newActiveConsoles = new Map();
+        for (const group of allWindows) {
+            for (const tab of group.tabs) {
+                if (tab.componentName === 'IoskConsole' && tab.isConsoleConnected && tab.consoleConnection) {
+                    const key = `${tab.consoleConnection.user}@${tab.consoleConnection.url}`;
+                    if (!newActiveConsoles.has(key)) {
+                        newActiveConsoles.set(key, tab);
+                    }
+                }
+            }
+        }
+        set(newActiveConsoles);
+    });
+
+    return () => unsubscribe();
+});
 
 export const instanceRegistry = {
     instances: new Map(),
@@ -475,7 +701,7 @@ export const instanceRegistry = {
 
 // --- Window Creation Functions ---
 
-export function newIoskConnection() {
+export function newIoskConnection(props = {}) {
     const allWindowSettings = get(windowSettings);
     const componentSettings = allWindowSettings['IoskConsole'];
     const globalSettings = get(desktopSettings);
@@ -484,29 +710,46 @@ export function newIoskConnection() {
         title: 'IOSK Connection',
         wsUrl: componentSettings?.defaultUrl ?? globalSettings.ioskUrl,
         username: componentSettings?.defaultUsername ?? globalSettings.ioskUsername,
+        ...props,
     });
 }
-export function newCalculator() {
-    windows.addWindow(Calculator, { title: 'Calculator', width: 320, height: 450 });
+export function newCalculator(props = {}) {
+    windows.addWindow(Calculator, { title: 'Calculator', width: 320, height: 450, ...props });
 }
-export function newSettings() {
-    windows.addWindow(Settings, { title: 'Settings', width: 400, height: 550 });
+export function newSettings(props = {}) {
+    windows.addWindow(Settings, { title: 'Settings', width: 420, height: 711, ...props });
 }
-export function newIoskFileExplorer(consoleTabId, consoleTitle) {
+export function newNotificationCenter(props = {}) {
+    const allWindows = get(windows);
+    const existingNCTab = allWindows.flatMap(g => g.tabs).find(t =>
+        t.componentName === 'NotificationCenter'
+    );
+
+    if (existingNCTab) {
+        const group = allWindows.find(g => g.tabs.some(t => t.id === existingNCTab.id));
+        if (group.minimized) windows.toggleMinimize(group.id);
+        else windows.focusWindow(group.id);
+        windows.setActiveTab(group.id, existingNCTab.id);
+        return;
+    }
+
+    windows.addWindow(NotificationCenter, { title: 'Notifications', width: 475, height: 475, ...props });
+}
+export function newIoskFileExplorer(consoleTabId, consoleTitle, props = {}) {
     const title = `Files - ${consoleTitle || `Console ${consoleTabId}`}`;
     const explorerSettings = get(windowSettings)['IoskFileExplorer'];
-    windows.addWindow(IoskFileExplorer, { title, consoleId: consoleTabId, initialPath: explorerSettings?.initialPath || '.', width: 400, height: 500 });
+    windows.addWindow(IoskFileExplorer, { title, consoleId: consoleTabId, initialPath: explorerSettings?.initialPath || '.', width: 400, height: 500, ...props });
 }
-export function newIoskFileViewer(consoleTabId, path) {
+export function newIoskFileViewer(consoleTabId, path, props = {}) {
     const title = path.split('/').pop() || path;
-    windows.addWindow(IoskFileViewer, { title: `View - ${title}`, consoleId: consoleTabId, path: path, width: 700, height: 500 });
+    windows.addWindow(IoskFileViewer, { title: `View - ${title}`, consoleId: consoleTabId, path: path, width: 700, height: 500, ...props });
 }
-export function newWebBrowser() {
+export function newWebBrowser(props = {}) {
     const browserSettings = get(windowSettings)['WebBrowser'];
     const initialUrl = browserSettings?.defaultUrl || (typeof window !== 'undefined' ? window.location.origin : 'about:blank');
-    windows.addWindow(WebBrowser, { title: 'Web Browser', initialUrl, width: 1024, height: 768 });
+    windows.addWindow(WebBrowser, { title: 'Web Browser', initialUrl, width: 1024, height: 768, ...props });
 }
-export function newIoskPrivateChat(consoleTabId, localUser, remoteUser) {
+export function newIoskPrivateChat(consoleTabId, localUser, remoteUser, props = {}) {
     const allWindows = get(windows);
     const existingChatTab = allWindows.flatMap(g => g.tabs).find(t =>
         t.componentName === 'IoskPrivateChat' && t.consoleId === consoleTabId && t.remoteUser === remoteUser
@@ -521,11 +764,11 @@ export function newIoskPrivateChat(consoleTabId, localUser, remoteUser) {
     }
 
     const title = remoteUser.split('.')[0];
-    windows.addWindow(IoskPrivateChat, { title: `Chat with ${title}`, consoleId: consoleTabId, localUser, remoteUser, width: 450, height: 400 });
+    windows.addWindow(IoskPrivateChat, { title: `Chat with ${title}`, consoleId: consoleTabId, localUser, remoteUser, width: 450, height: 400, ...props });
 }
 
-export function newLocalTerminal() {
-    windows.addWindow(LocalTerminal, { title: 'Local Terminal', width: 800, height: 500 });
+export function newLocalTerminal(props = {}) {
+    windows.addWindow(LocalTerminal, { title: 'Local Terminal', width: 800, height: 500, ...props });
 }
 
 export function newLocalFileExplorer(props = {}) {
@@ -533,11 +776,11 @@ export function newLocalFileExplorer(props = {}) {
     windows.addWindow(LocalFileExplorer, { ...defaultProps, ...props });
 }
 
-export function newAskWindow(initialFiles = []) {
-    windows.addWindow(Ask, { title: 'Ask', initialFiles, width: 900, height: 600 });
+export function newAskWindow(initialFiles = [], props = {}) {
+    windows.addWindow(Ask, { title: 'Ask', initialFiles, width: 900, height: 600, ...props });
 }
 
-export function newIoskWatch(consoleTabId, pwd) {
+export function newIoskWatch(consoleTabId, pwd, props = {}) {
     const allWindows = get(windows);
     const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
     if (!consoleTab || !consoleTab.isConsoleConnected) {
@@ -551,17 +794,18 @@ export function newIoskWatch(consoleTabId, pwd) {
         consoleConnection: consoleTab.consoleConnection, // Pass this for Dash restore
         initialPwd: pwd,
         width: 700,
-        height: 400
+        height: 400,
+        ...props,
     });
 }
 
 
-export function newIoskContextInspector(consoleTabId, targetUser, consoleWs) {
+export function newIoskUserInspector(consoleTabId, targetUser, consoleWs, props = {}) {
     const allWindows = get(windows);
 
     // Find if an inspector for this user from this console already exists
     const existingInspectorTab = allWindows.flatMap(g => g.tabs).find(t =>
-        t.componentName === 'IoskContextInspector' && !t.isDetached && t.consoleId === consoleTabId && t.targetUser === targetUser
+        t.componentName === 'IoskUserInspector' && !t.isDetached && t.consoleId === consoleTabId && t.targetUser === targetUser
     );
 
     if (existingInspectorTab) {
@@ -579,14 +823,15 @@ export function newIoskContextInspector(consoleTabId, targetUser, consoleWs) {
         return;
     }
 
-    const title = `Context - ${targetUser}`;
-    windows.addWindow(IoskContextInspector, {
+    const title = `Inspector - ${targetUser}`;
+    windows.addWindow(IoskUserInspector, {
         title,
         consoleId: consoleTabId,
         targetUser: targetUser,
         consoleWs: consoleWs, // Pass the WebSocket instance
         consoleConnection: consoleTab.consoleConnection, // For dash restore
-        width: 600,
+        width: 700,
         height: 700,
+        ...props,
     });
 }

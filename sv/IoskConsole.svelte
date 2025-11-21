@@ -5,9 +5,14 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch, newIoskContextInspector } from './windows.js';
-    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents, contextUpdates } from './ioskEvents.js';
-    import { desktopSettings, windowSettings } from './desktopStore.js';
+    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch, newIoskUserInspector } from './windows.js';
+    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents, contextUpdates } from './iosk.js';
+    import { desktopSettings, windowSettings } from './desktop.js';
+    import RoomsMenu from './popup/RoomsMenu.svelte';
+    import AttachMenu from './popup/AttachMenu.svelte';
+    import UserContextMenu from './popup/UserContextMenu.svelte';
+    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
+    import { parseAnsi, stripAnsi } from './ansi.js';
 
     export let id; // Unique ID from the window manager
     export let groupId;
@@ -41,8 +46,6 @@
     let showAttachMenu = false;
     let attachDevices = [];
     let attachUsers = [];
-    let selectedDevice = null;
-    let selectedUser = null;
     let isLoadingDevices = false;
     let isLoadingUsers = false;
 
@@ -51,8 +54,7 @@
         visible: false,
         x: 0,
         y: 0,
-        user: null,
-        showColorPicker: false
+        user: null
     };
 
     // --- State for Token Telemetry ---
@@ -145,10 +147,7 @@
     let ws = null;
     const PREAMBLE = "SK1:";
 
-    // --- Settings Modal State ---
     let showSettings = false;
-    let settingsUrl, settingsUsername;
-    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
 
     // --- Event bus subscriptions ---
     let requestUnsubscribe;
@@ -165,47 +164,6 @@
         'bright_yellow': 'var(--ansi-bright-yellow)', 'bright_blue': 'var(--ansi-bright-blue)', 'bright_magenta': 'var(--ansi-bright-magenta)',
         'bright_cyan': 'var(--ansi-bright-cyan)', 'bright_white': 'var(--ansi-bright-white)',
     };
-
-    const ansiCodeToCssVar = {
-        '30': 'var(--ansi-black)', '31': 'var(--ansi-red)', '32': 'var(--ansi-green)', '33': 'var(--ansi-yellow)',
-        '34': 'var(--ansi-blue)', '35': 'var(--ansi-magenta)', '36': 'var(--ansi-cyan)', '37': 'var(--ansi-white)',
-        '90': 'var(--ansi-bright-black)', '91': 'var(--ansi-bright-red)', '92': 'var(--ansi-bright-green)', '93': 'var(--ansi-bright-yellow)',
-        '94': 'var(--ansi-bright-blue)', '95': 'var(--ansi-bright-magenta)', '96': 'var(--ansi-bright-cyan)', '97': 'var(--ansi-bright-white)',
-    };
-
-    function parseAnsi(text) {
-        if (typeof text !== 'string') return '';
-        const ansiRegex = /\u001b\[(\d+)m/g;
-        let openSpan = false;
-
-        let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-        let html = sanitizedText.replace(ansiRegex, (match, code) => {
-            let newHtml = '';
-            if (openSpan) {
-                newHtml += '</span>';
-                openSpan = false;
-            }
-            if (code === '0') {
-                // Reset code, just close the span
-            } else if (ansiCodeToCssVar[code]) {
-                newHtml += `<span style="color: ${ansiCodeToCssVar[code]}">`;
-                openSpan = true;
-            }
-            return newHtml;
-        });
-
-        if (openSpan) {
-            html += '</span>';
-        }
-        return html;
-    }
-
-    function stripAnsi(text) {
-        if (typeof text !== 'string') return '';
-        const ansiRegex = /\u001b\[\d+m/g;
-        return text.replace(ansiRegex, '');
-    }
 
 
     // --- Lifecycle and Reactive Statements ---
@@ -284,9 +242,10 @@
     $: if (id !== undefined && groupId !== undefined) {
         windows.updateTabProps(groupId, id, {
             isConsoleConnected: isConnected,
-           consoleConnection: isConnected ? { url: wsUrl, user: username } : null,
-           wsUrl,
-           username
+            consoleConnection: isConnected ? { url: wsUrl, user: username } : null,
+            wsUrl,
+            username,
+            isSettingsModalOpen: showSettings
         });
     }
 
@@ -317,12 +276,11 @@
             x: event.clientX,
             y: event.clientY,
             user: participant,
-            showColorPicker: false
         };
     }
 
     function closeUserContextMenu() {
-        userContextMenu = { visible: false, x: 0, y: 0, user: null, showColorPicker: false };
+        userContextMenu = { visible: false, x: 0, y: 0, user: null };
     }
 
     function sendSystemCommand(systemCommand) {
@@ -370,7 +328,7 @@
 
     function inspectUserContext(targetUser) {
       // Open the new window component
-      newIoskContextInspector(id, targetUser, ws);
+      newIoskUserInspector(id, targetUser, ws);
 
       // Subscribe to updates
       if (ws && ws.readyState === WebSocket.OPEN) {
@@ -379,7 +337,8 @@
       closeUserContextMenu();
     }
 
-    function setColorForUser(colorName) {
+    function handleSetColor(event) {
+        const colorName = event.detail;
         if (!userContextMenu.user) return;
         const commandToRun = `$ color -u ${userContextMenu.user} ${colorName}`;
         sendSystemCommand(commandToRun);
@@ -419,57 +378,32 @@
 
     // --- Functions ---
     export function showSettingsDialog() {
-        settingsUrl = wsUrl;
-        settingsUsername = username;
-
-        const allSettings = get(windowSettings);
-        const currentSettings = allSettings[componentName] || { positioning: 'auto' };
-        windowSettingsForModal = {
-            positioning: currentSettings.positioning || 'auto',
-            x: currentSettings.x ?? x,
-            y: currentSettings.y ?? y,
-            width: currentSettings.width ?? width,
-            height: currentSettings.height ?? height,
-            defaultZoom: currentSettings.defaultZoom ?? 1.0,
-        };
-
         showSettings = true;
-        tick().then(() => settingsUrlInput?.focus());
     }
 
-    function handleSaveSettings() {
-        wsUrl = settingsUrl;
-        username = settingsUsername;
-        // Also update the local values for the connection form to keep them in sync
-        localWsUrl = settingsUrl;
-        localUsername = settingsUsername;
+    let settingsUrl, settingsUsername;
+    $: if (showSettings) {
+        settingsUrl = wsUrl;
+        settingsUsername = username;
+    }
 
+    function handleSaveComponentSettings() {
         windowSettings.update(allSettings => {
             const existingSettings = allSettings[componentName] || {};
             return {
                 ...allSettings,
                 [componentName]: {
                     ...existingSettings,
-                    ...windowSettingsForModal,
                     defaultUrl: settingsUrl,
                     defaultUsername: settingsUsername
                 }
             };
         });
 
-        showSettings = false;
-    }
-
-    function handleCancelSettings() {
-        showSettings = false;
-    }
-
-    function handleSettingsKeydown(e) {
-        if (e.key === 'Escape') handleCancelSettings();
-        else if (e.key === 'Enter') {
-            e.preventDefault();
-            handleSaveSettings();
-        }
+        wsUrl = settingsUrl;
+        username = settingsUsername;
+        localWsUrl = settingsUrl;
+        localUsername = settingsUsername;
     }
 
     function requestFsList(path) {
@@ -600,8 +534,10 @@
                                 let outputToProcess = data.output;
 
                                 // This is now a generic bell handler. DM-specific logic is removed.
+                                let bellTriggered = false;
                                 if (outputToProcess.includes(bellCode)) {
                                     handleBell();
+                                    bellTriggered = true;
                                     outputToProcess = outputToProcess.replace(new RegExp(bellCode, 'g'), '');
                                 }
 
@@ -609,9 +545,19 @@
                                 const clearScreenCode = "\x1b[H\x1b[2J";
                                 if (cleanOutput === clearScreenCode) {
                                     output = [];
-                                } else if (cleanOutput) {
+                                } else if (cleanOutput) { // Note: can be just a newline
                                     const lines = cleanOutput.split('\n');
                                     output = [...output, ...lines.map(line => ({type: 'output', content: line}))];
+
+                                    // SENTINEL: Notify for new output if the window is inactive,
+                                    // the input isn't focused, and a bell didn't already trigger a notice.
+                                    if (cleanOutput.trim() && !bellTriggered) {
+                                        const isInputFocused = document.activeElement === commandInput;
+                                        if (!isActive && !isInputFocused) {
+                                            const notificationSummary = stripAnsi(cleanOutput.trim()).split('\n')[0];
+                                            windows.notifyActivity(groupId, id, { summary: notificationSummary });
+                                        }
+                                    }
                                 }
                             }
                             if (data.prompt) {
@@ -784,9 +730,10 @@
 
     export function toggleAttachMenu() {
         showAttachMenu = !showAttachMenu;
+    }
+
+    function requestAttachData() {
         if (showAttachMenu) {
-            selectedDevice = null;
-            selectedUser = null;
             if (attachDevices.length === 0) {
                 isLoadingDevices = true;
                 requestAllDevices();
@@ -798,19 +745,12 @@
         }
     }
 
-    function handleDeviceClick(item) {
-        selectedDevice = item.displayName;
-    }
-
-    function handleUserClick(item) {
-        selectedUser = item.name;
-    }
-
-    function performAttach() {
-        if (!selectedDevice) return;
-        const commandToRun = selectedUser
-            ? `$ attach ${selectedDevice} ${selectedUser}`
-            : `$ attach ${selectedDevice}`;
+    function handleAttach(event) {
+        const { device, user } = event.detail;
+        if (!device) return;
+        const commandToRun = user
+            ? `$ attach ${device} ${user}`
+            : `$ attach ${device}`;
         output = [...output, {type: 'prompt', content: currentPrompt + commandToRun}];
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
@@ -838,12 +778,9 @@
     }
 
     function handleBell() {
-        // 1. Play sound
-        playBellSound();
-
-        // 2. Flash window
-        windows.updateWindowProps(id, { isFlashing: true });
-        setTimeout(() => windows.updateWindowProps(id, { isFlashing: false }), 500);
+        // Sentinel handles audio and visual notice effects.
+        // The sound will be played based on window/global settings.
+        windows.notifyActivity(groupId, id, { summary: `Bell received in console` });
     }
 
     // --- Watch Window Function ---
@@ -978,35 +915,6 @@
     .modal-content button:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-content .save-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .modal-content .save-button:hover { background-color: #1a9c2a; }
-    .rooms-menu { position: absolute; top: 45px; left: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 100; display: flex; flex-direction: column; min-width: 180px; max-height: 250px; overflow-y: auto; }
-    .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border-color); }
-    .menu-item:last-child { border-bottom: none; }
-    .menu-item:hover:not(:disabled) { background-color: var(--taskbar-button-hover-bg); }
-    .menu-item:disabled { color: #7f8c8d; cursor: not-allowed; font-style: italic; }
-    .menu-item-empty { padding: 8px 12px; color: #7f8c8d; font-style: italic; }
-    .menu-separator { height: 3px; background-color: var(--border-color); margin: 0; }
-    .close-item { color: #e74c3c; }
-    .close-item:hover { background-color: #c0392b; color: white; }
-    .attach-menu { position: absolute; top: 45px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 100; display: flex; width: 600px; height: 300px; flex-direction: column; }
-    .attach-panels { display: flex; flex-grow: 1; overflow: hidden; }
-    .attach-panel { width: 35%; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
-    .attach-panel:first-child { width: 65%; }
-    .attach-panel:last-child { border-right: none; }
-    .panel-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
-    .list-item { padding: 4px 8px; cursor: pointer; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .list-item:hover { background-color: var(--taskbar-button-hover-bg); }
-    .list-item.selected { background-color: #3498db; color: white; }
-    .attach-footer { padding: 8px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; flex-shrink: 0; }
-    .attach-footer button { background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 4px 8px; cursor: pointer; border-radius: 3px; }
-    .attach-footer button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .attach-footer button.primary { background-color: #27c93f; border-color: #1a9c2a; color: white; }
-    .path-header { font-size: 0.9em; color: #95a5a6; padding: 2px 8px; flex-shrink: 0; }
-    fieldset { border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-top: 15px; }
-    legend { color: var(--title-bar-text); padding: 0 5px; }
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-left: 20px; }
-    .form-grid label { display: flex; align-items: center; gap: 5px; }
-    .form-grid input { width: 80px; }
-    .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 
     /* User Context Menu Styles */
     .pause-resume-button {
@@ -1023,37 +931,7 @@
     .pause-resume-button:hover {
         opacity: 1;
     }
-
-    .user-context-menu {
-        position: fixed;
-        background-color: var(--window-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 4px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        z-index: 200; /* Above console content */
-        display: flex;
-        flex-direction: column;
-        padding: 4px;
-        min-width: 120px;
-    }
-    .color-picker-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 4px;
-        padding: 4px;
-    }
-    .color-swatch {
-        width: 24px;
-        height: 24px;
-        border: 1px solid var(--border-color);
-        border-radius: 3px;
-        cursor: pointer;
-        background: none; /* remove default button background */
-    }
-    .color-swatch:hover {
-        border-color: var(--taskbar-button-hover-bg);
-        transform: scale(1.1);
-    }
+    .menu-separator { height: 3px; background-color: var(--border-color); margin: 0; }
 </style>
 
 <div class="console-container">
@@ -1075,79 +953,23 @@
     </form>
 
     {#if showRoomsMenu}
-        <div class="rooms-menu">
-            {#each availableRooms as room (room.name)}
-                <button class="menu-item" on:click={() => joinRoom(room.name)} disabled={room.name === roomName} title={room.topic || 'No topic'}>
-                    {room.name}
-                </button>
-            {:else}
-                <span class="menu-item-empty">No rooms available</span>
-            {/each}
-            {#if roomName}
-                <div class="menu-separator"></div>
-                <button class="menu-item close-item" on:click={closeRoom}>
-                    Close '{roomName}'
-                </button>
-            {/if}
-        </div>
+        <RoomsMenu
+            {availableRooms}
+            currentRoomName={roomName}
+            on:join={e => joinRoom(e.detail)}
+            on:close={closeRoom}
+        />
     {/if}
 
     {#if showAttachMenu}
-        <div class="attach-menu">
-            <div class="attach-panels">
-                <div class="attach-panel">
-                    <div class="panel-header">Device</div>
-                    <div class="panel-list">
-                        {#if isLoadingDevices}
-                            <div class="list-item">Loading...</div>
-                        {:else}
-                            {#each attachDevices as item (item.fullPath)}
-                                <div
-                                    class="list-item"
-                                    class:selected={selectedDevice === item.displayName}
-                                    on:click={() => handleDeviceClick(item)}
-                                    title={item.displayName}
-                                >
-                                    {item.type === 'dir' ? '🗂️' : '🔌'} {item.displayName}
-                                </div>
-                            {:else}
-                                <div class="list-item">(empty)</div>
-                            {/each}
-                        {/if}
-                    </div>
-                </div>
-                <div class="attach-panel">
-                    <div class="panel-header">User (Optional)</div>
-                    <div class="path-header">/home</div>
-                     <div class="panel-list">
-                        {#if isLoadingUsers}
-                            <div class="list-item">Loading...</div>
-                        {:else}
-                            {#each attachUsers as item (item.name)}
-                                <div
-                                    class="list-item"
-                                    class:selected={selectedUser === item.name}
-                                    on:click={() => handleUserClick(item)}
-                                    title={item.name}
-                                >
-                                    👤 {item.name}
-                                </div>
-                          {:else}
-                                <div class="list-item">(no users found)</div>
-                            {/each}
-                        {/if}
-                    </div>
-                </div>
-            </div>
-            <div class="attach-footer">
-                <button
-                    class="primary"
-                    disabled={!selectedDevice}
-                    on:click={performAttach}>
-                    Attach
-                </button>
-            </div>
-        </div>
+        <AttachMenu
+            {isLoadingDevices}
+            {attachDevices}
+            {isLoadingUsers}
+            {attachUsers}
+            on:requestData={requestAttachData}
+            on:attach={handleAttach}
+        />
     {/if}
 
     <div class="main-flex-area">
@@ -1203,7 +1025,7 @@
                                 on:click|stopPropagation={() => togglePause(participant)}
                                 title={participant.paused ? `Resume ${participant.displayName}` : `Pause ${participant.displayName}`}
                             >
-                                {participant.paused ? '▶️' : '⏸️'}
+                                {participant.paused ? '▶' : '⏸'}
                             </button>
                         {/if}
                     </div>
@@ -1240,7 +1062,7 @@
                                 on:click|stopPropagation={() => togglePause(participant)}
                                 title={participant.paused ? `Resume ${participant.displayName}` : `Pause ${participant.displayName}`}
                             >
-                                {participant.paused ? '▶️' : '⏸️'}
+                                {participant.paused ? '▶' : '⏸'}
                             </button>
                         {/if}
                     </div>
@@ -1250,94 +1072,35 @@
         {/if}
     </div>
 
-    {#if showSettings}
-        <div class="modal-overlay" on:click|self={handleCancelSettings} on:keydown={handleSettingsKeydown}>
-            <div class="modal-content">
-                <h3>Settings</h3>
-                <div class="form-group">
-                    <label for="url-setting-{id}">Default URL</label>
-                    <input id="url-setting-{id}" type="text" bind:this={settingsUrlInput} bind:value={settingsUrl}>
-                </div>
-                <div class="form-group">
-                    <label for="user-setting-{id}">Default Username</label>
-                    <input id="user-setting-{id}" type="text" bind:value={settingsUsername}>
-                </div>
-
-                <fieldset>
-                    <legend>Default Window Position & Size</legend>
-                    <div class="radio-group">
-                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="auto"> Auto</label>
-                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="manual"> Manual</label>
-                    </div>
-                    {#if windowSettingsForModal.positioning === 'manual'}
-                        <div class="form-grid">
-                            <label>X: <input type="number" bind:value={windowSettingsForModal.x}></label>
-                            <label>Y: <input type="number" bind:value={windowSettingsForModal.y}></label>
-                            <label>Width: <input type="number" bind:value={windowSettingsForModal.width}></label>
-                            <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
-                        </div>
-                    {/if}
-                </fieldset>
-
-                <fieldset>
-                    <legend>Appearance</legend>
-                    <div class="form-grid" style="grid-template-columns: 1fr; padding-left: 0;">
-                        <label style="display: flex; justify-content: space-between; align-items: center;">
-                            <span>Default Zoom</span>
-                            <input type="number" bind:value={windowSettingsForModal.defaultZoom} min="0.5" max="3" step="0.1" style="width: 80px;">
-                        </label>
-                    </div>
-                </fieldset>
-
-                <div class="buttons">
-                    <button on:click={handleCancelSettings}>Cancel</button>
-                    <button class="save-button" on:click={handleSaveSettings}>Save Defaults</button>
-                </div>
-            </div>
+    <WindowSettingsModal
+        bind:show={showSettings}
+        title="Console Settings"
+        {componentName}
+        {x} {y} {width} {height}
+        on:save={handleSaveComponentSettings}
+    >
+        <div class="form-group">
+            <label for="url-setting-{id}">Default URL</label>
+            <input id="url-setting-{id}" type="text" bind:value={settingsUrl}>
         </div>
-    {/if}
+        <div class="form-group">
+            <label for="user-setting-{id}">Default Username</label>
+            <input id="user-setting-{id}" type="text" bind:value={settingsUsername}>
+        </div>
+    </WindowSettingsModal>
 
     {#if userContextMenu.visible}
-        <div
-            class="user-context-menu"
-            style="top: {userContextMenu.y}px; left: {userContextMenu.x}px;"
-            on:click|stopPropagation
-        >
-            {#if userContextMenu.showColorPicker}
-                <div class="color-picker-grid">
-                    {#each Object.entries(colorNameToCss) as [name, cssVar] (name)}
-                        <button
-                            class="color-swatch"
-                            style="background-color: {cssVar}"
-                            title={name.replace(/_/g, ' ')}
-                            on:click={() => setColorForUser(name)}
-                        ></button>
-                    {/each}
-                </div>
-                <div class="menu-separator"></div>
-                <button class="menu-item" on:click={() => userContextMenu.showColorPicker = false}>
-                    &larr; Back
-                </button>
-            {:else}
-                <button class="menu-item" on:click={() => inspectUserContext(userContextMenu.user)}>
-                  Context
-                </button>
-                <div class="menu-separator"></div>
-                <button class="menu-item" on:click={() => openPrivateChat(userContextMenu.user)}>
-                    Private Chat
-                </button>
-                <button class="menu-item" on:click={viewUserLog}>
-                    View Log
-                </button>
-                <button class="menu-item" on:click={() => userContextMenu.showColorPicker = true}>
-                  Color
-                </button>
-                <div class="menu-separator"></div>
-                <button class="menu-item close-item" on:click={handleDetachUser}>
-                    Detach
-                </button>
-            {/if}
-        </div>
+        <UserContextMenu
+            x={userContextMenu.x}
+            y={userContextMenu.y}
+            user={userContextMenu.user}
+            {colorNameToCss}
+            on:inspectContext={e => inspectUserContext(e.detail)}
+            on:privateChat={e => openPrivateChat(e.detail)}
+            on:viewLog={viewUserLog}
+            on:setColor={handleSetColor}
+            on:detach={handleDetachUser}
+        />
     {/if}
 
     {#if tokenTooltip.visible && tokenTooltip.user && userTokenStats[tokenTooltip.user]}

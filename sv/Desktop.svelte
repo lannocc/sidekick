@@ -5,7 +5,7 @@
 <script>
     import { windows, newSettings, dragRequest } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive } from './desktopStore.js';
+    import { desktopSettings, dashActive } from './desktop.js';
     import Dash from './Dash.svelte';
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
@@ -19,6 +19,7 @@
         visible: false,
         x: 0,
         y: 0,
+        sourceEvent: null,
     };
     
     // --- Focus Follows Mouse Logic ---
@@ -99,6 +100,7 @@
             visible: true,
             x: event.clientX,
             y: event.clientY,
+            sourceEvent: event,
         };
     }
 
@@ -108,7 +110,7 @@
 
     function openSettingsMenu() {
         closeContextMenu();
-        newSettings();
+        newSettings({ sourceEvent: contextMenu.sourceEvent });
     }
 
     function handleFocusOut(event, tab) {
@@ -267,7 +269,7 @@
                 style:top="{group.maximized ? 0 : group.y}px"
                 style:width="{group.maximized ? '100%' : group.width + 'px'}"
                 style:height="{group.maximized ? '100%' : group.height + 'px'}"
-                style:z-index="{group.zIndex - 1}"
+                style:z-index="{tab.isSettingsModalOpen ? group.zIndex + 1 : group.zIndex - 1}"
                 on:focusout={e => handleFocusOut(e, tab)}
                 on:contextmenu|preventDefault|stopPropagation
             >
