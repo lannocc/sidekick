@@ -137,12 +137,12 @@
         if (showWindowsMenu && windowsButton && !windowsButton.contains(event.target)) showWindowsMenu = false;
     }
 
-    function launchIosk() { newIoskConnection(); showMenu = false; }
-    function launchCalculator() { newCalculator(); showMenu = false; }
-    function launchSettings() { newSettings(); showMenu = false; }
-    function launchLocalTerminal() { newLocalTerminal(); showMenu = false; }
-    function launchLocalFileExplorer() { newLocalFileExplorer(); showMenu = false; }
-    function launchAsk() { newAskWindow(); showMenu = false; }
+    function launchIosk(props = {}) { newIoskConnection(props); showMenu = false; }
+    function launchCalculator(props = {}) { newCalculator(props); showMenu = false; }
+    function launchSettings(props = {}) { newSettings(props); showMenu = false; }
+    function launchLocalTerminal(props = {}) { newLocalTerminal(props); showMenu = false; }
+    function launchLocalFileExplorer(props = {}) { newLocalFileExplorer(props); showMenu = false; }
+    function launchAsk(props = {}) { newAskWindow(props); showMenu = false; }
 
     onMount(() => window.addEventListener('click', handleWindowClick));
     onDestroy(() => window.removeEventListener('click', handleWindowClick));
@@ -268,19 +268,19 @@
         <NotificationCenter on:close={() => showNotificationCenter = false} />
     {/if}
     <div class="taskbar-right" bind:this={rightSectionEl}>
-        <button class="quick-launch-button" on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); launchIosk(); }} title="IOSK Connection">$+</button>
+        <button class="quick-launch-button" on:click|stopPropagation={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">$+</button>
         <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }}>SKY</button>
         {#if showMenu}
             <div class="start-menu">
-                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchSettings(); }}>Settings</button>
-                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchIosk(); }}>IOSK Connection</button>
-                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); newWebBrowser(); showMenu = false; }}>Web Browser</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchSettings({ sourceEvent: e }); }}>Settings</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }}>IOSK Connection</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebBrowser({ sourceEvent: e }); showMenu = false; }}>Web Browser</button>
                 <div class="menu-separator"></div>
-                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchAsk(); }}>Ask</button>
-                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchLocalTerminal(); }}>Terminal</button>
-                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer(); }}>Files</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }}>Ask</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalTerminal({ sourceEvent: e }); }}>Terminal</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer({ sourceEvent: e }); }}>Files</button>
                 <div class="menu-separator"></div>
-                <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); launchCalculator(); }}>Calculator</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchCalculator({ sourceEvent: e }); }}>Calculator</button>
             </div>
         {/if}
     </div>
