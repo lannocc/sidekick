@@ -6,6 +6,7 @@
     import { get } from 'svelte/store';
     import { windows } from './windows.js';
     import { windowSettings } from './desktop.js';
+    import WindowSettingsFields from './popup/WindowSettingsFields.svelte';
 
     export let id; // Window ID
     export let groupId;
@@ -23,7 +24,7 @@
     // --- Settings Modal State ---
     let showSettings = false;
     let settingsModel = { defaultUrl: '' };
-    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0, notice: { mode: 'global' } };
+    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0, notice: { mode: 'global' }, defaultZoom: 1.0 };
 
     // Update the central window store for Dash saving
     $: if (id !== undefined && groupId !== undefined) {
@@ -274,31 +275,7 @@
                     </label>
                 </fieldset>
 
-                <fieldset>
-                    <legend>Default Window Position & Size</legend>
-                    <div class="radio-group">
-                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="auto"> Auto</label>
-                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="manual"> Manual</label>
-                    </div>
-                    {#if windowSettingsForModal.positioning === 'manual'}
-                        <div class="form-grid">
-                            <label>X: <input type="number" bind:value={windowSettingsForModal.x}></label>
-                            <label>Y: <input type="number" bind:value={windowSettingsForModal.y}></label>
-                            <label>Width: <input type="number" bind:value={windowSettingsForModal.width}></label>
-                            <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
-                        </div>
-                    {/if}
-                </fieldset>
-
-                <fieldset>
-                    <legend>Appearance</legend>
-                    <div class="form-grid">
-                        <label style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; flex-direction: row;">
-                            <span>Default Zoom</span>
-                            <input type="number" bind:value={windowSettingsForModal.defaultZoom} min="0.5" max="3" step="0.1" style="width: 80px;">
-                        </label>
-                    </div>
-                </fieldset>
+                <WindowSettingsFields bind:settings={windowSettingsForModal} />
 
                 <fieldset>
                     <legend>Activity Notice</legend>

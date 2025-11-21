@@ -14,6 +14,7 @@
     import Settings from './Settings.svelte';
     import Calculator from './Calculator.svelte';
     import IoskPrivateChat from './IoskPrivateChat.svelte';
+    import WindowSettingsFields from './popup/WindowSettingsFields.svelte';
 
     // Group properties
     export let id;
@@ -53,7 +54,7 @@
 
     let showGenericSettingsModal = false;
     let windowSettingsForModal = {
-        positioning: 'auto', x: 0, y: 0, width: 0, height: 0,
+        positioning: 'auto', x: 0, y: 0, width: 0, height: 0, defaultZoom: 1.0,
         notice: { mode: 'global', visual: { color: '#f39c12' }, audio: { sound: 'ding.wav' } }
     };
 
@@ -467,9 +468,6 @@
     .modal-content button:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-content .save-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .modal-content .save-button:hover { background-color: #1a9c2a; }
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-left: 20px; }
-    .form-grid label { display: flex; align-items: center; gap: 5px; }
-    .form-grid input { width: 80px; background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
     .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
     .select-input { background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
 </style>
@@ -548,30 +546,7 @@
         <div class="modal-overlay" on:click|self={() => showGenericSettingsModal = false}>
             <div class="modal-content" on:click|stopPropagation>
                 <h3>Window Settings: {title}</h3>
-                <fieldset>
-                    <legend>Default Position & Size</legend>
-                    <div class="radio-group">
-                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="auto"> Auto</label>
-                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="manual"> Manual</label>
-                    </div>
-                    {#if windowSettingsForModal.positioning === 'manual'}
-                        <div class="form-grid">
-                            <label>X: <input type="number" bind:value={windowSettingsForModal.x}></label>
-                            <label>Y: <input type="number" bind:value={windowSettingsForModal.y}></label>
-                            <label>Width: <input type="number" bind:value={windowSettingsForModal.width}></label>
-                            <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
-                        </div>
-                    {/if}
-                </fieldset>
-                <fieldset>
-                    <legend>Appearance</legend>
-                    <div class="form-grid">
-                        <label style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;">
-                            <span>Default Zoom</span>
-                            <input type="number" bind:value={windowSettingsForModal.defaultZoom} min="0.5" max="3" step="0.1" style="width: 80px;">
-                        </label>
-                    </div>
-                </fieldset>
+                <WindowSettingsFields bind:settings={windowSettingsForModal} />
                 <fieldset>
                     <legend>Activity Notice</legend>
                     <div class="radio-group">

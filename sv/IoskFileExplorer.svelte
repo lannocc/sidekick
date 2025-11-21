@@ -8,6 +8,7 @@
     import { fileSystemRequests, fileSystemResponses, fileSystemWatchEvents } from './iosk.js';
     import { newIoskFileViewer, windows, activeConsoles } from './windows.js';
     import { windowSettings } from './desktop.js';
+    import WindowSettingsFields from './popup/WindowSettingsFields.svelte';
 
     // --- Component Props & State ---
     export let id; // Window ID, passed from Window.svelte
@@ -47,7 +48,7 @@
     // --- Settings Modal State ---
     let showSettings = false;
     let settingsModel = { usePwd: true, path: '/' };
-    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0 };
+    let windowSettingsForModal = { positioning: 'auto', x: 0, y: 0, width: 0, height: 0, defaultZoom: 1.0 };
 
     const dispatch = createEventDispatcher();
 
@@ -689,10 +690,6 @@
     .modal-content button:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-content .save-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .modal-content .save-button:hover { background-color: #1a9c2a; }
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-left: 20px; }
-    .form-grid label { display: flex; align-items: center; gap: 5px; }
-    .form-grid input { width: 80px; }
-    .radio-group label { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; }
 </style>
 
 {#if !treeNode}
@@ -821,31 +818,7 @@
                     {/if}
                 </fieldset>
 
-                <fieldset>
-                    <legend>Default Window Position & Size</legend>
-                    <div class="radio-group">
-                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="auto"> Auto</label>
-                        <label><input type="radio" bind:group={windowSettingsForModal.positioning} value="manual"> Manual</label>
-                    </div>
-                    {#if windowSettingsForModal.positioning === 'manual'}
-                        <div class="form-grid">
-                            <label>X: <input type="number" bind:value={windowSettingsForModal.x}></label>
-                            <label>Y: <input type="number" bind:value={windowSettingsForModal.y}></label>
-                            <label>Width: <input type="number" bind:value={windowSettingsForModal.width}></label>
-                            <label>Height: <input type="number" bind:value={windowSettingsForModal.height}></label>
-                        </div>
-                    {/if}
-                </fieldset>
-
-                <fieldset>
-                    <legend>Appearance</legend>
-                    <div class="form-grid">
-                         <label style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;">
-                            <span>Default Zoom</span>
-                            <input type="number" bind:value={windowSettingsForModal.defaultZoom} min="0.5" max="3" step="0.1" style="width: 80px;">
-                        </label>
-                    </div>
-                </fieldset>
+                <WindowSettingsFields bind:settings={windowSettingsForModal} />
 
                 <div class="buttons">
                     <button on:click={handleCancelSettings}>Cancel</button>
