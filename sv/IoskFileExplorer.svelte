@@ -761,6 +761,9 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
+    .column-header-nav-up {
+        flex-shrink: 0;
+    }
 
     /* --- Animation styles for Watch updates --- */
     @keyframes green-pop-tile {
@@ -943,10 +946,11 @@
                 <div class="column files-column">
                     <div class="column-header"
                          on:click={() => handleItemClick({name: '..', type: 'dir'})}
-                         title="Parent Directory / Files"
+                         title="Parent Directory"
                          style:background-color={getTileColor({name: '..', type: 'dir'}, colorMode)}>
                         <span class="column-item-icon">🗂️</span>
-                        <span class="column-item-name">.. | Files: {currentPath}</span>
+                        <span class="column-item-name">{currentPath}</span>
+                        <span class="column-header-nav-up">..</span>
                     </div>
                     <div class="column-content">
                         {#if viewMode === 'list'}
