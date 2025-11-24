@@ -656,49 +656,20 @@ class PortManager:
             initial_state_payload = {'type': 'state_info'}
             initial_state_payload['hostname'] = self.os.hostname
             initial_state_payload['userColors'] = self._get_color_name_map(io_context)
-            # Get available rooms, using the user's new io_context
-            available_rooms = await self.os.get_room_list(io_context)
-            initial_state_payload['availableRooms'] = available_rooms
-            if self.os.chat and self.os.chat.active_room:
-                # Room is active, send room state
-                room = self.os.chat
 
-                # REVISED: Gather participants as objects with name, is_bot, and paused status
-                all_participants = []
-                if room.active_room:
-                    # Iterate network_rooms, the single source of truth for room membership
-                    for user_addr, r_name in self.os.network_rooms.items():
-                        if r_name == room.active_room:
-                            user, host = user_addr.split('.', 1)
-                            is_bot = False
-                            paused = False
-                            if host == self.os.hostname:
-                                # Local user: get live info from context
-                                if user in self.os.users.contexts:
-                                    user_io = self.os.users.contexts[user]
-                                    is_bot = user_io.session.bot
-                                    paused = user_io.session.paused
-                            else:
-                                # Remote user: get cached info
-                                user_info = self.os.network_users.get(user_addr, {})
-                                is_bot = user_info.get('is_bot', False)
-                                paused = user_info.get('paused', False)
-                            
-                            all_participants.append({
-                                'name': user_addr,
-                                'is_bot': is_bot,
-                                'paused': paused
-                            })
-
-                participants_list = sorted(all_participants, key=lambda p: p['name'])
-
-                initial_state_payload.update({
-                    'roomName': room.active_room,
-                    'roomTopic': room.room_topic,
-                    'participants': participants_list
-                })
-            else:
-                # No room, send MOTD. The MOTD was selected and cached during login.
+            # Get room state, participants, and available rooms from AIMessenger
+            if self.os.chat:
+                state_payload = await self.os.chat._get_state_payload()
+                initial_state_payload.update(state_payload)
+            else: # Fallback if chat system is not available
+                initial_state_payload['availableRooms'] = await self.os.get_room_list(io_context)
+                # Set sane defaults if chat subsystem is missing
+                initial_state_payload['participants'] = []
+                initial_state_payload['roomName'] = None
+                initial_state_payload['roomTopic'] = ''
+            
+            # If no room is active, also add MOTD
+            if not (self.os.chat and self.os.chat.active_room):
                 motd_content = getattr(io_context, 'motd_cache', None)
                 initial_state_payload['motd'] = motd_content or ''
 
