@@ -425,6 +425,13 @@
         focusInput();
     }
 
+    function handleUserListClick(event) {
+        // Collapse the panel if the click is on the list background, not on a child element.
+        if (event.target === event.currentTarget) {
+            isUsersPanelCollapsed = true;
+        }
+    }
+
     // --- Functions ---
     export function showSettingsDialog() {
         showSettings = true;
@@ -1133,7 +1140,7 @@
                 </div>
             </div>
             {#if !isUsersPanelCollapsed}
-                <div class="user-list">
+                <div class="user-list" on:click={handleUserListClick}>
                     {#each localUsers as participant (participant.name)}
                         <div
                             class="user-item"
