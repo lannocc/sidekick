@@ -972,16 +972,26 @@
         right: 5px;
     }
     .user-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
-    .collapsed-user-count {
+    .collapsed-user-counts {
         display: flex;
+        flex-direction: column;
         align-items: center;
-        justify-content: center;
         flex-grow: 1;
+        padding-top: 8px;
         color: var(--title-bar-text);
         font-weight: bold;
         font-size: 1.1em;
-        cursor: default;
+        cursor: pointer;
         user-select: none;
+    }
+    .collapsed-count-separator {
+        width: 60%;
+        height: 1px;
+        background-color: var(--border-color);
+        margin: 4px 0;
+    }
+    .remote-user-count {
+        color: var(--ansi-cyan);
     }
     .user-item { padding: 2px 6px; cursor: pointer; border-radius: 2px; display: flex; align-items: center; }
     .user-item:hover { background-color: var(--taskbar-button-hover-bg); }
@@ -1105,7 +1115,7 @@
         </div>
 
         {#if isConnected}
-        <div class="users-panel" style="--panel-width: {usersPanelWidth}px" class:collapsed={isUsersPanelCollapsed}>
+        <div class="users-panel" style="--panel-width: {usersPanelWidth}px" class:collapsed={isUsersPanelCollapsed} on:click={isUsersPanelCollapsed ? () => isUsersPanelCollapsed = false : null}>
             {#if !isUsersPanelCollapsed}
                 <div class="users-panel-resizer" on:mousedown={startResize}></div>
             {/if}
@@ -1117,7 +1127,7 @@
                     {#if !isUsersPanelCollapsed}
                         <button class="attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
                     {/if}
-                    <button class="collapse-toggle-button" on:click={() => isUsersPanelCollapsed = !isUsersPanelCollapsed} title={isUsersPanelCollapsed ? 'Expand' : 'Collapse'}>
+                    <button class="collapse-toggle-button" on:click|stopPropagation={() => isUsersPanelCollapsed = !isUsersPanelCollapsed} title={isUsersPanelCollapsed ? 'Expand' : 'Collapse'}>
                         {isUsersPanelCollapsed ? '❮' : '❯'}
                     </button>
                 </div>
@@ -1197,8 +1207,16 @@
                     {/each}
                 </div>
             {:else}
-                <div class="collapsed-user-count" title="{roomParticipants.length} users">
-                    {roomParticipants.length}
+                <div class="collapsed-user-counts" title="Click to expand Users panel">
+                    <div title={"Local Users:\n" + localUsers.map(u => u.displayName).join('\n')}>
+                        {localUsers.length}
+                    </div>
+                    {#if remoteUsers.length > 0}
+                        <div class="collapsed-count-separator"></div>
+                        <div class="remote-user-count" title={"Remote Users:\n" + remoteUsers.map(u => u.displayName).join('\n')}>
+                            {remoteUsers.length}
+                        </div>
+                    {/if}
                 </div>
             {/if}
         </div>
