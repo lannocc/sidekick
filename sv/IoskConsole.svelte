@@ -48,9 +48,9 @@
     let attachUsers = [];
     let isLoadingDevices = false;
     let isLoadingUsers = false;
-    let freeformAttachUser = '';
-    let attachUserInput;
     let attachMenuPosition = { x: 0, y: 0 };
+    let attachUsername = ''; // New state for the username input in the attach menu
+    let attachUsernameInput;
 
 
     // --- State for User Context Menu ---
@@ -252,6 +252,21 @@
         }
     }
 
+    function handleGlobalKeyDown(event) {
+        if (event.key === 'Escape') {
+            if (showAttachMenu) {
+                showAttachMenu = false;
+                focusInput();
+            }
+        }
+    }
+
+    $: if (showAttachMenu) {
+        window.addEventListener('keydown', handleGlobalKeyDown);
+    } else {
+        window.removeEventListener('keydown', handleGlobalKeyDown);
+    }
+
     onMount(() => {
         // Initialize local input values from passed-in props
         localWsUrl = wsUrl;
@@ -290,6 +305,7 @@
             commandsUnsubscribe();
         }
         window.removeEventListener('click', handleGlobalClick);
+        window.removeEventListener('keydown', handleGlobalKeyDown);
     });
 
     $: if (id !== undefined && groupId !== undefined) {
@@ -799,17 +815,15 @@
         showAttachMenu = !showAttachMenu;
         if (showAttachMenu) {
             const rect = attachButton.getBoundingClientRect();
-            // Position popup's top-right corner near the button's top-right corner,
-            // so it expands left and down without covering the button.
+            // Position popup's top below the button's bottom, and right edges aligned.
             attachMenuPosition = {
                 x: rect.right,
-                y: rect.top,
+                y: rect.bottom + 2,
             };
+            // Focus the username input when the menu opens
             tick().then(() => {
-                attachUserInput?.focus();
+                attachUsernameInput?.focus();
             });
-        } else {
-            freeformAttachUser = ''; // Clear on close
         }
     }
 
@@ -827,10 +841,10 @@
     }
 
     function handleAttach(event) {
-        const { device, user } = event.detail;
+        const { device } = event.detail; // `user` from event.detail is ignored
         if (!device) return;
 
-        const finalUser = freeformAttachUser.trim() || user;
+        const finalUser = attachUsername.trim(); // We use the value from our own input
 
         const commandToRun = finalUser
             ? `$ attach ${device} ${finalUser}`
@@ -841,18 +855,21 @@
             ws.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
         }
         showAttachMenu = false;
+        attachUsername = ''; // Clear for next time
         focusInput();
     }
 
-    function handleAttachUserKeydown(e) {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            showAttachMenu = false;
-            focusInput();
+    function handleAttachUsernameKeydown(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            // This is a reasonable guess: find the main "attach" button inside the
+            // AttachMenu component and click it. This assumes the component has one.
+            const attachMenuEl = event.target.closest('.attach-menu');
+            const attachButton = attachMenuEl?.querySelector('button[type="submit"], .attach-button-main');
+            if (attachButton) {
+                attachButton.click();
+            }
         }
-        // "Enter to attach" is not implemented, as this component cannot access the
-        // selected device within the child AttachMenu component. The user must
-        // click the attach button inside the popup.
     }
 
     function playBellSound() {
@@ -1117,19 +1134,19 @@
         display: flex;
         flex-direction: column;
     }
-    .attach-form-extra {
-        padding: 4px 8px;
+    .attach-user-input-container {
+        padding: 6px 8px;
         border-top: 1px solid var(--border-color);
+        background-color: var(--title-bar-bg);
     }
-    .attach-form-extra input {
+    .attach-user-input-container input {
         width: 100%;
         box-sizing: border-box;
         background-color: var(--console-bg);
         border: 1px solid var(--border-color);
         color: var(--title-bar-text);
-        padding: 6px;
+        padding: 4px;
         border-radius: 3px;
-        font-family: monospace;
     }
 </style>
 
@@ -1170,14 +1187,13 @@
                 on:requestData={requestAttachData}
                 on:attach={handleAttach}
             />
-            <div class="attach-form-extra">
+            <div class="attach-user-input-container">
                 <input
                     type="text"
-                    bind:this={attachUserInput}
-                    bind:value={freeformAttachUser}
-                    placeholder="Attach to user (optional)..."
-                    on:keydown={handleAttachUserKeydown}
-                    spellcheck="false"
+                    placeholder="username (optional)"
+                    bind:this={attachUsernameInput}
+                    bind:value={attachUsername}
+                    on:keydown={handleAttachUsernameKeydown}
                 />
             </div>
         </div>
