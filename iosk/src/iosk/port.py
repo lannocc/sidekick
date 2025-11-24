@@ -315,7 +315,11 @@ class PortManager:
             log.warning(f"send_payload_to_client: Could not find active connection for user '{username}'.")
             return
 
-        message_to_send = f"SK1:{json.dumps(payload)}"
+        # FIX: Augment participant list before sending state updates.
+        # This ensures network users are included when in a room.
+        augmented_payload = self._augment_participant_list(payload.copy())
+
+        message_to_send = f"SK1:{json.dumps(augmented_payload)}"
         try:
             await target_ws.send(message_to_send)
         except ConnectionClosed:
@@ -336,8 +340,12 @@ class PortManager:
         if not clients:
             return
 
+        # FIX: Augment participant list before sending state updates.
+        # This ensures network users are included when in a room.
+        augmented_message = self._augment_participant_list(message.copy())
+
         # Use the SK1: protocol wrapper for clients
-        payload = f"SK1:{json.dumps(message)}"
+        payload = f"SK1:{json.dumps(augmented_message)}"
         aws = [ws.send(payload) for ws in clients]
         await asyncio.gather(*aws, return_exceptions=True)
 
@@ -509,6 +517,30 @@ class PortManager:
     # --------------------------------------------------------------------------
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
+
+    def _augment_participant_list(self, message: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        If a message contains an active room state, ensures its participant list
+        includes network users from the same room. This corrects for cases where
+        the core chat system is only aware of local participants.
+        """
+        if message.get("type") in ("room_state_update", "state_info") and message.get("roomName"):
+            room_name = message["roomName"]
+            current_participants = message.get("participants", [])
+            current_participant_names = {p['name'] for p in current_participants}
+            
+            # Find remote users in the same room from the kernel's network state caches
+            for user_addr, r_name in self.os.network_rooms.items():
+                if r_name == room_name and user_addr not in current_participant_names:
+                    user_data = self.os.network_users.get(user_addr, {})
+                    current_participants.append({
+                        'name': user_addr,
+                        'is_bot': user_data.get('is_bot', False),
+                        'paused': user_data.get('paused', False)
+                    })
+            
+            message['participants'] = current_participants
+        return message
 
     def _get_color_name_map(self, user_io: "Context") -> dict:
         """Converts a user's ANSI color map to a map of usernames to color names."""
