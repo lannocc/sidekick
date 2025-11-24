@@ -46,7 +46,7 @@
 </script>
 
 <style>
-    .attach-menu { position: absolute; top: 45px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 100; display: flex; width: 600px; height: 300px; flex-direction: column; }
+    .attach-menu { display: flex; width: 600px; height: 300px; flex-direction: column; }
     .attach-panels { display: flex; flex-grow: 1; overflow: hidden; }
     .attach-panel { width: 35%; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
     .attach-panel:first-child { width: 65%; }
