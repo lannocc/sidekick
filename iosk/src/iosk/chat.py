@@ -37,17 +37,24 @@ class AIMessenger:
         # Determine which users to include in the list
         user_addrs_to_include = []
         if self.active_room:
-            # If in a room, only include participants of that room.
-            user_addrs_to_include = [
-                user_addr for user_addr, room_name in self.os.network_rooms.items()
-                if room_name == self.active_room
-            ]
+            # If in a room, combine participants from network state and all local users.
+            # This ensures the list is complete.
+            
+            # Start with users known to be in the room from network state.
+            for user_addr, room_name in self.os.network_rooms.items():
+                if room_name == self.active_room:
+                    user_addrs_to_include.append(user_addr)
+            
+            # Add all current local users, as they are de facto in the room.
+            for local_user in self.os.users.contexts.keys():
+                user_addrs_to_include.append(f"{local_user}.{self.os.hostname}")
+
         else:
             # If not in a room, include all known users in the mesh.
             user_addrs_to_include = list(self.os.network_users.keys())
 
-        # Gather details for each user in the list
-        for user_addr in user_addrs_to_include:
+        # Gather details for each unique user in the list, sorted alphabetically.
+        for user_addr in sorted(list(set(user_addrs_to_include))):
             user, host = user_addr.split('.', 1)
             is_bot = False
             paused = False
@@ -71,7 +78,7 @@ class AIMessenger:
         return {
             'roomName': self.active_room,
             'roomTopic': self.room_topic,
-            'participants': sorted(all_participants, key=lambda p: p['name']),
+            'participants': all_participants,
             'availableRooms': available_rooms
         }
 
