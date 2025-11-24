@@ -49,8 +49,6 @@
     let isLoadingDevices = false;
     let isLoadingUsers = false;
     let attachMenuPosition = { x: 0, y: 0 };
-    let attachUsername = ''; // New state for the username input in the attach menu
-    let attachUsernameInput;
 
 
     // --- State for User Context Menu ---
@@ -820,10 +818,6 @@
                 x: rect.right,
                 y: rect.bottom + 2,
             };
-            // Focus the username input when the menu opens
-            tick().then(() => {
-                attachUsernameInput?.focus();
-            });
         }
     }
 
@@ -841,10 +835,10 @@
     }
 
     function handleAttach(event) {
-        const { device } = event.detail; // `user` from event.detail is ignored
+        const { device, user } = event.detail;
         if (!device) return;
 
-        const finalUser = attachUsername.trim(); // We use the value from our own input
+        const finalUser = user.trim();
 
         const commandToRun = finalUser
             ? `$ attach ${device} ${finalUser}`
@@ -855,21 +849,7 @@
             ws.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
         }
         showAttachMenu = false;
-        attachUsername = ''; // Clear for next time
         focusInput();
-    }
-
-    function handleAttachUsernameKeydown(event) {
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            // This is a reasonable guess: find the main "attach" button inside the
-            // AttachMenu component and click it. This assumes the component has one.
-            const attachMenuEl = event.target.closest('.attach-menu');
-            const attachButton = attachMenuEl?.querySelector('button[type="submit"], .attach-button-main');
-            if (attachButton) {
-                attachButton.click();
-            }
-        }
     }
 
     function playBellSound() {
@@ -1134,20 +1114,6 @@
         display: flex;
         flex-direction: column;
     }
-    .attach-user-input-container {
-        padding: 6px 8px;
-        border-top: 1px solid var(--border-color);
-        background-color: var(--title-bar-bg);
-    }
-    .attach-user-input-container input {
-        width: 100%;
-        box-sizing: border-box;
-        background-color: var(--console-bg);
-        border: 1px solid var(--border-color);
-        color: var(--title-bar-text);
-        padding: 4px;
-        border-radius: 3px;
-    }
 </style>
 
 <div class="console-container">
@@ -1187,15 +1153,6 @@
                 on:requestData={requestAttachData}
                 on:attach={handleAttach}
             />
-            <div class="attach-user-input-container">
-                <input
-                    type="text"
-                    placeholder="username (optional)"
-                    bind:this={attachUsernameInput}
-                    bind:value={attachUsername}
-                    on:keydown={handleAttachUsernameKeydown}
-                />
-            </div>
         </div>
     {/if}
 

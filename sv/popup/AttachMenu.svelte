@@ -10,23 +10,38 @@
     const dispatch = createEventDispatcher();
 
     let selectedDevice = null;
-    let selectedUser = null;
+    let selectedUser = null; // For list highlighting
+    let username = ''; // For the input field
+    let inputEl;
 
     function handleDeviceClick(item) {
         selectedDevice = item.displayName;
+        if (!username) {
+            username = item.displayName;
+        }
     }
 
     function handleUserClick(item) {
         selectedUser = item.name;
+        username = item.name;
     }
 
     function performAttach() {
-        dispatch('attach', { device: selectedDevice, user: selectedUser });
+        if (!selectedDevice) return;
+        dispatch('attach', { device: selectedDevice, user: username });
+    }
+
+    function handleKeydown(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            performAttach();
+        }
     }
 
     onMount(() => {
         // Request data from parent when mounted
         dispatch('requestData');
+        inputEl?.focus();
     });
 </script>
 
@@ -41,7 +56,16 @@
     .list-item { padding: 4px 8px; cursor: pointer; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .list-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .list-item.selected { background-color: #3498db; color: white; }
-    .attach-footer { padding: 8px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; flex-shrink: 0; }
+    .attach-footer { padding: 6px 8px; border-top: 1px solid var(--border-color); display: flex; align-items: center; gap: 8px; flex-shrink: 0; background-color: var(--title-bar-bg); }
+    .attach-footer input {
+        flex-grow: 1;
+        box-sizing: border-box;
+        background-color: var(--console-bg);
+        border: 1px solid var(--border-color);
+        color: var(--title-bar-text);
+        padding: 4px;
+        border-radius: 3px;
+    }
     .attach-footer button { background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 4px 8px; cursor: pointer; border-radius: 3px; }
     .attach-footer button:disabled { opacity: 0.5; cursor: not-allowed; }
     .attach-footer button.primary { background-color: #27c93f; border-color: #1a9c2a; color: white; }
@@ -95,8 +119,15 @@
         </div>
     </div>
     <div class="attach-footer">
+        <input
+            type="text"
+            placeholder="username (optional)"
+            bind:this={inputEl}
+            bind:value={username}
+            on:keydown={handleKeydown}
+        />
         <button
-            class="primary"
+            class="primary attach-button-main"
             disabled={!selectedDevice}
             on:click={performAttach}>
             Attach
