@@ -2,6 +2,19 @@ Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
 
+v0.4.4
+======
+
+Date: November 21, 2025
+
+    * User context inspector aka glassbox.
+    * Notifications aka sentinel.
+    * New "Columns" view for IOSK File Explorer.
+    * SKYBOARD.
+    * Refactored frontend and backend.
+    * Misc. improvements.
+
+
 v0.4.3
 ======
 
