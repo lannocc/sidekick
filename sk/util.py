@@ -257,7 +257,13 @@ def package_directory(path, label='project'): # path can be a str or list of str
 
     # Second pass: write the collected content to the temp file
     with open(name, 'w', encoding='utf-8') as file:
-        file.write(f'Our {label} is laid out as given in the following file hierarchy:\n\n')
+        file.write('The contents of each file are given in succession below...\n\n')
+
+        # Write content section
+        for p in paths:
+            file.write(content_buffer[p]['content'])
+
+        file.write('Our project is laid out as given in the following file hierarchy:\n\n')
 
         # Write tree/file list section
         for p in paths:
@@ -269,11 +275,7 @@ def package_directory(path, label='project'): # path can be a str or list of str
                 file.write(f'{p}\n')
 
         file.write('\n\n')
-        file.write('The contents of each file are given in succession below...\n\n')
-
-        # Write content section
-        for p in paths:
-            file.write(content_buffer[p]['content'])
+        file.write('With the above context, please respond to the following prompt:\n')
 
     # Ensure counts return type matches original behavior for single-item calls
     if not isinstance(path, list) and counts:
