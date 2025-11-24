@@ -362,7 +362,6 @@ class UserManager:
 
         # Announce user logout to network peers
         if self.os.port:
-            await self.os.port.broadcast_color_updates()
             await self.os.port.broadcast_to_peers({
                 'type': 'user_update',
                 'action': 'logout',
@@ -374,9 +373,19 @@ class UserManager:
                 'type': 'system_broadcast',
                 'message': logout_msg
             })
+
+            # Update all local clients about the state change
+            if self.os.chat:
+                await self.os.chat._broadcast_room_state_update()
+            await self.os.port.broadcast_color_updates()
+
             # If the user was a network client, close their connection
             if user_is_network_client:
                 await self.os.port.disconnect_client(user_to_logout)
+        else:
+            # Handle non-networked case (e.g. local bot logout)
+            if self.os.chat:
+                await self.os.chat._broadcast_room_state_update()
 
         return True
 

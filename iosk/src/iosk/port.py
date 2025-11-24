@@ -224,6 +224,10 @@ class PortManager:
                     log.info(f"Received full mesh state from {peer_hostname}. Syncing...")
                     self.os.network_users = mesh_state.get("users", {})
                     self.os.network_rooms = mesh_state.get("rooms", {})
+                    # After a full sync, update local clients with the new mesh state.
+                    if self.os.chat:
+                        await self.os.chat._broadcast_room_state_update()
+                    await self.broadcast_color_updates()
                 else:
                     # Fallback for older peers: process only the peer's local state.
                     log.warning(f"Peer {peer_hostname} did not provide full mesh state. Performing partial sync.")
@@ -1050,6 +1054,11 @@ class PortManager:
             if users_to_remove:
                 log.info(f"Cleaned up {len(users_to_remove)} users from disconnected host '{hostname}' via propagation.")
 
+            # Update local clients with the new state
+            if self.os.chat:
+                await self.os.chat._broadcast_room_state_update()
+            await self.broadcast_color_updates()
+
             await self.os.system.print(f":: host '{hostname}' disconnected from mesh (propagated via {from_peer})")
 
             # Forward the disconnect message to our other peers.
@@ -1140,3 +1149,8 @@ class PortManager:
 
             # 3. Propagate the disconnection to remaining peers
             await self._broadcast_peer_disconnect(disconnected_host)
+
+            # 4. Update local clients with the new state
+            if self.os.chat:
+                await self.os.chat._broadcast_room_state_update()
+            await self.broadcast_color_updates()
