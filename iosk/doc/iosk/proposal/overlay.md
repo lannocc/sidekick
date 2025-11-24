@@ -87,9 +87,50 @@ This transition is divided into three logical batches for AI agents to process.
 
 ### Use Case Scenario
 
-1.  **Start:** `iosk my-project`
-2.  **Read:** `ls /bin` lists files from the bundled distribution (merged view).
-3.  **Modify:** `touch /bin/test` creates `my-project/bin/test`.
-4.  **Shadow:** Creating a file at `my-project/bin/welcome` overrides the system's `/bin/welcome`.
-5.  **Delete:** `rm /bin/welcome` creates `my-project/bin/.rm.welcome`, hiding it from the virtual view.
-6.  **Reset:** Deleting the `my-project` folder completely resets the environment to the clean distribution state.
+1.  A user starts a new project.
+    ```bash
+    host$ mkdir my-project
+    host$ iosk my-project
+    ```
+2.  IOSK starts. The kernel sets `workspace_root` to `my-project` and `dist_root` to the bundled package data.
+3.  The user lists the `/bin` directory.
+    ```
+    [root /] $ ls /bin
+    alias.py    ask.py    attach.py    ...    whoami.py    xargs.py
+    ```
+    The `list_dir` method found no `/bin` in `my-project` and listed the contents from `dist/bin`.
+4.  The user decides to customize the `welcome` message by shadowing the distribution file.
+    ```
+    [root /] $ echo "#!/bin/skrip\nWelcome to My Project!" > /bin/welcome
+    ```
+    This write operation is routed to `my-project/bin/welcome`. The original `dist/bin/welcome` is untouched.
+5.  The user now "deletes" a command they don't want.
+    ```
+    [root /] $ rm /bin/ask.py
+    ```
+    The system sees that `/bin/ask.py` exists only in the distribution and creates a tombstone file at `my-project/bin/.rm.ask.py`.
+6.  The user lists `/bin` again to see the merged and masked result.
+    ```
+    [root /] $ ls /bin
+    alias.py    attach.py    ...    welcome    whoami.py    xargs.py
+    ```
+    The `list_dir` method has merged the directory contents. `ask.py` is now hidden because of the tombstone, and `welcome` is listed (representing the shadowed file from the workspace).
+7.  The user lists the project directory from the host shell after exiting.
+    ```bash
+    host$ ls -aR my-project
+    my-project:
+    bin
+
+    my-project/bin:
+    .rm.ask.py
+    welcome
+    ```
+    The workspace contains only the user's modifications: the shadowed `welcome` file and the tombstone for `ask.py`. The rest of the system was provided virtually by the overlay.
+
+### Benefits
+
+*   **Clean Separation**: User data and customizations are cleanly separated from the core system files, making workspaces portable and self-contained.
+*   **Immutability**: The core IOSK distribution remains untouched and can be updated via `pip` without affecting user workspaces.
+*   **Customization**: Users can easily override any system script or configuration file by simply creating a file at the same path in their workspace.
+*   **Ease of Use**: Starting a new, clean IOSK environment is as simple as creating an empty directory.
+*   **System Agnostic**: This approach relies only on standard Python libraries and works identically across all supported operating systems.
