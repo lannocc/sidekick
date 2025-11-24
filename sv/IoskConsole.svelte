@@ -48,6 +48,10 @@
     let attachUsers = [];
     let isLoadingDevices = false;
     let isLoadingUsers = false;
+    let freeformAttachUser = '';
+    let attachUserInput;
+    let attachMenuPosition = { x: 0, y: 0 };
+
 
     // --- State for User Context Menu ---
     let userContextMenu = {
@@ -793,6 +797,20 @@
 
     export function toggleAttachMenu() {
         showAttachMenu = !showAttachMenu;
+        if (showAttachMenu) {
+            const rect = attachButton.getBoundingClientRect();
+            // Position popup's top-right corner near the button's top-right corner,
+            // so it expands left and down without covering the button.
+            attachMenuPosition = {
+                x: rect.right,
+                y: rect.top,
+            };
+            tick().then(() => {
+                attachUserInput?.focus();
+            });
+        } else {
+            freeformAttachUser = ''; // Clear on close
+        }
     }
 
     function requestAttachData() {
@@ -811,15 +829,30 @@
     function handleAttach(event) {
         const { device, user } = event.detail;
         if (!device) return;
-        const commandToRun = user
-            ? `$ attach ${device} ${user}`
+
+        const finalUser = freeformAttachUser.trim() || user;
+
+        const commandToRun = finalUser
+            ? `$ attach ${device} ${finalUser}`
             : `$ attach ${device}`;
+
         output = [...output, {type: 'prompt', content: currentPrompt + commandToRun}];
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
         }
         showAttachMenu = false;
         focusInput();
+    }
+
+    function handleAttachUserKeydown(e) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            showAttachMenu = false;
+            focusInput();
+        }
+        // "Enter to attach" is not implemented, as this component cannot access the
+        // selected device within the child AttachMenu component. The user must
+        // click the attach button inside the popup.
     }
 
     function playBellSound() {
@@ -1071,6 +1104,33 @@
         opacity: 1;
     }
     .menu-separator { height: 3px; background-color: var(--border-color); margin: 0; }
+
+    /* Attach Menu Styles */
+    .attach-menu-wrapper {
+        z-index: 200;
+        /* Position is set via style attribute */
+        transform: translateX(-100%); /* Aligns right edge of popup with left coordinate */
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        display: flex;
+        flex-direction: column;
+    }
+    .attach-form-extra {
+        padding: 4px 8px;
+        border-top: 1px solid var(--border-color);
+    }
+    .attach-form-extra input {
+        width: 100%;
+        box-sizing: border-box;
+        background-color: var(--console-bg);
+        border: 1px solid var(--border-color);
+        color: var(--title-bar-text);
+        padding: 6px;
+        border-radius: 3px;
+        font-family: monospace;
+    }
 </style>
 
 <div class="console-container">
@@ -1101,14 +1161,26 @@
     {/if}
 
     {#if showAttachMenu}
-        <AttachMenu
-            {isLoadingDevices}
-            {attachDevices}
-            {isLoadingUsers}
-            {attachUsers}
-            on:requestData={requestAttachData}
-            on:attach={handleAttach}
-        />
+        <div class="attach-menu-wrapper attach-menu" style="position: fixed; top: {attachMenuPosition.y}px; left: {attachMenuPosition.x}px;">
+            <AttachMenu
+                {isLoadingDevices}
+                {attachDevices}
+                {isLoadingUsers}
+                {attachUsers}
+                on:requestData={requestAttachData}
+                on:attach={handleAttach}
+            />
+            <div class="attach-form-extra">
+                <input
+                    type="text"
+                    bind:this={attachUserInput}
+                    bind:value={freeformAttachUser}
+                    placeholder="Attach to user (optional)..."
+                    on:keydown={handleAttachUserKeydown}
+                    spellcheck="false"
+                />
+            </div>
+        </div>
     {/if}
 
     <div class="main-flex-area">
