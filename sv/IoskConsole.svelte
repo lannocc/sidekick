@@ -425,9 +425,16 @@
         focusInput();
     }
 
-    function handleUserListClick(event) {
-        // Collapse the panel if the click is on the list background, not on a child element.
-        if (event.target === event.currentTarget) {
+    function handlePanelClick(event) {
+        // This function handles both expanding and collapsing the user panel.
+        if (isUsersPanelCollapsed) {
+            // If collapsed, any click on the panel should expand it.
+            // Clicks on interactive elements within the header are stopped by their own handlers.
+            isUsersPanelCollapsed = false;
+        } else if (event.target.classList.contains('user-list')) {
+            // If expanded, only a click directly on the user-list container (the "blank area")
+            // should collapse it. Clicks on user items will bubble up, but their target
+            // will not be the user-list itself.
             isUsersPanelCollapsed = true;
         }
     }
@@ -1122,7 +1129,7 @@
         </div>
 
         {#if isConnected}
-        <div class="users-panel" style="--panel-width: {usersPanelWidth}px" class:collapsed={isUsersPanelCollapsed} on:click={isUsersPanelCollapsed ? () => isUsersPanelCollapsed = false : null}>
+        <div class="users-panel" style="--panel-width: {usersPanelWidth}px" class:collapsed={isUsersPanelCollapsed} on:click={handlePanelClick}>
             {#if !isUsersPanelCollapsed}
                 <div class="users-panel-resizer" on:mousedown={startResize}></div>
             {/if}
@@ -1140,7 +1147,7 @@
                 </div>
             </div>
             {#if !isUsersPanelCollapsed}
-                <div class="user-list" on:click={handleUserListClick}>
+                <div class="user-list">
                     {#each localUsers as participant (participant.name)}
                         <div
                             class="user-item"
