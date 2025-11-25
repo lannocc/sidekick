@@ -1,6 +1,6 @@
 # Proposal: Filesystem Overlay for IOSK Workspaces
 
-**Status**: Proposed
+**Status**: Implemented
 
 ### Introduction
 
