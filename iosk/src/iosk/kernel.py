@@ -21,8 +21,8 @@ import aioconsole
 from datetime import datetime, timedelta
 import os
 import posixpath
-from os.path import isdir, isfile, exists, getsize, getmtime
-import importlib, importlib.util
+from os.path import isdir, isfile, exists, getsize, getmtime, abspath, dirname, join as path_join
+import importlib, importlib.util, importlib.resources
 import sys
 import shutil
 import traceback
@@ -42,9 +42,29 @@ class IOSK:
     SKRC = '/etc/skrc'
     SKEL_SKRC = '/etc/skel/skrc' # Added for the new requirement
 
-    def __init__(self, root):
-        self.root = root # path
+    def __init__(self, workspace_root):
+        self.workspace_root = abspath(workspace_root)
+        self.dist_root = None
         self.started = None
+
+        # --- Find Distribution Root ---
+        try:
+            # For installed packages via pip. Assumes 'bin', 'etc' are package data.
+            self.dist_root = str(importlib.resources.files('iosk'))
+        except (ModuleNotFoundError, AttributeError):
+            # Fallback for development environment.
+            # This file is at .../iosk/src/iosk/kernel.py
+            # The dist root (project root) is .../iosk/
+            dev_dist_root = abspath(path_join(dirname(__file__), '..', '..'))
+            if isdir(path_join(dev_dist_root, 'bin')):
+                self.dist_root = dev_dist_root
+            else:
+                raise FileNotFoundError("Could not locate IOSK distribution root. "
+                                        "Ensure 'bin', 'etc', etc. are present.")
+
+        # Handle the developer workflow case where workspace IS the distribution
+        if self.workspace_root == self.dist_root:
+            print(":: Developer mode: Workspace and Distribution roots are the same.")
 
         self.ready = asyncio.Event()
         self.halt = asyncio.Event()
@@ -90,41 +110,39 @@ class IOSK:
         self.started = datetime.now()
         fail = None
 
-        if not isdir(self.root):
-            fail = 'bad root'
+        if not exists(self.workspace_root):
+            try:
+                os.makedirs(self.workspace_root)
+                print(f":: Created workspace directory: {self.workspace_root}")
+            except OSError as e:
+                fail = f'bad workspace: could not create: {e}'
+        elif not isdir(self.workspace_root):
+            fail = f'bad workspace: not a directory: {self.workspace_root}'
 
         io = None
 
         if not fail:
-            boot = self.fs.box(self.BOOT_COUNT)
-            if exists(boot):
-                with open(boot, 'r') as bf:
+            # All filesystem operations now go through the overlay-aware fs manager
+            # The fs manager will ensure writes go to the workspace
+            boot_path_host = self.fs.box_for_write(self.BOOT_COUNT)
+            
+            # Ensure parent directory exists in workspace
+            boot_dir = os.path.dirname(boot_path_host)
+            if not exists(boot_dir):
+                os.makedirs(boot_dir)
+
+            if exists(boot_path_host):
+                with open(boot_path_host, 'r') as bf:
                     self.BOOT = int(bf.read()) + 1
+            
+            with open(boot_path_host, 'w') as bf:
+                bf.write(str(self.BOOT))
+            
+            # These directories are created in the workspace by fs write operations
+            await self.fs.create_dir(Context(self), f'{Context.CHATTER}/{self.BOOT}', parents=True)
+            await self.fs.create_dir(Context(self), Context.CODE, parents=True)
+            await self.fs.create_dir(Context(self), '/var/log/trip', parents=True)
 
-            chatter = self.fs.box(f'{Context.CHATTER}/{self.BOOT}')
-            if not exists(chatter):
-                os.makedirs(chatter) # creates /var/cache
-            elif not isdir(chatter):
-                fail = f'not a dir: {chatter}'
-
-        if not fail:
-            code = self.fs.box(Context.CODE)
-            if not exists(code):
-                os.makedirs(code)
-            elif not isdir(code):
-                fail = f'not a dir: {code}'
-
-        # Added for trace proposal
-        if not fail:
-            trip_log_dir = self.fs.box('/var/log/trip')
-            if not exists(trip_log_dir):
-                os.makedirs(trip_log_dir)
-            elif not isdir(trip_log_dir):
-                fail = f'not a dir: {trip_log_dir}'
-
-        if not fail:
-            with open(boot, 'w') as boot: # assumes /var/cache exists
-                boot.write(str(self.BOOT))
 
         if not fail:
             io = self.system = Context(self, self.CONSOLE_DEV,
@@ -140,11 +158,11 @@ class IOSK:
         if not fail:
             # Read hostname
             hostname_path = self.fs.box('/etc/hostname')
-            if exists(hostname_path):
+            if await self.fs.exists(None, '/etc/hostname'):
                 with open(hostname_path, 'r') as f:
                     self.hostname = f.read().strip() or 'localhost'
             else:
-                self.hostname = os.path.basename(os.path.abspath(self.root)) or 'localhost'
+                self.hostname = os.path.basename(os.path.abspath(self.workspace_root)) or 'localhost'
 
             # Instantiate subsystems
             self.port = PortManager(self)
@@ -667,7 +685,7 @@ class IOSK:
             device_name = device_path.replace('/dev/', '').replace('/', '-')
             base_filename = f'{device_name}-{io.session.user}-{self.BOOT}-{io.cid}-{tid}'
 
-            trip_log_dir_host = self.fs.box('/var/log/trip')
+            trip_log_dir_host = self.fs.box_for_write('/var/log/trip')
             prompt_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.prompt')
             reply_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.reply')
             tokens_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.tokens')
