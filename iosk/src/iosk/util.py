@@ -18,6 +18,7 @@ COLOR_MAP = {
     'bright_yellow': '\033[93m', 'bright_blue': '\033[94m', 'bright_magenta': '\033[95m',
     'bright_cyan': '\033[96m', 'bright_white': '\033[97m',
 }
+USER_SELF_COLOR_NAME = 'bright_yellow'
 REVERSE_COLOR_MAP = {v: k for k, v in COLOR_MAP.items()}
 ANSI_RESET = '\033[0m'
 ANSI_BOLD = '\033[1m'

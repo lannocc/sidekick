@@ -168,7 +168,7 @@ class UserManager:
         if not io.session.bot:
             # This user is interactive, set up their color map with user.host keys.
             # 1a. Assign self-color (white)
-            io.session.user_colors[user_addr] = util.COLOR_MAP['bright_white']
+            io.session.user_colors[user_addr] = util.COLOR_MAP[util.USER_SELF_COLOR_NAME]
 
             # 1b. Populate this new user's map with all other known users.
             all_other_users = list(self.os.network_users.keys())
@@ -411,7 +411,7 @@ class UserManager:
         if not io.session.bot:
             # This user is interactive, set up their color map with user.host keys.
             # 1a. Assign self-color (white)
-            io.session.user_colors[user_addr] = util.COLOR_MAP['bright_white']
+            io.session.user_colors[user_addr] = util.COLOR_MAP[util.USER_SELF_COLOR_NAME]
 
             # 1b. Populate this new user's map with all other known users.
             all_other_users = list(self.os.network_users.keys())

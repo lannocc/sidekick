@@ -228,7 +228,7 @@ class AIMessenger:
                                 if sender_color:
                                     reset = util.ANSI_RESET
                                     bold = util.ANSI_BOLD
-                                    me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", util.COLOR_MAP['bright_white'])
+                                    me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", util.COLOR_MAP[util.USER_SELF_COLOR_NAME])
                                     colored_sender = f'{bold}{sender_color}{remote_from_addr}{reset}'
                                     bold_me = f'{bold}{me_color}me{reset}'
                                     colored_msg = f'{sender_color}{actual_msg}{reset}'
@@ -249,7 +249,7 @@ class AIMessenger:
                     if not sender_io.session.bot and sender_io.session.user_colors:
                         reset = util.ANSI_RESET
                         bold = util.ANSI_BOLD
-                        me_color = sender_io.session.user_colors.get(f"{from_user}.{self.os.hostname}", util.COLOR_MAP['bright_white'])
+                        me_color = sender_io.session.user_colors.get(f"{from_user}.{self.os.hostname}", util.COLOR_MAP[util.USER_SELF_COLOR_NAME])
                         bold_me = f'{bold}{me_color}me{reset}'
                         colored_recipients = []
                         for r_addr in recipients:
@@ -489,7 +489,7 @@ class AIMessenger:
                         if sender_color:
                             reset = util.ANSI_RESET
                             bold = util.ANSI_BOLD
-                            me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", util.COLOR_MAP['bright_white'])
+                            me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", util.COLOR_MAP[util.USER_SELF_COLOR_NAME])
                             colored_sender = f'{bold}{sender_color}{from_addr}{reset}'
                             bold_me = f'{bold}{me_color}me{reset}'
                             colored_content = f'{sender_color}{content}{reset}'
