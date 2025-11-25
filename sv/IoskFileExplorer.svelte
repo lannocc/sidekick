@@ -512,17 +512,17 @@
         padding: 4px 8px;
         background-color: var(--title-bar-bg);
         border-bottom: 1px solid var(--border-color);
-        white-space: nowrap;
-        overflow-x: auto;
         flex-shrink: 0; /* Prevents the path bar from shrinking */
         display: flex;
         justify-content: space-between;
         align-items: center;
+        flex-wrap: wrap;
     }
     .path-bar .path-text {
         flex-grow: 1;
         overflow-x: hidden;
         text-overflow: ellipsis;
+        white-space: nowrap;
     }
     .controls-group {
         display: flex;
@@ -530,6 +530,8 @@
         gap: 10px;
         flex-shrink: 0;
         margin-left: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
     }
     .view-mode-selector, .color-mode-selector {
         display: flex;
@@ -883,13 +885,13 @@
             </div>
             <div class="view-mode-selector">
                 <button class="view-button" class:active={columnsEnabled} on:click={toggleColumnsView} title="Toggle Columns View">◫</button>
-            </div>
+          </div>
             <div class="view-mode-selector">
                 <button class="view-button" class:active={viewMode === 'list'} on:click={() => switchViewMode('list')} title="List View">☰</button>
                 <button class="view-button" class:active={viewMode === 'tiles'} on:click={() => switchViewMode('tiles')} title="Tiles View">⊞</button>
             </div>
              <button class="watch-button" class:active={nestedView} on:click={toggleNestedView} title="Toggle Nested View">Nested</button>
-            <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates">
+             <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates">
                 {isWatching ? 'Watching' : 'Watch'} 👀
             </button>
         </div>
@@ -930,7 +932,7 @@
                         {:else} <!-- tiles -->
                             {#each columnFiles as file (file.path)}
                                 <div class="tile-item nested-tile"
-                                     on:click={() => handleItemClick(file)}
+                                   on:click={() => handleItemClick(file)}
                                      title={file.name}
                                      style:background-color={getTileColor(file, colorMode)}
                                      class:new={itemChangeStatus[file.path] === 'new'}
@@ -948,12 +950,12 @@
             <!-- Directory Columns -->
             {#each columnDirs as item (item.path)}
                 {@const isNestedListColumn = nestedView && viewMode === 'list'}
-                {@const maxDepth = isNestedListColumn ? getMaxExpandedDepth(item) : 0}
+                {@const maxDepth = isNestedListColumn ? geaxExpandedDepth(item) : 0}
                 {@const columnWidth = 160 + maxDepth * 20}
                 <div class="column" style={isNestedListColumn ? `flex-basis: ${columnWidth}px;` : ''}>
                     <div class="column-header" on:click={() => handleItemClick(item)} title={item.name} style:background-color={getTileColor(item, colorMode)}>
                         <span class="column-item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
-                        <span class="column-item-name">{item.name}</span>
+                        <span class="column-item-name">{ite}</span>
                     </div>
                     {#if item.type === 'dir' && item.children && item.children.length > 0}
                         <div class="column-content">
@@ -971,8 +973,7 @@
                                             <span class="column-item-icon">{child.type === 'dir' ? '🗂️' : '📄'}</span>
                                             <span class="column-item-name">{child.name}</span>
                                         </div>
-                                    {/each}
-                                {:else} <!-- tiles -->
+                                    {/each}                           {:else} <!-- tiles -->
                                     {#each item.children as child (child.path)}
                                         <div class="tile-item nested-tile" on:click={() => handleItemClick(child)} title={child.name} style:background-color={getTileColor(child, colorMode)}
                                              class:new={itemChangeStatus[child.path] === 'new'}
@@ -984,8 +985,7 @@
                                     {/each}
                                 {/if}
                              {/if}
-                        </div>
-                    {/if}
+                        </div>                {/if}
                 </div>
             {/each}
         </div>
@@ -997,7 +997,7 @@
                     {#if currentPath !== '/'}
                         <div class="item" on:click={() => handleItemClick({name: '..', type: 'dir'})} title="Parent Directory">
                             <span class="item-icon">🗂️</span>
-                            <span class="item-name">..</span>
+                        <span class="item-name">..</span>
                         </div>
                     {/if}
                     {#each treeItems as item (item.path)}
@@ -1033,7 +1033,7 @@
                              style:background-color={getTileColor({name: '..', type: 'dir'}, colorMode)}>
                             <div class="tile-icon">🗂️</div>
                             <div class="tile-name">..</div>
-                        </div>
+                    </div>
                     {/if}
                      {#each treeItems as item (item.path)}
                         {#if item.type === 'file'}
@@ -1078,7 +1078,7 @@
                                 {#if item.type === 'file'}
                                     📄
                                 {:else if item.type === 'dir'}
-                                    🗂️
+                                  🗂️
                                 {/if}
                             </div>
                             <div class="tile-name">{item.name}</div>
@@ -1096,7 +1096,7 @@
         {x} {y} {width} {height}
         on:save={handleSaveComponentSettings}
     >
-        <fieldset>
+    <fieldset>
             <legend>Initial Directory</legend>
             <label>
                 <input type="radio" bind:group={settingsModel.usePwd} value={true}>
@@ -1128,7 +1128,7 @@
                         {expandedNodes.has(treeNode.path) ? '▼' : '►'}
                     {/if}
                 </span>
-                <span class="item-icon">{treeNode.type === 'dir' ? '🗂️' : '📄'}</span>
+            <span class="item-icon">{treeNode.type === 'dir' ? '🗂️' : '📄'}</span>
                 <span class="item-name">{treeNode.name}</span>
                  {#if !(columnsEnabled && nestedView)}
                      <span class="item-size">
@@ -1138,7 +1138,7 @@
                     </span>
                  {/if}
             </div>
-            {#if treeNode.children && treeNode.children.length > 0 && expandedNodes.has(treeNode.path)}
+            {#if treeNode.children && treeNode.cn.length > 0 && expandedNodes.has(treeNode.path)}
                 {#each treeNode.children as child}
                     <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
                 {/each}
@@ -1175,3 +1175,4 @@
         {/if}
     {/if}
 {/if}
+
