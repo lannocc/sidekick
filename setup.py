@@ -14,6 +14,7 @@ def run():
         package_data={
             'sk': [
                 'iosk_dist/**',
+                'iosk_dist/**/.*',
             ],
         },
         description='AI SideKick',
