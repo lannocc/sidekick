@@ -1,4 +1,4 @@
-<!-- sv/UserContextMenu.svelte -->
+<!-- sv/popup/UserContextMenu.svelte -->
 <script>
     import { createEventDispatcher } from 'svelte';
 
@@ -82,14 +82,14 @@
         <button class="menu-item" on:click={() => dispatchAction('privateChat', user)}>
             Private Chat
         </button>
-        <button class="menu-item" on:click={() => dispatchAction('viewLog')}>
+        <button class="menu-item" on:click={() => dispatchAction('viewLog', user)}>
             View Log
         </button>
         <button class="menu-item" on:click={() => showColorPicker = true}>
             Color
         </button>
         <div class="menu-separator"></div>
-        <button class="menu-item close-item" on:click={() => dispatchAction('detach')}>
+        <button class="menu-item close-item" on:click={() => dispatchAction('detach', user)}>
             Detach
         </button>
     {/if}
