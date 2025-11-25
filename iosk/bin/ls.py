@@ -1,6 +1,7 @@
 import os
 import posixpath
-from os.path import exists, isdir, getsize
+from os.path import exists, isdir, getsize, getmtime
+from datetime import datetime, timedelta
 
 
 async def iocall(io, argv):
@@ -15,6 +16,10 @@ async def iocall(io, argv):
       -s, --size  Show file sizes.
       -h, --human-readable
                 With -l or -s, print sizes in human-readable format (e.g., 1K 234M 2G).
+      -t        Sort by modification time, newest first.
+      -S        Sort by file size, largest first.
+      -r, --reverse
+                Reverse order while sorting.
       --help    Display this help message.
 
     [path ...]: The paths to list. If no path is provided use current directory.
@@ -25,6 +30,9 @@ async def iocall(io, argv):
     allp = False
     human = False
     show_size = False
+    sort_by_time = False
+    sort_by_size = False
+    reverse = False
 
     if '--help' in argv:
         await io.print(iocall.__doc__)
@@ -42,6 +50,9 @@ async def iocall(io, argv):
         if arg == '--human-readable':
             human = True
             continue
+        if arg == '--reverse':
+            reverse = True
+            continue
 
         arg = arg[1:]
         for c in arg:
@@ -49,6 +60,9 @@ async def iocall(io, argv):
             elif c == 'a': allp = True
             elif c == 's': show_size = True
             elif c == 'h': human = True
+            elif c == 't': sort_by_time = True
+            elif c == 'S': sort_by_size = True
+            elif c == 'r': reverse = True
             else:
                 await io.error(f'!! ls: unknown option: -{c}')
                 return
@@ -69,17 +83,54 @@ async def iocall(io, argv):
         if not isdir(bpath):
             try:
                 size = getsize(bpath)
+                mtime = getmtime(bpath)
             except OSError:
                 size = -1
-            files.append({'path': path, 'size': size})
+                mtime = 0
+            files.append({'path': path, 'size': size, 'mtime': mtime})
         else:
             try:
                 # Use the new overlay-aware directory lister, passing the 'show all' flag
                 listing = await io.os.list_dir(io, path, show_all=allp, honor_skignore=False)
-                dirs.append((path, listing))
+                try:
+                    mtime = getmtime(bpath)
+                    size = getsize(bpath)
+                except OSError:
+                    mtime = 0
+                    size = -1
+                dirs.append({'path': path, 'listing': listing, 'mtime': mtime, 'size': size})
             except Exception as e:
                 await io.error(f'!! ls: cannot list directory {path}: {e}')
                 errors = True
+
+    # Sort files and directories passed as arguments
+    if sort_by_time:
+        key = lambda x: x.get('mtime', 0)
+        order = not reverse
+    elif sort_by_size:
+        key = lambda x: x.get('size', -1)
+        order = not reverse
+    else:  # sort by name
+        key = lambda x: x['path']
+        order = reverse
+
+    files.sort(key=key, reverse=order)
+    dirs.sort(key=key, reverse=order)
+
+    # Sort directory contents
+    if sort_by_time:
+        content_key = lambda x: x.get('mtime', 0)
+        content_order = not reverse
+    elif sort_by_size:
+        content_key = lambda x: x.get('size', -1)
+        content_order = not reverse
+    else:  # sort by name
+        content_key = lambda x: x['name']
+        content_order = reverse
+
+    for d in dirs:
+        d['listing'].sort(key=content_key, reverse=content_order)
+
 
     c = '\n' if long else '\t'
     if files:
@@ -91,7 +142,9 @@ async def iocall(io, argv):
                     size_str = f'{human_size(size):>10}'
                 else:
                     size_str = f'{size:10}' if size >= 0 else ' ' * 10
-                output_items.append(f"{size_str} {item['path']}")
+                mtime = item.get('mtime', 0)
+                mtime_str = format_time(mtime) if mtime > 0 else ' ' * 12
+                output_items.append(f"{size_str} {mtime_str} {item['path']}")
         elif show_size:
             for item in files:
                 size = item.get('size', -1)
@@ -106,7 +159,8 @@ async def iocall(io, argv):
         if output_items:
             await io.print(c.join(output_items))
 
-    for path, listing in dirs:
+    for d in dirs:
+        path, listing = d['path'], d['listing']
         if (errors or files or len(dirs) > 1):
             await io.print(f'\n{path}:')
 
@@ -118,8 +172,10 @@ async def iocall(io, argv):
                     size_str = f'{human_size(size):>10}'
                 else:
                     size_str = f'{size:10}' if size >= 0 else ' ' * 10
+                mtime = item.get('mtime', 0)
+                mtime_str = format_time(mtime) if mtime > 0 else ' ' * 12
                 name = f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
-                output_items.append(f"{size_str} {name}")
+                output_items.append(f"{size_str} {mtime_str} {name}")
         elif show_size:
             for item in listing:
                 size = item.get('size', -1)
@@ -138,6 +194,15 @@ async def iocall(io, argv):
         await io.print(c.join(output_items))
 
     return not errors
+
+
+def format_time(mtime_timestamp):
+    """Formats a timestamp for ls -l output."""
+    mtime = datetime.fromtimestamp(mtime_timestamp)
+    if datetime.now() - mtime > timedelta(days=180):
+        return mtime.strftime('%b %d  %Y')
+    else:
+        return mtime.strftime('%b %d %H:%M')
 
 
 def human_size(size_bytes):
