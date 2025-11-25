@@ -317,7 +317,25 @@ class FileSystemManager:
         
         return True
 
-    async def list_dir(self, io: Context, path: str, recursive: bool = False) -> list:
+    async def _get_ignore_set(self, io: Context, virtual_dir_path: str) -> set:
+        """Reads a .skignore file from a virtual directory path."""
+        ignore_file_path = posixpath.join(virtual_dir_path, '.skignore')
+        if await self.exists(io, ignore_file_path):
+            content = await self.get(io, ignore_file_path)
+            if content:
+                return set(line.strip() for line in content.splitlines() if line.strip())
+        return set()
+
+    def _is_ignorable_path(self, item_name: str, ignores: set) -> bool:
+        """Checks if a path item should be ignored by default, based on common patterns and an ignore set."""
+        return item_name.startswith('.') \
+            or item_name.endswith('~') \
+            or item_name.endswith('.bak') \
+            or item_name.endswith('.orig') \
+            or item_name == '__pycache__' \
+            or item_name in ignores
+
+    async def list_dir(self, io: Context, path: str, recursive: bool = False, show_all: bool = False) -> list:
         """Lists directory contents, merging workspace and distribution, handling tombstones."""
         normalized_virtual_path = self._resolve_virtual_path(path, io_context=io)
         workspace_dir_host = self._to_host_path(self.os.workspace_root, normalized_virtual_path)
@@ -336,6 +354,9 @@ class FileSystemManager:
         async def _list_level(virtual_base_path):
             results = {}
             tombstones = set()
+
+            # Get ignore set for this directory
+            ignores = await self._get_ignore_set(io, virtual_base_path)
 
             # Layer 1: Distribution
             dist_path = self._to_host_path(self.os.dist_root, virtual_base_path)
@@ -365,6 +386,9 @@ class FileSystemManager:
             listing = []
             for name, data in sorted(results.items()):
                 if name not in tombstones:
+                    if not show_all and self._is_ignorable_path(name, ignores):
+                        continue
+                    
                     item_virtual_path = posixpath.join(virtual_base_path, name)
                     item_host_path = self.box(item_virtual_path)
                     try: size, mtime = (getsize(item_host_path), getmtime(item_host_path))

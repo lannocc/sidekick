@@ -7,6 +7,7 @@ async def iocall(io, argv):
            tree --help
 
     Options:
+      -a        List all entries, including those starting with '.'.
       -c        Count bytes and estimate tokens for the content.
       -d        List directories only.
       -h --help Display this help message.
@@ -17,11 +18,14 @@ async def iocall(io, argv):
 
     count = False
     dirs_only = False
+    show_all = False
     paths = []
 
     for arg in args_list:
         if arg.startswith('-'):
-            if arg == '-c':
+            if arg == '-a':
+                show_all = True
+            elif arg == '-c':
                 count = True
             elif arg == '-d':
                 dirs_only = True
@@ -51,7 +55,7 @@ async def iocall(io, argv):
     # --- Recursive helper to build and print the tree ---
     async def print_tree_level(virtual_path, prefix=""):
         nonlocal file_count, dir_count
-        items = await io.os.list_dir(io, virtual_path)
+        items = await io.os.list_dir(io, virtual_path, show_all=show_all)
         
         if dirs_only:
             items = [item for item in items if item['type'] == 'dir']

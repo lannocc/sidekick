@@ -60,8 +60,8 @@ async def iocall(io, argv):
             files.append(path)
         else:
             try:
-                # Use the new overlay-aware directory lister
-                listing = await io.os.list_dir(io, path)
+                # Use the new overlay-aware directory lister, passing the 'show all' flag
+                listing = await io.os.list_dir(io, path, show_all=allp)
                 dirs.append((path, listing))
             except Exception as e:
                 await io.error(f'!! ls: cannot list directory {path}: {e}')
@@ -76,19 +76,9 @@ async def iocall(io, argv):
         if (errors or files or len(dirs) > 1):
             await io.print(f'\n{path}:')
 
-        #ignores = get_ignore_set(bpath)
-        ignores = set()
-
-        def is_hidden_by_default(item_name):
-            return item_name.startswith('.') or item_name.endswith('~') or item_name == '__pycache__'
-
-        filtered_listing = [
-            item for item in listing
-            if item['name'] not in ignores and (allp or not is_hidden_by_default(item['name']))
-        ]
-
+        # The filtering is now handled by io.os.list_dir, so we can just print the result.
         await io.print(c.join(
             [ f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
-              for item in filtered_listing ]))
+              for item in listing ]))
 
     return not errors
