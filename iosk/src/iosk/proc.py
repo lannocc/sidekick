@@ -99,7 +99,7 @@ class ProcessManager:
                 if exists(sandboxed_py_path) and isfile(sandboxed_py_path):
                     try:
                         modname_for_pymod = interpreter_path.strip("/").replace("/", ".").replace("-", "_")
-                        py_mod = self.os.pymod(modname_for_pymod, sandboxed_py_path)
+                        py_mod = await self.os.pymod(modname_for_pymod, sandboxed_py_path)
                         if py_mod and hasattr(py_mod, 'iocall'):
                             # Execute the interpreter's iocall method directly.
                             return await py_mod.iocall(io, script_and_args_for_interpreter)

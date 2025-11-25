@@ -251,7 +251,7 @@ class CommandPipelineExecutor:
             if is_python_module:
                 modname_for_pymod = resolved_internal_path.strip("/").replace("/", ".").replace("-", "_")
                 # Load the Python module using the kernel's pymod utility
-                py_mod = self.os.pymod(modname_for_pymod, self.os.box(f'{resolved_internal_path}.py'))
+                py_mod = await self.os.pymod(modname_for_pymod, self.os.box(f'{resolved_internal_path}.py'))
                 if py_mod and hasattr(py_mod, 'iocall'):
                     # Execute the iocall method with the context and arguments
                     result = await py_mod.iocall(io, cmd_args)
