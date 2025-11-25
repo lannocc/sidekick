@@ -1,7 +1,6 @@
 import os
 import posixpath
-from os.path import exists, isdir
-#from sk.util import get_ignore_set
+from os.path import exists, isdir, getsize
 
 
 async def iocall(io, argv):
@@ -57,7 +56,11 @@ async def iocall(io, argv):
 
         bpath = io.os.box(path, io_context=io)
         if not isdir(bpath):
-            files.append(path)
+            try:
+                size = getsize(bpath)
+            except OSError:
+                size = -1
+            files.append({'path': path, 'size': size})
         else:
             try:
                 # Use the new overlay-aware directory lister, passing the 'show all' flag
@@ -69,16 +72,35 @@ async def iocall(io, argv):
 
     c = '\n' if long else '\t'
     if files:
-        await io.print(c.join(
-            [ file for file in files if allp or not file.startswith('.') ]))
+        output_items = []
+        if long:
+            for item in files:
+                size = item.get('size', -1)
+                size_str = f'{size:10}' if size >= 0 else ' ' * 10
+                output_items.append(f"{size_str} {item['path']}")
+        else:
+            output_items = [item['path'] for item in files]
+        
+        if output_items:
+            await io.print(c.join(output_items))
 
     for path, listing in dirs:
         if (errors or files or len(dirs) > 1):
             await io.print(f'\n{path}:')
 
-        # The filtering is now handled by io.os.list_dir, so we can just print the result.
-        await io.print(c.join(
-            [ f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
-              for item in listing ]))
+        output_items = []
+        if long:
+            for item in listing:
+                size = item.get('size', -1)
+                size_str = f'{size:10}' if size >= 0 else ' ' * 10
+                name = f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
+                output_items.append(f"{size_str} {name}")
+        else:
+            output_items = [
+                f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
+                for item in listing
+            ]
+        
+        await io.print(c.join(output_items))
 
     return not errors
