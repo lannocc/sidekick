@@ -49,18 +49,12 @@ class IOSK:
 
         # --- Find Distribution Root ---
         try:
-            # For installed packages via pip. Assumes 'bin', 'etc' are package data.
+            # For installed packages via pip. This will find the bundled 'bin', 'etc', etc.
             self.dist_root = str(importlib.resources.files('iosk'))
         except (ModuleNotFoundError, AttributeError):
-            # Fallback for development environment.
-            # This file is at .../iosk/src/iosk/kernel.py
-            # The dist root (project root) is .../iosk/
-            dev_dist_root = abspath(path_join(dirname(__file__), '..', '..'))
-            if isdir(path_join(dev_dist_root, 'bin')):
-                self.dist_root = dev_dist_root
-            else:
-                raise FileNotFoundError("Could not locate IOSK distribution root. "
-                                        "Ensure 'bin', 'etc', etc. are present.")
+            # Fallback for development environment: the distribution is the workspace.
+            # This allows direct editing of source files.
+            self.dist_root = self.workspace_root
 
         # Handle the developer workflow case where workspace IS the distribution
         if self.workspace_root == self.dist_root:
