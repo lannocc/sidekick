@@ -24,6 +24,7 @@ async def iocall(io, argv):
     long = False
     allp = False
     human = False
+    show_size = False
 
     if '--help' in argv:
         await io.print(iocall.__doc__)
@@ -36,7 +37,7 @@ async def iocall(io, argv):
             continue
 
         if arg == '--size':
-            long = True
+            show_size = True
             continue
         if arg == '--human-readable':
             human = True
@@ -46,7 +47,7 @@ async def iocall(io, argv):
         for c in arg:
             if c == 'l': long = True
             elif c == 'a': allp = True
-            elif c == 's': long = True
+            elif c == 's': show_size = True
             elif c == 'h': human = True
             else:
                 await io.error(f'!! ls: unknown option: -{c}')
@@ -91,6 +92,14 @@ async def iocall(io, argv):
                 else:
                     size_str = f'{size:10}' if size >= 0 else ' ' * 10
                 output_items.append(f"{size_str} {item['path']}")
+        elif show_size:
+            for item in files:
+                size = item.get('size', -1)
+                prefix = ''
+                if size >= 0:
+                    size_str = human_size(size) if human else str(size)
+                    prefix = f'{size_str} '
+                output_items.append(f"{prefix}{item['path']}")
         else:
             output_items = [item['path'] for item in files]
         
@@ -111,6 +120,15 @@ async def iocall(io, argv):
                     size_str = f'{size:10}' if size >= 0 else ' ' * 10
                 name = f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
                 output_items.append(f"{size_str} {name}")
+        elif show_size:
+            for item in listing:
+                size = item.get('size', -1)
+                prefix = ''
+                if size >= 0:
+                    size_str = human_size(size) if human else str(size)
+                    prefix = f'{size_str} '
+                name = f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
+                output_items.append(f"{prefix}{name}")
         else:
             output_items = [
                 f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
@@ -141,4 +159,3 @@ def human_size(size_bytes):
         return str(size_bytes)
 
     return f'{size_float:.1f}{power_labels[n]}'
-
