@@ -49,13 +49,23 @@ async def iocall(io, argv):
     dirs = [ ]
 
     for path in paths:
-        bpath = io.os.box(path, io_context=io)
-        if not exists(bpath):
+        # Use overlay-aware exists check first
+        if not await io.os.exists(io, path):
             await io.error(f'!! ls: path does not exist: {path}')
             errors = True
+            continue
 
-        elif not isdir(bpath): files.append(path)
-        else: dirs.append((path, sorted(os.listdir(bpath))))
+        bpath = io.os.box(path, io_context=io)
+        if not isdir(bpath):
+            files.append(path)
+        else:
+            try:
+                # Use the new overlay-aware directory lister
+                listing = await io.os.list_dir(io, path)
+                dirs.append((path, listing))
+            except Exception as e:
+                await io.error(f'!! ls: cannot list directory {path}: {e}')
+                errors = True
 
     c = '\n' if long else '\t'
     if files:
@@ -66,21 +76,19 @@ async def iocall(io, argv):
         if (errors or files or len(dirs) > 1):
             await io.print(f'\n{path}:')
 
-        bpath = io.os.box(path, io_context=io)
         #ignores = get_ignore_set(bpath)
         ignores = set()
 
-        def is_hidden_by_default(item):
-            return item.startswith('.') or item.endswith('~') or item == '__pycache__'
+        def is_hidden_by_default(item_name):
+            return item_name.startswith('.') or item_name.endswith('~') or item_name == '__pycache__'
 
         filtered_listing = [
             item for item in listing
-            if item not in ignores and (allp or not is_hidden_by_default(item))
+            if item['name'] not in ignores and (allp or not is_hidden_by_default(item['name']))
         ]
 
         await io.print(c.join(
-            [ f'{file}{"/" if isdir(io.os.box(posixpath.join(path, file), io_context=io)) else ""}'
-              for file in filtered_listing ]))
+            [ f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
+              for item in filtered_listing ]))
 
     return not errors
-

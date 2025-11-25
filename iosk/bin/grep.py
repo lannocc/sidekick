@@ -159,27 +159,27 @@ async def iocall(io, argv):
         # First, expand all paths and directories to get a final list of files.
         files_to_search = []
         for p in paths:
-            host_p = io.os.box(p, io_context=io)
-            if not exists(host_p):
+            # Use overlay-aware exists check to respect tombstones
+            if not await io.os.exists(io, p):
                 await io.error(f"!! grep: {p}: No such file or directory")
                 any_errors = True
                 continue
 
+            host_p = io.os.box(p, io_context=io)
             if isdir(host_p):
                 if not opts['recursive']:
                     await io.error(f"!! grep: {p}: is a directory")
                     any_errors = True
                     continue
-                # Recursive search
-                base_dir = posixpath.dirname(p) if posixpath.dirname(p) else '.'
-                for root, _, files in os.walk(host_p):
-                    for name in files:
-                        full_host_path = os.path.join(root, name)
-                        # Convert host path back to a virtual path relative to the initial dir
-                        relative_path = relpath(full_host_path, io.os.box(base_dir, io_context=io))
-                        # IMPORTANT: Re-join using POSIX separator for virtual path
-                        virtual_file_path = posixpath.normpath(posixpath.join(base_dir, relative_path.replace(os.sep, '/')))
-                        files_to_search.append(virtual_file_path)
+                # Recursive search using overlay-aware, merged list_dir
+                try:
+                    listing = await io.os.list_dir(io, p, recursive=True)
+                    # The listing contains files and subdirs; we just want the files.
+                    files_in_dir = [item['path'] for item in listing if item['type'] == 'file']
+                    files_to_search.extend(files_in_dir)
+                except Exception as e:
+                    await io.error(f'!! grep: failed to list directory recursively {p}: {e}')
+                    any_errors = True
             else:  # is a file
                 files_to_search.append(p)
 
@@ -188,8 +188,7 @@ async def iocall(io, argv):
         show_filenames = len(files_to_search) > 1
 
         # Now search the collected files
-        for f_path in sorted(files_to_search):
+        for f_path in sorted(list(set(files_to_search))): # Deduplicate files
             await search_file(f_path, show_filenames)
 
     return not any_errors
-
