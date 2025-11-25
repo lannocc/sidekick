@@ -12,7 +12,10 @@ async def iocall(io, argv):
     Options:
       -l        Use a long listing format.
       -a        List all entries, including those starting with '.'.
-      -h --help Display this help message.
+      -s, --size  Show file sizes.
+      -h, --human-readable
+                With -l or -s, print sizes in human-readable format (e.g., 1K 234M 2G).
+      --help    Display this help message.
 
     [path ...]: The paths to list. If no path is provided use current directory.
 
@@ -20,6 +23,7 @@ async def iocall(io, argv):
     #REMOVED Note: This command honors .skignore files in listed directories.
     long = False
     allp = False
+    human = False
 
     if '--help' in argv:
         await io.print(iocall.__doc__)
@@ -31,13 +35,19 @@ async def iocall(io, argv):
             paths.append(arg)
             continue
 
+        if arg == '--size':
+            long = True
+            continue
+        if arg == '--human-readable':
+            human = True
+            continue
+
         arg = arg[1:]
         for c in arg:
             if c == 'l': long = True
             elif c == 'a': allp = True
-            elif c == 'h':
-                await io.print(iocall.__doc__)
-                return
+            elif c == 's': long = True
+            elif c == 'h': human = True
             else:
                 await io.error(f'!! ls: unknown option: -{c}')
                 return
@@ -76,7 +86,10 @@ async def iocall(io, argv):
         if long:
             for item in files:
                 size = item.get('size', -1)
-                size_str = f'{size:10}' if size >= 0 else ' ' * 10
+                if human:
+                    size_str = f'{human_size(size):>10}'
+                else:
+                    size_str = f'{size:10}' if size >= 0 else ' ' * 10
                 output_items.append(f"{size_str} {item['path']}")
         else:
             output_items = [item['path'] for item in files]
@@ -92,7 +105,10 @@ async def iocall(io, argv):
         if long:
             for item in listing:
                 size = item.get('size', -1)
-                size_str = f'{size:10}' if size >= 0 else ' ' * 10
+                if human:
+                    size_str = f'{human_size(size):>10}'
+                else:
+                    size_str = f'{size:10}' if size >= 0 else ' ' * 10
                 name = f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
                 output_items.append(f"{size_str} {name}")
         else:
@@ -104,3 +120,25 @@ async def iocall(io, argv):
         await io.print(c.join(output_items))
 
     return not errors
+
+
+def human_size(size_bytes):
+    """Converts a size in bytes to a human-readable string."""
+    if size_bytes < 0:
+        return ''
+    if size_bytes == 0:
+        return '0'
+
+    power = 1024.0
+    n = 0
+    power_labels = {0: '', 1: 'K', 2: 'M', 3: 'G', 4: 'T'}
+    size_float = float(size_bytes)
+    while size_float >= power and n < len(power_labels) - 1:
+        size_float /= power
+        n += 1
+
+    if n == 0:
+        return str(size_bytes)
+
+    return f'{size_float:.1f}{power_labels[n]}'
+
