@@ -397,7 +397,7 @@ class IOSK:
         is_from_local = not from_host or from_host == self.hostname
         is_to_local = not to_host or to_host == self.hostname
 
-        # Case 1: Local -> Local
+        # Case 1: Local -> Local (no changes, shutil.copy handles this)
         if is_from_local and is_to_local:
             return await self.fs.copy(io, from_path, to_path)
 
@@ -405,20 +405,33 @@ class IOSK:
             await io.error("!! netfs: network subsystem is not available.")
             return False
 
+        source_basename = posixpath.basename(from_vpath)
+
         # Case 2: Local -> Remote
         if is_from_local and not is_to_local:
+            final_to_vpath = to_vpath
+            # If remote destination ends with '/', treat it as a directory
+            if to_vpath.endswith('/'):
+                final_to_vpath = posixpath.join(to_vpath, source_basename)
+
             content_bytes = await self.get_raw(io, from_path)
             if content_bytes is None:
                 return False
-            return await self.port.remote_put_file(to_host, to_vpath, content_bytes)
+            return await self.port.remote_put_file(to_host, final_to_vpath, content_bytes)
 
         # Case 3: Remote -> Local
         if not is_from_local and is_to_local:
+            final_to_path = to_path
+            # For local destination, we can check if it's a directory
+            host_dest_path = self.fs.box(to_path, io)
+            if isdir(host_dest_path):
+                final_to_path = posixpath.join(to_path, source_basename)
+
             content_bytes = await self.get_raw(io, from_path)
             if content_bytes is None:
                 return False
-            
-            host_path = self.fs.box_for_write(to_path)
+
+            host_path = self.fs.box_for_write(final_to_path)
             try:
                 parent_dir = dirname(host_path)
                 if not exists(parent_dir):
@@ -427,22 +440,27 @@ class IOSK:
                     f.write(content_bytes)
                 return True
             except Exception as e:
-                await io.error(f"!! failed to write local file {to_path}: {e}")
+                await io.error(f"!! failed to write local file {final_to_path}: {e}")
                 return False
 
         # Case 4: Remote -> Remote
         if not is_from_local and not is_to_local:
+            final_to_vpath = to_vpath
+            # Use the same heuristic for remote-to-remote copies
+            if to_vpath.endswith('/'):
+                final_to_vpath = posixpath.join(to_vpath, source_basename)
+
             # Case 4a: Same remote host
             if from_host == to_host:
-                return await self.port.remote_copy(from_host, from_vpath, to_vpath)
+                return await self.port.remote_copy(from_host, from_vpath, final_to_vpath)
             # Case 4b: Different remote hosts (third-party transfer via this host)
             else:
                 await io.print(f":: proxying file from {from_host} to {to_host}...")
                 content_bytes = await self.get_raw(io, from_path)
                 if content_bytes is None:
                     return False
-                return await self.port.remote_put_file(to_host, to_vpath, content_bytes)
-        
+                return await self.port.remote_put_file(to_host, final_to_vpath, content_bytes)
+
         return False
 
     async def move(self, io:Context, from_path:str, to_path:str):
