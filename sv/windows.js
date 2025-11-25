@@ -738,7 +738,7 @@ export function newNotificationCenter(props = {}) {
 export function newIoskFileExplorer(consoleTabId, consoleTitle, props = {}) {
     const title = `Files - ${consoleTitle || `Console ${consoleTabId}`}`;
     const explorerSettings = get(windowSettings)['IoskFileExplorer'];
-    windows.addWindow(IoskFileExplorer, { title, consoleId: consoleTabId, initialPath: explorerSettings?.initialPath || '.', width: 400, height: 500, ...props });
+    windows.addWindow(IoskFileExplorer, { title, consoleId: consoleTabId, initialPath: explorerSettings?.initialPath || '.', width: 500, height: 500, ...props });
 }
 export function newIoskFileViewer(consoleTabId, path, props = {}) {
     const title = path.split('/').pop() || path;
