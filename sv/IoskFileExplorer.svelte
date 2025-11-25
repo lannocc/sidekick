@@ -950,12 +950,12 @@
             <!-- Directory Columns -->
             {#each columnDirs as item (item.path)}
                 {@const isNestedListColumn = nestedView && viewMode === 'list'}
-                {@const maxDepth = isNestedListColumn ? geaxExpandedDepth(item) : 0}
+                {@const maxDepth = isNestedListColumn ? getMaxExpandedDepth(item) : 0}
                 {@const columnWidth = 160 + maxDepth * 20}
                 <div class="column" style={isNestedListColumn ? `flex-basis: ${columnWidth}px;` : ''}>
                     <div class="column-header" on:click={() => handleItemClick(item)} title={item.name} style:background-color={getTileColor(item, colorMode)}>
                         <span class="column-item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
-                        <span class="column-item-name">{ite}</span>
+                        <span class="column-item-name">{item.name}</span>
                     </div>
                     {#if item.type === 'dir' && item.children && item.children.length > 0}
                         <div class="column-content">
@@ -1138,7 +1138,7 @@
                     </span>
                  {/if}
             </div>
-            {#if treeNode.children && treeNode.cn.length > 0 && expandedNodes.has(treeNode.path)}
+            {#if treeNode.children && treeNode.children.length > 0 && expandedNodes.has(treeNode.path)}
                 {#each treeNode.children as child}
                     <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
                 {/each}
@@ -1175,4 +1175,3 @@
         {/if}
     {/if}
 {/if}
-
