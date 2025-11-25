@@ -73,10 +73,14 @@ class FileSystemManager:
         """Test if path exists in the merged filesystem view."""
         normalized_virtual_path = self._resolve_virtual_path(path, io_context=io)
 
+        # Rule 2a: Files with .iosk. prefix must never appear to exist.
+        if posixpath.basename(normalized_virtual_path).startswith('.iosk.'):
+            return False
+
         # 1. Check for a tombstone. If it exists, the file is considered deleted.
         dir_name, file_name = posixpath.split(normalized_virtual_path)
-        tombstone_name = f'.rm.{file_name}'
-        tombstone_py_name = f'.rm.{file_name}.py'
+        tombstone_name = f'.iosk.rm.{file_name}'
+        tombstone_py_name = f'.iosk.rm.{file_name}.py'
         tombstone_dir_host = self._to_host_path(self.os.workspace_root, dir_name)
         
         if isfile(os.path.join(tombstone_dir_host, tombstone_name)) or \
@@ -110,6 +114,12 @@ class FileSystemManager:
 
     async def create(self, io:Context, path:str):
         """Create new (empty) file in the workspace."""
+        # Rule 2b: Prevent creation of .iosk. prefixed files.
+        normalized_virtual_path = self._resolve_virtual_path(path, io_context=io)
+        if posixpath.basename(normalized_virtual_path).startswith('.iosk.'):
+            await io.error("!! creating files with '.iosk.' prefix is forbidden (system reserved).")
+            return False
+
         file_host_path = self.box_for_write(path, io_context=io)
         if exists(file_host_path): return True
 
@@ -123,6 +133,12 @@ class FileSystemManager:
 
     async def copy(self, io:Context, from_path:str, to_path:str):
         """Copy file. Source is from merged view, destination is always in workspace."""
+        # Rule 2b: Prevent creation of .iosk. prefixed files.
+        normalized_to_path = self._resolve_virtual_path(to_path, io_context=io)
+        if posixpath.basename(normalized_to_path).startswith('.iosk.'):
+            await io.error("!! creating files with '.iosk.' prefix is forbidden (system reserved).")
+            return False
+
         from_file_host = self.box(from_path, io_context=io)
         if not exists(from_file_host):
             await io.error(f'!! copy from path not found: {from_path}')
@@ -138,6 +154,12 @@ class FileSystemManager:
 
     async def move(self, io:Context, from_path:str, to_path:str):
         """Move file/directory. Destination is always in workspace."""
+        # Rule 2b: Prevent creation of .iosk. prefixed files.
+        normalized_to_path = self._resolve_virtual_path(to_path, io_context=io)
+        if posixpath.basename(normalized_to_path).startswith('.iosk.'):
+            await io.error("!! creating files with '.iosk.' prefix is forbidden (system reserved).")
+            return False
+
         # Implemented as a copy-then-remove to handle overlay logic correctly.
         from_host_path = self.box(from_path, io_context=io)
         if not exists(from_host_path):
@@ -186,8 +208,18 @@ class FileSystemManager:
             tombstone_target = normalized_virtual_path
 
         if tombstone_target:
+            # Rule 3: Store content in tombstone
+            source_content = b''
+            source_host_path = self._to_host_path(self.os.dist_root, tombstone_target)
+            try:
+                with open(source_host_path, 'rb') as f:
+                    source_content = f.read()
+            except OSError as e:
+                await io.error(f"!! could not read original file to create tombstone: {e}")
+                return False
+
             dir_name, file_name = posixpath.split(tombstone_target)
-            tombstone_name = f'.rm.{file_name}'
+            tombstone_name = f'.iosk.rm.{file_name}' # Rule 1: New tombstone prefix
             tombstone_virtual_path = posixpath.join(dir_name, tombstone_name)
             tombstone_host_path = self.box_for_write(tombstone_virtual_path)
             
@@ -195,7 +227,8 @@ class FileSystemManager:
             if not exists(parent_dir):
                 os.makedirs(parent_dir, exist_ok=True)
             
-            with open(tombstone_host_path, 'w') as f: pass
+            with open(tombstone_host_path, 'wb') as f:
+                f.write(source_content)
             return True
 
         return False # Should be unreachable if exists() check passed
@@ -254,6 +287,9 @@ class FileSystemManager:
             dist_path = self._to_host_path(self.os.dist_root, virtual_base_path)
             if isdir(dist_path):
                 for name in os.listdir(dist_path):
+                    # Rule 2a: Hide .iosk. files
+                    if name.startswith('.iosk.'):
+                        continue
                     host_p = os.path.join(dist_path, name)
                     results[name] = {'name': name, 'type': 'dir' if isdir(host_p) else 'file'}
 
@@ -261,8 +297,12 @@ class FileSystemManager:
             ws_path = self._to_host_path(self.os.workspace_root, virtual_base_path)
             if isdir(ws_path):
                 for name in os.listdir(ws_path):
-                    if name.startswith('.rm.'):
-                        tombstones.add(name[4:])
+                    # Rule 1: Check for new tombstone prefix
+                    if name.startswith('.iosk.rm.'):
+                        tombstones.add(name[9:])
+                        continue
+                    # Rule 2a: Hide .iosk. files
+                    if name.startswith('.iosk.'):
                         continue
                     host_p = os.path.join(ws_path, name)
                     results[name] = {'name': name, 'type': 'dir' if isdir(host_p) else 'file'}

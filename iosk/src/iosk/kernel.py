@@ -460,8 +460,9 @@ class IOSK:
             return False
 
         dev = dev[5:]
-        path = self.fs.box(posixpath.join('/dev', dev))
-        py = self.pymod(f'dev.{dev.replace("/", ".").replace("-", "_")}', path)
+        virtual_dev_path = posixpath.join('/dev', dev)
+        path = self.fs.box(virtual_dev_path)
+        py = await self.pymod(f'dev.{dev.replace("/", ".").replace("-", "_")}', path, virtual_path=virtual_dev_path)
 
         if py:
             try:
@@ -491,8 +492,9 @@ class IOSK:
             return None
 
         dev = dev[5:]
-        path = self.fs.box(posixpath.join('/dev', dev))
-        py = self.pymod(f'dev.{dev.replace("/", ".").replace("-", "_")}', path)
+        virtual_dev_path = posixpath.join('/dev', dev)
+        path = self.fs.box(virtual_dev_path)
+        py = await self.pymod(f'dev.{dev.replace("/", ".").replace("-", "_")}', path, virtual_path=virtual_dev_path)
 
         if py:
             try:
@@ -521,8 +523,11 @@ class IOSK:
         # This requires a standardized way to get a client from a device module.
         dev_name = dev_virtual_path.replace('/dev/', '', 1)
         mod_name_for_pymod = dev_name.replace('/', '.').replace('-', '_')
-        host_py_path = self.fs.box(f"{dev_virtual_path}.py", io_context=io)
-        dev_mod = self.pymod(f'dev.{mod_name_for_pymod}', host_py_path)
+        # The original code explicitly looked for a .py file. We preserve this by checking
+        # for existence of the logical path, which fs.exists will resolve to a .py file if needed.
+        virtual_py_path = f"{dev_virtual_path}.py"
+        host_py_path = self.fs.box(virtual_py_path, io_context=io)
+        dev_mod = await self.pymod(f'dev.{mod_name_for_pymod}', host_py_path, virtual_path=dev_virtual_path)
 
         if not dev_mod or not hasattr(dev_mod, 'get_client'):
             await io.error(f"!! device module for '{dev_virtual_path}' is invalid or missing get_client() function.")
@@ -712,18 +717,23 @@ class IOSK:
         """Sandboxes a virtual path to the host. Delegates to FileSystemManager."""
         return self.fs.box(virtual_path_input, io_context)
 
-    def pymod(self, modname, path):
+    async def pymod(self, modname, path, virtual_path=None):
         """Import python module at path as the given module name."""
+        # Requirement 4: Honor tombstones by checking existence with fs.exists
+        if virtual_path and not await self.fs.exists(None, virtual_path):
+            return None
+
         modname = f'sk.iosk.{modname}'
         if not path.endswith('.py'): path += '.py'
 
         py = None
         try:
             spec = importlib.util.spec_from_file_location(modname, path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            sys.modules[modname] = mod
-            py = mod
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                sys.modules[modname] = mod
+                py = mod
         except:
             py = None
 
