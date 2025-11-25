@@ -375,10 +375,10 @@
         focusInput();
     }
 
-    function viewUserLog() {
-        if (!userContextMenu.user) return;
+    function viewUserLog(user) {
+        if (!user) return;
 
-        const usernameOnly = userContextMenu.user.split('.')[0];
+        const usernameOnly = user.split('.')[0];
 
         const now = new Date();
         const year = now.getFullYear();
@@ -413,9 +413,9 @@
         focusInput();
     }
 
-    function handleDetachUser() {
-        if (!userContextMenu.user) return;
-        const commandToRun = `$ detach ${userContextMenu.user}`;
+    function handleDetachUser(user) {
+        if (!user) return;
+        const commandToRun = `$ detach ${user}`;
         sendSystemCommand(commandToRun);
         closeUserContextMenu();
         focusInput();
@@ -1307,9 +1307,9 @@
             {colorNameToCss}
             on:inspectContext={e => inspectUserContext(e.detail)}
             on:privateChat={e => openPrivateChat(e.detail)}
-            on:viewLog={viewUserLog}
+            on:viewLog={e => viewUserLog(e.detail)}
             on:setColor={handleSetColor}
-            on:detach={handleDetachUser}
+            on:detach={e => handleDetachUser(e.detail)}
         />
     {/if}
 

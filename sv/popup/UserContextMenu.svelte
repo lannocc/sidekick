@@ -10,7 +10,7 @@
     const dispatch = createEventDispatcher();
     let showColorPicker = false;
 
-    function dispatchAndClose(eventName, detail) {
+    function dispatchAction(eventName, detail) {
         dispatch(eventName, detail);
     }
 </script>
@@ -66,7 +66,7 @@
                     class="color-swatch"
                     style="background-color: {cssVar}"
                     title={name.replace(/_/g, ' ')}
-                    on:click={() => dispatchAndClose('setColor', name)}
+                    on:click={() => dispatchAction('setColor', name)}
                 ></button>
             {/each}
         </div>
@@ -75,21 +75,21 @@
             &larr; Back
         </button>
     {:else}
-        <button class="menu-item" on:click={() => dispatchAndClose('inspectContext', user)}>
+        <button class="menu-item" on:click={() => dispatchAction('inspectContext', user)}>
             Inspector
         </button>
         <div class="menu-separator"></div>
-        <button class="menu-item" on:click={() => dispatchAndClose('privateChat', user)}>
+        <button class="menu-item" on:click={() => dispatchAction('privateChat', user)}>
             Private Chat
         </button>
-        <button class="menu-item" on:click={() => dispatchAndClose('viewLog')}>
+        <button class="menu-item" on:click={() => dispatchAction('viewLog')}>
             View Log
         </button>
         <button class="menu-item" on:click={() => showColorPicker = true}>
             Color
         </button>
         <div class="menu-separator"></div>
-        <button class="menu-item close-item" on:click={() => dispatchAndClose('detach')}>
+        <button class="menu-item close-item" on:click={() => dispatchAction('detach')}>
             Detach
         </button>
     {/if}
