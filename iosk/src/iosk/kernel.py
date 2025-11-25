@@ -57,8 +57,8 @@ class IOSK:
             self.dist_root = self.workspace_root
 
         # Handle the developer workflow case where workspace IS the distribution
-        if self.workspace_root == self.dist_root:
-            print(":: Developer mode: Workspace and Distribution roots are the same.")
+        #if self.workspace_root == self.dist_root:
+        #    print(":: Developer mode: Workspace and Distribution roots are the same.")
 
         self.ready = asyncio.Event()
         self.halt = asyncio.Event()
@@ -133,9 +133,9 @@ class IOSK:
                 bf.write(str(self.BOOT))
             
             # These directories are created in the workspace by fs write operations
-            await self.fs.create_dir(Context(self), f'{Context.CHATTER}/{self.BOOT}', parents=True)
-            await self.fs.create_dir(Context(self), Context.CODE, parents=True)
-            await self.fs.create_dir(Context(self), '/var/log/trip', parents=True)
+            await self.fs.create_dir(Context(self, self.CONSOLE_DEV), f'{Context.CHATTER}/{self.BOOT}', parents=True)
+            await self.fs.create_dir(Context(self, self.CONSOLE_DEV), Context.CODE, parents=True)
+            await self.fs.create_dir(Context(self, self.CONSOLE_DEV), '/var/log/trip', parents=True)
 
 
         if not fail:
