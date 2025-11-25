@@ -50,7 +50,7 @@ class IOSK:
         # --- Find Distribution Root ---
         try:
             # For installed packages via pip. This will find the bundled 'bin', 'etc', etc.
-            self.dist_root = str(importlib.resources.files('iosk'))
+            self.dist_root = importlib.resources.files('sk').joinpath('iosk_dist')
         except (ModuleNotFoundError, AttributeError):
             # Fallback for development environment: the distribution is the workspace.
             # This allows direct editing of source files.

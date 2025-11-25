@@ -11,6 +11,11 @@ def run():
         author='LANNOCC',
         url='https://make.lanno.cc/source/sidekick',
         packages=setuptools.find_packages(),
+        package_data={
+            'sk': [
+                'iosk_dist/**',
+            ],
+        },
         description='AI SideKick',
         long_description_content_type='text/markdown',
         long_description=open('README.md').read(),
