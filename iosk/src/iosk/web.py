@@ -172,9 +172,10 @@ async def handle_fs_list(port_manager: "PortManager", websocket: "WebSocketServe
         path = message.get("path", "/")
         requesterId = message.get("requesterId")
         recursive = message.get("recursive", False)
+        honor_skignore = message.get("honor_skignore", True)
         io_context = port_manager.os.users.contexts.get(conn_meta.username)
         if io_context:
-            await port_manager._handle_fs_list(websocket, io_context, path, requesterId, recursive)
+            await port_manager._handle_fs_list(websocket, io_context, path, requesterId, recursive, honor_skignore)
     else:
         log.warning("Received fs_list from non-client connection.")
 

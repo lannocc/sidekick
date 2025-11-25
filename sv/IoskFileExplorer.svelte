@@ -281,7 +281,8 @@
                 type: 'fs_list',
                 path,
                 // Request recursive listing if in any nested view or in columns view
-                recursive: nestedView || columnsEnabled
+                recursive: nestedView || columnsEnabled,
+                honor_skignore: nestedView || columnsEnabled
             }
         };
         fileSystemRequests.set({ ...request, timestamp: Date.now() });

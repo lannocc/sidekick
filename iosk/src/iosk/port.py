@@ -741,13 +741,13 @@ class PortManager:
 
         await self.send_payload_to_client(io_context.session.user, response)
 
-    async def _handle_fs_list(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Optional[Any], recursive: bool = False):
+    async def _handle_fs_list(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Optional[Any], recursive: bool = False, honor_skignore: bool = True):
         """Handles a file system list request from a client."""
         response = {"type": "fs_list_response", "path": path}
         if requesterId is not None:
             response["requesterId"] = requesterId
         try:
-            listing = await self.os.list_dir(io_context, path, recursive=recursive)
+            listing = await self.os.list_dir(io_context, path, recursive=recursive, honor_skignore=honor_skignore)
             response["listing"] = listing
         except FileNotFoundError as e:
             response["error"] = str(e)

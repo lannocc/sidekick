@@ -326,14 +326,13 @@ class FileSystemManager:
                 return set(line.strip() for line in content.splitlines() if line.strip())
         return set()
 
-    def _is_ignorable_path(self, item_name: str, ignores: set) -> bool:
-        """Checks if a path item should be ignored by default, based on common patterns and an ignore set."""
+    def _is_standard_ignorable(self, item_name: str) -> bool:
+        """Checks if a path item should be ignored by standard rules (dotfiles, backups, etc)."""
         return item_name.startswith('.') \
             or item_name.endswith('~') \
             or item_name.endswith('.bak') \
             or item_name.endswith('.orig') \
-            or item_name == '__pycache__' \
-            or item_name in ignores
+            or item_name == '__pycache__'
 
     async def list_dir(self, io: Context, path: str, recursive: bool = False, show_all: bool = False, honor_skignore: bool = True) -> list:
         """Lists directory contents, merging workspace and distribution, handling tombstones."""
@@ -351,20 +350,15 @@ class FileSystemManager:
              else:
                  raise FileNotFoundError(f"Path not found: {path}")
 
-        async def _list_level(virtual_base_path):
+        async def _list_level_raw(virtual_base_path):
+            """Lists all raw entries in a directory, only filtering out tombstones and reserved .iosk files."""
             results = {}
             tombstones = set()
-
-            # Get ignore set for this directory if requested
-            ignores = set()
-            if honor_skignore:
-                ignores = await self._get_ignore_set(io, virtual_base_path)
 
             # Layer 1: Distribution
             dist_path = self._to_host_path(self.os.dist_root, virtual_base_path)
             if isdir(dist_path):
                 for name in os.listdir(dist_path):
-                    # Rule 2a: Hide .iosk. files
                     if name.startswith('.iosk.'):
                         continue
                     host_p = os.path.join(dist_path, name)
@@ -374,23 +368,17 @@ class FileSystemManager:
             ws_path = self._to_host_path(self.os.workspace_root, virtual_base_path)
             if isdir(ws_path):
                 for name in os.listdir(ws_path):
-                    # Rule 1: Check for new tombstone prefix
                     if name.startswith('.iosk.rm.'):
                         tombstones.add(name[9:])
                         continue
-                    # Rule 2a: Hide .iosk. files
                     if name.startswith('.iosk.'):
                         continue
                     host_p = os.path.join(ws_path, name)
                     results[name] = {'name': name, 'type': 'dir' if isdir(host_p) else 'file'}
 
-            # Filter and format
             listing = []
             for name, data in sorted(results.items()):
                 if name not in tombstones:
-                    if not show_all and self._is_ignorable_path(name, ignores):
-                        continue
-                    
                     item_virtual_path = posixpath.join(virtual_base_path, name)
                     item_host_path = self.box(item_virtual_path)
                     try: size, mtime = (getsize(item_host_path), getmtime(item_host_path))
@@ -400,14 +388,30 @@ class FileSystemManager:
             return listing
 
         if not recursive:
-            return await _list_level(normalized_virtual_path)
+            items = await _list_level_raw(normalized_virtual_path)
+            if show_all:
+                return items
+
+            final_items = []
+            ignores = await self._get_ignore_set(io, normalized_virtual_path) if honor_skignore else set()
+            for item in items:
+                name = item['name']
+                if self._is_standard_ignorable(name):
+                    continue
+                if honor_skignore and name in ignores:
+                    continue
+                final_items.append(item)
+            return final_items
+
         else:
             all_items = []
             queue = [normalized_virtual_path]
             while queue:
                 current_path = queue.pop(0)
                 try:
-                    level_items = await _list_level(current_path)
+                    level_items = await _list_level_raw(current_path)
+                    ignores = await self._get_ignore_set(io, current_path) if honor_skignore else set()
+
                     if current_path != normalized_virtual_path: # Add the dir entry itself
                         dir_host_path = self.box(current_path)
                         try: size, mtime = getsize(dir_host_path), getmtime(dir_host_path)
@@ -418,10 +422,18 @@ class FileSystemManager:
                         })
 
                     for item in level_items:
+                        # Always filter standard ignorables unless show_all is specified
+                        if not show_all and self._is_standard_ignorable(item['name']):
+                            continue
+
+                        # Add item to the results. In recursive mode, we show skignored items.
+                        if item['type'] == 'file':
+                            all_items.append(item)
+
+                        # Only queue directories for recursion if they are not in the ignore list.
                         if item['type'] == 'dir':
-                            queue.append(item['path'])
-                        else: # is a file
-                           all_items.append(item)
+                            if not (honor_skignore and item['name'] in ignores):
+                                queue.append(item['path'])
                 except (FileNotFoundError, NotADirectoryError) as e:
                     await io.error(f"Error during recursive list of {current_path}: {e}")
             return all_items
