@@ -20,6 +20,7 @@ async def iocall(io, argv):
       -S        Sort by file size, largest first.
       -r, --reverse
                 Reverse order while sorting.
+      --color   Use color for output.
       --help    Display this help message.
 
     [path ...]: The paths to list. If no path is provided use current directory.
@@ -33,6 +34,7 @@ async def iocall(io, argv):
     sort_by_time = False
     sort_by_size = False
     reverse = False
+    color = False
 
     if '--help' in argv:
         await io.print(iocall.__doc__)
@@ -52,6 +54,9 @@ async def iocall(io, argv):
             continue
         if arg == '--reverse':
             reverse = True
+            continue
+        if arg == '--color':
+            color = True
             continue
 
         arg = arg[1:]
@@ -159,6 +164,9 @@ async def iocall(io, argv):
         if output_items:
             await io.print(c.join(output_items))
 
+    C_DIR = '\033[94m'
+    C_END = '\033[0m'
+
     for d in dirs:
         path, listing = d['path'], d['listing']
         if (errors or files or len(dirs) > 1):
@@ -175,6 +183,8 @@ async def iocall(io, argv):
                 mtime = item.get('mtime', 0)
                 mtime_str = format_time(mtime) if mtime > 0 else ' ' * 12
                 name = f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
+                if color and item['type'] == 'dir':
+                    name = f"{C_DIR}{name}{C_END}"
                 output_items.append(f"{size_str} {mtime_str} {name}")
         elif show_size:
             for item in listing:
@@ -184,12 +194,15 @@ async def iocall(io, argv):
                     size_str = human_size(size) if human else str(size)
                     prefix = f'{size_str} '
                 name = f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
+                if color and item['type'] == 'dir':
+                    name = f"{C_DIR}{name}{C_END}"
                 output_items.append(f"{prefix}{name}")
         else:
-            output_items = [
-                f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
-                for item in listing
-            ]
+            for item in listing:
+                name = f"{item['name']}{'/' if item['type'] == 'dir' else ''}"
+                if color and item['type'] == 'dir':
+                    name = f"{C_DIR}{name}{C_END}"
+                output_items.append(name)
         
         await io.print(c.join(output_items))
 
