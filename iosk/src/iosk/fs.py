@@ -34,6 +34,22 @@ class FileSystemManager:
         host_path = os.path.join(base_root, *path_components)
         return os.path.abspath(host_path)
 
+    def _remove_tombstone_if_exists(self, normalized_virtual_path: str):
+        """Helper to remove a tombstone file for a given virtual path."""
+        dir_name, file_name = posixpath.split(normalized_virtual_path)
+        tombstone_dir_host = self._to_host_path(self.os.workspace_root, dir_name)
+
+        tombstone_name = f'.iosk.rm.{file_name}'
+        tombstone_py_name = f'.iosk.rm.{file_name}.py'
+        
+        tombstone_path = os.path.join(tombstone_dir_host, tombstone_name)
+        if isfile(tombstone_path):
+            os.remove(tombstone_path)
+
+        tombstone_py_path = os.path.join(tombstone_dir_host, tombstone_py_name)
+        if isfile(tombstone_py_path):
+            os.remove(tombstone_py_path)
+
     def box(self, virtual_path_input: str, io_context=None) -> str:
         """
         Sandboxes a virtual path for reading, checking the workspace first, then the distribution.
@@ -114,11 +130,13 @@ class FileSystemManager:
 
     async def create(self, io:Context, path:str):
         """Create new (empty) file in the workspace."""
-        # Rule 2b: Prevent creation of .iosk. prefixed files.
         normalized_virtual_path = self._resolve_virtual_path(path, io_context=io)
         if posixpath.basename(normalized_virtual_path).startswith('.iosk.'):
             await io.error("!! creating files with '.iosk.' prefix is forbidden (system reserved).")
             return False
+
+        # If a tombstone exists for this path, remove it.
+        self._remove_tombstone_if_exists(normalized_virtual_path)
 
         file_host_path = self.box_for_write(path, io_context=io)
         if exists(file_host_path): return True
@@ -133,11 +151,13 @@ class FileSystemManager:
 
     async def copy(self, io:Context, from_path:str, to_path:str):
         """Copy file. Source is from merged view, destination is always in workspace."""
-        # Rule 2b: Prevent creation of .iosk. prefixed files.
         normalized_to_path = self._resolve_virtual_path(to_path, io_context=io)
         if posixpath.basename(normalized_to_path).startswith('.iosk.'):
             await io.error("!! creating files with '.iosk.' prefix is forbidden (system reserved).")
             return False
+
+        # If a tombstone exists for the destination path, remove it.
+        self._remove_tombstone_if_exists(normalized_to_path)
 
         from_file_host = self.box(from_path, io_context=io)
         if not exists(from_file_host):
@@ -262,6 +282,40 @@ class FileSystemManager:
         except OSError as e:
             await io.error(f"!! failed to remove directory '{path}': {e}") # e.g., "Directory not empty"
             return False
+
+    async def unremove(self, io: Context, path: str):
+        """Restores a file by removing its tombstone from the workspace."""
+        normalized_virtual_path = self._resolve_virtual_path(path, io_context=io)
+
+        # First, check if the file already exists (not as a tombstone).
+        # We can't unremove something that's not removed.
+        if await self.exists(io, path):
+             await io.error(f"!! unrm: cannot restore '{path}': file already exists.")
+             return False
+
+        dir_name, file_name = posixpath.split(normalized_virtual_path)
+        tombstone_dir_host = self._to_host_path(self.os.workspace_root, dir_name)
+
+        tombstone_name = f'.iosk.rm.{file_name}'
+        tombstone_py_name = f'.iosk.rm.{file_name}.py'
+        
+        tombstone_path = os.path.join(tombstone_dir_host, tombstone_name)
+        tombstone_py_path = os.path.join(tombstone_dir_host, tombstone_py_name)
+
+        found_and_removed = False
+        if isfile(tombstone_path):
+            os.remove(tombstone_path)
+            found_and_removed = True
+
+        if isfile(tombstone_py_path):
+            os.remove(tombstone_py_path)
+            found_and_removed = True
+
+        if not found_and_removed:
+            await io.error(f"!! unrm: no removed version of '{path}' found to restore.")
+            return False
+        
+        return True
 
     async def list_dir(self, io: Context, path: str, recursive: bool = False) -> list:
         """Lists directory contents, merging workspace and distribution, handling tombstones."""
