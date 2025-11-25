@@ -398,9 +398,9 @@ class IOSK:
         """Restores a file by removing its tombstone. Delegates to FileSystemManager."""
         return await self.fs.unremove(io, path)
 
-    async def list_dir(self, io: Context, path: str, recursive: bool = False, show_all: bool = False) -> list:
+    async def list_dir(self, io: Context, path: str, recursive: bool = False, show_all: bool = False, honor_skignore: bool = True) -> list:
         """Lists directory contents. Delegates to FileSystemManager."""
-        return await self.fs.list_dir(io, path, recursive=recursive, show_all=show_all)
+        return await self.fs.list_dir(io, path, recursive=recursive, show_all=show_all, honor_skignore=honor_skignore)
 
     ###
     ### FILE I/O (DELEGATED AND LOCAL)

@@ -335,7 +335,7 @@ class FileSystemManager:
             or item_name == '__pycache__' \
             or item_name in ignores
 
-    async def list_dir(self, io: Context, path: str, recursive: bool = False, show_all: bool = False) -> list:
+    async def list_dir(self, io: Context, path: str, recursive: bool = False, show_all: bool = False, honor_skignore: bool = True) -> list:
         """Lists directory contents, merging workspace and distribution, handling tombstones."""
         normalized_virtual_path = self._resolve_virtual_path(path, io_context=io)
         workspace_dir_host = self._to_host_path(self.os.workspace_root, normalized_virtual_path)
@@ -355,8 +355,10 @@ class FileSystemManager:
             results = {}
             tombstones = set()
 
-            # Get ignore set for this directory
-            ignores = await self._get_ignore_set(io, virtual_base_path)
+            # Get ignore set for this directory if requested
+            ignores = set()
+            if honor_skignore:
+                ignores = await self._get_ignore_set(io, virtual_base_path)
 
             # Layer 1: Distribution
             dist_path = self._to_host_path(self.os.dist_root, virtual_base_path)

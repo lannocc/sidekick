@@ -61,7 +61,7 @@ async def iocall(io, argv):
         else:
             try:
                 # Use the new overlay-aware directory lister, passing the 'show all' flag
-                listing = await io.os.list_dir(io, path, show_all=allp)
+                listing = await io.os.list_dir(io, path, show_all=allp, honor_skignore=False)
                 dirs.append((path, listing))
             except Exception as e:
                 await io.error(f'!! ls: cannot list directory {path}: {e}')
