@@ -961,7 +961,7 @@
                         <div class="column-content">
                              {#if nestedView}
                                 {#each item.children as child (child.path)}
-                                    <svelte:self treeNode={child} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
+                                    <svelte:self treeNode={child} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} />
                                 {/each}
                              {:else}
                                 {#if viewMode === 'list'}
@@ -1001,7 +1001,7 @@
                         </div>
                     {/if}
                     {#each treeItems as item (item.path)}
-                        <svelte:self treeNode={item} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
+                        <svelte:self treeNode={item} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} />
                     {/each}
                 {:else}
                     {#each items as item (item.name)}
@@ -1058,7 +1058,7 @@
                                 <div class="nested-dir-content-grid">
                                     {#if item.children && item.children.length > 0}
                                         {#each item.children as child (child.path)}
-                                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
+                                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} />
                                         {/each}
                                     {/if}
                                 </div>
@@ -1140,7 +1140,7 @@
             </div>
             {#if treeNode.children && treeNode.children.length > 0 && expandedNodes.has(treeNode.path)}
                 {#each treeNode.children as child}
-                    <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
+                    <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} />
                 {/each}
             {/if}
         </div>
@@ -1167,7 +1167,7 @@
                 <div class="nested-dir-content-grid">
                     {#if treeNode.children && treeNode.children.length > 0}
                         {#each treeNode.children as child (child.path)}
-                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} />
+                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} />
                         {/each}
                     {/if}
                 </div>
