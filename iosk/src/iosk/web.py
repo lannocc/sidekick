@@ -216,6 +216,124 @@ async def handle_fs_tail_stop(port_manager: "PortManager", websocket: "WebSocket
     if path:
         await port_manager._handle_fs_tail_stop(websocket, path)
 
+# --------------------------------------------------------------------------
+# NETFS RPC Handlers (Server-side)
+# --------------------------------------------------------------------------
+
+async def _netfs_request_handler(port_manager: "PortManager", websocket: "WebSocketServerProtocol", message: Dict[str, Any], coro, response_type: str):
+    """Generic helper to execute a local FS operation and send a response."""
+    request_id = message.get('request_id')
+    response = {'type': response_type, 'request_id': request_id}
+    # Operations are performed with system-level context on behalf of the remote peer.
+    io_context = port_manager.os.system
+    try:
+        result = await coro(io_context)
+        response['payload'] = result
+    except Exception as e:
+        log.error(f"Error handling {message.get('type')} for peer: {e}")
+        response['error'] = str(e)
+    
+    try:
+        await websocket.send(json.dumps(response))
+    except Exception as e:
+        log.error(f"Failed to send netfs response for {request_id}: {e}")
+
+async def handle_netfs_response(port_manager: "PortManager", _websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
+    """Handles all netfs responses, resolving the future for the original request."""
+    request_id = message.get('request_id')
+    if not request_id:
+        log.warning("Received netfs_response without request_id")
+        return
+
+    future = port_manager.netfs_requests.get(request_id)
+    if future and not future.done():
+        error = message.get('error')
+        if error:
+            future.set_result(Exception(f"netfs remote error: {error}"))
+        else:
+            future.set_result(message.get('payload'))
+    else:
+        log.warning(f"Received netfs_response for unknown or completed request_id: {request_id}")
+
+# Wire up all response types to the generic handler
+handle_netfs_list_response = handle_netfs_response
+handle_netfs_get_response = handle_netfs_response
+handle_netfs_put_response = handle_netfs_response
+handle_netfs_exists_response = handle_netfs_response
+handle_netfs_remove_response = handle_netfs_response
+handle_netfs_create_dir_response = handle_netfs_response
+handle_netfs_remove_dir_response = handle_netfs_response
+handle_netfs_copy_response = handle_netfs_response
+handle_netfs_move_response = handle_netfs_response
+
+async def handle_netfs_list_request(port_manager: "PortManager", websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
+    path = message.get('path')
+    kwargs = message.get('kwargs', {})
+    async def do_list(io):
+        return await port_manager.os.list_dir(io, path, **kwargs)
+    await _netfs_request_handler(port_manager, websocket, message, do_list, 'netfs_list_response')
+
+async def handle_netfs_get_request(port_manager: "PortManager", websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
+    path = message.get('path')
+    async def do_get(io):
+        content_bytes = await port_manager.os.get_raw(io, path)
+        if content_bytes is not None:
+            return base64.b64encode(content_bytes).decode('ascii')
+        return None
+    await _netfs_request_handler(port_manager, websocket, message, do_get, 'netfs_get_response')
+
+async def handle_netfs_put_request(port_manager: "PortManager", websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
+    path = message.get('path')
+    content_b64 = message.get('content_b64')
+    async def do_put(io):
+        content_bytes = base64.b64decode(content_b64.encode('ascii'))
+        host_path = port_manager.os.fs.box_for_write(path)
+        parent_dir = os.path.dirname(host_path)
+        os.makedirs(parent_dir, exist_ok=True)
+        with open(host_path, 'wb') as f:
+            f.write(content_bytes)
+        return True
+    await _netfs_request_handler(port_manager, websocket, message, do_put, 'netfs_put_response')
+
+async def handle_netfs_exists_request(port_manager: "PortManager", websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
+    path = message.get('path')
+    async def do_exists(io):
+        return await port_manager.os.exists(io, path)
+    await _netfs_request_handler(port_manager, websocket, message, do_exists, 'netfs_exists_response')
+
+async def handle_netfs_remove_request(port_manager: "PortManager", websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
+    path = message.get('path')
+    async def do_remove(io):
+        return await port_manager.os.remove(io, path)
+    await _netfs_request_handler(port_manager, websocket, message, do_remove, 'netfs_remove_response')
+
+async def handle_netfs_create_dir_request(port_manager: "PortManager", websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
+    path = message.get('path')
+    parents = message.get('parents', False)
+    async def do_create_dir(io):
+        return await port_manager.os.create_dir(io, path, parents=parents)
+    await _netfs_request_handler(port_manager, websocket, message, do_create_dir, 'netfs_create_dir_response')
+
+async def handle_netfs_remove_dir_request(port_manager: "PortManager", websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
+    path = message.get('path')
+    async def do_remove_dir(io):
+        return await port_manager.os.remove_dir(io, path)
+    await _netfs_request_handler(port_manager, websocket, message, do_remove_dir, 'netfs_remove_dir_response')
+
+async def handle_netfs_copy_request(port_manager: "PortManager", websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
+    from_path = message.get('from_path')
+    to_path = message.get('to_path')
+    async def do_copy(io):
+        return await port_manager.os.copy(io, from_path, to_path)
+    await _netfs_request_handler(port_manager, websocket, message, do_copy, 'netfs_copy_response')
+    
+async def handle_netfs_move_request(port_manager: "PortManager", websocket: "WebSocketServerProtocol", _conn_meta: "Connection", message: Dict[str, Any], _message_str: str):
+    from_path = message.get('from_path')
+    to_path = message.get('to_path')
+    async def do_move(io):
+        return await port_manager.os.move(io, from_path, to_path)
+    await _netfs_request_handler(port_manager, websocket, message, do_move, 'netfs_move_response')
+
 
 # --- GlassBox Proposal: Section 3.1.2 ---
 async def handle_ui_context_subscribe(port_manager: "PortManager", websocket: "WebSocketServerProtocol", conn_meta: "Connection", message: Dict[str, Any], _message_str: str):

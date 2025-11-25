@@ -67,6 +67,8 @@ class PortManager:
         self.active_tailers: Dict[tuple, asyncio.Task] = {}
         # --- GlassBox Proposal: Section 3.1.2 ---
         self.context_subscriptions: Dict[str, set] = {} # Maps targetUser -> {ws1, ws2, ...}
+        # --- NetFS Proposal ---
+        self.netfs_requests: Dict[str, asyncio.Future] = {}
 
     # --------------------------------------------------------------------------
     # Public API (Kernel-Facing)
@@ -509,6 +511,71 @@ class PortManager:
                 subscribers.remove(ws)
 
     # --------------------------------------------------------------------------
+    # NETFS RPC Calls (Client-side)
+    # --------------------------------------------------------------------------
+
+    async def _netfs_rpc(self, host: str, payload: Dict[str, Any], timeout: float = 60.0) -> Any:
+        """Helper to perform a generic NetFS RPC call."""
+        request_id = str(uuid.uuid4())
+        payload['request_id'] = request_id
+        
+        future = asyncio.get_running_loop().create_future()
+        self.netfs_requests[request_id] = future
+
+        await self.route_message(host, payload)
+
+        try:
+            result = await asyncio.wait_for(future, timeout=timeout)
+            if isinstance(result, Exception):
+                raise result
+            return result
+        except asyncio.TimeoutError as e:
+            raise Exception(f"netfs: request to '{host}' timed out.") from e
+        finally:
+            self.netfs_requests.pop(request_id, None)
+
+    async def remote_list_dir(self, host: str, path: str, **kwargs) -> Optional[list]:
+        payload = {"type": "netfs_list_request", "path": path, "kwargs": kwargs}
+        return await self._netfs_rpc(host, payload)
+
+    async def remote_get_file(self, host: str, path: str) -> Optional[bytes]:
+        payload = {"type": "netfs_get_request", "path": path}
+        response = await self._netfs_rpc(host, payload)
+        if response:
+            return base64.b64decode(response.encode('ascii'))
+        return None
+
+    async def remote_put_file(self, host: str, path: str, content_bytes: bytes) -> bool:
+        content_b64 = base64.b64encode(content_bytes).decode('ascii')
+        payload = {"type": "netfs_put_request", "path": path, "content_b64": content_b64}
+        return await self._netfs_rpc(host, payload)
+
+    async def remote_exists(self, host: str, path: str) -> bool:
+        payload = {"type": "netfs_exists_request", "path": path}
+        return await self._netfs_rpc(host, payload)
+    
+    async def remote_remove_file(self, host: str, path: str) -> bool:
+        payload = {"type": "netfs_remove_request", "path": path}
+        return await self._netfs_rpc(host, payload)
+
+    async def remote_create_dir(self, host: str, path: str, parents: bool) -> bool:
+        payload = {"type": "netfs_create_dir_request", "path": path, "parents": parents}
+        return await self._netfs_rpc(host, payload)
+
+    async def remote_remove_dir(self, host: str, path: str) -> bool:
+        payload = {"type": "netfs_remove_dir_request", "path": path}
+        return await self._netfs_rpc(host, payload)
+        
+    async def remote_copy(self, host: str, from_path: str, to_path: str) -> bool:
+        payload = {"type": "netfs_copy_request", "from_path": from_path, "to_path": to_path}
+        return await self._netfs_rpc(host, payload)
+
+    async def remote_move(self, host: str, from_path: str, to_path: str) -> bool:
+        payload = {"type": "netfs_move_request", "from_path": from_path, "to_path": to_path}
+        return await self._netfs_rpc(host, payload)
+
+
+    # --------------------------------------------------------------------------
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
 
@@ -760,7 +827,7 @@ class PortManager:
         await self.send_payload_to_client(io_context.session.user, response)
 
     async def _handle_fs_read(self, websocket: WebSocketServerProtocol, io_context: "Context", message: Dict[str, Any]):
-        """Handles a file read request from a client, now supporting chunking."""
+        """Handles a file read request from a client, now supporting chunking and remote paths."""
         path = message.get("path")
         requesterId = message.get("requesterId")
         offset = message.get("offset", 0)
@@ -779,26 +846,37 @@ class PortManager:
         }
 
         try:
-            host_path = self.os.box(path, io_context=io_context)
+            # Kernel's get_raw is network-aware and will handle remote/local dispatching.
+            content_bytes = await self.os.get_raw(io_context, path)
 
-            if not os.path.exists(host_path):
-                response["error"] = f"path not found: {path}"
-            elif not os.path.isfile(host_path):
-                response["error"] = f"not a file: {path}"
+            if content_bytes is None:
+                response["error"] = f"path not found or could not be read: {path}"
             else:
-                total_size = os.path.getsize(host_path)
+                total_size = len(content_bytes)
                 response["total_size"] = total_size
 
-                with open(host_path, 'rb') as f:
-                    f.seek(offset)
-                    content_bytes = f.read(length)
+                # Apply chunking logic to the retrieved content
+                chunk = content_bytes[offset:] if length == -1 else content_bytes[offset:offset + length]
 
-                is_binary_file = is_binary(host_path)
-                response["content_b64"] = base64.b64encode(content_bytes).decode('ascii')
+                # Determine if the content is binary
+                hostname, _ = self.os.parse_path(path)
+                is_local = not hostname or hostname == self.os.hostname
+
+                is_binary_file = False
+                if is_local:
+                    # For local files, we can check the file on disk.
+                    host_path = self.os.box(path, io_context)
+                    if os.path.isfile(host_path):
+                        is_binary_file = is_binary(host_path)
+                else:
+                    # For remote files, we must guess from the content. A common heuristic is checking for null bytes.
+                    is_binary_file = b'\0' in chunk
+
+                response["content_b64"] = base64.b64encode(chunk).decode('ascii')
                 response["is_binary"] = is_binary_file
         except Exception as e:
             log.error(f"Error during fs_read for {io_context.session.user} at '{path}': {e}")
-            response["error"] = "An internal server error occurred."
+            response["error"] = f"An internal server error occurred: {e}"
 
         await self.send_payload_to_client(io_context.session.user, response)
 
