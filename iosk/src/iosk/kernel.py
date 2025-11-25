@@ -553,7 +553,11 @@ class IOSK:
         """Gets raw file contents, locally or remotely."""
         hostname, virtual_path = self.parse_path(path)
         if not hostname or hostname == self.hostname:
-            return await self.fs.get_raw(io, path)
+            content, _, error = await self.fs.get_raw(io, path)
+            if error:
+                await io.error(f"!! get_raw failed for {path}: {error}")
+                return None
+            return content
         else:
             if not self.port:
                 await io.error("!! netfs: network subsystem is not available.")
