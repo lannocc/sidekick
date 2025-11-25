@@ -367,52 +367,198 @@ class IOSK:
         return await self.fs.get_room_list(io)
 
     async def exists(self, io:Context, path:str):
-        """Tests if a path exists. Delegates to FileSystemManager."""
-        return await self.fs.exists(io, path)
+        """Tests if a path exists, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.exists(io, path)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return False
+            return await self.port.remote_exists(hostname, virtual_path)
 
     async def create(self, io:Context, path:str):
-        """Creates an empty file. Delegates to FileSystemManager."""
-        return await self.fs.create(io, path)
+        """Creates an empty file, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.create(io, path)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return False
+            # An empty put operation creates a file.
+            return await self.port.remote_put_file(hostname, virtual_path, b'')
 
     async def copy(self, io:Context, from_path:str, to_path:str):
-        """Copies a file. Delegates to FileSystemManager."""
-        return await self.fs.copy(io, from_path, to_path)
+        """Copies a file, with support for local and remote paths."""
+        from_host, from_vpath = self.parse_path(from_path)
+        to_host, to_vpath = self.parse_path(to_path)
+
+        is_from_local = not from_host or from_host == self.hostname
+        is_to_local = not to_host or to_host == self.hostname
+
+        # Case 1: Local -> Local
+        if is_from_local and is_to_local:
+            return await self.fs.copy(io, from_path, to_path)
+
+        if not self.port:
+            await io.error("!! netfs: network subsystem is not available.")
+            return False
+
+        # Case 2: Local -> Remote
+        if is_from_local and not is_to_local:
+            content_bytes = await self.get_raw(io, from_path)
+            if content_bytes is None:
+                return False
+            return await self.port.remote_put_file(to_host, to_vpath, content_bytes)
+
+        # Case 3: Remote -> Local
+        if not is_from_local and is_to_local:
+            content_bytes = await self.get_raw(io, from_path)
+            if content_bytes is None:
+                return False
+            
+            host_path = self.fs.box_for_write(to_path)
+            try:
+                parent_dir = dirname(host_path)
+                if not exists(parent_dir):
+                    os.makedirs(parent_dir, exist_ok=True)
+                with open(host_path, 'wb') as f:
+                    f.write(content_bytes)
+                return True
+            except Exception as e:
+                await io.error(f"!! failed to write local file {to_path}: {e}")
+                return False
+
+        # Case 4: Remote -> Remote
+        if not is_from_local and not is_to_local:
+            # Case 4a: Same remote host
+            if from_host == to_host:
+                return await self.port.remote_copy(from_host, from_vpath, to_vpath)
+            # Case 4b: Different remote hosts (third-party transfer via this host)
+            else:
+                await io.print(f":: proxying file from {from_host} to {to_host}...")
+                content_bytes = await self.get_raw(io, from_path)
+                if content_bytes is None:
+                    return False
+                return await self.port.remote_put_file(to_host, to_vpath, content_bytes)
+        
+        return False
 
     async def move(self, io:Context, from_path:str, to_path:str):
-        """Moves a file or directory. Delegates to FileSystemManager."""
-        return await self.fs.move(io, from_path, to_path)
+        """Moves a file or directory, with support for local and remote paths."""
+        from_host, from_vpath = self.parse_path(from_path)
+        to_host, to_vpath = self.parse_path(to_path)
+
+        is_from_local = not from_host or from_host == self.hostname
+        is_to_local = not to_host or to_host == self.hostname
+
+        # Case 1: Local -> Local
+        if is_from_local and is_to_local:
+            return await self.fs.move(io, from_path, to_path)
+
+        if not self.port:
+            await io.error("!! netfs: network subsystem is not available.")
+            return False
+
+        # Optimization: Remote -> Remote on the same host
+        if not is_from_local and not is_to_local and from_host == to_host:
+            return await self.port.remote_move(from_host, from_vpath, to_vpath)
+
+        # All other cases are emulated as copy then remove.
+        copied = await self.copy(io, from_path, to_path)
+        if not copied:
+            await io.error(f"!! move failed: could not copy {from_path} to {to_path}")
+            return False
+
+        removed = await self.remove(io, from_path)
+        if not removed:
+            await io.error(f"!! move warning: source {from_path} could not be removed after copy.")
+            return False
+
+        return True
 
     async def remove(self, io:Context, path:str):
-        """Removes a file. Delegates to FileSystemManager."""
-        return await self.fs.remove(io, path)
+        """Removes a file, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.remove(io, path)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return False
+            return await self.port.remote_remove_file(hostname, virtual_path)
 
     async def create_dir(self, io:Context, path:str, parents=False):
-        """Creates a directory. Delegates to FileSystemManager."""
-        return await self.fs.create_dir(io, path, parents)
+        """Creates a directory, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.create_dir(io, path, parents)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return False
+            return await self.port.remote_create_dir(hostname, virtual_path, parents=parents)
 
     async def remove_dir(self, io:Context, path:str):
-        """Removes a directory. Delegates to FileSystemManager."""
-        return await self.fs.remove_dir(io, path)
+        """Removes a directory, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.remove_dir(io, path)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return False
+            return await self.port.remote_remove_dir(hostname, virtual_path)
 
     async def unremove(self, io:Context, path:str):
         """Restores a file by removing its tombstone. Delegates to FileSystemManager."""
         return await self.fs.unremove(io, path)
 
     async def list_dir(self, io: Context, path: str, recursive: bool = False, show_all: bool = False, honor_skignore: bool = True) -> list:
-        """Lists directory contents. Delegates to FileSystemManager."""
-        return await self.fs.list_dir(io, path, recursive=recursive, show_all=show_all, honor_skignore=honor_skignore)
+        """Lists directory contents, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.list_dir(io, path, recursive=recursive, show_all=show_all, honor_skignore=honor_skignore)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return None
+            return await self.port.remote_list_dir(hostname, virtual_path, recursive=recursive, show_all=show_all, honor_skignore=honor_skignore)
 
     ###
     ### FILE I/O (DELEGATED AND LOCAL)
     ###
 
     async def get(self, io:Context, path:str):
-        """Gets file contents. Delegates to FileSystemManager."""
-        return await self.fs.get(io, path)
+        """Gets file contents, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.get(io, path) # Local case uses local logic with is_binary check
+        else:
+            # Remote case: get raw bytes and attempt to decode
+            content_bytes = await self.get_raw(io, path)
+            if content_bytes is None:
+                return None
+            try:
+                # We can't do a proper is_binary check on remote bytes without the file.
+                # The primary goal of `get` is to return decoded text, so we attempt that.
+                # A binary file will fail here, which is the desired outcome.
+                return content_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                await io.error(f"!! remote file is not utf-8 encoded or is binary: {path}")
+                return None
 
     async def get_raw(self, io:Context, path:str):
-        """Gets raw file contents. Delegates to FileSystemManager."""
-        return await self.fs.get_raw(io, path)
+        """Gets raw file contents, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.get_raw(io, path)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return None
+            return await self.port.remote_get_file(hostname, virtual_path)
 
     async def send(self, io:Context, dev:str, data):
         """Send data to device."""
@@ -720,6 +866,19 @@ class IOSK:
     def box(self, virtual_path_input: str, io_context=None) -> str:
         """Sandboxes a virtual path to the host. Delegates to FileSystemManager."""
         return self.fs.box(virtual_path_input, io_context)
+
+    def parse_path(self, path_str: str) -> tuple[str | None, str]:
+        """
+        Parses a path string into (hostname, virtual_path).
+        Returns (None, path_str) if the path is local.
+        Syntax: `hostname:/path/to/resource`
+        """
+        if ':' in path_str:
+            hostname, virtual_path = path_str.split(':', 1)
+            # A valid remote path must have a non-empty hostname and start with a '/'
+            if hostname and virtual_path.startswith('/'):
+                return hostname, virtual_path
+        return None, path_str
 
     async def pymod(self, modname, path, virtual_path=None):
         """Import python module at path as the given module name."""
