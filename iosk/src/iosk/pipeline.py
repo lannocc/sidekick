@@ -221,27 +221,29 @@ class CommandPipelineExecutor:
         # Iterate through potential paths to find the first existing and executable one
         # Prioritize Python modules over generic scripts/executables if both exist
         for p_base in potential_base_paths:
-            # Check for Python module (.py file with iocall)
-            sandboxed_py_path = self.os.box(f'{p_base}.py', io_context=io)
-            if exists(sandboxed_py_path) and isfile(sandboxed_py_path):
-                # Construct module name for spec from virtual path
-                modname_for_spec = f'sk.iosk.{p_base.strip("/").replace("/", ".")}'
-                try:
-                    spec = importlib.util.spec_from_file_location(modname_for_spec, sandboxed_py_path)
-                    if spec and spec.loader: # Ensure it's a loadable Python module
-                        resolved_internal_path = p_base
-                        is_python_module = True
-                        break # Found a Python module, prioritize it and stop searching
-                except Exception as e:
-                    await io.os.system.error(f'!! python load error for {cmd}: {e}')
-                    pass # Not a loadable Python module or other error, continue search
+            # Check for Python module (.py file with iocall), respecting tombstones
+            virtual_py_path = f'{p_base}.py'
+            if await self.os.fs.exists(io, virtual_py_path):
+                sandboxed_py_path = self.os.box(virtual_py_path, io_context=io)
+                if isfile(sandboxed_py_path):
+                    modname_for_spec = f'sk.iosk.{p_base.strip("/").replace("/", ".")}'
+                    try:
+                        spec = importlib.util.spec_from_file_location(modname_for_spec, sandboxed_py_path)
+                        if spec and spec.loader:
+                            resolved_internal_path = p_base
+                            is_python_module = True
+                            break
+                    except Exception as e:
+                        await io.os.system.error(f'!! python load error for {cmd}: {e}')
+                        pass
 
-            # Check for generic script/executable file (without .py extension)
-            sandboxed_file_path = self.os.box(p_base, io_context=io)
-            if exists(sandboxed_file_path) and isfile(sandboxed_file_path):
-                resolved_internal_path = p_base
-                is_python_module = False
-                break # Found a script, stop search
+            # Check for generic script/executable file, respecting tombstones
+            if await self.os.fs.exists(io, p_base):
+                sandboxed_file_path = self.os.box(p_base, io_context=io)
+                if isfile(sandboxed_file_path):
+                    resolved_internal_path = p_base
+                    is_python_module = False
+                    break
 
         if not resolved_internal_path:
             await io.error(f"!! command not found: {cmd}")
@@ -251,7 +253,7 @@ class CommandPipelineExecutor:
             if is_python_module:
                 modname_for_pymod = resolved_internal_path.strip("/").replace("/", ".").replace("-", "_")
                 # Load the Python module using the kernel's pymod utility
-                py_mod = self.os.pymod(modname_for_pymod, self.os.box(f'{resolved_internal_path}.py'))
+                py_mod = await self.os.pymod(modname_for_pymod, self.os.box(f'{resolved_internal_path}.py'))
                 if py_mod and hasattr(py_mod, 'iocall'):
                     # Execute the iocall method with the context and arguments
                     result = await py_mod.iocall(io, cmd_args)

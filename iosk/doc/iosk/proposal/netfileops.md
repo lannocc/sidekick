@@ -28,7 +28,7 @@ Crucially, this functionality will be exposed through the same kernel APIs used 
 
 #### 1. Path Parsing Utility
 
-A new helper function, `parse_path(path_str) -> (hostname, virtual_path)`, will be added to the kernel. It will be responsible for splitting a path string into its `hostname` and `virtual_path` components. If no hostname is present, it will return `(None, virtual_path)`.
+A new helper function, `parse_path(path_str) -> (hostname, virtual_path)`, will be added to the kernel (`IOSK` class). It will be responsible for splitting a path string into its `hostname` and `virtual_path` components. If no hostname is present, it will return `(None, virtual_path)`.
 
 #### 2. Kernel File Operation Modifications (`kernel.py`)
 
@@ -37,27 +37,28 @@ The core filesystem methods in the `IOSK` class will be updated to serve as disp
 **Example: `IOSK.list_dir` modification:**
 ```python
 # Conceptual change in src/iosk/kernel.py
-async def list_dir(self, io: Context, path: str) -> list:
+async def list_dir(self, io: Context, path: str, **kwargs) -> list:
     hostname, virtual_path = self.parse_path(path) # New parsing step
 
     if not hostname or hostname == self.hostname:
         # --- Local Operation ---
-        # (Existing logic to list a directory from the local sandbox)
+        # Delegate to the local FileSystemManager
+        return await self.fs.list_dir(io, path, **kwargs)
     else:
         # --- Remote Operation ---
         if not self.port:
             await io.error("!! netfs: network subsystem is not available.")
             return None
         # Delegate to PortManager to handle the remote request
-        return await self.port.remote_list_dir(hostname, virtual_path)
+        return await self.port.remote_list_dir(hostname, virtual_path, **kwargs)
 ```
-This pattern of parsing and dispatching will be applied to `copy`, `move`, `get`, `create`, `remove`, `mkdir`, and `rmdir`. For two-argument operations like `copy`, both source and destination paths will be parsed to determine the operation type (local-local, local-remote, remote-local, or remote-remote).
+This pattern of parsing and dispatching will be applied to `copy`, `move`, `get`, `get_raw`, `create`, `remove`, `create_dir`, `remove_dir`, and `exists`. For two-argument operations like `copy`, both source and destination paths will be parsed to determine the operation type (local-local, local-remote, remote-local, or remote-remote).
 
-#### 3. Network Protocol and PortManager Extensions (`port.py`)
+#### 3. Network Protocol and PortManager Extensions (`port.py` and `web.py`)
 
 The `PortManager` will handle the lifecycle of remote filesystem requests.
 
-1.  **New Public Methods**: New methods will be added for the kernel to call, such as:
+1.  **New Public Methods**: New methods will be added to `PortManager` for the kernel to call, such as:
     *   `async def remote_list_dir(self, host, path)`
     *   `async def remote_get_file(self, host, path)`
     *   `async def remote_put_file(self, host, path, content_b64, is_binary)`
@@ -69,7 +70,7 @@ The `PortManager` will handle the lifecycle of remote filesystem requests.
     *   `netfs_put_request` / `netfs_put_response` (request contains file content)
     *   ... and corresponding messages for `mv`, `rm`, `mkdir`, `rmdir`, `describe`.
 
-3.  **Message Dispatcher Update**: The `_dispatch_message` method will be updated to handle these new `netfs_*` request types. Upon receiving a request, it will call the corresponding *local* kernel method (`self.kernel.list_dir`, `self.kernel.get_raw`, etc.) on behalf of the remote peer, and then send the result back in a response message.
+3.  **Message Dispatcher and Handler Update**: The `_dispatch_message` method in `src/iosk/port.py` routes message types to handler functions in `src/iosk/web.py`. New `handle_netfs_*` functions will be added to `web.py`. Upon receiving a request, these handlers will call the corresponding *local* kernel method (`port_manager.os.list_dir`, `port_manager.os.get_raw`, etc.) on behalf of the remote peer, and then send the result back in a response message.
 
 #### 4. Web Client API Updates
 
@@ -80,9 +81,9 @@ The WebSocket API for the web client will be extended to proxy `netfs` requests.
     *   When listing a directory, it will construct its `fs_list` request with the full path, including the `hostname:` prefix if a remote host is targeted.
     *   The logic for handling drag-and-drop between two explorer windows will be updated to construct the correct local and remote paths for the resulting `cp` or `mv` command.
 
-2.  **`port.py` (`_handle_fs_list`, `_handle_fs_read`)**:
-    *   These handlers, which process messages from the client, will be modified. They will use the new `parse_path` utility on the requested path.
-    *   If the path is local, they will function as they do now.
+2.  **`web.py` (`handle_fs_list`, `handle_fs_read`)**:
+    *   These handlers in `src/iosk/web.py`, which process messages from the client, will be modified. They will use the new `parse_path` utility (from the kernel) on the requested path.
+    *   If the path is local, they will function as they do now by calling the local kernel FS method.
     *   If the path is remote, they will call the appropriate `PortManager.remote_*` method (e.g., `remote_list_dir`) and forward the result to the client, ensuring the response format is identical to that of a local request. This makes the proxying transparent to the client.
 
 #### 5. Command Updates (`bin/*.py`)

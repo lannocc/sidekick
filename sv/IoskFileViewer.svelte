@@ -8,6 +8,7 @@
     import { fileSystemRequests, fileSystemResponses, fileSystemTailEvents } from './iosk.js';
     import { marked } from 'marked';
     import { windows, activeConsoles } from './windows.js';
+    import { parseAnsi } from './ansi.js';
 
     // Highlight.js for syntax highlighting
     import hljs from 'highlight.js/lib/core';
@@ -235,7 +236,9 @@
     $: isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(fileExtension);
     $: isMarkdown = ['md', 'markdown'].includes(fileExtension);
     $: isSourceCode = ['py', 'html', 'js', 'css', 'svelte'].includes(fileExtension);
-    $: canRender = (isImage && isBinary) || (isMarkdown && !isBinary) || (isSourceCode && !isBinary);
+    // A plaintext file that is not handled by other renderers can be rendered with ANSI parsing.
+    $: isAnsiText = !isBinary && !isImage && !isMarkdown && !isSourceCode;
+    $: canRender = (isImage && isBinary) || (isMarkdown && !isBinary) || (isSourceCode && !isBinary) || isAnsiText;
 
     $: if (id !== undefined && groupId !== undefined) {
         windows.updateTabProps(groupId, id, { canRender, mode, consoleId });
@@ -423,6 +426,8 @@
                     <div class="rendered-markdown">{@html marked(content_text)}</div>
                 {:else if isSourceCode}
                     <pre class="rendered-code"><code class="language-{fileExtension} hljs">{@html highlighted_html}</code></pre>
+                {:else if isAnsiText}
+                    <div>{@html parseAnsi(content_text)}</div>
                 {/if}
             {:else}
                 <!-- Fallback to raw view if mode is 'rendered' but not possible -->

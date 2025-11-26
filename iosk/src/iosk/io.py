@@ -3,7 +3,7 @@
 
 from datetime import datetime, date
 from os import makedirs
-from os.path import join, isdir, exists
+from os.path import join, isdir, exists, dirname
 from io import StringIO
 import sys
 from . import util
@@ -96,8 +96,15 @@ class Context:
         self.log = log_file # opened file handle
         self.parent = None  # parent Context
 
-        chatter = join(self.CHATTER, str(self.os.BOOT), str(self.cid))
-        self.chatter = open(self.os.box(chatter), 'w')
+        # FIX: The chatter file is a write operation and must always target the
+        # workspace. self.os.box() resolves to the distribution if the path
+        # doesn't exist in the workspace, which is incorrect for writing.
+        # We must use the filesystem manager's write-path resolver and ensure
+        # the host directory exists before opening the file.
+        chatter_vpath = join(self.CHATTER, str(self.os.BOOT), str(self.cid))
+        chatter_hpath = self.os.fs.box_for_write(chatter_vpath)
+        makedirs(dirname(chatter_hpath), exist_ok=True)
+        self.chatter = open(chatter_hpath, 'w')
 
         self.base = False # True if this is the root Context
 
@@ -401,7 +408,10 @@ class Capture:
     @classmethod
     def log(cls, iosk, path, mkdirs=False):
         if mkdirs:
-            folder = iosk.box(path)
+            # FIX: The log directory path must be resolved to the workspace for
+            # writing. iosk.box() can fall back to the dist_root, which is
+            # read-only and the wrong location for logs.
+            folder = iosk.fs.box_for_write(path)
             if not exists(folder):
                 makedirs(folder)
 
@@ -409,7 +419,8 @@ class Capture:
                 raise ValueError(f'path exists but not a folder: {folder}')
 
         today = date.today().strftime('%Y-%m-%d')
-        file_path = iosk.box(join(path, f'{today}.log'))
+        # FIX: The final log file path must also be resolved to the workspace.
+        file_path = iosk.fs.box_for_write(join(path, f'{today}.log'))
 
         if file_path in cls.logs:
             return cls.logs[file_path]
@@ -443,4 +454,3 @@ def serialize_context_for_frontend(io: Context) -> dict:
             ],
         },
     }
-

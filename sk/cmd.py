@@ -134,7 +134,7 @@ def main(args, called=''):
             elif op == '-q': quiet_flag_present = True
             elif op == '-c': chatter = True
             elif op == '-s': shot = True
-            elif op in ['-1', '-2', '-3']: model_flag = op
+            elif op in ['-1', '-2', '-3', '-4']: model_flag = op
 
             # Handle options that take arguments
             elif op == '-a':
@@ -181,11 +181,13 @@ def main(args, called=''):
     # Set model based on flags
     if use_openai:
         if model_flag == '-1': model = config.OPENAI_MODEL_QUICK_1
-        elif model_flag == '-3': model = config.OPENAI_MODEL_SMART
+        elif model_flag == '-3': model = config.OPENAI_MODEL_SMART_1
+        elif model_flag == '-4': model = config.OPENAI_MODEL_SMART_2
         else: model = config.OPENAI_MODEL_QUICK_2  # Default or -2
     else:
         if model_flag == '-1': model = config.GEMINI_MODEL_QUICK_1
-        elif model_flag == '-3': model = config.GEMINI_MODEL_SMART
+        elif model_flag == '-3': model = config.GEMINI_MODEL_SMART_1
+        elif model_flag == '-4': model = config.GEMINI_MODEL_SMART_2
         else: model = config.GEMINI_MODEL_QUICK_2   # Default or -2
 
 
@@ -434,7 +436,9 @@ OPTIONS = {
     '-2': (None,
         '(ask only) use QUICK_2 model (gemini-2.5-flash / gpt-5-mini) [DEFAULT]'),
     '-3': (None,
-        '(ask only) use SMART model (gemini-2.5-pro / gpt-5)'),
+        '(ask only) use SMART_1 model (gemini-2.5-pro / gpt-5)'),
+    '-4': (None,
+        '(ask only) use SMART_2 model (gemini-3-pro-preview / gpt-5.1)'),
 }
 
 

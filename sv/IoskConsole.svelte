@@ -48,6 +48,8 @@
     let attachUsers = [];
     let isLoadingDevices = false;
     let isLoadingUsers = false;
+    let attachMenuPosition = { x: 0, y: 0 };
+
 
     // --- State for User Context Menu ---
     let userContextMenu = {
@@ -248,6 +250,21 @@
         }
     }
 
+    function handleGlobalKeyDown(event) {
+        if (event.key === 'Escape') {
+            if (showAttachMenu) {
+                showAttachMenu = false;
+                focusInput();
+            }
+        }
+    }
+
+    $: if (showAttachMenu) {
+        window.addEventListener('keydown', handleGlobalKeyDown);
+    } else {
+        window.removeEventListener('keydown', handleGlobalKeyDown);
+    }
+
     onMount(() => {
         // Initialize local input values from passed-in props
         localWsUrl = wsUrl;
@@ -286,6 +303,7 @@
             commandsUnsubscribe();
         }
         window.removeEventListener('click', handleGlobalClick);
+        window.removeEventListener('keydown', handleGlobalKeyDown);
     });
 
     $: if (id !== undefined && groupId !== undefined) {
@@ -357,10 +375,10 @@
         focusInput();
     }
 
-    function viewUserLog() {
-        if (!userContextMenu.user) return;
+    function viewUserLog(user) {
+        if (!user) return;
 
-        const usernameOnly = userContextMenu.user.split('.')[0];
+        const usernameOnly = user.split('.')[0];
 
         const now = new Date();
         const year = now.getFullYear();
@@ -395,9 +413,9 @@
         focusInput();
     }
 
-    function handleDetachUser() {
-        if (!userContextMenu.user) return;
-        const commandToRun = `$ detach ${userContextMenu.user}`;
+    function handleDetachUser(user) {
+        if (!user) return;
+        const commandToRun = `$ detach ${user}`;
         sendSystemCommand(commandToRun);
         closeUserContextMenu();
         focusInput();
@@ -423,6 +441,20 @@
         const command = participant.paused ? `unpause ${participant.name}` : `pause ${participant.name}`;
         sendSystemCommand(`$ ${command}`);
         focusInput();
+    }
+
+    function handlePanelClick(event) {
+        // This function handles both expanding and collapsing the user panel.
+        if (isUsersPanelCollapsed) {
+            // If collapsed, any click on the panel should expand it.
+            // Clicks on interactive elements within the header are stopped by their own handlers.
+            isUsersPanelCollapsed = false;
+        } else if (event.target.classList.contains('user-list')) {
+            // If expanded, only a click directly on the user-list container (the "blank area")
+            // should collapse it. Clicks on user items will bubble up, but their target
+            // will not be the user-list itself.
+            isUsersPanelCollapsed = true;
+        }
     }
 
     // --- Functions ---
@@ -779,6 +811,14 @@
 
     export function toggleAttachMenu() {
         showAttachMenu = !showAttachMenu;
+        if (showAttachMenu) {
+            const rect = attachButton.getBoundingClientRect();
+            // Position popup's top below the button's bottom, and right edges aligned.
+            attachMenuPosition = {
+                x: rect.right,
+                y: rect.bottom + 2,
+            };
+        }
     }
 
     function requestAttachData() {
@@ -797,9 +837,13 @@
     function handleAttach(event) {
         const { device, user } = event.detail;
         if (!device) return;
-        const commandToRun = user
-            ? `$ attach ${device} ${user}`
+
+        const finalUser = user.trim();
+
+        const commandToRun = finalUser
+            ? `$ attach ${device} ${finalUser}`
             : `$ attach ${device}`;
+
         output = [...output, {type: 'prompt', content: currentPrompt + commandToRun}];
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
@@ -972,16 +1016,26 @@
         right: 5px;
     }
     .user-list { flex-grow: 1; overflow-y: auto; padding: 4px; }
-    .collapsed-user-count {
+    .collapsed-user-counts {
         display: flex;
+        flex-direction: column;
         align-items: center;
-        justify-content: center;
         flex-grow: 1;
+        padding-top: 8px;
         color: var(--title-bar-text);
         font-weight: bold;
         font-size: 1.1em;
-        cursor: default;
+        cursor: pointer;
         user-select: none;
+    }
+    .collapsed-count-separator {
+        width: 60%;
+        height: 1px;
+        background-color: var(--border-color);
+        margin: 4px 0;
+    }
+    .remote-user-count {
+        color: var(--ansi-cyan);
     }
     .user-item { padding: 2px 6px; cursor: pointer; border-radius: 2px; display: flex; align-items: center; }
     .user-item:hover { background-color: var(--taskbar-button-hover-bg); }
@@ -1047,6 +1101,19 @@
         opacity: 1;
     }
     .menu-separator { height: 3px; background-color: var(--border-color); margin: 0; }
+
+    /* Attach Menu Styles */
+    .attach-menu-wrapper {
+        z-index: 200;
+        /* Position is set via style attribute */
+        transform: translateX(-100%); /* Aligns right edge of popup with left coordinate */
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        display: flex;
+        flex-direction: column;
+    }
 </style>
 
 <div class="console-container">
@@ -1077,14 +1144,16 @@
     {/if}
 
     {#if showAttachMenu}
-        <AttachMenu
-            {isLoadingDevices}
-            {attachDevices}
-            {isLoadingUsers}
-            {attachUsers}
-            on:requestData={requestAttachData}
-            on:attach={handleAttach}
-        />
+        <div class="attach-menu-wrapper attach-menu" style="position: fixed; top: {attachMenuPosition.y}px; left: {attachMenuPosition.x}px;">
+            <AttachMenu
+                {isLoadingDevices}
+                {attachDevices}
+                {isLoadingUsers}
+                {attachUsers}
+                on:requestData={requestAttachData}
+                on:attach={handleAttach}
+            />
+        </div>
     {/if}
 
     <div class="main-flex-area">
@@ -1105,7 +1174,7 @@
         </div>
 
         {#if isConnected}
-        <div class="users-panel" style="--panel-width: {usersPanelWidth}px" class:collapsed={isUsersPanelCollapsed}>
+        <div class="users-panel" style="--panel-width: {usersPanelWidth}px" class:collapsed={isUsersPanelCollapsed} on:click={handlePanelClick}>
             {#if !isUsersPanelCollapsed}
                 <div class="users-panel-resizer" on:mousedown={startResize}></div>
             {/if}
@@ -1117,7 +1186,7 @@
                     {#if !isUsersPanelCollapsed}
                         <button class="attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
                     {/if}
-                    <button class="collapse-toggle-button" on:click={() => isUsersPanelCollapsed = !isUsersPanelCollapsed} title={isUsersPanelCollapsed ? 'Expand' : 'Collapse'}>
+                    <button class="collapse-toggle-button" on:click|stopPropagation={() => isUsersPanelCollapsed = !isUsersPanelCollapsed} title={isUsersPanelCollapsed ? 'Expand' : 'Collapse'}>
                         {isUsersPanelCollapsed ? '❮' : '❯'}
                     </button>
                 </div>
@@ -1197,8 +1266,16 @@
                     {/each}
                 </div>
             {:else}
-                <div class="collapsed-user-count" title="{roomParticipants.length} users">
-                    {roomParticipants.length}
+                <div class="collapsed-user-counts" title="Click to expand Users panel">
+                    <div title={"Local Users:\n" + localUsers.map(u => u.displayName).join('\n')}>
+                        {localUsers.length}
+                    </div>
+                    {#if remoteUsers.length > 0}
+                        <div class="collapsed-count-separator"></div>
+                        <div class="remote-user-count" title={"Remote Users:\n" + remoteUsers.map(u => u.displayName).join('\n')}>
+                            {remoteUsers.length}
+                        </div>
+                    {/if}
                 </div>
             {/if}
         </div>
@@ -1230,9 +1307,9 @@
             {colorNameToCss}
             on:inspectContext={e => inspectUserContext(e.detail)}
             on:privateChat={e => openPrivateChat(e.detail)}
-            on:viewLog={viewUserLog}
+            on:viewLog={e => viewUserLog(e.detail)}
             on:setColor={handleSetColor}
-            on:detach={handleDetachUser}
+            on:detach={e => handleDetachUser(e.detail)}
         />
     {/if}
 

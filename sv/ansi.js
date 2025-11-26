@@ -14,6 +14,7 @@ export const ansiCodeToCssVar = {
 /**
  * Parses a string containing ANSI escape codes and converts it into HTML with inline styles.
  * It handles standard and bright colors, as well as the reset code.
+ * It also strips some common control characters like bell and clear screen.
  * @param {string} text The text to parse.
  * @returns {string} The HTML representation of the text.
  */
@@ -22,6 +23,10 @@ export function parseAnsi(text) {
     // This regex handles standard color codes and also the reset code which can be `[0m` or just `[m`.
     const ansiRegex = /\u001b\[(\d*)m/g;
     let openSpan = false;
+
+    // Strip some common non-rendering control characters like bell and clear screen.
+    const controlCharsRegex = /\u0007|\x1b\[H\x1b\[2J|\x1b\[2J/g;
+    text = text.replace(controlCharsRegex, '');
 
     // Sanitize the text to prevent HTML injection.
     let sanitizedText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -52,10 +57,11 @@ export function parseAnsi(text) {
 /**
  * Strips all ANSI escape codes from a string.
  * @param {string} text The text to strip codes from.
- * @returns {string} The text without any ANSI codes.
+ * @returns {string} The text without any ANSI codes or control characters.
  */
 export function stripAnsi(text) {
     if (typeof text !== 'string') return '';
     const ansiRegex = /\u001b\[\d*m/g; // Use * to match empty codes as well
-    return text.replace(ansiRegex, '');
+    const controlCharsRegex = /\u0007|\x1b\[H\x1b\[2J|\x1b\[2J/g;
+    return text.replace(ansiRegex, '').replace(controlCharsRegex, '');
 }

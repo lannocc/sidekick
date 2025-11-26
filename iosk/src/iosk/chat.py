@@ -30,49 +30,66 @@ class AIMessenger:
         self.room_owner = None
         self.local_room_participants = set()
 
-    async def _broadcast_room_state_update(self):
-        """Gathers current room state and broadcasts it to clients."""
-        if not self.os.port: return
-
-        # --- BEGIN MODIFICATION ---
-        # The original code sent a list of strings, causing a frontend crash.
-        # This new logic constructs a list of objects, each with 'name' and 'is_bot'
-        # properties, which is what the frontend expects.
-
+    async def _get_state_payload(self) -> dict:
+        """Constructs a state payload dictionary with current room and participant info."""
         all_participants = []
+        
+        # Determine which users to include in the list
+        user_addrs_to_include = []
         if self.active_room:
-            # We iterate network_rooms, which is the single source of truth for who is in what room.
+            # If in a room, combine participants from network state and all local users.
+            # This ensures the list is complete.
+            
+            # Start with users known to be in the room from network state.
             for user_addr, room_name in self.os.network_rooms.items():
                 if room_name == self.active_room:
-                    user, host = user_addr.split('.', 1)
-                    is_bot = False
-                    paused = False # NEW: default paused state
-                    if host == self.os.hostname:
-                        # It's a local user; get the 'is_bot' status from the live context.
-                        if user in self.os.users.contexts:
-                            user_io = self.os.users.contexts[user] # Get context once
-                            is_bot = user_io.session.bot
-                            paused = user_io.session.paused # NEW: get paused state
-                    else:
-                        # It's a remote user; get the 'is_bot' status from the cached network state.
-                        user_info = self.os.network_users.get(user_addr, {})
-                        is_bot = user_info.get('is_bot', False)
-                        paused = user_info.get('paused', False) # NEW: get paused state
-                    
-                    all_participants.append({'name': user_addr, 'is_bot': is_bot, 'paused': paused})
+                    user_addrs_to_include.append(user_addr)
+            
+            # Add all current local users, as they are de facto in the room.
+            for local_user in self.os.users.contexts.keys():
+                user_addrs_to_include.append(f"{local_user}.{self.os.hostname}")
+
+        else:
+            # If not in a room, include all known users in the mesh.
+            user_addrs_to_include = list(self.os.network_users.keys())
+
+        # Gather details for each unique user in the list, sorted alphabetically.
+        for user_addr in sorted(list(set(user_addrs_to_include))):
+            user, host = user_addr.split('.', 1)
+            is_bot = False
+            paused = False
+            if host == self.os.hostname:
+                # It's a local user; get live status from their context.
+                if user in self.os.users.contexts:
+                    user_io = self.os.users.contexts[user]
+                    is_bot = user_io.session.bot
+                    paused = user_io.session.paused
+            else:
+                # It's a remote user; get cached status from network_users.
+                user_info = self.os.network_users.get(user_addr, {})
+                is_bot = user_info.get('is_bot', False)
+                paused = user_info.get('paused', False)
+            
+            all_participants.append({'name': user_addr, 'is_bot': is_bot, 'paused': paused})
 
         # Get available rooms. Need a valid IO context for kernel calls. Use system.
         available_rooms = await self.os.get_room_list(self.os.system)
 
-        payload = {
-            'type': 'room_state_update',
+        return {
             'roomName': self.active_room,
             'roomTopic': self.room_topic,
-            'participants': sorted(all_participants, key=lambda p: p['name']),
+            'participants': all_participants,
             'availableRooms': available_rooms
         }
+
+    async def _broadcast_room_state_update(self):
+        """Gathers current room state and broadcasts it to clients."""
+        if not self.os.port: return
+
+        payload = await self._get_state_payload()
+        payload['type'] = 'room_state_update'
+        
         await self.os.port.broadcast_to_clients(payload)
-        # --- END MODIFICATION ---
 
     async def _setup_chat_context(self, io):
         """Executes preamble, caches it, and calculates initial token counts."""
@@ -211,7 +228,7 @@ class AIMessenger:
                                 if sender_color:
                                     reset = util.ANSI_RESET
                                     bold = util.ANSI_BOLD
-                                    me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", util.COLOR_MAP['bright_white'])
+                                    me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", util.COLOR_MAP[util.USER_SELF_COLOR_NAME])
                                     colored_sender = f'{bold}{sender_color}{remote_from_addr}{reset}'
                                     bold_me = f'{bold}{me_color}me{reset}'
                                     colored_msg = f'{sender_color}{actual_msg}{reset}'
@@ -232,7 +249,7 @@ class AIMessenger:
                     if not sender_io.session.bot and sender_io.session.user_colors:
                         reset = util.ANSI_RESET
                         bold = util.ANSI_BOLD
-                        me_color = sender_io.session.user_colors.get(f"{from_user}.{self.os.hostname}", util.COLOR_MAP['bright_white'])
+                        me_color = sender_io.session.user_colors.get(f"{from_user}.{self.os.hostname}", util.COLOR_MAP[util.USER_SELF_COLOR_NAME])
                         bold_me = f'{bold}{me_color}me{reset}'
                         colored_recipients = []
                         for r_addr in recipients:
@@ -472,7 +489,7 @@ class AIMessenger:
                         if sender_color:
                             reset = util.ANSI_RESET
                             bold = util.ANSI_BOLD
-                            me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", util.COLOR_MAP['bright_white'])
+                            me_color = uio.session.user_colors.get(f"{uio.session.user}.{self.os.hostname}", util.COLOR_MAP[util.USER_SELF_COLOR_NAME])
                             colored_sender = f'{bold}{sender_color}{from_addr}{reset}'
                             bold_me = f'{bold}{me_color}me{reset}'
                             colored_content = f'{sender_color}{content}{reset}'

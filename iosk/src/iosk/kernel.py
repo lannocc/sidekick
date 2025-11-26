@@ -21,8 +21,8 @@ import aioconsole
 from datetime import datetime, timedelta
 import os
 import posixpath
-from os.path import isdir, isfile, exists, getsize, getmtime
-import importlib, importlib.util
+from os.path import isdir, isfile, exists, getsize, getmtime, abspath, dirname, join as path_join
+import importlib, importlib.util, importlib.resources
 import sys
 import shutil
 import traceback
@@ -42,9 +42,23 @@ class IOSK:
     SKRC = '/etc/skrc'
     SKEL_SKRC = '/etc/skel/skrc' # Added for the new requirement
 
-    def __init__(self, root):
-        self.root = root # path
+    def __init__(self, workspace_root):
+        self.workspace_root = abspath(workspace_root)
+        self.dist_root = None
         self.started = None
+
+        # --- Find Distribution Root ---
+        try:
+            # For installed packages via pip. This will find the bundled 'bin', 'etc', etc.
+            self.dist_root = importlib.resources.files('sk').joinpath('iosk_dist')
+        except (ModuleNotFoundError, AttributeError):
+            # Fallback for development environment: the distribution is the workspace.
+            # This allows direct editing of source files.
+            self.dist_root = self.workspace_root
+
+        # Handle the developer workflow case where workspace IS the distribution
+        #if self.workspace_root == self.dist_root:
+        #    print(":: Developer mode: Workspace and Distribution roots are the same.")
 
         self.ready = asyncio.Event()
         self.halt = asyncio.Event()
@@ -90,41 +104,39 @@ class IOSK:
         self.started = datetime.now()
         fail = None
 
-        if not isdir(self.root):
-            fail = 'bad root'
+        if not exists(self.workspace_root):
+            try:
+                os.makedirs(self.workspace_root)
+                print(f":: Created workspace directory: {self.workspace_root}")
+            except OSError as e:
+                fail = f'bad workspace: could not create: {e}'
+        elif not isdir(self.workspace_root):
+            fail = f'bad workspace: not a directory: {self.workspace_root}'
 
         io = None
 
         if not fail:
-            boot = self.fs.box(self.BOOT_COUNT)
-            if exists(boot):
-                with open(boot, 'r') as bf:
+            # All filesystem operations now go through the overlay-aware fs manager
+            # The fs manager will ensure writes go to the workspace
+            boot_path_host = self.fs.box_for_write(self.BOOT_COUNT)
+            
+            # Ensure parent directory exists in workspace
+            boot_dir = os.path.dirname(boot_path_host)
+            if not exists(boot_dir):
+                os.makedirs(boot_dir)
+
+            if exists(boot_path_host):
+                with open(boot_path_host, 'r') as bf:
                     self.BOOT = int(bf.read()) + 1
+            
+            with open(boot_path_host, 'w') as bf:
+                bf.write(str(self.BOOT))
+            
+            # These directories are created in the workspace by fs write operations
+            await self.fs.create_dir(Context(self, self.CONSOLE_DEV), f'{Context.CHATTER}/{self.BOOT}', parents=True)
+            await self.fs.create_dir(Context(self, self.CONSOLE_DEV), Context.CODE, parents=True)
+            await self.fs.create_dir(Context(self, self.CONSOLE_DEV), '/var/log/trip', parents=True)
 
-            chatter = self.fs.box(f'{Context.CHATTER}/{self.BOOT}')
-            if not exists(chatter):
-                os.makedirs(chatter) # creates /var/cache
-            elif not isdir(chatter):
-                fail = f'not a dir: {chatter}'
-
-        if not fail:
-            code = self.fs.box(Context.CODE)
-            if not exists(code):
-                os.makedirs(code)
-            elif not isdir(code):
-                fail = f'not a dir: {code}'
-
-        # Added for trace proposal
-        if not fail:
-            trip_log_dir = self.fs.box('/var/log/trip')
-            if not exists(trip_log_dir):
-                os.makedirs(trip_log_dir)
-            elif not isdir(trip_log_dir):
-                fail = f'not a dir: {trip_log_dir}'
-
-        if not fail:
-            with open(boot, 'w') as boot: # assumes /var/cache exists
-                boot.write(str(self.BOOT))
 
         if not fail:
             io = self.system = Context(self, self.CONSOLE_DEV,
@@ -140,11 +152,11 @@ class IOSK:
         if not fail:
             # Read hostname
             hostname_path = self.fs.box('/etc/hostname')
-            if exists(hostname_path):
+            if await self.fs.exists(None, '/etc/hostname'):
                 with open(hostname_path, 'r') as f:
                     self.hostname = f.read().strip() or 'localhost'
             else:
-                self.hostname = os.path.basename(os.path.abspath(self.root)) or 'localhost'
+                self.hostname = os.path.basename(os.path.abspath(self.workspace_root)) or 'localhost'
 
             # Instantiate subsystems
             self.port = PortManager(self)
@@ -355,48 +367,220 @@ class IOSK:
         return await self.fs.get_room_list(io)
 
     async def exists(self, io:Context, path:str):
-        """Tests if a path exists. Delegates to FileSystemManager."""
-        return await self.fs.exists(io, path)
+        """Tests if a path exists, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.exists(io, path)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return False
+            return await self.port.remote_exists(hostname, virtual_path)
 
     async def create(self, io:Context, path:str):
-        """Creates an empty file. Delegates to FileSystemManager."""
-        return await self.fs.create(io, path)
+        """Creates an empty file, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.create(io, path)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return False
+            # An empty put operation creates a file.
+            return await self.port.remote_put_file(hostname, virtual_path, b'')
 
     async def copy(self, io:Context, from_path:str, to_path:str):
-        """Copies a file. Delegates to FileSystemManager."""
-        return await self.fs.copy(io, from_path, to_path)
+        """Copies a file, with support for local and remote paths."""
+        from_host, from_vpath = self.parse_path(from_path)
+        to_host, to_vpath = self.parse_path(to_path)
+
+        is_from_local = not from_host or from_host == self.hostname
+        is_to_local = not to_host or to_host == self.hostname
+
+        # Case 1: Local -> Local (no changes, shutil.copy handles this)
+        if is_from_local and is_to_local:
+            return await self.fs.copy(io, from_path, to_path)
+
+        if not self.port:
+            await io.error("!! netfs: network subsystem is not available.")
+            return False
+
+        source_basename = posixpath.basename(from_vpath)
+
+        # Case 2: Local -> Remote
+        if is_from_local and not is_to_local:
+            final_to_vpath = to_vpath
+            # If remote destination ends with '/', treat it as a directory
+            if to_vpath.endswith('/'):
+                final_to_vpath = posixpath.join(to_vpath, source_basename)
+
+            content_bytes = await self.get_raw(io, from_path)
+            if content_bytes is None:
+                return False
+            return await self.port.remote_put_file(to_host, final_to_vpath, content_bytes)
+
+        # Case 3: Remote -> Local
+        if not is_from_local and is_to_local:
+            final_to_path = to_path
+            # For local destination, we can check if it's a directory
+            host_dest_path = self.fs.box(to_path, io)
+            if isdir(host_dest_path):
+                final_to_path = posixpath.join(to_path, source_basename)
+
+            content_bytes = await self.get_raw(io, from_path)
+            if content_bytes is None:
+                return False
+
+            host_path = self.fs.box_for_write(final_to_path)
+            try:
+                parent_dir = dirname(host_path)
+                if not exists(parent_dir):
+                    os.makedirs(parent_dir, exist_ok=True)
+                with open(host_path, 'wb') as f:
+                    f.write(content_bytes)
+                return True
+            except Exception as e:
+                await io.error(f"!! failed to write local file {final_to_path}: {e}")
+                return False
+
+        # Case 4: Remote -> Remote
+        if not is_from_local and not is_to_local:
+            final_to_vpath = to_vpath
+            # Use the same heuristic for remote-to-remote copies
+            if to_vpath.endswith('/'):
+                final_to_vpath = posixpath.join(to_vpath, source_basename)
+
+            # Case 4a: Same remote host
+            if from_host == to_host:
+                return await self.port.remote_copy(from_host, from_vpath, final_to_vpath)
+            # Case 4b: Different remote hosts (third-party transfer via this host)
+            else:
+                await io.print(f":: proxying file from {from_host} to {to_host}...")
+                content_bytes = await self.get_raw(io, from_path)
+                if content_bytes is None:
+                    return False
+                return await self.port.remote_put_file(to_host, final_to_vpath, content_bytes)
+
+        return False
 
     async def move(self, io:Context, from_path:str, to_path:str):
-        """Moves a file or directory. Delegates to FileSystemManager."""
-        return await self.fs.move(io, from_path, to_path)
+        """Moves a file or directory, with support for local and remote paths."""
+        from_host, from_vpath = self.parse_path(from_path)
+        to_host, to_vpath = self.parse_path(to_path)
+
+        is_from_local = not from_host or from_host == self.hostname
+        is_to_local = not to_host or to_host == self.hostname
+
+        # Case 1: Local -> Local
+        if is_from_local and is_to_local:
+            return await self.fs.move(io, from_path, to_path)
+
+        if not self.port:
+            await io.error("!! netfs: network subsystem is not available.")
+            return False
+
+        # Optimization: Remote -> Remote on the same host
+        if not is_from_local and not is_to_local and from_host == to_host:
+            return await self.port.remote_move(from_host, from_vpath, to_vpath)
+
+        # All other cases are emulated as copy then remove.
+        copied = await self.copy(io, from_path, to_path)
+        if not copied:
+            await io.error(f"!! move failed: could not copy {from_path} to {to_path}")
+            return False
+
+        removed = await self.remove(io, from_path)
+        if not removed:
+            await io.error(f"!! move warning: source {from_path} could not be removed after copy.")
+            return False
+
+        return True
 
     async def remove(self, io:Context, path:str):
-        """Removes a file. Delegates to FileSystemManager."""
-        return await self.fs.remove(io, path)
+        """Removes a file, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.remove(io, path)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return False
+            return await self.port.remote_remove_file(hostname, virtual_path)
 
     async def create_dir(self, io:Context, path:str, parents=False):
-        """Creates a directory. Delegates to FileSystemManager."""
-        return await self.fs.create_dir(io, path, parents)
+        """Creates a directory, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.create_dir(io, path, parents)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return False
+            return await self.port.remote_create_dir(hostname, virtual_path, parents=parents)
 
     async def remove_dir(self, io:Context, path:str):
-        """Removes a directory. Delegates to FileSystemManager."""
-        return await self.fs.remove_dir(io, path)
+        """Removes a directory, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.remove_dir(io, path)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return False
+            return await self.port.remote_remove_dir(hostname, virtual_path)
 
-    async def list_dir(self, io: Context, path: str, recursive: bool = False) -> list:
-        """Lists directory contents. Delegates to FileSystemManager."""
-        return await self.fs.list_dir(io, path, recursive)
+    async def unremove(self, io:Context, path:str):
+        """Restores a file by removing its tombstone. Delegates to FileSystemManager."""
+        return await self.fs.unremove(io, path)
+
+    async def list_dir(self, io: Context, path: str, recursive: bool = False, show_all: bool = False, honor_skignore: bool = True) -> list:
+        """Lists directory contents, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.list_dir(io, path, recursive=recursive, show_all=show_all, honor_skignore=honor_skignore)
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return None
+            return await self.port.remote_list_dir(hostname, virtual_path, recursive=recursive, show_all=show_all, honor_skignore=honor_skignore)
 
     ###
     ### FILE I/O (DELEGATED AND LOCAL)
     ###
 
     async def get(self, io:Context, path:str):
-        """Gets file contents. Delegates to FileSystemManager."""
-        return await self.fs.get(io, path)
+        """Gets file contents, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            return await self.fs.get(io, path) # Local case uses local logic with is_binary check
+        else:
+            # Remote case: get raw bytes and attempt to decode
+            content_bytes = await self.get_raw(io, path)
+            if content_bytes is None:
+                return None
+            try:
+                # We can't do a proper is_binary check on remote bytes without the file.
+                # The primary goal of `get` is to return decoded text, so we attempt that.
+                # A binary file will fail here, which is the desired outcome.
+                return content_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                await io.error(f"!! remote file is not utf-8 encoded or is binary: {path}")
+                return None
 
     async def get_raw(self, io:Context, path:str):
-        """Gets raw file contents. Delegates to FileSystemManager."""
-        return await self.fs.get_raw(io, path)
+        """Gets raw file contents, locally or remotely."""
+        hostname, virtual_path = self.parse_path(path)
+        if not hostname or hostname == self.hostname:
+            content, _, error = await self.fs.get_raw(io, path)
+            if error:
+                await io.error(f"!! get_raw failed for {path}: {error}")
+                return None
+            return content
+        else:
+            if not self.port:
+                await io.error("!! netfs: network subsystem is not available.")
+                return None
+            return await self.port.remote_get_file(hostname, virtual_path)
 
     async def send(self, io:Context, dev:str, data):
         """Send data to device."""
@@ -448,8 +632,9 @@ class IOSK:
             return False
 
         dev = dev[5:]
-        path = self.fs.box(posixpath.join('/dev', dev))
-        py = self.pymod(f'dev.{dev.replace("/", ".").replace("-", "_")}', path)
+        virtual_dev_path = posixpath.join('/dev', dev)
+        path = self.fs.box(virtual_dev_path)
+        py = await self.pymod(f'dev.{dev.replace("/", ".").replace("-", "_")}', path, virtual_path=virtual_dev_path)
 
         if py:
             try:
@@ -479,8 +664,9 @@ class IOSK:
             return None
 
         dev = dev[5:]
-        path = self.fs.box(posixpath.join('/dev', dev))
-        py = self.pymod(f'dev.{dev.replace("/", ".").replace("-", "_")}', path)
+        virtual_dev_path = posixpath.join('/dev', dev)
+        path = self.fs.box(virtual_dev_path)
+        py = await self.pymod(f'dev.{dev.replace("/", ".").replace("-", "_")}', path, virtual_path=virtual_dev_path)
 
         if py:
             try:
@@ -509,8 +695,11 @@ class IOSK:
         # This requires a standardized way to get a client from a device module.
         dev_name = dev_virtual_path.replace('/dev/', '', 1)
         mod_name_for_pymod = dev_name.replace('/', '.').replace('-', '_')
-        host_py_path = self.fs.box(f"{dev_virtual_path}.py", io_context=io)
-        dev_mod = self.pymod(f'dev.{mod_name_for_pymod}', host_py_path)
+        # The original code explicitly looked for a .py file. We preserve this by checking
+        # for existence of the logical path, which fs.exists will resolve to a .py file if needed.
+        virtual_py_path = f"{dev_virtual_path}.py"
+        host_py_path = self.fs.box(virtual_py_path, io_context=io)
+        dev_mod = await self.pymod(f'dev.{mod_name_for_pymod}', host_py_path, virtual_path=dev_virtual_path)
 
         if not dev_mod or not hasattr(dev_mod, 'get_client'):
             await io.error(f"!! device module for '{dev_virtual_path}' is invalid or missing get_client() function.")
@@ -667,7 +856,7 @@ class IOSK:
             device_name = device_path.replace('/dev/', '').replace('/', '-')
             base_filename = f'{device_name}-{io.session.user}-{self.BOOT}-{io.cid}-{tid}'
 
-            trip_log_dir_host = self.fs.box('/var/log/trip')
+            trip_log_dir_host = self.fs.box_for_write('/var/log/trip')
             prompt_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.prompt')
             reply_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.reply')
             tokens_file_host = os.path.join(trip_log_dir_host, f'{base_filename}.tokens')
@@ -700,18 +889,36 @@ class IOSK:
         """Sandboxes a virtual path to the host. Delegates to FileSystemManager."""
         return self.fs.box(virtual_path_input, io_context)
 
-    def pymod(self, modname, path):
+    def parse_path(self, path_str: str) -> tuple[str | None, str]:
+        """
+        Parses a path string into (hostname, virtual_path).
+        Returns (None, path_str) if the path is local.
+        Syntax: `hostname:/path/to/resource`
+        """
+        if ':' in path_str:
+            hostname, virtual_path = path_str.split(':', 1)
+            # A valid remote path must have a non-empty hostname and start with a '/'
+            if hostname and virtual_path.startswith('/'):
+                return hostname, virtual_path
+        return None, path_str
+
+    async def pymod(self, modname, path, virtual_path=None):
         """Import python module at path as the given module name."""
+        # Requirement 4: Honor tombstones by checking existence with fs.exists
+        if virtual_path and not await self.fs.exists(None, virtual_path):
+            return None
+
         modname = f'sk.iosk.{modname}'
         if not path.endswith('.py'): path += '.py'
 
         py = None
         try:
             spec = importlib.util.spec_from_file_location(modname, path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            sys.modules[modname] = mod
-            py = mod
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                sys.modules[modname] = mod
+                py = mod
         except:
             py = None
 

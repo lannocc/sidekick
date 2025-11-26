@@ -18,25 +18,29 @@ async def iocall(io, argv): # Changed 'args' to 'argv'
         await io.print(iocall.__doc__)
         return
 
-    path = argv[0] # Changed from args.strip() to argv[0]
-    box = io.os.box(path, io_context=io)
+    path = argv[0]
 
-    if not exists(box):
+    # Use overlay-aware exists to respect tombstones
+    if not await io.os.exists(io, path):
         await io.error(f'!! describe: path not found: {path}')
         return
 
+    # Once we know it exists, box it to get the host path for reading
+    box = io.os.box(path, io_context=io)
+
     if isdir(box):
         try:
-            entries = os.listdir(box)
+            # Use overlay-aware list_dir for merged view
+            listing = await io.os.list_dir(io, path)
         except Exception as e:
             await io.error(f'!! describe: cannot list directory: {e}')
             return
 
-        files = sum(1 for e in entries if isfile(os.path.join(box, e)))
-        dirs = sum(1 for e in entries if isdir(os.path.join(box, e)))
+        files = sum(1 for item in listing if item['type'] == 'file')
+        dirs = sum(1 for item in listing if item['type'] == 'dir')
         await io.print(f'Path: {path}')
         await io.print('Type: directory')
-        await io.print(f'Items: {len(entries)} (files: {files}, dirs: {dirs})')
+        await io.print(f'Items: {len(listing)} (files: {files}, dirs: {dirs})')
         return True
 
     # File

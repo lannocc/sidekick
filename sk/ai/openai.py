@@ -50,7 +50,7 @@ def prompt_for_json(prompt, chatter=False, model=config.OPENAI_MODEL_QUICK_2):
 
 
 def prompt_with_file_for_text(prompt, file, chatter=False,
-                              model=config.OPENAI_MODEL_SMART):
+                              model=config.OPENAI_MODEL_SMART_1):
     if chatter: print(f'  ai >> {prompt}')
     client = openai.OpenAI(api_key=config.OPENAI_API_KEY,
                            timeout=config.OPENAI_TIMEOUT_HTTP)
@@ -85,7 +85,7 @@ def prompt_with_file_for_text(prompt, file, chatter=False,
 
 
 def prompt_with_file_for_json(prompt, file, retries=0, quiet=False,
-                              chatter=False, model=config.OPENAI_MODEL_SMART):
+                              chatter=False, model=config.OPENAI_MODEL_SMART_1):
     if chatter: print(f'  ai >> {prompt}')
     client = openai.OpenAI(api_key=config.OPENAI_API_KEY,
                            timeout=config.OPENAI_TIMEOUT_HTTP)
@@ -141,4 +141,3 @@ async def async_prompt_for_text(prompt, chatter=False,
     result_text = resp.choices[0].message.content
     if chatter: print(f'  ai << {result_text}')
     return result_text
-

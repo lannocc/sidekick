@@ -67,6 +67,8 @@ class PortManager:
         self.active_tailers: Dict[tuple, asyncio.Task] = {}
         # --- GlassBox Proposal: Section 3.1.2 ---
         self.context_subscriptions: Dict[str, set] = {} # Maps targetUser -> {ws1, ws2, ...}
+        # --- NetFS Proposal ---
+        self.netfs_requests: Dict[str, asyncio.Future] = {}
 
     # --------------------------------------------------------------------------
     # Public API (Kernel-Facing)
@@ -224,6 +226,10 @@ class PortManager:
                     log.info(f"Received full mesh state from {peer_hostname}. Syncing...")
                     self.os.network_users = mesh_state.get("users", {})
                     self.os.network_rooms = mesh_state.get("rooms", {})
+                    # After a full sync, update local clients with the new mesh state.
+                    if self.os.chat:
+                        await self.os.chat._broadcast_room_state_update()
+                    await self.broadcast_color_updates()
                 else:
                     # Fallback for older peers: process only the peer's local state.
                     log.warning(f"Peer {peer_hostname} did not provide full mesh state. Performing partial sync.")
@@ -311,6 +317,7 @@ class PortManager:
             log.warning(f"send_payload_to_client: Could not find active connection for user '{username}'.")
             return
 
+        # The payload from AIMessenger._get_state_payload is now the source of truth.
         message_to_send = f"SK1:{json.dumps(payload)}"
         try:
             await target_ws.send(message_to_send)
@@ -332,6 +339,7 @@ class PortManager:
         if not clients:
             return
 
+        # The message from AIMessenger._get_state_payload is now the source of truth.
         # Use the SK1: protocol wrapper for clients
         payload = f"SK1:{json.dumps(message)}"
         aws = [ws.send(payload) for ws in clients]
@@ -503,6 +511,71 @@ class PortManager:
                 subscribers.remove(ws)
 
     # --------------------------------------------------------------------------
+    # NETFS RPC Calls (Client-side)
+    # --------------------------------------------------------------------------
+
+    async def _netfs_rpc(self, host: str, payload: Dict[str, Any], timeout: float = 60.0) -> Any:
+        """Helper to perform a generic NetFS RPC call."""
+        request_id = str(uuid.uuid4())
+        payload['request_id'] = request_id
+        
+        future = asyncio.get_running_loop().create_future()
+        self.netfs_requests[request_id] = future
+
+        await self.route_message(host, payload)
+
+        try:
+            result = await asyncio.wait_for(future, timeout=timeout)
+            if isinstance(result, Exception):
+                raise result
+            return result
+        except asyncio.TimeoutError as e:
+            raise Exception(f"netfs: request to '{host}' timed out.") from e
+        finally:
+            self.netfs_requests.pop(request_id, None)
+
+    async def remote_list_dir(self, host: str, path: str, **kwargs) -> Optional[list]:
+        payload = {"type": "netfs_list_request", "path": path, "kwargs": kwargs}
+        return await self._netfs_rpc(host, payload)
+
+    async def remote_get_file(self, host: str, path: str) -> Optional[bytes]:
+        payload = {"type": "netfs_get_request", "path": path}
+        response = await self._netfs_rpc(host, payload)
+        if response:
+            return base64.b64decode(response.encode('ascii'))
+        return None
+
+    async def remote_put_file(self, host: str, path: str, content_bytes: bytes) -> bool:
+        content_b64 = base64.b64encode(content_bytes).decode('ascii')
+        payload = {"type": "netfs_put_request", "path": path, "content_b64": content_b64}
+        return await self._netfs_rpc(host, payload)
+
+    async def remote_exists(self, host: str, path: str) -> bool:
+        payload = {"type": "netfs_exists_request", "path": path}
+        return await self._netfs_rpc(host, payload)
+    
+    async def remote_remove_file(self, host: str, path: str) -> bool:
+        payload = {"type": "netfs_remove_request", "path": path}
+        return await self._netfs_rpc(host, payload)
+
+    async def remote_create_dir(self, host: str, path: str, parents: bool) -> bool:
+        payload = {"type": "netfs_create_dir_request", "path": path, "parents": parents}
+        return await self._netfs_rpc(host, payload)
+
+    async def remote_remove_dir(self, host: str, path: str) -> bool:
+        payload = {"type": "netfs_remove_dir_request", "path": path}
+        return await self._netfs_rpc(host, payload)
+        
+    async def remote_copy(self, host: str, from_path: str, to_path: str) -> bool:
+        payload = {"type": "netfs_copy_request", "from_path": from_path, "to_path": to_path}
+        return await self._netfs_rpc(host, payload)
+
+    async def remote_move(self, host: str, from_path: str, to_path: str) -> bool:
+        payload = {"type": "netfs_move_request", "from_path": from_path, "to_path": to_path}
+        return await self._netfs_rpc(host, payload)
+
+
+    # --------------------------------------------------------------------------
     # Internal Logic and Connection Handling
     # --------------------------------------------------------------------------
 
@@ -656,49 +729,20 @@ class PortManager:
             initial_state_payload = {'type': 'state_info'}
             initial_state_payload['hostname'] = self.os.hostname
             initial_state_payload['userColors'] = self._get_color_name_map(io_context)
-            # Get available rooms, using the user's new io_context
-            available_rooms = await self.os.get_room_list(io_context)
-            initial_state_payload['availableRooms'] = available_rooms
-            if self.os.chat and self.os.chat.active_room:
-                # Room is active, send room state
-                room = self.os.chat
 
-                # REVISED: Gather participants as objects with name, is_bot, and paused status
-                all_participants = []
-                if room.active_room:
-                    # Iterate network_rooms, the single source of truth for room membership
-                    for user_addr, r_name in self.os.network_rooms.items():
-                        if r_name == room.active_room:
-                            user, host = user_addr.split('.', 1)
-                            is_bot = False
-                            paused = False
-                            if host == self.os.hostname:
-                                # Local user: get live info from context
-                                if user in self.os.users.contexts:
-                                    user_io = self.os.users.contexts[user]
-                                    is_bot = user_io.session.bot
-                                    paused = user_io.session.paused
-                            else:
-                                # Remote user: get cached info
-                                user_info = self.os.network_users.get(user_addr, {})
-                                is_bot = user_info.get('is_bot', False)
-                                paused = user_info.get('paused', False)
-                            
-                            all_participants.append({
-                                'name': user_addr,
-                                'is_bot': is_bot,
-                                'paused': paused
-                            })
-
-                participants_list = sorted(all_participants, key=lambda p: p['name'])
-
-                initial_state_payload.update({
-                    'roomName': room.active_room,
-                    'roomTopic': room.room_topic,
-                    'participants': participants_list
-                })
-            else:
-                # No room, send MOTD. The MOTD was selected and cached during login.
+            # Get room state, participants, and available rooms from AIMessenger
+            if self.os.chat:
+                state_payload = await self.os.chat._get_state_payload()
+                initial_state_payload.update(state_payload)
+            else: # Fallback if chat system is not available
+                initial_state_payload['availableRooms'] = await self.os.get_room_list(io_context)
+                # Set sane defaults if chat subsystem is missing
+                initial_state_payload['participants'] = []
+                initial_state_payload['roomName'] = None
+                initial_state_payload['roomTopic'] = ''
+            
+            # If no room is active, also add MOTD
+            if not (self.os.chat and self.os.chat.active_room):
                 motd_content = getattr(io_context, 'motd_cache', None)
                 initial_state_payload['motd'] = motd_content or ''
 
@@ -764,13 +808,13 @@ class PortManager:
 
         await self.send_payload_to_client(io_context.session.user, response)
 
-    async def _handle_fs_list(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Optional[Any], recursive: bool = False):
+    async def _handle_fs_list(self, websocket: WebSocketServerProtocol, io_context: "Context", path: str, requesterId: Optional[Any], recursive: bool = False, honor_skignore: bool = True):
         """Handles a file system list request from a client."""
         response = {"type": "fs_list_response", "path": path}
         if requesterId is not None:
             response["requesterId"] = requesterId
         try:
-            listing = await self.os.list_dir(io_context, path, recursive=recursive)
+            listing = await self.os.list_dir(io_context, path, recursive=recursive, honor_skignore=honor_skignore)
             response["listing"] = listing
         except FileNotFoundError as e:
             response["error"] = str(e)
@@ -783,7 +827,7 @@ class PortManager:
         await self.send_payload_to_client(io_context.session.user, response)
 
     async def _handle_fs_read(self, websocket: WebSocketServerProtocol, io_context: "Context", message: Dict[str, Any]):
-        """Handles a file read request from a client, now supporting chunking."""
+        """Handles a file read request from a client, now supporting chunking and remote paths."""
         path = message.get("path")
         requesterId = message.get("requesterId")
         offset = message.get("offset", 0)
@@ -802,26 +846,37 @@ class PortManager:
         }
 
         try:
-            host_path = self.os.box(path, io_context=io_context)
+            # Kernel's get_raw is network-aware and will handle remote/local dispatching.
+            content_bytes = await self.os.get_raw(io_context, path)
 
-            if not os.path.exists(host_path):
-                response["error"] = f"path not found: {path}"
-            elif not os.path.isfile(host_path):
-                response["error"] = f"not a file: {path}"
+            if content_bytes is None:
+                response["error"] = f"path not found or could not be read: {path}"
             else:
-                total_size = os.path.getsize(host_path)
+                total_size = len(content_bytes)
                 response["total_size"] = total_size
 
-                with open(host_path, 'rb') as f:
-                    f.seek(offset)
-                    content_bytes = f.read(length)
+                # Apply chunking logic to the retrieved content
+                chunk = content_bytes[offset:] if length == -1 else content_bytes[offset:offset + length]
 
-                is_binary_file = is_binary(host_path)
-                response["content_b64"] = base64.b64encode(content_bytes).decode('ascii')
+                # Determine if the content is binary
+                hostname, _ = self.os.parse_path(path)
+                is_local = not hostname or hostname == self.os.hostname
+
+                is_binary_file = False
+                if is_local:
+                    # For local files, we can check the file on disk.
+                    host_path = self.os.box(path, io_context)
+                    if os.path.isfile(host_path):
+                        is_binary_file = is_binary(host_path)
+                else:
+                    # For remote files, we must guess from the content. A common heuristic is checking for null bytes.
+                    is_binary_file = b'\0' in chunk
+
+                response["content_b64"] = base64.b64encode(chunk).decode('ascii')
                 response["is_binary"] = is_binary_file
         except Exception as e:
             log.error(f"Error during fs_read for {io_context.session.user} at '{path}': {e}")
-            response["error"] = "An internal server error occurred."
+            response["error"] = f"An internal server error occurred: {e}"
 
         await self.send_payload_to_client(io_context.session.user, response)
 
@@ -1079,6 +1134,11 @@ class PortManager:
             if users_to_remove:
                 log.info(f"Cleaned up {len(users_to_remove)} users from disconnected host '{hostname}' via propagation.")
 
+            # Update local clients with the new state
+            if self.os.chat:
+                await self.os.chat._broadcast_room_state_update()
+            await self.broadcast_color_updates()
+
             await self.os.system.print(f":: host '{hostname}' disconnected from mesh (propagated via {from_peer})")
 
             # Forward the disconnect message to our other peers.
@@ -1169,3 +1229,8 @@ class PortManager:
 
             # 3. Propagate the disconnection to remaining peers
             await self._broadcast_peer_disconnect(disconnected_host)
+
+            # 4. Update local clients with the new state
+            if self.os.chat:
+                await self.os.chat._broadcast_room_state_update()
+            await self.broadcast_color_updates()

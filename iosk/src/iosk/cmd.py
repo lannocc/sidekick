@@ -34,7 +34,7 @@ def run(args=sys.argv[1:]):
 
     # 1. Argument Parsing
     if len(args) != 1 or args[0].startswith('-'):
-        print("Usage: iosk <root_directory>")
+        print("Usage: iosk <workspace_directory>")
         sys.exit(1)
 
     # Set the logging level for the google-genai library to WARNING to suppress INFO messages
@@ -42,11 +42,11 @@ def run(args=sys.argv[1:]):
     #logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.disable(logging.INFO) # all INFO and less are disabled
 
-    root_directory = args[0]
+    workspace_directory = args[0]
 
     # 2. System Initialization
-    print(f'Preparing iosk UNIX at root: {root_directory}')
-    kernel = UNIX(root=root_directory)
+    print(f'Preparing iosk UNIX at workspace: {workspace_directory}')
+    kernel = UNIX(workspace_root=workspace_directory)
     print('System loaded.')
 
     # 3. Asynchronous Main Loop
@@ -178,4 +178,3 @@ def run(args=sys.argv[1:]):
 
 # This simplified structure removes the old SET dictionary and command dispatching.
 # The `run` function is now the sole purpose of this module, as per the netroom proposal.
-

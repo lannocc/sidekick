@@ -45,7 +45,7 @@ async def iocall(io, argv):
 
     # --- Job Creation: Normal reattach or a device swap ---
     jobs = []
-    console_devices == ('/dev/console') #, '/dev/terminal')
+    console_devices = ('/dev/console',) #, '/dev/terminal')
     is_console_target = new_device_virtual_path in console_devices
 
     if is_console_target:
@@ -108,7 +108,7 @@ async def iocall(io, argv):
             mod_name_for_pymod = device_name_for_mod.replace('/', '.').replace('-', '_')
 
             potential_host_py_path = io.os.box(f"{new_path}.py", io_context=io)
-            new_device_mod = io.os.pymod(f'dev.{mod_name_for_pymod}', potential_host_py_path)
+            new_device_mod = await io.os.pymod(f'dev.{mod_name_for_pymod}', potential_host_py_path)
 
             if not new_device_mod:
                 await io.error(f"!! reattach: failed to load device module for '{device_name_for_mod}'.")
