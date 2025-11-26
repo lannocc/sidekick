@@ -24,6 +24,7 @@ async def iocall(io, argv):
       --help    Display this help message.
 
     [path ...]: The paths to list. If no path is provided use current directory.
+                Paths can be local or remote (e.g., hostname:/path/).
 
     """
     #REMOVED Note: This command honors .skignore files in listed directories.
@@ -78,35 +79,46 @@ async def iocall(io, argv):
     dirs = [ ]
 
     for path in paths:
-        # Use overlay-aware exists check first
-        if not await io.os.exists(io, path):
-            await io.error(f'!! ls: path does not exist: {path}')
-            errors = True
-            continue
-
-        bpath = io.os.box(path, io_context=io)
-        if not isdir(bpath):
-            try:
-                size = getsize(bpath)
-                mtime = getmtime(bpath)
-            except OSError:
-                size = -1
-                mtime = 0
-            files.append({'path': path, 'size': size, 'mtime': mtime})
-        else:
-            try:
-                # Use the new overlay-aware directory lister, passing the 'show all' flag
-                listing = await io.os.list_dir(io, path, show_all=allp, honor_skignore=False)
-                try:
-                    mtime = getmtime(bpath)
-                    size = getsize(bpath)
-                except OSError:
-                    mtime = 0
-                    size = -1
-                dirs.append({'path': path, 'listing': listing, 'mtime': mtime, 'size': size})
-            except Exception as e:
-                await io.error(f'!! ls: cannot list directory {path}: {e}')
+        # To support remote paths, we can't use os.path.isdir.
+        # We must try to list the path and, if it fails, treat it as a file.
+        try:
+            listing = await io.os.list_dir(io, path, show_all=allp, honor_skignore=False)
+            if listing is None:
+                # A None return from list_dir indicates a network or remote error.
+                await io.error(f'!! ls: could not retrieve listing for {path}')
                 errors = True
+                continue
+
+            # It's a directory. Get its stats if possible (this only works for local paths).
+            try:
+                bpath = io.os.box(path, io_context=io)
+                mtime = getmtime(bpath)
+                size = getsize(bpath)
+            except OSError:
+                mtime = 0
+                size = -1
+            dirs.append({'path': path, 'listing': listing, 'mtime': mtime, 'size': size})
+
+        except Exception as e:
+            # If list_dir raised an exception, it's either a file or an error.
+            if 'Not a directory' in str(e):
+                # It's a file. Get stats if possible (only works for local paths).
+                try:
+                    bpath = io.os.box(path, io_context=io)
+                    size = getsize(bpath)
+                    mtime = getmtime(bpath)
+                except OSError:
+                    size = -1
+                    mtime = 0
+                files.append({'path': path, 'size': size, 'mtime': mtime})
+            else:
+                # It could be a non-existent path or another error. Fallback to `exists` check.
+                if not await io.os.exists(io, path):
+                    await io.error(f'!! ls: path does not exist: {path}')
+                else:
+                    await io.error(f'!! ls: cannot access {path}: {e}')
+                errors = True
+
 
     # Sort files and directories passed as arguments
     if sort_by_time:
