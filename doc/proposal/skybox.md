@@ -106,9 +106,9 @@ The `sk local` process must be upgraded to a stateful service that manages persi
 *   **Persistence Layer (SQLite)**:
     *   Utilize Python's built-in `sqlite3` library. No new dependencies are required.
     *   On startup, `sk/local.py` will establish a connection to a database file named `skybox.db` located within the user's data directory, managed by `appdirs` (consistent with `sk/config.py`). A function will be created to initialize the database and create tables if they don't exist.
-    *   A `boxes` table will be created with the following schema for Phase 1:
+    *   A `box` table will be created with the following schema for Phase 1:
         ```sql
-        CREATE TABLE IF NOT EXISTS boxes (
+        CREATE TABLE IF NOT EXISTS box (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             type TEXT NOT NULL CHECK(type IN ('local', 'iosk')),
@@ -128,7 +128,7 @@ The `sk local` process must be upgraded to a stateful service that manages persi
         - `{ "type": "delete_box", "id": 123 }`: Deletes a box record.
         - `{ "type": "update_box", "id": 123, "name": "New Name" }`: Updates a box's properties (initially, just the name).
     *   **New Server-to-Client Messages**:
-        - `{ "type": "boxes_list", "boxes": [...] }`: Sent in response to `list_boxes`, containing an array of all box objects from the database.
+        - `{ "type": "box_list", "boxes": [...] }`: Sent in response to `list_boxes`, containing an array of all box objects from the database.
         - A confirmation message (e.g., `{ "type": "box_created", "box": {...} }`) should be sent after a successful creation, followed by a new `boxes_list` broadcast to all clients to ensure synchronization. The same pattern applies to updates and deletions.
 
 #### 5.1.2. SKYBOARD UI Integration
@@ -169,16 +169,16 @@ This phase focuses on making the Box panels functional by allowing them to conta
 The backend service will be updated to store and serve the configuration for each panel within a Box.
 
 *   **Persistence Layer (SQLite) Extension**:
-    *   A new table, `panels`, will be created in `skybox.db` to store the configuration for each of a Box's six potential panels (center, top, bottom, left, right, and cover).
-    *   This table will be linked to the `boxes` table via a foreign key, and its schema will be as follows:
+    *   A new table, `panel`, will be created in `skybox.db` to store the configuration for each of a Box's six potential panels (center, top, bottom, left, right, and cover).
+    *   This table will be linked to the `box` table via a foreign key, and its schema will be as follows:
         ```sql
-        CREATE TABLE IF NOT EXISTS panels (
+        CREATE TABLE IF NOT EXISTS panel (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             box_id INTEGER NOT NULL,
             location TEXT NOT NULL CHECK(location IN ('center', 'top', 'bottom', 'left', 'right', 'cover')),
             board_type TEXT NOT NULL CHECK(board_type IN ('empty', 'window', 'tabs', 'dash', 'image')),
             board_config TEXT, -- JSON blob for the BOARD configuration
-            FOREIGN KEY(box_id) REFERENCES boxes(id) ON DELETE CASCADE,
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
             UNIQUE(box_id, location)
         );
         ```
@@ -241,30 +241,30 @@ This final phase introduces the "Back" concept, fully realizing the recursive BO
 The backend service's persistence layer and API will be extended to manage "Backs" and associate full desktop layouts with Boxes.
 
 *   **Persistence Layer (SQLite) Extension**:
-    *   A new table, `backs`, will be created in `skybox.db` to store saved background layouts. Its structure will be analogous to how Dashes are stored.
+    *   A new table, `back`, will be created in `skybox.db` to store saved background layouts. Its structure will be analogous to how Dashes are stored.
         ```sql
-        CREATE TABLE IF NOT EXISTS backs (
+        CREATE TABLE IF NOT EXISTS back (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             layout_config TEXT NOT NULL -- JSON blob of locked-in window groups
         );
         ```
-    *   The existing `boxes` table will be altered to link to a default Dash and a default Back, representing a complete workspace.
+    *   The existing `box` table will be altered to link to a default Dash and a default Back, representing a complete workspace.
         ```sql
-        ALTER TABLE boxes ADD COLUMN active_dash_id INTEGER REFERENCES dashes(id);
-        ALTER TABLE boxes ADD COLUMN active_back_id INTEGER REFERENCES backs(id);
+        ALTER TABLE box ADD COLUMN active_dash_id INTEGER REFERENCES dash(id);
+        ALTER TABLE box ADD COLUMN active_back_id INTEGER REFERENCES back(id);
         ```
 
 *   **Expanded WebSocket API**:
-    *   The `websocket_handler` in `sk/local.py` will be expanded to manage `backs` and update `boxes` with desktop layout associations.
+    *   The `websocket_handler` in `sk/local.py` will be expanded to manage `back` and update `box` with desktop layout associations.
     *   **New Client-to-Server Messages**:
         - `{ "type": "list_backs" }`: Requests all saved Back layouts.
         - `{ "type": "create_back", "name": "...", "layout_config": {...} }`: Creates a new Back record. The server will respond with the newly created back object, including its ID.
         - `{ "type": "delete_back", "id": 123 }`: Deletes a Back record.
         - `{ "type": "update_box_desktop", "id": 123, "dash_id": 4, "back_id": 7 }`: Updates a Box to associate it with a specific Dash and Back.
     *   **New Server-to-Client Messages**:
-        - `{ "type": "backs_list", "backs": [...] }`: Sent in response to `list_backs` and broadcast on any change.
-        - Standard confirmation messages (`back_created`, `back_deleted`, etc.) will be sent, followed by a `backs_list` broadcast to synchronize all clients.
+        - `{ "type": "back_list", "backs": [...] }`: Sent in response to `list_backs` and broadcast on any change.
+        - Standard confirmation messages (`back_created`, `back_deleted`, etc.) will be sent, followed by a `back_list` broadcast to synchronize all clients.
 
 #### 5.3.2. SKYBOARD UI Integration
 
@@ -279,7 +279,7 @@ The frontend will be updated to implement the "lock in" feature, manage Backs, a
         - A new store, `export const backs = writable([]);`, will be added to manage saved Back layouts, mirroring `dashLayouts`.
         - A store to track the currently active workspace: `export const activeBox = writable(null);`. When `null`, the main "desktop of boxes" is shown. When it holds a box object, a full-box-desktop is active.
     *   **`local.js`**:
-        - The `onmessage` handler will be updated to process `backs_list` messages and populate the `backs` store.
+        - The `onmessage` handler will be updated to process `back_list` messages and populate the `back` store.
         - Helper functions will be added to send the new WebSocket messages: `saveBack(name, config)`, `deleteBack(id)`, `updateBoxDesktop(boxId, dashId, backId)`.
 
 *   **UI Components**:
@@ -290,7 +290,7 @@ The frontend will be updated to implement the "lock in" feature, manage Backs, a
         - The options menu (`showOptionsMenu`) will gain a "Lock In" item that calls `windows.lockWindow(id)`.
         - When a window is unlocked via a new context menu on the desktop, its `lockedIn` state will become false, and the standard `<Window>` component will reappear for it in the `Desktop.svelte` loop.
     *   **`Dash.svelte`**:
-        - The UI will be updated with a toggle or tabs to switch between managing "Dashes" and "Backs".
+        - The UI will be updated with a toggle to switch between managing "Dashes" and "Backs".
         - The "Save Current Layout" button's logic will be modified:
             - In "Dash" mode, it saves the layout of floating windows (`$windows.filter(w => !w.lockedIn)`).
             - In "Back" mode, it saves the layout of locked-in windows (`$windows.filter(w => w.lockedIn)`).
