@@ -162,11 +162,75 @@ The initial visual feedback for the Box will be implemented.
 
 ### 5.2. Phase 2: Populating Box Panels
 
-This phase enables the configuration of Box panels with BOARDs (excluding the "Back" type for now).
+This phase focuses on making the Box panels functional by allowing them to contain and persist different types of UI layouts, known as BOARDs. This will be achieved through a combination of database schema extensions, new WebSocket APIs, and enhanced frontend components that support dynamic rendering and user interaction.
 
-*   **Panel Configuration**: Extend the data model and API to support saving BOARD configurations (single window, tabs, or a floating "Dash") to each of a Box's panels.
-*   **State Restoration**: When a Box unfolds, its configured panels will correctly instantiate and display their saved BOARDs.
-*   **Cover Image**: Allow users to assign a "cover" image to a Box, which will be displayed on one of the unfolding panels.
+#### 5.2.1. `sk local` Service Enhancement
+
+The backend service will be updated to store and serve the configuration for each panel within a Box.
+
+*   **Persistence Layer (SQLite) Extension**:
+    *   A new table, `panels`, will be created in `skybox.db` to store the configuration for each of a Box's six potential panels (center, top, bottom, left, right, and cover).
+    *   This table will be linked to the `boxes` table via a foreign key, and its schema will be as follows:
+        ```sql
+        CREATE TABLE IF NOT EXISTS panels (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            box_id INTEGER NOT NULL,
+            location TEXT NOT NULL CHECK(location IN ('center', 'top', 'bottom', 'left', 'right', 'cover')),
+            board_type TEXT NOT NULL CHECK(board_type IN ('empty', 'window', 'tabs', 'dash', 'image')),
+            board_config TEXT, -- JSON blob for the BOARD configuration
+            FOREIGN KEY(box_id) REFERENCES boxes(id) ON DELETE CASCADE,
+            UNIQUE(box_id, location)
+        );
+        ```
+        - `box_id`: Links the panel to its parent box.
+        - `location`: Defines the panel's position.
+        - `board_type`: Specifies the type of content the panel holds.
+        - `board_config`: A JSON string containing the detailed configuration for the BOARD. For `board_type: 'dash'`, this will be a full Dash layout object. For `window` or `tabs`, it will contain the necessary properties to restore the component(s) (e.g., component type, title, initial state). For `image`, it will store the image URL.
+
+*   **Expanded WebSocket API**:
+    *   The `websocket_handler` in `sk/local.py` will be extended with new message types for managing panel content.
+    *   **New Client-to-Server Messages**:
+        - `{ "type": "get_box_config", "id": 123 }`: Requests the configurations for all panels associated with the specified `box_id`.
+        - `{ "type": "set_panel_config", "box_id": 123, "location": "right", "board_type": "tabs", "board_config": {...} }`: Creates or updates the configuration for a specific panel. Sending `board_type: 'empty'` will clear the panel.
+    *   **New Server-to-Client Messages**:
+        - `{ "type": "box_config_response", "box_id": 123, "panels": [...] }`: Sent in response to `get_box_config`. The `panels` array will contain objects matching the `panels` table schema for that box.
+        - After a `set_panel_config` is processed successfully, a new `box_config_response` will be broadcast to all connected clients to ensure all views are synchronized.
+
+#### 5.2.2. SKYBOARD UI Integration
+
+The frontend will be enhanced to allow users to configure panels and to render the saved BOARDs when a Box unfolds.
+
+*   **State Management (`local.js`, `desktop.js`)**:
+    *   The `boxes` store in `desktop.js` will be updated so that each box object contains a `panels` property (e.g., a map of `location` to panel configuration).
+    *   The `onmessage` handler in `sv/local.js` will process the `box_config_response` message, finding the relevant box in the `boxes` store and updating its `panels` property.
+    *   A new helper function, `savePanelConfig(boxId, location, boardType, config)`, will be added to `sv/local.js` to abstract the `set_panel_config` WebSocket message.
+
+*   **Panel Configuration UI**:
+    *   **Drag-and-Drop**: Users will configure panels primarily through drag-and-drop.
+        - An open window (or a window group with tabs) can be dragged from the desktop and dropped onto one of a Box's unfolded panels.
+        - The `dragState` store in `sv/windows.js` will be extended to detect when a drag operation is hovering over a valid panel drop target.
+        - Upon dropping a window, a helper function (similar to `generateLayoutObject` in `Dash.svelte`) will create the `board_config` object. The appropriate `board_type` (`window` or `tabs`) will be determined, and `savePanelConfig` will be called.
+    *   **Cover Image**: A "Set Cover Image" option will be added to the Box's right-click context menu. This will prompt the user for an image URL and save it as the 'cover' panel with `board_type: 'image'`.
+    *   **Dash Panel**: A saved layout tile from `Dash.svelte` can be dragged onto a panel. This will set the panel's `board_type` to `dash` and store the entire layout object in `board_config`.
+
+*   **State Restoration and Rendering**:
+    *   The `Box.svelte` component will be refactored. On hover, when a panel unfolds, it will dynamically render its content based on the `board_type` from its configuration.
+    *   A new component, tentatively named `Board.svelte`, will be created to handle this dynamic rendering. It will receive `board_type` and `board_config` as props.
+    *   Using `<svelte:component>`, `Board.svelte` will instantiate the correct view:
+        - **`window`**: It will render the specified component directly within the panel's bounds, passing the saved props (e.g., `initialPath` for a file explorer). The panel itself serves as the window frame.
+        - **`tabs`**: It will render a compact tab bar and the active tab's component, effectively creating a mini-window within the panel.
+        - **`dash`**: It will render a miniature, self-contained desktop environment, recursively using components like `Desktop.svelte` and `Window.svelte`, and populate it by calling `windows.restoreWindow` for each item in the saved layout.
+        - **`image`**: It will render an `<img>` tag for the cover panel.
+
+#### 5.2.3. Visual Interaction
+
+The visual feedback for panel configuration will be made clear and intuitive.
+
+*   **Drop Target Highlighting**: When a window is dragged over a valid, empty panel on an unfolded Box, the panel will light up or display an icon to indicate it is a drop target.
+*   **Content Loading Animation**: When a Box unfolds, the panels will animate into place first. The content within each panel (the BOARD) will then fade in smoothly, preventing visual lag during the unfolding transition.
+*   **Cover Panel Unfolding**: The cover panel will unfold from the top, simultaneously with or just before the main top panel, creating a layered, visually appealing reveal. Its content will simply be the configured image, styled to fit the panel.
+
+This phase transforms the static Box placeholders from Phase 1 into fully functional, configurable, and persistent mini-workspaces, setting the stage for the full desktop integration planned in Phase 3.
 
 ### 5.3. Phase 3: The "Back" and Full Desktop Integration
 
