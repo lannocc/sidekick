@@ -17,6 +17,7 @@
     let y = 100 + Math.floor(box.id / 5) * 150;
 
     let isDragging = false;
+    let wasDragging = false; // To distinguish between a drag and a click
     let dragOffsetX, dragOffsetY;
     let boxEl;
 
@@ -114,8 +115,8 @@
     function onDragStart(event) {
         // Prevent dragging if it's not a left-click.
         if (event.button !== 0) return;
-
         
+        wasDragging = false; // Reset for the new interaction
         isDragging = true;
         dragOffsetX = event.clientX - x;
         dragOffsetY = event.clientY - y;
@@ -126,6 +127,7 @@
 
     function onDrag(event) {
         if (!isDragging) return;
+        wasDragging = true; // If we move, it's a drag
         x = event.clientX - dragOffsetX;
         y = event.clientY - dragOffsetY;
     }
@@ -194,6 +196,11 @@
     }
 
     function handlePanelClick(event, location) {
+        if (wasDragging) {
+            // This was a drag, not a click. Do nothing.
+            return;
+        }
+
         if (showBoardPicker) {
             showBoardPicker = false;
             return;
@@ -231,14 +238,14 @@
                 // For occupied side panels, restore the board
                 if (board_type === 'window' || board_type === 'tabs') {
                     windows.restoreWindow(board_config);
-                    savePanelConfig(box.id, location, 'empty', null);
+                    // savePanelConfig(box.id, location, 'empty', null); // Keep board on panel after restore
                 } else if (board_type === 'dash') {
                     if (board_config?.windowGroups) {
                         for (const group of board_config.windowGroups) {
                             windows.restoreWindow(group);
                         }
                     }
-                    savePanelConfig(box.id, location, 'empty', null);
+                    // savePanelConfig(box.id, location, 'empty', null); // Keep board on panel after restore
                 }
             }
             // Clicking occupied center or non-image cover panels does nothing for now.
