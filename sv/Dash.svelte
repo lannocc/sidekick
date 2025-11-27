@@ -170,6 +170,15 @@
         }));
         return JSON.stringify(relevantData);
     }
+    
+    function handleLayoutDragStart(event, layout) {
+        const data = {
+            type: 'dashLayout',
+            layout,
+        };
+        event.dataTransfer.setData('application/json', JSON.stringify(data));
+        event.dataTransfer.effectAllowed = 'link';
+    }
 
     $: if ($dashActive) {
         currentLayout = generateLayoutObject(get(windows), 'Current Desktop', 'current');
@@ -334,7 +343,7 @@
                 </div>
             {/if}
             {#each $dashLayouts as layout (layout.id)}
-                <div class="layout-tile" class:highlighted={cyclePreviewedLayout && cyclePreviewedLayout.id === layout.id} title={layout.name} on:click={() => handleRestoreLayout(layout)} on:mouseenter={() => manualPreviewedLayout = layout} on:mouseleave={() => manualPreviewedLayout = null} on:contextmenu|preventDefault={e => handleRightClick(e, layout)} role="button" tabindex="0" on:keydown={e => e.key === 'Enter' && handleRestoreLayout(layout)}>
+                <div class="layout-tile" class:highlighted={cyclePreviewedLayout && cyclePreviewedLayout.id === layout.id} title={layout.name} on:click={() => handleRestoreLayout(layout)} on:mouseenter={() => manualPreviewedLayout = layout} on:mouseleave={() => manualPreviewedLayout = null} on:contextmenu|preventDefault={e => handleRightClick(e, layout)} role="button" tabindex="0" on:keydown={e => e.key === 'Enter' && handleRestoreLayout(layout)} draggable="true" on:dragstart={(e) => handleLayoutDragStart(e, layout)}>
                     {layout.name}
                 </div>
             {/each}

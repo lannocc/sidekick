@@ -4,8 +4,10 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { newAskWindow } from './windows.js';
-    import { updateBox, deleteBox } from './local.js';
+    import { get } from 'svelte/store';
+    import { newAskWindow, dragState } from './windows.js';
+    import { updateBox, deleteBox, savePanelConfig } from './local.js';
+    import Board from './Board.svelte';
 
     export let box;
 
@@ -62,8 +64,16 @@
             alert(`"Ask..." for 'iosk' boxes is not yet implemented.`);
         }
     }
+    
+    function setCoverImage() {
+        closeContextMenu();
+        const url = prompt("Enter URL for cover image:");
+        if (url) {
+            savePanelConfig(box.id, 'cover', 'image', { url });
+        }
+    }
 
-    // --- Dragging Logic ---
+    // --- Dragging & Drop Target Logic ---
     function onDragStart(event) {
         if (event.button !== 0 || event.target.closest('.panel:not(.center)')) return;
         isDragging = true;
@@ -85,6 +95,37 @@
         document.body.style.cursor = 'auto';
         window.removeEventListener('mousemove', onDrag);
         // Position persistence will be handled in a later phase
+    }
+
+    function handlePanelMouseEnter(location) {
+        const state = get(dragState);
+        if (state?.draggingGroupId) {
+            dragState.update(s => ({...s, dropTargetBoxPanel: { boxId: box.id, location }}));
+        }
+    }
+
+    function handlePanelMouseLeave(location) {
+        const state = get(dragState);
+        if (state?.dropTargetBoxPanel?.boxId === box.id && state?.dropTargetBoxPanel?.location === location) {
+            dragState.update(s => ({...s, dropTargetBoxPanel: null}));
+        }
+    }
+
+    function handleDragOver(event) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'link';
+    }
+
+    function handleDrop(event, location) {
+        event.preventDefault();
+        try {
+            const data = JSON.parse(event.dataTransfer.getData('application/json'));
+            if (data.type === 'dashLayout') {
+                savePanelConfig(box.id, location, 'dash', data.layout);
+            }
+        } catch(e) {
+            console.error("Drop failed:", e);
+        }
     }
 </script>
 
@@ -117,25 +158,35 @@
         transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
         color: var(--title-bar-text);
         text-align: center;
+        padding: 5px;
+    }
+    .panel.drop-target {
+        border-color: #3498db;
+        box-shadow: 0 0 15px 5px rgba(52, 152, 219, 0.6);
     }
 
     .center {
-        z-index: 2;
+        z-index: 3;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 10px;
         cursor: move;
     }
 
-    .top, .bottom, .left, .right {
+    .cover, .top, .bottom, .left, .right {
         z-index: 1;
         opacity: 0;
         transform: scale(0.95);
         pointer-events: none;
     }
 
+    .box:hover .cover {
+        transform: translateY(-210%);
+        opacity: 1;
+        pointer-events: auto;
+        z-index: 2;
+    }
     .box:hover .top {
         transform: translateY(-105%);
         opacity: 1;
@@ -183,7 +234,7 @@
         display: flex;
         flex-direction: column;
         padding: 4px 0;
-        min-width: 120px;
+        min-width: 150px;
     }
     .context-menu button {
         background: none;
@@ -197,13 +248,9 @@
     .context-menu button:hover {
         background-color: var(--taskbar-button-hover-bg);
     }
-    .context-menu .delete {
-        color: #e74c3c;
-    }
-    .context-menu .delete:hover {
-        background-color: #c0392b;
-        color: white;
-    }
+    .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
+    .context-menu .delete { color: #e74c3c; }
+    .context-menu .delete:hover { background-color: #c0392b; color: white; }
 </style>
 
 <div
@@ -214,15 +261,30 @@
     on:contextmenu={handleRightClick}
 >
     <!-- Panels for Unfolding Animation -->
-    <div class="panel top"></div>
-    <div class="panel bottom"></div>
-    <div class="panel left"></div>
-    <div class="panel right"></div>
+    <div class="panel cover" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'cover'} on:mouseenter={() => handlePanelMouseEnter('cover')} on:mouseleave={() => handlePanelMouseLeave('cover')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'cover')}>
+        {#if box.panels?.cover} <Board board_type={box.panels.cover.board_type} board_config={box.panels.cover.board_config} /> {/if}
+    </div>
+    <div class="panel top" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'top'} on:mouseenter={() => handlePanelMouseEnter('top')} on:mouseleave={() => handlePanelMouseLeave('top')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'top')}>
+        {#if box.panels?.top} <Board board_type={box.panels.top.board_type} board_config={box.panels.top.board_config} /> {/if}
+    </div>
+    <div class="panel bottom" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'bottom'} on:mouseenter={() => handlePanelMouseEnter('bottom')} on:mouseleave={() => handlePanelMouseLeave('bottom')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'bottom')}>
+        {#if box.panels?.bottom} <Board board_type={box.panels.bottom.board_type} board_config={box.panels.bottom.board_config} /> {/if}
+    </div>
+    <div class="panel left" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'left'} on:mouseenter={() => handlePanelMouseEnter('left')} on:mouseleave={() => handlePanelMouseLeave('left')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'left')}>
+        {#if box.panels?.left} <Board board_type={box.panels.left.board_type} board_config={box.panels.left.board_config} /> {/if}
+    </div>
+    <div class="panel right" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'right'} on:mouseenter={() => handlePanelMouseEnter('right')} on:mouseleave={() => handlePanelMouseLeave('right')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'right')}>
+        {#if box.panels?.right} <Board board_type={box.panels.right.board_type} board_config={box.panels.right.board_config} /> {/if}
+    </div>
 
     <!-- Center Panel with Content -->
-    <div class="panel center" on:mousedown={onDragStart}>
-        <div class="box-name">{box.name}</div>
-        <div class="box-context" title={box.context}>{box.context}</div>
+    <div class="panel center" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')} on:mousedown={onDragStart}>
+        {#if box.panels?.center}
+            <Board board_type={box.panels.center.board_type} board_config={box.panels.center.board_config} />
+        {:else}
+            <div class="box-name">{box.name}</div>
+            <div class="box-context" title={box.context}>{box.context}</div>
+        {/if}
     </div>
 </div>
 
@@ -230,7 +292,9 @@
     <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
         <button on:click={askBox}>Ask...</button>
         <button on:click={renameBox}>Rename...</button>
-        <div style="height: 1px; background-color: var(--border-color); margin: 4px 0;"></div>
+        <div class="menu-separator"></div>
+        <button on:click={setCoverImage}>Set Cover Image...</button>
+        <div class="menu-separator"></div>
         <button on:click={deleteBoxConfirm} class="delete">Delete</button>
     </div>
 {/if}

@@ -18,6 +18,10 @@ let windowGroupIdCounter = 0;
 let tabIdCounter = 0;
 
 // Store for managing drag-and-drop grouping state
+// Shape can be:
+// null
+// { draggingGroupId: number, dropTargetGroupId: number | null }
+// { draggingGroupId: number, dropTargetBoxPanel: { boxId: number, location: string } | null }
 export const dragState = writable(null);
 // Store for requesting a drag/resize action from another component
 export const dragRequest = writable(null);
@@ -197,6 +201,7 @@ function createWindowManager() {
             tabs: [newTab],
             activeTabId: newTab.id,
             notice: null,
+            lockedIn: false,
         };
 
         update(windows => {
@@ -246,10 +251,22 @@ function createWindowManager() {
     };
 
     const removeWindow = (groupId) => {
-        const group = get(windows).find(g => g.id === groupId);
-        if (group) {
-            removeTab(groupId, group.activeTabId);
-        }
+        update(currentWindows => {
+            const group = currentWindows.find(g => g.id === groupId);
+            if (!group) return currentWindows;
+
+            // Check if any tab requires confirmation
+            for (const tab of group.tabs) {
+                 if (tab.component === IoskConsole && tab.isConsoleConnected) {
+                    if (!confirm(`Console "${tab.title}" has an active connection. Are you sure you want to close it?`)) {
+                        return currentWindows;
+                    }
+                    // Only need to confirm once for the whole group
+                    break;
+                }
+            }
+            return currentWindows.filter(g => g.id !== groupId);
+        });
     };
 
     const setActiveTab = (groupId, tabId) => {
@@ -549,6 +566,7 @@ function createWindowManager() {
                 notice: null,
                 tabs: tabs,
                 activeTabId: newActiveTabId,
+                lockedIn: groupData.lockedIn || false,
             };
             return [...updatedWindows, newGroup];
         });

@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 
 const PORT = 4210;
 const URL = `ws://localhost:${PORT}`;
@@ -45,6 +45,13 @@ export function updateBox(id, name) {
 export function deleteBox(id) {
     sendMessage({ type: 'delete_box', id });
 }
+export function getBoxConfig(id) {
+    sendMessage({ type: 'get_box_config', id });
+}
+export function savePanelConfig(box_id, location, board_type, board_config) {
+    sendMessage({ type: 'set_panel_config', box_id, location, board_type, board_config });
+}
+
 
 function attemptConnection() {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
@@ -93,7 +100,23 @@ function attemptConnection() {
                     askStatsResponse.set({ ...msg, timestamp: Date.now() });
                     break;
                 case 'box_list':
-                    boxes.set(msg.boxes);
+                    // It's a full refresh of boxes, so we should also fetch their configs.
+                    const freshBoxes = msg.boxes.map(b => ({ ...b, panels: {} }));
+                    boxes.set(freshBoxes);
+                    freshBoxes.forEach(b => getBoxConfig(b.id));
+                    break;
+                case 'box_config_response':
+                    boxes.update(allBoxes => {
+                        const boxIndex = allBoxes.findIndex(b => b.id === msg.box_id);
+                        if (boxIndex !== -1) {
+                            const panelMap = msg.panels.reduce((acc, panel) => {
+                                acc[panel.location] = panel;
+                                return acc;
+                            }, {});
+                            allBoxes[boxIndex].panels = panelMap;
+                        }
+                        return allBoxes;
+                    });
                     break;
                 default:
                     console.warn('Unknown message type from local backend:', msg.type);

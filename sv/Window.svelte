@@ -7,6 +7,7 @@
     import { get } from 'svelte/store';
     import { windows, dragState, instanceRegistry, dragRequest } from './windows.js';
     import { desktopSettings, windowSettings } from './desktop.js';
+    import { savePanelConfig } from './local.js';
     import IoskConsole from './IoskConsole.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
     import IoskFileViewer from './IoskFileViewer.svelte';
@@ -14,6 +15,12 @@
     import Settings from './Settings.svelte';
     import Calculator from './Calculator.svelte';
     import IoskPrivateChat from './IoskPrivateChat.svelte';
+    import LocalTerminal from './LocalTerminal.svelte';
+    import LocalFileExplorer from './LocalFileExplorer.svelte';
+    import Ask from './Ask.svelte';
+    import IoskWatch from './IoskWatch.svelte';
+    import IoskUserInspector from './IoskUserInspector.svelte';
+    import NotificationCenter from './NotificationCenter.svelte';
     import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
 
     // Group properties
@@ -210,7 +217,7 @@
 
     function onDragStart(event) {
         isDragging = true;
-        dragState.set({ draggingGroupId: id, dropTargetGroupId: null });
+        dragState.set({ draggingGroupId: id, dropTargetGroupId: null, dropTargetBoxPanel: null });
         dragOffsetX = event.clientX - x;
         dragOffsetY = event.clientY - y;
         window.addEventListener('mousemove', onDrag);
@@ -232,17 +239,66 @@
 
         const targetTitleBar = elementUnder?.closest('.title-bar');
         const targetId = targetTitleBar ? parseInt(targetTitleBar.dataset.groupId, 10) : null;
-        const currentDragState = get(dragState);
-
+        
         if (targetId && targetId !== id) {
-            if (currentDragState.dropTargetGroupId !== targetId) {
-                dragState.update(s => ({ ...s, dropTargetGroupId: targetId }));
-            }
+            dragState.update(s => ({ ...s, dropTargetGroupId: targetId, dropTargetBoxPanel: null }));
         } else {
-            if (currentDragState.dropTargetGroupId !== null) {
-                dragState.update(s => ({ ...s, dropTargetGroupId: null }));
-            }
+             // Let Box.svelte handle setting dropTargetBoxPanel via its mouseenter events
+            dragState.update(s => ({ ...s, dropTargetGroupId: null }));
         }
+    }
+
+    function getComponentType(component) {
+        if (component === IoskConsole) return 'IoskConsole';
+        if (component === Calculator) return 'Calculator';
+        if (component === Settings) return 'Settings';
+        if (component === IoskFileExplorer) return 'IoskFileExplorer';
+        if (component === IoskFileViewer) return 'IoskFileViewer';
+        if (component === WebBrowser) return 'WebBrowser';
+        if (component === IoskPrivateChat) return 'IoskPrivateChat';
+        if (component === LocalTerminal) return 'LocalTerminal';
+        if (component === LocalFileExplorer) return 'LocalFileExplorer';
+        if (component === Ask) return 'Ask';
+        if (component === IoskWatch) return 'IoskWatch';
+        if (component === IoskUserInspector) return 'IoskUserInspector';
+        if (component === NotificationCenter) return 'NotificationCenter';
+        return 'Unknown';
+    }
+
+    function generateBoardConfigFromWindow(group) {
+        const allWindows = get(windows);
+        const findTabById = (tabId) => {
+            if (!tabId) return null;
+            for (const g of allWindows) {
+                const tab = g.tabs.find(t => t.id === tabId);
+                if (tab) return tab;
+            }
+            return null;
+        }
+        const layoutTabs = group.tabs.map(tab => {
+            const associatedConsole = findTabById(tab.consoleId);
+            return {
+                originalId: tab.id,
+                componentType: getComponentType(tab.component),
+                title: tab.title,
+                wsUrl: tab.wsUrl, username: tab.username,
+                localUser: tab.localUser, remoteUser: tab.remoteUser, 
+                consoleConnection: tab.consoleConnection || (associatedConsole ? associatedConsole.consoleConnection : null),
+                initialPath: tab.currentPath, path: tab.path,
+                mode: tab.mode, initialUrl: tab.currentUrl,
+                zoom: tab.zoom,
+                initialCommand: tab.initialCommand,
+                initialPwd: tab.initialPwd,
+                initialInterval: tab.initialInterval,
+                initialState: tab.initialState,
+            };
+        });
+        return {
+            x: group.x, y: group.y, width: group.width, height: group.height,
+            maximized: group.maximized,
+            activeTabId: group.activeTabId,
+            tabs: layoutTabs
+        };
     }
 
     function onDragEnd() {
@@ -250,8 +306,20 @@
         document.body.style.cursor = 'auto';
         window.removeEventListener('mousemove', onDrag);
         const currentDragState = get(dragState);
-        if (currentDragState && currentDragState.dropTargetGroupId) {
-            windows.groupWindows(currentDragState.draggingGroupId, currentDragState.dropTargetGroupId);
+        if (currentDragState) {
+            if (currentDragState.dropTargetGroupId) {
+                windows.groupWindows(currentDragState.draggingGroupId, currentDragState.dropTargetGroupId);
+            } else if (currentDragState.dropTargetBoxPanel) {
+                const { boxId, location } = currentDragState.dropTargetBoxPanel;
+                const sourceGroup = get(windows).find(g => g.id === currentDragState.draggingGroupId);
+                if (sourceGroup) {
+                    const board_config = generateBoardConfigFromWindow(sourceGroup);
+                    const board_type = sourceGroup.tabs.length > 1 ? 'tabs' : 'window';
+                    savePanelConfig(boxId, location, board_type, board_config);
+                    // Move the window to the box by removing it from the desktop
+                    windows.removeWindow(currentDragState.draggingGroupId);
+                }
+            }
         }
         dragState.set(null);
         restoreFocus();
