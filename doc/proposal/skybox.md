@@ -91,7 +91,36 @@ The `sk local` process will be significantly upgraded from a simple WebSocket br
 *   **`Dash.svelte` Modifications**: This component will be refactored to manage both floating Dashes and locked-in Backs, presenting them as distinct savable layout types.
 *   **`Taskbar.svelte`**: A "New Box" menu item will be added.
 
-## 5. Future Vision
+## 5. Implementation Plan
+
+This plan outlines a phased approach to implementing the Skybox feature set, allowing for incremental delivery and testing.
+
+### 5.1. Phase 1: The Basic Box
+
+This initial phase focuses on establishing the core "Box" entity and its persistence via the upgraded `sk local` service.
+
+*   **`sk local` Enhancement**: Upgrade the `sk local` process to support the basic Box data model (name, associated path/connection).
+*   **SKYBOARD UI Integration**: Add the "New Box" functionality to the UI. When `sk local` is running, saved Boxes will be fetched and rendered on the desktop.
+*   **Visual Interaction**: Implement the basic mouseover unfolding animation, though panels will initially be empty placeholders.
+
+### 5.2. Phase 2: Populating Box Panels
+
+This phase enables the configuration of Box panels with BOARDs (excluding the "Back" type for now).
+
+*   **Panel Configuration**: Extend the data model and API to support saving BOARD configurations (single window, tabs, or a floating "Dash") to each of a Box's panels.
+*   **State Restoration**: When a Box unfolds, its configured panels will correctly instantiate and display their saved BOARDs.
+*   **Cover Image**: Allow users to assign a "cover" image to a Box, which will be displayed on one of the unfolding panels.
+
+### 5.3. Phase 3: The "Back" and Full Desktop Integration
+
+This final phase introduces the "Back" concept, fully realizing the recursive BOARD model and enabling Boxes to act as complete desktop replacements.
+
+*   **"Back" Implementation**: Implement the "lock in" functionality, allowing any window to be embedded into the desktop background. The collection of "locked-in" windows can now be saved as a "Back".
+*   **Box as Desktop**: A Box can be configured with a "Back" (to replace the desktop background) and/or a "Dash" (to replace the current set of floating windows). Activating the Box will apply this full desktop layout.
+*   **Saving to a Box**: The user can save the entire current desktop state (its Back and Dash) directly into a Box.
+*   **Navigation**: Implement a clear UI mechanism to return to the main "desktop of boxes" view from within a full-Box-desktop.
+
+## 6. Future Vision
 
 This proposal lays the foundation for even more powerful features:
 
@@ -99,6 +128,7 @@ This proposal lays the foundation for even more powerful features:
 *   **Deeper `iosk` Integration**: An `iosk` Box could have panels that dynamically represent different aspects of the remote system, such as a panel for each logged-in user, a panel for running processes, or a panel tailing a specific log file.
 *   **A Box Marketplace**: Users could create and share pre-configured Box templates for common development environments (e.g., "Python/Django Box", "SvelteKit Box"), which could be imported directly into their desktop.
 
-## 6. Conclusion
+## 7. Conclusion
 
-The Skybox initiative transforms SKYBOARD from a simple desktop interface into a comprehensive, project-centric workspace management system. By introducing the recursive concepts of "Boxes" and "BOARDs", we create an infinitely flexible and intuitive UI. Elevating `sk local` to a persistent service with a local database ensures that these rich, customized environments are durable and portable. This represents the next logical step in the evolution of the SideKick Suite, fulfilling the "Y-Combinator" promise of SKYBOARD and creating a powerful, scalable platform for human-computer and AI-computer collaboration
+The Skybox initiative transforms SKYBOARD from a simple desktop interface into a comprehensive, project-centric workspace management system. By introducing the recursive concepts of "Boxes" and "BOARDs", we create an infinitely flexible and intuitive UI. Elevating `sk local` to a persistent service with a local database ensures that these rich, customized environments are durable and portable. This represents the next logical step in the evolution of the SideKick Suite, fulfilling the "Y-Combinator" promise of SKYBOARD and creating a powerful, scalable platform for human-computer and AI-computer collaboration.
+
