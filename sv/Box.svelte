@@ -19,6 +19,20 @@
     let dragOffsetX, dragOffsetY;
     let boxEl;
 
+    // --- Dynamic Unfold Direction ---
+    let unfoldDirection = 'up';
+
+    function updateUnfoldDirection() {
+        if (!boxEl || typeof window === 'undefined') return;
+        // Check if the vertical midpoint of the box is in the top or bottom half of the viewport
+        const boxMidY = y + boxEl.offsetHeight / 2;
+        unfoldDirection = boxMidY > window.innerHeight / 2 ? 'up' : 'down';
+    }
+
+    // Update direction whenever the 'y' coordinate changes (e.g., during drag)
+    $: y, updateUnfoldDirection();
+
+
     // --- Context Menu State ---
     let contextMenu = { visible: false, x: 0, y: 0 };
 
@@ -37,7 +51,10 @@
             closeContextMenu();
         }
     }
-    onMount(() => window.addEventListener('click', handleWindowClick));
+    onMount(() => {
+        updateUnfoldDirection(); // Set initial direction
+        window.addEventListener('click', handleWindowClick);
+    });
     onDestroy(() => window.removeEventListener('click', handleWindowClick));
 
     // --- Context Menu Actions ---
@@ -139,6 +156,19 @@
         z-index: 10;
         transition: z-index 0s 0.3s; /* Delay z-index change until after animation */
     }
+    /* This pseudo-element creates a large, invisible hover area around the box,
+       preventing the hover state from being lost when moving the mouse across gaps. */
+    .box::after {
+        content: '';
+        position: absolute;
+        /* Sized to be larger than the maximum unfolded state */
+        top: -260px;
+        bottom: -260px;
+        left: -190px;
+        right: -190px;
+        z-index: -1;
+    }
+
     .box:hover {
         z-index: 100;
         transition-delay: 0s;
@@ -181,12 +211,20 @@
         pointer-events: none;
     }
 
-    .box:hover .cover {
+    /* Dynamic cover panel unfolding */
+    .box.unfold-up:hover .cover {
         transform: translateY(-210%);
         opacity: 1;
         pointer-events: auto;
         z-index: 2;
     }
+    .box.unfold-down:hover .cover {
+        transform: translateY(210%);
+        opacity: 1;
+        pointer-events: auto;
+        z-index: 2;
+    }
+
     .box:hover .top {
         transform: translateY(-105%);
         opacity: 1;
@@ -255,6 +293,8 @@
 
 <div
     class="box"
+    class:unfold-up={unfoldDirection === 'up'}
+    class:unfold-down={unfoldDirection === 'down'}
     bind:this={boxEl}
     style:left="{x}px"
     style:top="{y}px"
