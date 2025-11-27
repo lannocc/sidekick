@@ -8,6 +8,8 @@ import logging
 import platform
 import sys
 import tiktoken
+import sqlite3
+from . import config
 from .util import get_directory_tree_as_text, get_directory_contents_as_text
 from binaryornot.check import is_binary
 
@@ -31,6 +33,49 @@ HOST = '127.0.0.1'
 
 ENCODING = tiktoken.get_encoding('cl100k_base')
 running_asks = {}
+
+# --- Skybox Globals ---
+DB_CONN = None
+CONNECTED_CLIENTS = set()
+# --------------------
+
+def init_db():
+    """Initializes the SQLite database for Skybox."""
+    global DB_CONN
+    db_path = os.path.join(config.DIRS.user_data_dir, 'skybox.db')
+    log.info(f"Using Skybox database at {db_path}")
+    DB_CONN = sqlite3.connect(db_path)
+    DB_CONN.row_factory = sqlite3.Row  # Makes rows dict-like
+    cursor = DB_CONN.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS box (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('local', 'iosk')),
+            context TEXT NOT NULL
+        );
+    """)
+    DB_CONN.commit()
+    log.info("Skybox database initialized.")
+
+async def broadcast_box_list():
+    """Fetches all boxes and broadcasts them to all connected clients."""
+    if not DB_CONN:
+        log.error("Database not connected, cannot broadcast box list.")
+        return
+
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT id, name, type, context FROM box ORDER BY name")
+    boxes = [dict(row) for row in cursor.fetchall()]
+    
+    message = json.dumps({'type': 'box_list', 'boxes': boxes})
+    
+    if CONNECTED_CLIENTS:
+        log.info(f"Broadcasting box_list to {len(CONNECTED_CLIENTS)} clients.")
+        # Create a list of send tasks that can be awaited
+        tasks = [client.send(message) for client in CONNECTED_CLIENTS]
+        if tasks:
+            await asyncio.wait(tasks)
 
 
 async def read_stream(stream, websocket, ask_id, stream_name):
@@ -244,6 +289,7 @@ async def pty_reader(pty_master_fd, websocket):
 async def websocket_handler(websocket):
     """Main handler for each WebSocket connection."""
     log.info(f"Client connected from {websocket.remote_address}")
+    CONNECTED_CLIENTS.add(websocket)
     pty_master_fd = None
     pty_child_pid = None
     reader_task = None
@@ -254,18 +300,58 @@ async def websocket_handler(websocket):
                 msg = json.loads(message)
                 msg_type = msg.get('type')
 
+                # --- Filesystem Operations ---
                 if msg_type == 'fs_list':
                     response = await handle_fs_list(msg.get('path', '.'))
                     await websocket.send(json.dumps(response))
                 elif msg_type == 'fs_read':
                     response = await handle_fs_read(msg.get('path'))
                     await websocket.send(json.dumps(response))
+                
+                # --- Ask Operations ---
                 elif msg_type == 'sk_ask':
                     asyncio.create_task(handle_sk_ask(websocket, msg))
                 elif msg_type == 'ask_stats':
                     response = await handle_ask_stats(msg)
                     await websocket.send(json.dumps(response))
 
+                # --- Skybox Box Operations ---
+                elif msg_type == 'list_boxes':
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("SELECT id, name, type, context FROM box ORDER BY name")
+                    boxes = [dict(row) for row in cursor.fetchall()]
+                    await websocket.send(json.dumps({'type': 'box_list', 'boxes': boxes}))
+                
+                elif msg_type == 'create_box':
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "INSERT INTO box (name, type, context) VALUES (?, ?, ?)",
+                        (msg.get('name'), msg.get('box_type'), msg.get('context'))
+                    )
+                    new_id = cursor.lastrowid
+                    DB_CONN.commit()
+                    cursor.execute("SELECT * FROM box WHERE id = ?", (new_id,))
+                    new_box_row = cursor.fetchone()
+                    new_box = dict(new_box_row) if new_box_row else None
+                    await websocket.send(json.dumps({'type': 'box_created', 'box': new_box}))
+                    await broadcast_box_list()
+
+                elif msg_type == 'update_box':
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "UPDATE box SET name = ? WHERE id = ?",
+                        (msg.get('name'), msg.get('id'))
+                    )
+                    DB_CONN.commit()
+                    await broadcast_box_list()
+                
+                elif msg_type == 'delete_box':
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("DELETE FROM box WHERE id = ?", (msg.get('id'),))
+                    DB_CONN.commit()
+                    await broadcast_box_list()
+
+                # --- Terminal Operations ---
                 elif pty and msg_type == 'term_open':
                     if pty_child_pid:
                         log.warning("Terminal already open for this connection.")
@@ -305,6 +391,7 @@ async def websocket_handler(websocket):
     except ConnectionClosed:
         log.info("Client disconnected.")
     finally:
+        CONNECTED_CLIENTS.remove(websocket)
         if pty_child_pid:
             log.info(f"Cleaning up PTY resources for PID {pty_child_pid}.")
             if reader_task:
@@ -326,6 +413,7 @@ async def start_server():
 
 def main(args):
     """Entry point for `sk local` command."""
+    init_db()  # Initialize the database on startup
     try:
         asyncio.run(start_server())
     except KeyboardInterrupt:
@@ -336,3 +424,7 @@ def main(args):
             log.error("Another instance of sk-local might be running, or another service is using that port.")
         else:
             raise e
+    finally:
+        if DB_CONN:
+            DB_CONN.close()
+            log.info("Database connection closed.")
