@@ -107,7 +107,11 @@ function attemptConnection() {
         connectionStatus.set('disconnected');
         socket = null;
         if (!reconnectTimer) {
-            reconnectTimer = setTimeout(attemptConnection, RECONNECT_DELAY);
+            reconnectTimer = setTimeout(() => {
+                // The timer has fired. Clear the handle so a new one can be set on the next failure.
+                reconnectTimer = null;
+                attemptConnection();
+            }, RECONNECT_DELAY);
         }
     };
 
