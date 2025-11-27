@@ -48,14 +48,37 @@ def init_db():
     DB_CONN.row_factory = sqlite3.Row  # Makes rows dict-like
     DB_CONN.execute("PRAGMA foreign_keys = ON;") # Enforce foreign key constraints
     cursor = DB_CONN.cursor()
+    
+    # Check if box table exists to decide if we need to check for migration
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='box';")
+    box_table_exists = cursor.fetchone()
+    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS box (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             type TEXT NOT NULL CHECK(type IN ('local', 'iosk')),
-            context TEXT NOT NULL
+            context TEXT NOT NULL,
+            x INTEGER DEFAULT 100,
+            y INTEGER DEFAULT 100,
+            scale REAL DEFAULT 1.0
         );
     """)
+
+    # If table already existed, check if we need to add columns for migration
+    if box_table_exists:
+        cursor.execute("PRAGMA table_info(box)")
+        columns = [col['name'] for col in cursor.fetchall()]
+        if 'x' not in columns:
+            log.info("Migrating 'box' table: adding 'x' column.")
+            cursor.execute("ALTER TABLE box ADD COLUMN x INTEGER DEFAULT 100")
+        if 'y' not in columns:
+            log.info("Migrating 'box' table: adding 'y' column.")
+            cursor.execute("ALTER TABLE box ADD COLUMN y INTEGER DEFAULT 100")
+        if 'scale' not in columns:
+            log.info("Migrating 'box' table: adding 'scale' column.")
+            cursor.execute("ALTER TABLE box ADD COLUMN scale REAL DEFAULT 1.0")
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS panel (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +100,7 @@ async def broadcast_box_list():
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, name, type, context FROM box ORDER BY name")
+    cursor.execute("SELECT id, name, type, context, x, y, scale FROM box ORDER BY name")
     boxes = [dict(row) for row in cursor.fetchall()]
     
     message = json.dumps({'type': 'box_list', 'boxes': boxes})
@@ -358,7 +381,7 @@ async def websocket_handler(websocket):
                 # --- Skybox Box Operations ---
                 elif msg_type == 'list_boxes':
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT id, name, type, context FROM box ORDER BY name")
+                    cursor.execute("SELECT id, name, type, context, x, y, scale FROM box ORDER BY name")
                     boxes = [dict(row) for row in cursor.fetchall()]
                     await websocket.send(json.dumps({'type': 'box_list', 'boxes': boxes}))
                 
@@ -381,6 +404,15 @@ async def websocket_handler(websocket):
                     cursor.execute(
                         "UPDATE box SET name = ? WHERE id = ?",
                         (msg.get('name'), msg.get('id'))
+                    )
+                    DB_CONN.commit()
+                    await broadcast_box_list()
+
+                elif msg_type == 'update_box_transform':
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "UPDATE box SET x = ?, y = ?, scale = ? WHERE id = ?",
+                        (msg.get('x'), msg.get('y'), msg.get('scale'), msg.get('id'))
                     )
                     DB_CONN.commit()
                     await broadcast_box_list()

@@ -6,20 +6,35 @@
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer } from './windows.js';
-    import { updateBox, deleteBox, savePanelConfig } from './local.js';
+    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform } from './local.js';
     import { dashLayouts } from './desktop.js';
     import Board from './Board.svelte';
 
     export let box;
 
-    // Phase 1: Auto-arrange on desktop. Position is not persisted yet.
-    let x = 100 + (box.id % 5) * 200;
-    let y = 100 + Math.floor(box.id / 5) * 150;
+    // --- Position, Size, and Scale ---
+    let x = box.x ?? 100 + (box.id % 5) * 200;
+    let y = box.y ?? 100 + Math.floor(box.id / 5) * 150;
+    let scale = box.scale ?? 1.0;
+
+    // Make local state reactive to prop changes from the store
+    $: if (box.x != null) x = box.x;
+    $: if (box.y != null) y = box.y;
+    $: if (box.scale != null) scale = box.scale;
+
+    const BASE_WIDTH = 180;
+    let desktopWidth = window.innerWidth;
+    let desktopHeight = window.innerHeight - 40; // Approx taskbar height
+    let aspectRatio = desktopHeight / desktopWidth;
+
+    $: boxWidth = BASE_WIDTH * scale;
+    $: boxHeight = BASE_WIDTH * aspectRatio * scale;
 
     let isDragging = false;
     let wasDragging = false; // To distinguish between a drag and a click
     let dragOffsetX, dragOffsetY;
     let boxEl;
+    let saveTransformTimeout;
 
     // --- Hover State for Unfolding ---
     let isHovered = false;
@@ -111,7 +126,7 @@
         }
     }
 
-    // --- Dragging & Drop Target Logic ---
+    // --- Dragging, Scaling & Drop Target Logic ---
     function onDragStart(event) {
         // Prevent dragging if it's not a left-click.
         if (event.button !== 0) return;
@@ -136,7 +151,24 @@
         isDragging = false;
         document.body.style.cursor = 'auto';
         window.removeEventListener('mousemove', onDrag);
-        // Position persistence will be handled in a later phase
+        if (wasDragging) {
+            updateBoxTransform(box.id, Math.round(x), Math.round(y), scale);
+        }
+    }
+    
+    function handleWheel(event) {
+        if (event.ctrlKey || event.altKey) {
+            event.preventDefault();
+            const zoomStep = 0.05;
+            const delta = event.deltaY < 0 ? zoomStep : -zoomStep;
+            
+            scale = Math.max(0.2, scale + delta);
+
+            if (saveTransformTimeout) clearTimeout(saveTransformTimeout);
+            saveTransformTimeout = setTimeout(() => {
+                updateBoxTransform(box.id, Math.round(x), Math.round(y), scale);
+            }, 300);
+        }
     }
 
     function handlePanelMouseEnter(location) {
@@ -256,8 +288,8 @@
 <style>
     .box {
         position: absolute;
-        width: 180px;
-        height: 120px;
+        /* width: 180px; */ /* Now set by style directive */
+        /* height: 120px; */ /* Now set by style directive */
         cursor: pointer;
         user-select: none;
         z-index: 10;
@@ -449,9 +481,12 @@
     bind:this={boxEl}
     style:left="{x}px"
     style:top="{y}px"
+    style:width="{boxWidth}px"
+    style:height="{boxHeight}px"
     on:contextmenu={handleRightClick}
     on:mouseenter={handleMouseEnter}
     on:mouseleave={handleMouseLeave}
+    on:wheel={handleWheel}
 >
     <!-- Panels for Unfolding Animation -->
     <div class="panel cover" on:mousedown={onDragStart} on:click={e => handlePanelClick(e, 'cover')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'cover'} on:mouseenter={() => handlePanelMouseEnter('cover')} on:mouseleave={() => handlePanelMouseLeave('cover')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'cover')}>

@@ -51,6 +51,9 @@ export function getBoxConfig(id) {
 export function savePanelConfig(box_id, location, board_type, board_config) {
     sendMessage({ type: 'set_panel_config', box_id, location, board_type, board_config });
 }
+export function updateBoxTransform(id, x, y, scale) {
+    sendMessage({ type: 'update_box_transform', id, x, y, scale });
+}
 
 
 function attemptConnection() {
@@ -100,22 +103,37 @@ function attemptConnection() {
                     askStatsResponse.set({ ...msg, timestamp: Date.now() });
                     break;
                 case 'box_list':
-                    // It's a full refresh of boxes, so we should also fetch their configs.
-                    const freshBoxes = msg.boxes.map(b => ({ ...b, panels: {} }));
-                    boxes.set(freshBoxes);
-                    freshBoxes.forEach(b => getBoxConfig(b.id));
+                    const newBoxesFromBackend = msg.boxes;
+                    boxes.update(currentBoxes => {
+                        const currentBoxMap = new Map(currentBoxes.map(b => [b.id, b]));
+                        const updatedBoxes = newBoxesFromBackend.map(b => {
+                            const existingBox = currentBoxMap.get(b.id);
+                            return {
+                                ...b, // name, type, context, x, y, scale from backend
+                                panels: existingBox ? existingBox.panels : {} // preserve panels
+                            };
+                        });
+                        // Fetch configs for any box that doesn't have them yet.
+                        updatedBoxes.forEach(b => {
+                            if (b.panels && Object.keys(b.panels).length === 0) {
+                                getBoxConfig(b.id);
+                            }
+                        });
+                        return updatedBoxes;
+                    });
                     break;
                 case 'box_config_response':
                     boxes.update(allBoxes => {
-                        const boxIndex = allBoxes.findIndex(b => b.id === msg.box_id);
-                        if (boxIndex !== -1) {
-                            const panelMap = msg.panels.reduce((acc, panel) => {
-                                acc[panel.location] = panel;
-                                return acc;
-                            }, {});
-                            allBoxes[boxIndex].panels = panelMap;
-                        }
-                        return allBoxes;
+                        return allBoxes.map(box => {
+                            if (box.id === msg.box_id) {
+                                const panelMap = msg.panels.reduce((acc, panel) => {
+                                    acc[panel.location] = panel;
+                                    return acc;
+                                }, {});
+                                return { ...box, panels: panelMap }; // Return new object for reactivity
+                            }
+                            return box;
+                        });
                     });
                     break;
                 default:
