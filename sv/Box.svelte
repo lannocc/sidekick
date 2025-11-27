@@ -112,9 +112,9 @@
 
     // --- Dragging & Drop Target Logic ---
     function onDragStart(event) {
-        // Prevent dragging if it's not a left-click, or if the click
-        // is on an unfolded side panel (top, bottom, left, right).
-        if (event.button !== 0 || event.target.closest('.panel.top, .panel.bottom, .panel.left, .panel.right')) return;
+        // Prevent dragging if it's not a left-click.
+        if (event.button !== 0) return;
+
         
         isDragging = true;
         dragOffsetX = event.clientX - x;
@@ -200,12 +200,16 @@
         }
 
         const panelConfig = box.panels?.[location];
+        const isSidePanel = ['top', 'bottom', 'left', 'right'].includes(location);
 
         if (!panelConfig || panelConfig.board_type === 'empty') {
+            // Handle clicks on empty panels
             if (location === 'center' && box.type === 'local') {
                 newLocalFileExplorer({ initialPath: box.context, title: `Local Files - ${box.name}` });
-            } else {
-                // Req 1: Open picker for empty panel
+            } else if (isSidePanel) {
+                // For side panels, open the board picker.
+                // We must stop propagation so the window's 'click' listener doesn't immediately close the picker.
+                event.stopPropagation();
                 boardPickerProps = {
                     location,
                     x: event.clientX,
@@ -213,25 +217,31 @@
                 };
                 showBoardPicker = true;
             }
+            // Clicking empty center (non-local) or cover panels does nothing.
         } else {
-            // Req 2 & 3: Handle click on occupied panel
+            // Handle clicks on occupied panels
             const { board_type, board_config } = panelConfig;
 
             if (board_type === 'image' && location === 'cover') {
+                // Special action for cover image
                 if (board_config?.url) {
                     newWebBrowser({ initialUrl: board_config.url });
                 }
-            } else if (board_type === 'window' || board_type === 'tabs') {
-                windows.restoreWindow(board_config);
-                savePanelConfig(box.id, location, 'empty', null);
-            } else if (board_type === 'dash') {
-                if (board_config?.windowGroups) {
-                    for (const group of board_config.windowGroups) {
-                        windows.restoreWindow(group);
+            } else if (isSidePanel) {
+                // For occupied side panels, restore the board
+                if (board_type === 'window' || board_type === 'tabs') {
+                    windows.restoreWindow(board_config);
+                    savePanelConfig(box.id, location, 'empty', null);
+                } else if (board_type === 'dash') {
+                    if (board_config?.windowGroups) {
+                        for (const group of board_config.windowGroups) {
+                            windows.restoreWindow(group);
+                        }
                     }
+                    savePanelConfig(box.id, location, 'empty', null);
                 }
-                savePanelConfig(box.id, location, 'empty', null);
             }
+            // Clicking occupied center or non-image cover panels does nothing for now.
         }
     }
 </script>
@@ -433,12 +443,11 @@
     style:left="{x}px"
     style:top="{y}px"
     on:contextmenu={handleRightClick}
-    on:mousedown={onDragStart}
     on:mouseenter={handleMouseEnter}
     on:mouseleave={handleMouseLeave}
 >
     <!-- Panels for Unfolding Animation -->
-    <div class="panel cover" on:click={e => handlePanelClick(e, 'cover')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'cover'} on:mouseenter={() => handlePanelMouseEnter('cover')} on:mouseleave={() => handlePanelMouseLeave('cover')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'cover')}>
+    <div class="panel cover" on:mousedown={onDragStart} on:click={e => handlePanelClick(e, 'cover')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'cover'} on:mouseenter={() => handlePanelMouseEnter('cover')} on:mouseleave={() => handlePanelMouseLeave('cover')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'cover')}>
         {#if box.panels?.cover}
             <Board board_type={box.panels.cover.board_type} board_config={box.panels.cover.board_config} />
         {/if}
@@ -457,7 +466,7 @@
     </div>
 
     <!-- Center Panel with Content -->
-    <div class="panel center" on:click={e => handlePanelClick(e, 'center')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')}>
+    <div class="panel center" on:mousedown={onDragStart} on:click={e => handlePanelClick(e, 'center')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')}>
         {#if box.panels?.center}
             <Board board_type={box.panels.center.board_type} board_config={box.panels.center.board_config} />
         {:else}
