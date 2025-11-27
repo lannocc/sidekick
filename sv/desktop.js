@@ -129,3 +129,6 @@ windowSettings.subscribe(value => {
 // New stores for Notification Center
 export const notificationHistory = writable([]);
 export const unreadNoticeCount = writable(0);
+
+// Re-export Skybox stores
+export { boxes } from './local.js';

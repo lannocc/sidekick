@@ -6,6 +6,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter } from './windows.js';
     import { dashActive, unreadNoticeCount } from './desktop.js';
+    import { createBox } from './local.js';
     import Clock from './Clock.svelte';
 
     let showMenu = false; // For Start menu
@@ -141,6 +142,17 @@
     function launchLocalFileExplorer(props = {}) { newLocalFileExplorer(props); showMenu = false; }
     function launchAsk(props = {}) { newAskWindow(props); showMenu = false; }
 
+    function newBox() {
+        const name = prompt("Enter a name for the new Box:", "My Project Box");
+        if (!name) return;
+
+        // For simplicity, this implementation only handles 'local' type boxes.
+        const context = prompt("Enter the local filesystem path for the Box:", "/home/user/project");
+        if (!context) return;
+
+        createBox(name, 'local', context);
+    }
+
     onMount(() => window.addEventListener('click', handleWindowClick));
     onDestroy(() => window.removeEventListener('click', handleWindowClick));
 </script>
@@ -269,6 +281,8 @@
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchSettings({ sourceEvent: e }); }}>Settings</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }}>IOSK Connection</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebBrowser({ sourceEvent: e }); showMenu = false; }}>Web Browser</button>
+                <div class="menu-separator"></div>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBox(); showMenu = false; }}>New Box...</button>
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }}>Ask</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalTerminal({ sourceEvent: e }); }}>Terminal</button>

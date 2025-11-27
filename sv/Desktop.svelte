@@ -5,7 +5,8 @@
 <script>
     import { windows, newSettings, dragRequest } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive } from './desktop.js';
+    import { desktopSettings, dashActive, boxes } from './desktop.js';
+    import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
@@ -176,7 +177,8 @@
         transition: background 0.5s ease-in-out;
     }
     .desktop.dash-active .windows-layer,
-    .desktop.dash-active .tab-contents-layer {
+    .desktop.dash-active .tab-contents-layer,
+    .desktop.dash-active .boxes-layer {
         /* Hide windows without unmounting components, preserving their state */
         visibility: hidden;
     }
@@ -221,6 +223,16 @@
         background-color: var(--taskbar-button-hover-bg);
     }
 
+    .boxes-layer {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        pointer-events: none; /* Parent container is not interactive */
+    }
+    .boxes-layer > :global(*) {
+        pointer-events: auto; /* Children (boxes) are interactive */
+    }
+
     .tab-contents-layer {
         position: absolute;
         top: 0; left: 0;
@@ -252,6 +264,12 @@
 </style>
 
 <div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick}>
+    <div class="boxes-layer">
+        {#each $boxes as box (box.id)}
+            <Box {box} />
+        {/each}
+    </div>
+
     <div class="windows-layer">
         {#each $windows as win (win.id)}
             <Window {...win} />

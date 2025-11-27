@@ -16,6 +16,7 @@ export const askOutput = writable(null);
 export const askError = writable(null);
 export const askExit = writable(null);
 export const askStatsResponse = writable(null);
+export const boxes = writable([]);
 
 let messageQueue = [];
 
@@ -33,6 +34,16 @@ export function sendMessage(message) {
     processQueue();
 }
 
+export function createBox(name, box_type, context) {
+    sendMessage({ type: 'create_box', name, box_type, context });
+}
+export function updateBox(id, name) {
+    sendMessage({ type: 'update_box', id, name });
+}
+export function deleteBox(id) {
+    sendMessage({ type: 'delete_box', id });
+}
+
 export function connect() {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
         return;
@@ -43,7 +54,8 @@ export function connect() {
 
     socket.onopen = () => {
         connectionStatus.set('connected');
-        processQueue(); // Send any messages that were queued
+        sendMessage({ type: 'list_boxes' });
+        processQueue(); // Send any messages that were were queued
     };
 
     socket.onmessage = (event) => {
@@ -73,6 +85,9 @@ export function connect() {
                     break;
                 case 'ask_stats_response':
                     askStatsResponse.set({ ...msg, timestamp: Date.now() });
+                    break;
+                case 'box_list':
+                    boxes.set(msg.boxes);
                     break;
                 default:
                     console.warn('Unknown message type from local backend:', msg.type);
