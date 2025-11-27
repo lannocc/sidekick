@@ -2,6 +2,17 @@ Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
 
+v0.4.5
+======
+
+Date: November 26, 2025
+
+    * Implemented netfileops for easy file sharing between mesh nodes.
+    * Introducing iosk standard distribution and workspace overlay.
+    * Add "-4" option to `ask` for gemini-3-pro-preview / gpt-5.1.
+    * Improved `ask` command prompt construction for caching.
+
+
 v0.4.4
 ======
 
