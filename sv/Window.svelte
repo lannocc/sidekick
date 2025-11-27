@@ -5,7 +5,7 @@
 <script>
     import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, dragState, instanceRegistry, dragRequest } from './windows.js';
+    import { windows, dragState, instanceRegistry, dragRequest, generateBoardConfigFromWindow } from './windows.js';
     import { desktopSettings, windowSettings } from './desktop.js';
     import { savePanelConfig } from './local.js';
     import IoskConsole from './IoskConsole.svelte';
@@ -246,59 +246,6 @@
              // Let Box.svelte handle setting dropTargetBoxPanel via its mouseenter events
             dragState.update(s => ({ ...s, dropTargetGroupId: null }));
         }
-    }
-
-    function getComponentType(component) {
-        if (component === IoskConsole) return 'IoskConsole';
-        if (component === Calculator) return 'Calculator';
-        if (component === Settings) return 'Settings';
-        if (component === IoskFileExplorer) return 'IoskFileExplorer';
-        if (component === IoskFileViewer) return 'IoskFileViewer';
-        if (component === WebBrowser) return 'WebBrowser';
-        if (component === IoskPrivateChat) return 'IoskPrivateChat';
-        if (component === LocalTerminal) return 'LocalTerminal';
-        if (component === LocalFileExplorer) return 'LocalFileExplorer';
-        if (component === Ask) return 'Ask';
-        if (component === IoskWatch) return 'IoskWatch';
-        if (component === IoskUserInspector) return 'IoskUserInspector';
-        if (component === NotificationCenter) return 'NotificationCenter';
-        return 'Unknown';
-    }
-
-    function generateBoardConfigFromWindow(group) {
-        const allWindows = get(windows);
-        const findTabById = (tabId) => {
-            if (!tabId) return null;
-            for (const g of allWindows) {
-                const tab = g.tabs.find(t => t.id === tabId);
-                if (tab) return tab;
-            }
-            return null;
-        }
-        const layoutTabs = group.tabs.map(tab => {
-            const associatedConsole = findTabById(tab.consoleId);
-            return {
-                originalId: tab.id,
-                componentType: getComponentType(tab.component),
-                title: tab.title,
-                wsUrl: tab.wsUrl, username: tab.username,
-                localUser: tab.localUser, remoteUser: tab.remoteUser, 
-                consoleConnection: tab.consoleConnection || (associatedConsole ? associatedConsole.consoleConnection : null),
-                initialPath: tab.currentPath, path: tab.path,
-                mode: tab.mode, initialUrl: tab.currentUrl,
-                zoom: tab.zoom,
-                initialCommand: tab.initialCommand,
-                initialPwd: tab.initialPwd,
-                initialInterval: tab.initialInterval,
-                initialState: tab.initialState,
-            };
-        });
-        return {
-            x: group.x, y: group.y, width: group.width, height: group.height,
-            maximized: group.maximized,
-            activeTabId: group.activeTabId,
-            tabs: layoutTabs
-        };
     }
 
     function onDragEnd() {

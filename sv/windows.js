@@ -43,6 +43,53 @@ const componentMap = {
     'NotificationCenter': NotificationCenter,
 };
 
+export function getComponentType(component) {
+    for (const [name, comp] of Object.entries(componentMap)) {
+        if (comp === component) {
+            return name;
+        }
+    }
+    return 'Unknown';
+}
+
+function findTabById(groups, tabId) {
+    if (!tabId) return null;
+    for (const group of groups) {
+        const tab = group.tabs.find(t => t.id === tabId);
+        if (tab) return tab;
+    }
+    return null;
+}
+
+export function generateBoardConfigFromWindow(group) {
+    const allWindows = get(windows);
+    const layoutTabs = group.tabs.map(tab => {
+        const associatedConsole = findTabById(allWindows, tab.consoleId);
+        return {
+            originalId: tab.id,
+            componentType: getComponentType(tab.component),
+            title: tab.title,
+            maximized: group.maximized,
+            wsUrl: tab.wsUrl, username: tab.username,
+            localUser: tab.localUser, remoteUser: tab.remoteUser, 
+            consoleConnection: tab.consoleConnection || (associatedConsole ? associatedConsole.consoleConnection : null),
+            initialPath: tab.currentPath, path: tab.path,
+            mode: tab.mode, initialUrl: tab.currentUrl,
+            zoom: tab.zoom,
+            initialCommand: tab.initialCommand,
+            initialPwd: tab.initialPwd,
+            initialInterval: tab.initialInterval,
+            initialState: tab.initialState,
+        };
+    });
+    return {
+        x: group.x, y: group.y, width: group.width, height: group.height,
+        maximized: group.maximized,
+        activeTabId: group.activeTabId,
+        tabs: layoutTabs
+    };
+}
+
 function findOptimalPosition(props, allWindows, currentWindowId) {
     if (typeof window === 'undefined') {
         return { x: 50, y: 50 }; // SSR fallback

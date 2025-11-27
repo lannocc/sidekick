@@ -5,8 +5,9 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { newAskWindow, dragState } from './windows.js';
+    import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser } from './windows.js';
     import { updateBox, deleteBox, savePanelConfig } from './local.js';
+    import { dashLayouts } from './desktop.js';
     import Board from './Board.svelte';
 
     export let box;
@@ -66,6 +67,9 @@
         if (contextMenu.visible && !event.target.closest('.context-menu')) {
             closeContextMenu();
         }
+        if (showBoardPicker && !event.target.closest('.board-picker')) {
+            showBoardPicker = false;
+        }
     }
     onMount(() => {
         updateUnfoldDirection(); // Set initial direction
@@ -92,7 +96,7 @@
     function askBox() {
         closeContextMenu();
         if (box.type === 'local') {
-            newAskWindow([{ path: box.context, type: 'dir' }]);
+            newAskWindow([box.context]);
         } else {
             alert(`"Ask..." for 'iosk' boxes is not yet implemented.`);
         }
@@ -161,6 +165,69 @@
             }
         } catch(e) {
             console.error("Drop failed:", e);
+        }
+    }
+
+    // --- Board Picker State & Logic ---
+    let showBoardPicker = false;
+    let boardPickerProps = {}; // { location, x, y }
+
+    function getActiveTabTitle(win) {
+        if (!win || !win.tabs) return '...';
+        const activeTab = win.tabs.find(t => t.id === win.activeTabId);
+        return activeTab ? activeTab.title : (win.tabs[0]?.title || 'Window');
+    }
+
+    function selectWindow(group) {
+        const { location } = boardPickerProps;
+        const board_config = generateBoardConfigFromWindow(group);
+        const board_type = group.tabs.length > 1 ? 'tabs' : 'window';
+        savePanelConfig(box.id, location, board_type, board_config);
+        windows.removeWindow(group.id);
+        showBoardPicker = false;
+    }
+
+    function selectDash(layout) {
+        const { location } = boardPickerProps;
+        savePanelConfig(box.id, location, 'dash', layout);
+        showBoardPicker = false;
+    }
+
+    function handlePanelClick(event, location) {
+        if (showBoardPicker) {
+            showBoardPicker = false;
+            return;
+        }
+
+        const panelConfig = box.panels?.[location];
+
+        if (!panelConfig || panelConfig.board_type === 'empty') {
+            // Req 1: Open picker for empty panel
+            boardPickerProps = {
+                location,
+                x: event.clientX,
+                y: event.clientY,
+            };
+            showBoardPicker = true;
+        } else {
+            // Req 2 & 3: Handle click on occupied panel
+            const { board_type, board_config } = panelConfig;
+
+            if (board_type === 'image' && location === 'cover') {
+                if (board_config?.url) {
+                    newWebBrowser({ initialUrl: board_config.url });
+                }
+            } else if (board_type === 'window' || board_type === 'tabs') {
+                windows.restoreWindow(board_config);
+                savePanelConfig(box.id, location, 'empty', null);
+            } else if (board_type === 'dash') {
+                if (board_config?.windowGroups) {
+                    for (const group of board_config.windowGroups) {
+                        windows.restoreWindow(group);
+                    }
+                }
+                savePanelConfig(box.id, location, 'empty', null);
+            }
         }
     }
 </script>
@@ -310,6 +377,46 @@
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
     .context-menu .delete { color: #e74c3c; }
     .context-menu .delete:hover { background-color: #c0392b; color: white; }
+
+    .board-picker {
+        position: fixed;
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        z-index: 10001;
+        display: flex;
+        flex-direction: column;
+        padding: 4px 0;
+        min-width: 200px;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    .picker-header {
+        padding: 4px 12px;
+        font-weight: bold;
+        color: var(--title-bar-text);
+        background-color: var(--title-bar-bg);
+        border-bottom: 1px solid var(--border-color);
+    }
+    .picker-item {
+        background: none;
+        border: none;
+        color: var(--taskbar-text);
+        padding: 8px 12px;
+        text-align: left;
+        cursor: pointer;
+        font-size: 14px;
+        width: 100%;
+    }
+    .picker-item:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .empty-message {
+        padding: 8px 12px;
+        color: #7f8c8d;
+        font-style: italic;
+    }
 </style>
 
 <div
@@ -327,26 +434,26 @@
     on:mouseleave={handleMouseLeave}
 >
     <!-- Panels for Unfolding Animation -->
-    {#if box.panels?.cover}
-        <div class="panel cover" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'cover'} on:mouseenter={() => handlePanelMouseEnter('cover')} on:mouseleave={() => handlePanelMouseLeave('cover')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'cover')}>
+    <div class="panel cover" on:click={e => handlePanelClick(e, 'cover')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'cover'} on:mouseenter={() => handlePanelMouseEnter('cover')} on:mouseleave={() => handlePanelMouseLeave('cover')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'cover')}>
+        {#if box.panels?.cover}
             <Board board_type={box.panels.cover.board_type} board_config={box.panels.cover.board_config} />
-        </div>
-    {/if}
-    <div class="panel top" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'top'} on:mouseenter={() => handlePanelMouseEnter('top')} on:mouseleave={() => handlePanelMouseLeave('top')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'top')}>
+        {/if}
+    </div>
+    <div class="panel top" on:click={e => handlePanelClick(e, 'top')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'top'} on:mouseenter={() => handlePanelMouseEnter('top')} on:mouseleave={() => handlePanelMouseLeave('top')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'top')}>
         {#if box.panels?.top} <Board board_type={box.panels.top.board_type} board_config={box.panels.top.board_config} /> {/if}
     </div>
-    <div class="panel bottom" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'bottom'} on:mouseenter={() => handlePanelMouseEnter('bottom')} on:mouseleave={() => handlePanelMouseLeave('bottom')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'bottom')}>
+    <div class="panel bottom" on:click={e => handlePanelClick(e, 'bottom')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'bottom'} on:mouseenter={() => handlePanelMouseEnter('bottom')} on:mouseleave={() => handlePanelMouseLeave('bottom')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'bottom')}>
         {#if box.panels?.bottom} <Board board_type={box.panels.bottom.board_type} board_config={box.panels.bottom.board_config} /> {/if}
     </div>
-    <div class="panel left" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'left'} on:mouseenter={() => handlePanelMouseEnter('left')} on:mouseleave={() => handlePanelMouseLeave('left')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'left')}>
+    <div class="panel left" on:click={e => handlePanelClick(e, 'left')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'left'} on:mouseenter={() => handlePanelMouseEnter('left')} on:mouseleave={() => handlePanelMouseLeave('left')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'left')}>
         {#if box.panels?.left} <Board board_type={box.panels.left.board_type} board_config={box.panels.left.board_config} /> {/if}
     </div>
-    <div class="panel right" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'right'} on:mouseenter={() => handlePanelMouseEnter('right')} on:mouseleave={() => handlePanelMouseLeave('right')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'right')}>
+    <div class="panel right" on:click={e => handlePanelClick(e, 'right')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'right'} on:mouseenter={() => handlePanelMouseEnter('right')} on:mouseleave={() => handlePanelMouseLeave('right')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'right')}>
         {#if box.panels?.right} <Board board_type={box.panels.right.board_type} board_config={box.panels.right.board_config} /> {/if}
     </div>
 
     <!-- Center Panel with Content -->
-    <div class="panel center" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')}>
+    <div class="panel center" on:click={e => handlePanelClick(e, 'center')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')}>
         {#if box.panels?.center}
             <Board board_type={box.panels.center.board_type} board_config={box.panels.center.board_config} />
         {:else}
@@ -364,5 +471,28 @@
         <button on:click={setCoverImage}>Set Cover Image...</button>
         <div class="menu-separator"></div>
         <button on:click={deleteBoxConfirm} class="delete">Delete</button>
+    </div>
+{/if}
+
+<!-- Board Picker UI -->
+{#if showBoardPicker}
+    <div class="board-picker" style:top="{boardPickerProps.y}px" style:left="{boardPickerProps.x}px" on:click|stopPropagation>
+        <div class="picker-header">Open Windows</div>
+        {#each $windows as win (win.id)}
+            <button class="picker-item" on:click={() => selectWindow(win)}>
+                {getActiveTabTitle(win)}
+            </button>
+        {:else}
+            <div class="empty-message">No open windows</div>
+        {/each}
+
+        <div class="picker-header" style="margin-top: 5px;">Saved Dashes</div>
+        {#each $dashLayouts as layout (layout.id)}
+            <button class="picker-item" on:click={() => selectDash(layout)}>
+                {layout.name}
+            </button>
+        {:else}
+            <div class="empty-message">No saved dashes</div>
+        {/each}
     </div>
 {/if}
