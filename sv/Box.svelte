@@ -65,7 +65,7 @@
 
     // --- Dragging Logic ---
     function onDragStart(event) {
-        if (event.button !== 0) return;
+        if (event.button !== 0 || event.target.closest('.panel:not(.center)')) return;
         isDragging = true;
         dragOffsetX = event.clientX - x;
         dragOffsetY = event.clientY - y;
@@ -93,22 +93,70 @@
         position: absolute;
         width: 180px;
         height: 120px;
+        cursor: pointer;
+        user-select: none;
+        z-index: 10;
+        transition: z-index 0s 0.3s; /* Delay z-index change until after animation */
+    }
+    .box:hover {
+        z-index: 100;
+        transition-delay: 0s;
+    }
+
+    .panel {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
         background-color: var(--window-bg);
         border: 1px solid var(--border-color);
         border-radius: 6px;
         box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        cursor: move;
+        box-sizing: border-box;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        color: var(--title-bar-text);
+        text-align: center;
+    }
+
+    .center {
+        z-index: 2;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         padding: 10px;
-        box-sizing: border-box;
-        user-select: none;
-        z-index: 10;
-        color: var(--title-bar-text);
-        text-align: center;
+        cursor: move;
     }
+
+    .top, .bottom, .left, .right {
+        z-index: 1;
+        opacity: 0;
+        transform: scale(0.95);
+        pointer-events: none;
+    }
+
+    .box:hover .top {
+        transform: translateY(-105%);
+        opacity: 1;
+        pointer-events: auto;
+    }
+    .box:hover .bottom {
+        transform: translateY(105%);
+        opacity: 1;
+        pointer-events: auto;
+    }
+    .box:hover .left {
+        transform: translateX(-105%);
+        opacity: 1;
+        pointer-events: auto;
+    }
+    .box:hover .right {
+        transform: translateX(105%);
+        opacity: 1;
+        pointer-events: auto;
+    }
+
     .box-name {
         font-size: 1.1em;
         font-weight: bold;
@@ -163,11 +211,19 @@
     bind:this={boxEl}
     style:left="{x}px"
     style:top="{y}px"
-    on:mousedown={onDragStart}
     on:contextmenu={handleRightClick}
 >
-    <div class="box-name">{box.name}</div>
-    <div class="box-context" title={box.context}>{box.context}</div>
+    <!-- Panels for Unfolding Animation -->
+    <div class="panel top"></div>
+    <div class="panel bottom"></div>
+    <div class="panel left"></div>
+    <div class="panel right"></div>
+
+    <!-- Center Panel with Content -->
+    <div class="panel center" on:mousedown={onDragStart}>
+        <div class="box-name">{box.name}</div>
+        <div class="box-context" title={box.context}>{box.context}</div>
+    </div>
 </div>
 
 {#if contextMenu.visible}
