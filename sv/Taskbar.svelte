@@ -288,11 +288,11 @@
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }}>IOSK Connection</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebBrowser({ sourceEvent: e }); showMenu = false; }}>Web Browser</button>
                 <div class="menu-separator"></div>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBox(); showMenu = false; }}>New Box...</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBox(); showMenu = false; }} disabled={$connectionStatus !== 'connected'}>New Box...</button>
                 <div class="menu-separator"></div>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }}>Ask</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalTerminal({ sourceEvent: e }); }}>Terminal</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer({ sourceEvent: e }); }}>Files</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'}>Ask</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalTerminal({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'}>Terminal</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'}>Files</button>
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchCalculator({ sourceEvent: e }); }}>Calculator</button>
             </div>
