@@ -327,9 +327,11 @@
     on:mouseleave={handleMouseLeave}
 >
     <!-- Panels for Unfolding Animation -->
-    <div class="panel cover" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'cover'} on:mouseenter={() => handlePanelMouseEnter('cover')} on:mouseleave={() => handlePanelMouseLeave('cover')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'cover')}>
-        {#if box.panels?.cover} <Board board_type={box.panels.cover.board_type} board_config={box.panels.cover.board_config} /> {/if}
-    </div>
+    {#if box.panels?.cover}
+        <div class="panel cover" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'cover'} on:mouseenter={() => handlePanelMouseEnter('cover')} on:mouseleave={() => handlePanelMouseLeave('cover')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'cover')}>
+            <Board board_type={box.panels.cover.board_type} board_config={box.panels.cover.board_config} />
+        </div>
+    {/if}
     <div class="panel top" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'top'} on:mouseenter={() => handlePanelMouseEnter('top')} on:mouseleave={() => handlePanelMouseLeave('top')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'top')}>
         {#if box.panels?.top} <Board board_type={box.panels.top.board_type} board_config={box.panels.top.board_config} /> {/if}
     </div>
