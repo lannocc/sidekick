@@ -66,18 +66,18 @@ The "ask" functionality will be extended to this new metaphor:
 
 This provides a powerful, intuitive way to scope AI queries to entire projects or specific parts of them.
 
-## 4. Proposed Architecture & Implementation Plan
+## 4. Proposed Architecture
 
 ### 4.1. The "Skybox Service" (`sk local` 2.0)
 
-The `sk local` process will be significantly upgraded from a simple WebSocket bridge to a persistent local service.
+The `sk local` process will be significantly upgraded from a simple WebSocket bridge to a persistent local service. This service will be an optional enhancement; the core SKYBOARD desktop will remain fully functional without it.
 
-*   **Persistence Layer**: It will manage a lightweight local database (e.g., SQLite) located in the user's application data directory. This database will be the single source of truth for:
+*   **Persistence Layer**: It will manage a lightweight local database (e.g., SQLite) located in the user's application data directory. This database will be the source of truth for all new Skybox-related configurations:
     *   All saved Dashes and Backs.
     *   Box definitions (name, context path/iosk connection, panel configurations).
-    *   All global and per-window settings currently stored in the browser's `localStorage`.
+*   **Separation of Concerns**: To ensure that the core SKYBOARD desktop can still operate in a lightweight, backend-less mode, existing configurations such as Desktop Settings and default window settings will **continue to be stored in the browser's `localStorage`**. The Skybox Service is responsible only for persisting the new, richer workspace configurations.
 *   **Expanded WebSocket API**: New message types will be added to the protocol for creating, reading, updating, and deleting Boxes, Dashes, and Backs.
-*   **Data Portability**: The service will expose simple HTTP endpoints (e.g., `/export`, `/import`) to allow users to save their entire configuration to a single file and import it on another machine or browser. This finally makes the SKYBOARD environment truly portable.
+*   **Data Portability**: The service will expose simple HTTP endpoints (e.g., `/export`, `/import`) to allow users to save their entire Skybox workspace configuration (Boxes, Dashes, Backs) to a single file and import it on another machine or browser. This makes the project-oriented workspaces portable, while basic desktop settings remain local to the browser.
 
 ### 4.2. SKYBOARD Frontend (Svelte)
 
@@ -87,7 +87,7 @@ The `sk local` process will be significantly upgraded from a simple WebSocket br
 *   **`windows.js` & `desktop.js` Refactor**:
     *   State management for "Backs" will be added.
     *   A `lockedIn: boolean` property will be added to the window group state. A `lockWindow(groupId)` function will toggle this state.
-    *   `localStorage` access will be replaced with calls to the Skybox Service via the WebSocket connection.
+    *   Logic will be added to read/write Box, Dash, and Back configurations from the Skybox Service via the WebSocket connection. Existing settings management using `localStorage` will be preserved for core desktop functionality.
 *   **`Dash.svelte` Modifications**: This component will be refactored to manage both floating Dashes and locked-in Backs, presenting them as distinct savable layout types.
 *   **`Taskbar.svelte`**: A "New Box" menu item will be added.
 
@@ -102,4 +102,3 @@ This proposal lays the foundation for even more powerful features:
 ## 6. Conclusion
 
 The Skybox initiative transforms SKYBOARD from a simple desktop interface into a comprehensive, project-centric workspace management system. By introducing the recursive concepts of "Boxes" and "BOARDs", we create an infinitely flexible and intuitive UI. Elevating `sk local` to a persistent service with a local database ensures that these rich, customized environments are durable and portable. This represents the next logical step in the evolution of the SideKick Suite, fulfilling the "Y-Combinator" promise of SKYBOARD and creating a powerful, scalable platform for human-computer and AI-computer collaboration
-
