@@ -46,6 +46,7 @@ def init_db():
     log.info(f"Using Skybox database at {db_path}")
     DB_CONN = sqlite3.connect(db_path)
     DB_CONN.row_factory = sqlite3.Row  # Makes rows dict-like
+    DB_CONN.execute("PRAGMA foreign_keys = ON;") # Enforce foreign key constraints
     cursor = DB_CONN.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS box (
@@ -53,6 +54,17 @@ def init_db():
             name TEXT NOT NULL,
             type TEXT NOT NULL CHECK(type IN ('local', 'iosk')),
             context TEXT NOT NULL
+        );
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS panel (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            box_id INTEGER NOT NULL,
+            location TEXT NOT NULL CHECK(location IN ('center', 'top', 'bottom', 'left', 'right', 'cover')),
+            board_type TEXT NOT NULL CHECK(board_type IN ('empty', 'window', 'tabs', 'dash', 'image')),
+            board_config TEXT, -- JSON blob for the BOARD configuration
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
+            UNIQUE(box_id, location)
         );
     """)
     DB_CONN.commit()
@@ -73,6 +85,34 @@ async def broadcast_box_list():
     if CONNECTED_CLIENTS:
         log.info(f"Broadcasting box_list to {len(CONNECTED_CLIENTS)} clients.")
         # Create a list of send tasks that can be awaited
+        tasks = [client.send(message) for client in CONNECTED_CLIENTS]
+        if tasks:
+            await asyncio.wait(tasks)
+
+
+async def broadcast_box_config(box_id):
+    """Fetches the panel config for a box and broadcasts it to all clients."""
+    if not DB_CONN:
+        log.error("Database not connected, cannot broadcast box config.")
+        return
+
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT box_id, location, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
+    panels = []
+    for row in cursor.fetchall():
+        panel = dict(row)
+        try:
+            if panel['board_config']:
+                panel['board_config'] = json.loads(panel['board_config'])
+        except json.JSONDecodeError:
+            log.warning(f"Could not decode board_config for panel {panel['location']} in box {box_id}")
+            panel['board_config'] = None
+        panels.append(panel)
+
+    message = json.dumps({'type': 'box_config_response', 'box_id': box_id, 'panels': panels})
+
+    if CONNECTED_CLIENTS:
+        log.info(f"Broadcasting box_config for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
         tasks = [client.send(message) for client in CONNECTED_CLIENTS]
         if tasks:
             await asyncio.wait(tasks)
@@ -350,6 +390,57 @@ async def websocket_handler(websocket):
                     cursor.execute("DELETE FROM box WHERE id = ?", (msg.get('id'),))
                     DB_CONN.commit()
                     await broadcast_box_list()
+                
+                # --- Skybox Panel/Board Operations ---
+                elif msg_type == 'get_box_config':
+                    box_id = msg.get('id')
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("SELECT box_id, location, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
+                    panels = []
+                    for row in cursor.fetchall():
+                        panel = dict(row)
+                        try:
+                            if panel['board_config']:
+                                panel['board_config'] = json.loads(panel['board_config'])
+                        except json.JSONDecodeError:
+                            log.warning(f"Could not decode board_config for panel {panel['location']} in box {box_id}")
+                            panel['board_config'] = None
+                        panels.append(panel)
+                    
+                    await websocket.send(json.dumps({
+                        'type': 'box_config_response',
+                        'box_id': box_id,
+                        'panels': panels
+                    }))
+
+                elif msg_type == 'set_panel_config':
+                    box_id = msg.get('box_id')
+                    location = msg.get('location')
+                    board_type = msg.get('board_type')
+                    board_config = msg.get('board_config') # This is a dict from client
+
+                    cursor = DB_CONN.cursor()
+                    if board_type == 'empty':
+                        cursor.execute(
+                            "DELETE FROM panel WHERE box_id = ? AND location = ?",
+                            (box_id, location)
+                        )
+                    else:
+                        # Serialize the board_config dict to a JSON string for storage
+                        board_config_json = json.dumps(board_config) if board_config else None
+                        
+                        # Use UPSERT (INSERT ... ON CONFLICT)
+                        cursor.execute("""
+                            INSERT INTO panel (box_id, location, board_type, board_config)
+                            VALUES (?, ?, ?, ?)
+                            ON CONFLICT(box_id, location) DO UPDATE SET
+                                board_type = excluded.board_type,
+                                board_config = excluded.board_config;
+                        """, (box_id, location, board_type, board_config_json))
+                    
+                    DB_CONN.commit()
+                    # After successful update, broadcast the new state to all clients
+                    await broadcast_box_config(box_id)
 
                 # --- Terminal Operations ---
                 elif pty and msg_type == 'term_open':
