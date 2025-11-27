@@ -99,9 +99,66 @@ This plan outlines a phased approach to implementing the Skybox feature set, all
 
 This initial phase focuses on establishing the core "Box" entity and its persistence via the upgraded `sk local` service.
 
-*   **`sk local` Enhancement**: Upgrade the `sk local` process to support the basic Box data model (name, associated path/connection).
-*   **SKYBOARD UI Integration**: Add the "New Box" functionality to the UI. When `sk local` is running, saved Boxes will be fetched and rendered on the desktop.
-*   **Visual Interaction**: Implement the basic mouseover unfolding animation, though panels will initially be empty placeholders.
+#### 5.1.1. `sk local` Service Enhancement
+
+The `sk local` process must be upgraded to a stateful service that manages persistence for Skybox entities.
+
+*   **Persistence Layer (SQLite)**:
+    *   Utilize Python's built-in `sqlite3` library. No new dependencies are required.
+    *   On startup, `sk/local.py` will establish a connection to a database file named `skybox.db` located within the user's data directory, managed by `appdirs` (consistent with `sk/config.py`). A function will be created to initialize the database and create tables if they don't exist.
+    *   A `boxes` table will be created with the following schema for Phase 1:
+        ```sql
+        CREATE TABLE IF NOT EXISTS boxes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('local', 'iosk')),
+            context TEXT NOT NULL
+        );
+        ```
+        - `id`: Unique identifier for the box.
+        - `name`: User-defined name for the box (e.g., "SideKick Project").
+        - `type`: The context type, either `'local'` for a filesystem path or `'iosk'` for a connection string.
+        - `context`: The filesystem path or `iosk` WebSocket URL.
+
+*   **Expanded WebSocket API**:
+    *   The `websocket_handler` in `sk/local.py` will be extended to recognize new `msg_type` values. Each new type will be routed to a dedicated async handler function.
+    *   **New Client-to-Server Messages**:
+        - `{ "type": "list_boxes" }`: Triggers the server to query and return all boxes.
+        - `{ "type": "create_box", "name": "...", "box_type": "local", "context": "/path/to/dir" }`: Creates a new box record in the database.
+        - `{ "type": "delete_box", "id": 123 }`: Deletes a box record.
+        - `{ "type": "update_box", "id": 123, "name": "New Name" }`: Updates a box's properties (initially, just the name).
+    *   **New Server-to-Client Messages**:
+        - `{ "type": "boxes_list", "boxes": [...] }`: Sent in response to `list_boxes`, containing an array of all box objects from the database.
+        - A confirmation message (e.g., `{ "type": "box_created", "box": {...} }`) should be sent after a successful creation, followed by a new `boxes_list` broadcast to all clients to ensure synchronization. The same pattern applies to updates and deletions.
+
+#### 5.1.2. SKYBOARD UI Integration
+
+The frontend will be updated to communicate with the new service endpoints and render the Box entities.
+
+*   **State Management (`local.js`, `desktop.js`)**:
+    *   In `sv/local.js`, a new store `export const boxes = writable([]);` will be created.
+    *   The `onmessage` handler in `connect()` will be updated to process the `boxes_list` message type, calling `boxes.set(msg.boxes)`.
+    *   Functions like `sendMessage({ type: 'list_boxes' })` will be called within `connect()` upon successful connection to fetch the initial state. Helper functions like `createBox(name, type, context)` will be added to abstract `sendMessage` calls.
+    *   The `boxes` store will be re-exported from `sv/desktop.js` for consumption by UI components.
+
+*   **UI Components**:
+    *   **`Taskbar.svelte`**: A "New Box..." item will be added to the "Start Menu". Clicking it will open a new modal component (`NewBoxModal.svelte`, not yet created) responsible for gathering the required information (name, type, context).
+    *   **`Desktop.svelte`**: This component will subscribe to the `boxes` store. It will contain a new section that iterates through the `$boxes` array and renders a `<Box>` component for each entry.
+    *   **New `Box.svelte` Component**:
+        - It will accept a `box` object as a prop.
+        - It will render as a draggable panel on the desktop. Its position will need to be persisted in a later phase, but for Phase 1, it can be auto-arranged.
+        - It will implement a right-click context menu (similar to the one in `Dash.svelte`) with options for "Rename", "Delete", and "Ask...".
+
+#### 5.1.3. Visual Interaction
+
+The initial visual feedback for the Box will be implemented.
+
+*   **`Box.svelte` Structure & Animation**:
+    *   The component will consist of a main container with `position: relative`.
+    *   Inside, a central panel and four side panels (top, bottom, left, right) will be positioned absolutely.
+    *   Initially, the side panels will have `opacity: 0` and be transformed to be hidden behind the central panel (e.g., `transform: scale(0)` or `translateY(-100%)`).
+    *   On `:hover` of the main container, CSS transitions will be triggered to change the `opacity` and `transform` of the side panels, creating the "unfolding" effect.
+    *   For Phase 1, these panels will be simple `div` elements with a background color, serving as visual placeholders. They will not contain any content.
 
 ### 5.2. Phase 2: Populating Box Panels
 
@@ -131,4 +188,3 @@ This proposal lays the foundation for even more powerful features:
 ## 7. Conclusion
 
 The Skybox initiative transforms SKYBOARD from a simple desktop interface into a comprehensive, project-centric workspace management system. By introducing the recursive concepts of "Boxes" and "BOARDs", we create an infinitely flexible and intuitive UI. Elevating `sk local` to a persistent service with a local database ensures that these rich, customized environments are durable and portable. This represents the next logical step in the evolution of the SideKick Suite, fulfilling the "Y-Combinator" promise of SKYBOARD and creating a powerful, scalable platform for human-computer and AI-computer collaboration.
-
