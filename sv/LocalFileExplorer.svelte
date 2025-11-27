@@ -11,6 +11,7 @@
     export let id;
     export let groupId;
     export let pickerTargetId = null;
+    export let initialPath = '.';
 
     let currentPath = '/'; // A reasonable default
     let items = [];
@@ -92,7 +93,7 @@
         unsubscribeStatus = connectionStatus.subscribe(s => {
             status = s;
             if (s === 'connected') {
-                requestPath('.');
+                requestPath(initialPath);
             } else if (s === 'disconnected' || s === 'error') {
                 errorMessage = "Not connected to local backend. Run 'sk local'.";
                 items = [];

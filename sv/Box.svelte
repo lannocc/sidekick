@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser } from './windows.js';
+    import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer } from './windows.js';
     import { updateBox, deleteBox, savePanelConfig } from './local.js';
     import { dashLayouts } from './desktop.js';
     import Board from './Board.svelte';
@@ -202,13 +202,17 @@
         const panelConfig = box.panels?.[location];
 
         if (!panelConfig || panelConfig.board_type === 'empty') {
-            // Req 1: Open picker for empty panel
-            boardPickerProps = {
-                location,
-                x: event.clientX,
-                y: event.clientY,
-            };
-            showBoardPicker = true;
+            if (location === 'center' && box.type === 'local') {
+                newLocalFileExplorer({ initialPath: box.context, title: `Local Files - ${box.name}` });
+            } else {
+                // Req 1: Open picker for empty panel
+                boardPickerProps = {
+                    location,
+                    x: event.clientX,
+                    y: event.clientY,
+                };
+                showBoardPicker = true;
+            }
         } else {
             // Req 2 & 3: Handle click on occupied panel
             const { board_type, board_config } = panelConfig;
