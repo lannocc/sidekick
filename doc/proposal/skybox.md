@@ -234,12 +234,90 @@ This phase transforms the static Box placeholders from Phase 1 into fully functi
 
 ### 5.3. Phase 3: The "Back" and Full Desktop Integration
 
-This final phase introduces the "Back" concept, fully realizing the recursive BOARD model and enabling Boxes to act as complete desktop replacements.
+This final phase introduces the "Back" concept, fully realizing the recursive BOARD model. It enables windows to be "locked in" as part of the desktop background and allows a Box to represent a complete, loadable desktop environment, including both its background ("Back") and its floating windows ("Dash").
 
-*   **"Back" Implementation**: Implement the "lock in" functionality, allowing any window to be embedded into the desktop background. The collection of "locked-in" windows can now be saved as a "Back".
-*   **Box as Desktop**: A Box can be configured with a "Back" (to replace the desktop background) and/or a "Dash" (to replace the current set of floating windows). Activating the Box will apply this full desktop layout.
-*   **Saving to a Box**: The user can save the entire current desktop state (its Back and Dash) directly into a Box.
-*   **Navigation**: Implement a clear UI mechanism to return to the main "desktop of boxes" view from within a full-Box-desktop.
+#### 5.3.1. `sk local` Service Enhancement
+
+The backend service's persistence layer and API will be extended to manage "Backs" and associate full desktop layouts with Boxes.
+
+*   **Persistence Layer (SQLite) Extension**:
+    *   A new table, `backs`, will be created in `skybox.db` to store saved background layouts. Its structure will be analogous to how Dashes are stored.
+        ```sql
+        CREATE TABLE IF NOT EXISTS backs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            layout_config TEXT NOT NULL -- JSON blob of locked-in window groups
+        );
+        ```
+    *   The existing `boxes` table will be altered to link to a default Dash and a default Back, representing a complete workspace.
+        ```sql
+        ALTER TABLE boxes ADD COLUMN active_dash_id INTEGER REFERENCES dashes(id);
+        ALTER TABLE boxes ADD COLUMN active_back_id INTEGER REFERENCES backs(id);
+        ```
+
+*   **Expanded WebSocket API**:
+    *   The `websocket_handler` in `sk/local.py` will be expanded to manage `backs` and update `boxes` with desktop layout associations.
+    *   **New Client-to-Server Messages**:
+        - `{ "type": "list_backs" }`: Requests all saved Back layouts.
+        - `{ "type": "create_back", "name": "...", "layout_config": {...} }`: Creates a new Back record. The server will respond with the newly created back object, including its ID.
+        - `{ "type": "delete_back", "id": 123 }`: Deletes a Back record.
+        - `{ "type": "update_box_desktop", "id": 123, "dash_id": 4, "back_id": 7 }`: Updates a Box to associate it with a specific Dash and Back.
+    *   **New Server-to-Client Messages**:
+        - `{ "type": "backs_list", "backs": [...] }`: Sent in response to `list_backs` and broadcast on any change.
+        - Standard confirmation messages (`back_created`, `back_deleted`, etc.) will be sent, followed by a `backs_list` broadcast to synchronize all clients.
+
+#### 5.3.2. SKYBOARD UI Integration
+
+The frontend will be updated to implement the "lock in" feature, manage Backs, and handle the activation of a Box as a full desktop environment.
+
+*   **State Management (`windows.js`, `desktop.js`)**:
+    *   **`windows.js`**:
+        - A `lockedIn: boolean` property will be added to the window group state object. It will default to `false`.
+        - A new exported function, `lockWindow(groupId)`, will be created. It will find the specified window group and set its `lockedIn` property to `true`.
+        - A corresponding `unlockWindow(groupId)` will set `lockedIn` to `false`.
+    *   **`desktop.js`**:
+        - A new store, `export const backs = writable([]);`, will be added to manage saved Back layouts, mirroring `dashLayouts`.
+        - A store to track the currently active workspace: `export const activeBox = writable(null);`. When `null`, the main "desktop of boxes" is shown. When it holds a box object, a full-box-desktop is active.
+    *   **`local.js`**:
+        - The `onmessage` handler will be updated to process `backs_list` messages and populate the `backs` store.
+        - Helper functions will be added to send the new WebSocket messages: `saveBack(name, config)`, `deleteBack(id)`, `updateBoxDesktop(boxId, dashId, backId)`.
+
+*   **UI Components**:
+    *   **`Desktop.svelte`**:
+        - The main render loop (`{#each $windows as win...}`) will be split. It will first iterate and render all windows where `win.lockedIn` is `true`, followed by a second loop for windows where `lockedIn` is `false`.
+        - For locked-in windows, it will not render the `<Window>` component. Instead, it will directly render the tab content wrapper (`<div class="tab-content-wrapper">...</div>`) and the component inside it, positioned using the window's `x, y, width, height`. The `pointer-events` on the content area will need to be managed to allow right-clicks for unlocking but prevent other interactions by default.
+    *   **`Window.svelte`**:
+        - The options menu (`showOptionsMenu`) will gain a "Lock In" item that calls `windows.lockWindow(id)`.
+        - When a window is unlocked via a new context menu on the desktop, its `lockedIn` state will become false, and the standard `<Window>` component will reappear for it in the `Desktop.svelte` loop.
+    *   **`Dash.svelte`**:
+        - The UI will be updated with a toggle or tabs to switch between managing "Dashes" and "Backs".
+        - The "Save Current Layout" button's logic will be modified:
+            - In "Dash" mode, it saves the layout of floating windows (`$windows.filter(w => !w.lockedIn)`).
+            - In "Back" mode, it saves the layout of locked-in windows (`$windows.filter(w => w.lockedIn)`).
+        - The list of saved layouts will display both Dashes and Backs, with distinct icons or labels.
+    *   **`Box.svelte` (not yet created)**:
+        - A primary `on:click` event will activate the Box as a desktop. This will:
+            1. Set the `activeBox` store in `desktop.js` to the clicked box object.
+            2. Call `windows.closeAllWindows()`.
+            3. Fetch the `active_dash_id` and `active_back_id` from the box's configuration.
+            4. Find the corresponding layouts in the `$dashes` and `$backs` stores and call `windows.restoreWindow` for each item within them, setting the `lockedIn` flag appropriately for items from the Back.
+    *   **`Taskbar.svelte`**:
+        - The component will subscribe to the `activeBox` store.
+        - When `$activeBox` is not `null`, the "Dash" button (`&mdash;`) will be replaced by a "Return to Skybox" button. This button's `on:click` handler will set `activeBox` back to `null` and call `windows.closeAllWindows()`.
+
+#### 5.3.3. Visual Interaction & Workflow
+
+The user experience for these new features will be designed to be intuitive and fluid.
+
+*   **Locking and Unlocking**:
+    - When "Lock In" is selected, the window's frame and title bar will fade out, leaving only the content area fixed on the desktop.
+    - A right-click on the content area of a locked-in window will open a minimal context menu with an "Unlock" option. Selecting it will fade the window chrome back in and restore its floating behavior.
+*   **Saving the Desktop to a Box**:
+    - When a full-box-desktop is active, the "Save" button in the `Dash.svelte` interface will be repurposed. A click will prompt the user: "Save current layout to this Box?".
+    - On confirmation, the system will automatically save the current floating windows as a new Dash, the locked-in windows as a new Back, and then update the active Box to point to these new layouts via `updateBoxDesktop`.
+*   **Box Activation and Navigation**:
+    - Activating a Box will trigger a zoom-in animation centered on the Box, with the new desktop (Back and Dash) fading in seamlessly.
+    - The "Return to Skybox" button on the taskbar will provide a clear, persistent way to exit the Box's context and return to the main desktop, triggering a corresponding zoom-out/fade-out animation.
 
 ## 6. Future Vision
 
