@@ -16,10 +16,30 @@
 
     let currentUrl = initialUrl;
     let inputUrl = initialUrl;
-    let iframeEl;
+    let contentEl; // Unified ref for <img> or <iframe>
     let history = [initialUrl];
     let historyIndex = 0;
     let isLoading = false;
+    let isImageUrl = false;
+
+    const imageExtensions = /\.(jpeg|jpg|gif|png|svg|webp|avif|bmp|ico)$/i;
+
+    function checkIsImageUrl(url) {
+        if (!url || typeof url !== 'string' || url.startsWith('about:')) {
+            return false;
+        }
+        try {
+            // Use a dummy base for relative URLs, we only care about the pathname's extension.
+            const urlObj = new URL(url, 'http://dummy.base');
+            return imageExtensions.test(urlObj.pathname);
+        } catch (e) {
+            return false; // Invalid URL
+        }
+    }
+
+    // Reactively determine if the current URL is an image
+    $: isImageUrl = checkIsImageUrl(currentUrl);
+
 
     // --- Settings Modal State ---
     let showSettings = false;
@@ -77,21 +97,25 @@
     }
 
     function reload() {
-        if (iframeEl) {
+        if (contentEl) {
             isLoading = true;
-            iframeEl.src = currentUrl; // Re-assigning src reloads the iframe
+            // Re-assigning src works for both iframe and img.
+            contentEl.src = currentUrl;
         }
     }
 
-    function handleIframeLoad() {
+    function handleContentLoad() {
         isLoading = false;
-        // Due to same-origin policy, we cannot reliably get the iframe's current location
-        // if it navigates internally (e.g., user clicks a link).
-        // The address bar will show the last URL we explicitly set. This is a limitation.
-        
-        // SENTINEL INTEGRATION
-        if (!get(windows).find(w => w.id === groupId)?.isActive) {
-            windows.notifyActivity(groupId, id, { summary: `Page loaded: ${currentUrl.substring(0, 50)}`});
+        // Only trigger Sentinel notifications for actual page loads, not images.
+        if (!isImageUrl) {
+            // Due to same-origin policy, we cannot reliably get the iframe's current location
+            // if it navigates internally (e.g., user clicks a link).
+            // The address bar will show the last URL we explicitly set. This is a limitation.
+            
+            // SENTINEL INTEGRATION
+            if (!get(windows).find(w => w.id === groupId)?.isActive) {
+                windows.notifyActivity(groupId, id, { summary: `Page loaded: ${currentUrl.substring(0, 50)}`});
+            }
         }
     }
 
@@ -177,12 +201,26 @@
     .content {
         flex-grow: 1;
         position: relative;
+        background-color: #2c3e50; /* A dark background for image viewing */
     }
     iframe {
         width: 100%;
         height: 100%;
         border: none;
         background-color: white; /* Show a white background while loading */
+    }
+    .image-wrapper {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        overflow: auto;
+    }
+    .image-wrapper img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
     }
     .loading-overlay {
         position: absolute;
@@ -228,12 +266,25 @@
         </form>
     </div>
     <div class="content">
-        <iframe 
-            bind:this={iframeEl} 
-            src={currentUrl} 
-            sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
-            on:load={handleIframeLoad}
-        ></iframe>
+        {#if isImageUrl}
+            <div class="image-wrapper">
+                <img 
+                    bind:this={contentEl}
+                    src={currentUrl} 
+                    alt="Image content"
+                    on:load={handleContentLoad}
+                    on:error={handleContentLoad}
+                />
+            </div>
+        {:else}
+            <iframe 
+                bind:this={contentEl} 
+                src={currentUrl} 
+                sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+                on:load={handleContentLoad}
+            ></iframe>
+        {/if}
+
         {#if isLoading}
             <div class="loading-overlay">Loading...</div>
         {/if}
