@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { connect, sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus } from './local.js';
+    import { sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus } from './local.js';
     import { newAskWindow, windows } from './windows.js';
     import { fileSelection } from './iosk.js';
 
@@ -87,7 +87,6 @@
     }
 
     onMount(() => {
-        connect();
         window.addEventListener('click', closeContextMenu);
 
         unsubscribeStatus = connectionStatus.subscribe(s => {

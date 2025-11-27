@@ -9,6 +9,7 @@
     import { windows } from './windows.js';
     import { dashActive, dashLayouts, dashCycleIndex } from './desktop.js';
     import { get } from 'svelte/store';
+    import { initializeLocalConnection } from './local.js';
 
     function handleKeyDown(e) {
         // Tab switching with Alt/Ctrl + Number
@@ -92,6 +93,7 @@
     }
 
     onMount(() => {
+        initializeLocalConnection();
         window.addEventListener('keydown', handleKeyDown);
     });
 

@@ -11,7 +11,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import InstanceRegistrar from './InstanceRegistrar.svelte';
-    import { connect } from './local.js';
+    import { connectionStatus } from './local.js';
 
     let backgroundStyle = '';
     let componentInstances = {};
@@ -123,7 +123,7 @@
     }
 
     onMount(() => {
-        connect(); // Establish the WebSocket connection to sk-local
+        // The WebSocket connection is now established in SideKick.svelte
         window.addEventListener('click', closeContextMenu);
     });
     onDestroy(() => {
@@ -266,11 +266,13 @@
 </style>
 
 <div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick}>
-    <div class="boxes-layer">
-        {#each $boxes as box (box.id)}
-            <Box {box} />
-        {/each}
-    </div>
+    {#if $connectionStatus === 'connected'}
+        <div class="boxes-layer">
+            {#each $boxes as box (box.id)}
+                <Box {box} />
+            {/each}
+        </div>
+    {/if}
 
     <div class="windows-layer">
         {#each $windows as win (win.id)}

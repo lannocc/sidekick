@@ -6,7 +6,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter } from './windows.js';
     import { dashActive, unreadNoticeCount } from './desktop.js';
-    import { createBox } from './local.js';
+    import { createBox, connectionStatus } from './local.js';
     import Clock from './Clock.svelte';
 
     let showMenu = false; // For Start menu
@@ -175,8 +175,14 @@
     .taskbar-left > .windows-button:first-child:hover { background-color: #e0443e; }
     .taskbar-left > .windows-button:nth-child(2) { background-color: #ffbd2e; border-color: #e0a320; color: white; }
     .taskbar-left > .windows-button:nth-child(2):hover { background-color: #e0a320; }
-    .start-button { background-color: #3498db; border: 1px solid #2980b9; color: white; font-weight: bold; border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+    .start-button { background-color: #3498db; border: 1px solid #2980b9; color: white; font-weight: bold; border-radius: 4px; padding: 5px 10px; cursor: pointer; transition: box-shadow 0.3s ease-in-out; }
     .start-button:hover { background-color: #2980b9; }
+    @keyframes sky-glow {
+        50% { border-color: #5dade2; box-shadow: 0 0 12px 3px #5dade2; }
+    }
+    .start-button.connected {
+        animation: sky-glow 2s infinite ease-in-out;
+    }
     .quick-launch-button { background-color: #27c93f; border: 1px solid #1a9c2a; color: white; font-weight: bold; border-radius: 4px; padding: 5px 10px; cursor: pointer; }
     .quick-launch-button:hover { background-color: #1a9c2a; }
     .windows-button { background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--taskbar-text); font-weight: bold; border-radius: 4px; padding: 5px 10px; cursor: pointer; }
@@ -275,7 +281,7 @@
     </div>
     <div class="taskbar-right" bind:this={rightSectionEl}>
         <button class="quick-launch-button" on:click|stopPropagation={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">$+</button>
-        <button class="start-button" bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }}>SKY</button>
+        <button class="start-button" class:connected={$connectionStatus === 'connected'} bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }}>SKY</button>
         {#if showMenu}
             <div class="start-menu">
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchSettings({ sourceEvent: e }); }}>Settings</button>

@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { connect, sendMessage, askOutput, askError, askExit, connectionStatus, askStatsResponse } from './local.js';
+    import { sendMessage, askOutput, askError, askExit, connectionStatus, askStatsResponse } from './local.js';
     import { newLocalFileExplorer, windows } from './windows.js';
     import { fileSelection } from './iosk.js';
 
@@ -75,8 +75,6 @@
     }
 
     onMount(() => {
-        connect(); // Connect to local backend on mount
-
         unsubscribeStatus = connectionStatus.subscribe(s => {
             connectionState = s;
             if (s === 'connected') {

@@ -4,6 +4,8 @@ const PORT = 4210;
 const URL = `ws://localhost:${PORT}`;
 
 let socket;
+let reconnectTimer;
+const RECONNECT_DELAY = 3000; // 3 seconds
 
 export const connectionStatus = writable('disconnected'); // 'connecting', 'connected', 'disconnected', 'error'
 
@@ -44,7 +46,7 @@ export function deleteBox(id) {
     sendMessage({ type: 'delete_box', id });
 }
 
-export function connect() {
+function attemptConnection() {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
         return;
     }
@@ -56,6 +58,10 @@ export function connect() {
         connectionStatus.set('connected');
         sendMessage({ type: 'list_boxes' });
         processQueue(); // Send any messages that were were queued
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
     };
 
     socket.onmessage = (event) => {
@@ -100,11 +106,19 @@ export function connect() {
     socket.onclose = () => {
         connectionStatus.set('disconnected');
         socket = null;
+        if (!reconnectTimer) {
+            reconnectTimer = setTimeout(attemptConnection, RECONNECT_DELAY);
+        }
     };
 
     socket.onerror = (error) => {
         console.error('WebSocket error:', error);
         connectionStatus.set('error');
-        socket = null;
+        socket = null; // onclose will be called which handles reconnect
     };
+}
+
+// Single entry point to start and manage the connection.
+export function initializeLocalConnection() {
+    attemptConnection();
 }

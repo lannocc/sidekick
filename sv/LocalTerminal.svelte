@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { connect, sendMessage, terminalData, connectionStatus } from './local.js';
+    import { sendMessage, terminalData, connectionStatus } from './local.js';
     import { dragRequest, windows } from './windows.js';
 
     import { Terminal } from '@xterm/xterm';
@@ -67,8 +67,6 @@
         term.onData(data => {
             sendMessage({ type: 'term_data', data: data });
         });
-
-        connect();
 
         unsubscribeStatus = connectionStatus.subscribe(status => {
             if (status === 'connected' && !initialTermOpenSent) {
