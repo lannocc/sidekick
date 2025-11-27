@@ -19,6 +19,22 @@
     let dragOffsetX, dragOffsetY;
     let boxEl;
 
+    // --- Hover State for Unfolding ---
+    let isHovered = false;
+    let hoverTimeout;
+
+    function handleMouseEnter() {
+        if (hoverTimeout) clearTimeout(hoverTimeout);
+        isHovered = true;
+    }
+
+    function handleMouseLeave() {
+        // Use a timeout to keep the panels open while the mouse travels over the gap
+        hoverTimeout = setTimeout(() => {
+            isHovered = false;
+        }, 150);
+    }
+
     // --- Dynamic Unfold Direction ---
     let unfoldDirection = 'up';
 
@@ -159,20 +175,8 @@
         z-index: 10;
         transition: z-index 0s 0.3s; /* Delay z-index change until after animation */
     }
-    /* This pseudo-element creates a large, invisible hover area around the box,
-       preventing the hover state from being lost when moving the mouse across gaps. */
-    .box::after {
-        content: '';
-        position: absolute;
-        /* Sized to be larger than the maximum unfolded state */
-        top: -260px;
-        bottom: -260px;
-        left: -190px;
-        right: -190px;
-        z-index: -1;
-    }
 
-    .box:hover {
+    .box.is-hovered {
         z-index: 100;
         transition-delay: 0s;
     }
@@ -208,7 +212,7 @@
     }
 
     /* When a cover is present and the box is not hovered, the center panel is obscured */
-    .box.has-cover:not(:hover) .center {
+    .box.has-cover:not(.is-hovered) .center {
         pointer-events: none;
     }
 
@@ -229,35 +233,35 @@
     }
 
     /* Dynamic cover panel unfolding */
-    .box.unfold-up:hover .cover {
+    .box.unfold-up.is-hovered .cover {
         transform: translateY(-210%);
         opacity: 1;
         pointer-events: auto;
         z-index: 2;
     }
-    .box.unfold-down:hover .cover {
+    .box.unfold-down.is-hovered .cover {
         transform: translateY(210%);
         opacity: 1;
         pointer-events: auto;
         z-index: 2;
     }
 
-    .box:hover .top {
+    .box.is-hovered .top {
         transform: translateY(-105%);
         opacity: 1;
         pointer-events: auto;
     }
-    .box:hover .bottom {
+    .box.is-hovered .bottom {
         transform: translateY(105%);
         opacity: 1;
         pointer-events: auto;
     }
-    .box:hover .left {
+    .box.is-hovered .left {
         transform: translateX(-105%);
         opacity: 1;
         pointer-events: auto;
     }
-    .box:hover .right {
+    .box.is-hovered .right {
         transform: translateX(105%);
         opacity: 1;
         pointer-events: auto;
@@ -313,11 +317,14 @@
     class:has-cover={box.panels?.cover}
     class:unfold-up={unfoldDirection === 'up'}
     class:unfold-down={unfoldDirection === 'down'}
+    class:is-hovered={isHovered}
     bind:this={boxEl}
     style:left="{x}px"
     style:top="{y}px"
     on:contextmenu={handleRightClick}
     on:mousedown={onDragStart}
+    on:mouseenter={handleMouseEnter}
+    on:mouseleave={handleMouseLeave}
 >
     <!-- Panels for Unfolding Animation -->
     <div class="panel cover" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'cover'} on:mouseenter={() => handlePanelMouseEnter('cover')} on:mouseleave={() => handlePanelMouseLeave('cover')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'cover')}>
