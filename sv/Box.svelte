@@ -24,7 +24,7 @@
 
     function updateUnfoldDirection() {
         if (!boxEl || typeof window === 'undefined') return;
-        // Check if the vertical midpoint of the box is in the top or bottom half of the viewport
+        // Check if the vertical midpoint of the box is in the top or bottom half of theviewport
         const boxMidY = y + boxEl.offsetHeight / 2;
         unfoldDirection = boxMidY > window.innerHeight / 2 ? 'up' : 'down';
     }
@@ -92,7 +92,10 @@
 
     // --- Dragging & Drop Target Logic ---
     function onDragStart(event) {
-        if (event.button !== 0 || event.target.closest('.panel:not(.center)')) return;
+        // Prevent dragging if it's not a left-click, or if the click
+        // is on an unfolded side panel (top, bottom, left, right).
+        if (event.button !== 0 || event.target.closest('.panel.top, .panel.bottom, .panel.left, .panel.right')) return;
+        
         isDragging = true;
         dragOffsetX = event.clientX - x;
         dragOffsetY = event.clientY - y;
@@ -204,11 +207,25 @@
         cursor: move;
     }
 
+    /* When a cover is present and the box is not hovered, the center panel is obscured */
+    .box.has-cover:not(:hover) .center {
+        pointer-events: none;
+    }
+
     .cover, .top, .bottom, .left, .right {
         z-index: 1;
         opacity: 0;
         transform: scale(0.95);
         pointer-events: none;
+    }
+
+    /* If a cover exists, it's visible by default, on top, and draggable */
+    .box.has-cover .cover {
+        opacity: 1;
+        transform: scale(1);
+        z-index: 4;
+        pointer-events: auto;
+        cursor: move;
     }
 
     /* Dynamic cover panel unfolding */
@@ -293,12 +310,14 @@
 
 <div
     class="box"
+    class:has-cover={box.panels?.cover}
     class:unfold-up={unfoldDirection === 'up'}
     class:unfold-down={unfoldDirection === 'down'}
     bind:this={boxEl}
     style:left="{x}px"
     style:top="{y}px"
     on:contextmenu={handleRightClick}
+    on:mousedown={onDragStart}
 >
     <!-- Panels for Unfolding Animation -->
     <div class="panel cover" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'cover'} on:mouseenter={() => handlePanelMouseEnter('cover')} on:mouseleave={() => handlePanelMouseLeave('cover')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'cover')}>
@@ -318,7 +337,7 @@
     </div>
 
     <!-- Center Panel with Content -->
-    <div class="panel center" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')} on:mousedown={onDragStart}>
+    <div class="panel center" class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')}>
         {#if box.panels?.center}
             <Board board_type={box.panels.center.board_type} board_config={box.panels.center.board_config} />
         {:else}
