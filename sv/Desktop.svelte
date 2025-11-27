@@ -11,6 +11,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import InstanceRegistrar from './InstanceRegistrar.svelte';
+    import { connect } from './local.js';
 
     let backgroundStyle = '';
     let componentInstances = {};
@@ -122,6 +123,7 @@
     }
 
     onMount(() => {
+        connect(); // Establish the WebSocket connection to sk-local
         window.addEventListener('click', closeContextMenu);
     });
     onDestroy(() => {
