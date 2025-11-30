@@ -107,10 +107,8 @@ async def broadcast_box_list():
     
     if CONNECTED_CLIENTS:
         log.info(f"Broadcasting box_list to {len(CONNECTED_CLIENTS)} clients.")
-        # Create a list of send tasks that can be awaited
-        tasks = [client.send(message) for client in CONNECTED_CLIENTS]
-        if tasks:
-            await asyncio.wait(tasks)
+        # Concurrently send the message to all clients.
+        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
 async def broadcast_box_config(box_id):
@@ -136,9 +134,7 @@ async def broadcast_box_config(box_id):
 
     if CONNECTED_CLIENTS:
         log.info(f"Broadcasting box_config for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
-        tasks = [client.send(message) for client in CONNECTED_CLIENTS]
-        if tasks:
-            await asyncio.wait(tasks)
+        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
 async def read_stream(stream, websocket, ask_id, stream_name):
