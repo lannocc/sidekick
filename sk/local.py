@@ -9,6 +9,7 @@ import platform
 import sys
 import tiktoken
 import sqlite3
+from datetime import datetime
 from . import config
 from .util import get_directory_tree_as_text, get_directory_contents_as_text
 from binaryornot.check import is_binary
@@ -27,6 +28,30 @@ from websockets.exceptions import ConnectionClosed
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
+
+
+# --- Stylized Console Output ---
+
+# ANSI color codes for stylized console output
+class Colors:
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    CYAN = '\033[36m'
+    YELLOW = '\033[33m'
+    MAGENTA = '\033[35m'
+
+def print_action(action, details=""):
+    """Prints a formatted and stylized action line to the console."""
+    if not sys.stdout.isatty(): # Don't use colors if not a TTY
+        print(f"[SK-LOCAL] {action}: {details}")
+        return
+
+    timestamp = datetime.now().strftime('%H:%M:%S')
+    # Using f-string for clear, colored output.
+    print(f"{Colors.CYAN}[SK-LOCAL {timestamp}]{Colors.RESET} {Colors.BOLD}{Colors.MAGENTA}{action.ljust(14)}{Colors.RESET} {Colors.YELLOW}{details}{Colors.RESET}")
+
+# --- End Stylized Console Output ---
+
 
 PORT = 4210
 HOST = '127.0.0.1'
@@ -361,14 +386,19 @@ async def websocket_handler(websocket):
 
                 # --- Filesystem Operations ---
                 if msg_type == 'fs_list':
-                    response = await handle_fs_list(msg.get('path', '.'))
+                    path = msg.get('path', '.')
+                    print_action("FS List", f"path='{path}'")
+                    response = await handle_fs_list(path)
                     await websocket.send(json.dumps(response))
                 elif msg_type == 'fs_read':
-                    response = await handle_fs_read(msg.get('path'))
+                    path = msg.get('path')
+                    print_action("FS Read", f"path='{path}'")
+                    response = await handle_fs_read(path)
                     await websocket.send(json.dumps(response))
                 
                 # --- Ask Operations ---
                 elif msg_type == 'sk_ask':
+                    print_action("SK Ask", f"prompt_len={len(msg.get('prompt', ''))}, files={len(msg.get('files', []))}")
                     asyncio.create_task(handle_sk_ask(websocket, msg))
                 elif msg_type == 'ask_stats':
                     response = await handle_ask_stats(msg)
@@ -382,6 +412,9 @@ async def websocket_handler(websocket):
                     await websocket.send(json.dumps({'type': 'box_list', 'boxes': boxes}))
                 
                 elif msg_type == 'create_box':
+                    name = msg.get('name')
+                    box_type = msg.get('box_type')
+                    print_action("Create Box", f"name='{name}', type='{box_type}'")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
                         "INSERT INTO box (name, type, context) VALUES (?, ?, ?)",
@@ -396,6 +429,9 @@ async def websocket_handler(websocket):
                     await broadcast_box_list()
 
                 elif msg_type == 'update_box':
+                    box_id = msg.get('id')
+                    name = msg.get('name')
+                    print_action("Update Box", f"id={box_id}, name='{name}'")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
                         "UPDATE box SET name = ? WHERE id = ?",
@@ -414,6 +450,8 @@ async def websocket_handler(websocket):
                     await broadcast_box_list()
                 
                 elif msg_type == 'delete_box':
+                    box_id = msg.get('id')
+                    print_action("Delete Box", f"id={box_id}")
                     cursor = DB_CONN.cursor()
                     cursor.execute("DELETE FROM box WHERE id = ?", (msg.get('id'),))
                     DB_CONN.commit()
@@ -445,6 +483,7 @@ async def websocket_handler(websocket):
                     box_id = msg.get('box_id')
                     location = msg.get('location')
                     board_type = msg.get('board_type')
+                    print_action("Set Panel", f"box_id={box_id}, loc='{location}', type='{board_type}'")
                     board_config = msg.get('board_config') # This is a dict from client
 
                     cursor = DB_CONN.cursor()
@@ -476,6 +515,7 @@ async def websocket_handler(websocket):
                         log.warning("Terminal already open for this connection.")
                         continue
 
+                    print_action("Term Open")
                     (pid, fd) = pty.fork()
                     pty_master_fd, pty_child_pid = fd, pid
 
