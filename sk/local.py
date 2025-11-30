@@ -39,6 +39,8 @@ class Colors:
     CYAN = '\033[36m'
     YELLOW = '\033[33m'
     MAGENTA = '\033[35m'
+    GREEN = '\033[32m'
+    RED = '\033[31m'
 
 def print_action(action, details=""):
     """Prints a formatted and stylized action line to the console."""
@@ -49,6 +51,29 @@ def print_action(action, details=""):
     timestamp = datetime.now().strftime('%H:%M:%S')
     # Using f-string for clear, colored output.
     print(f"{Colors.CYAN}[SK-LOCAL {timestamp}]{Colors.RESET} {Colors.BOLD}{Colors.MAGENTA}{action.ljust(14)}{Colors.RESET} {Colors.YELLOW}{details}{Colors.RESET}")
+
+def print_startup_banner():
+    """Prints a colorful startup banner."""
+    if not sys.stdout.isatty():
+        log.info(f"Starting Skybox Local Server on ws://{HOST}:{PORT}")
+        return
+    print(f"\n{Colors.BOLD}{Colors.GREEN}--- Skybox Local Server ---{Colors.RESET}")
+    print(f"{Colors.CYAN}  Listening on: ws://{HOST}:{PORT}{Colors.RESET}")
+    print(f"{Colors.YELLOW}  Press Ctrl+C to stop the server.{Colors.RESET}\n")
+
+def print_shutdown_message():
+    """Prints a colorful shutdown message."""
+    if not sys.stdout.isatty():
+        log.info("Server shutting down.")
+        return
+    print(f"\n{Colors.BOLD}{Colors.YELLOW}Shutting down server...{Colors.RESET}")
+
+def print_stopped_message():
+    """Prints a colorful server stopped message."""
+    if not sys.stdout.isatty():
+        log.info("Server stopped.")
+        return
+    print(f"{Colors.BOLD}{Colors.RED}Server stopped.{Colors.RESET}")
 
 # --- End Stylized Console Output ---
 
@@ -401,11 +426,13 @@ async def websocket_handler(websocket):
                     print_action("SK Ask", f"prompt_len={len(msg.get('prompt', ''))}, files={len(msg.get('files', []))}")
                     asyncio.create_task(handle_sk_ask(websocket, msg))
                 elif msg_type == 'ask_stats':
+                    print_action("Ask Stats", f"prompt_len={len(msg.get('prompt', ''))}, files={len(msg.get('files', []))}")
                     response = await handle_ask_stats(msg)
                     await websocket.send(json.dumps(response))
 
                 # --- Skybox Box Operations ---
                 elif msg_type == 'list_boxes':
+                    print_action("List Boxes")
                     cursor = DB_CONN.cursor()
                     cursor.execute("SELECT id, name, type, context, x, y, scale FROM box ORDER BY name")
                     boxes = [dict(row) for row in cursor.fetchall()]
@@ -441,10 +468,13 @@ async def websocket_handler(websocket):
                     await broadcast_box_list()
 
                 elif msg_type == 'update_box_transform':
+                    box_id = msg.get('id')
+                    x, y, scale = msg.get('x'), msg.get('y'), msg.get('scale')
+                    print_action("Box Transform", f"id={box_id}, x={int(x)}, y={int(y)}, scale={scale:.2f}")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
                         "UPDATE box SET x = ?, y = ?, scale = ? WHERE id = ?",
-                        (msg.get('x'), msg.get('y'), msg.get('scale'), msg.get('id'))
+                        (x, y, scale, box_id)
                     )
                     DB_CONN.commit()
                     await broadcast_box_list()
@@ -460,6 +490,7 @@ async def websocket_handler(websocket):
                 # --- Skybox Panel/Board Operations ---
                 elif msg_type == 'get_box_config':
                     box_id = msg.get('id')
+                    print_action("Get Box Cfg", f"id={box_id}")
                     cursor = DB_CONN.cursor()
                     cursor.execute("SELECT box_id, location, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
                     panels = []
@@ -533,7 +564,9 @@ async def websocket_handler(websocket):
                     os.write(pty_master_fd, msg.get('data', '').encode('utf-8'))
 
                 elif pty and msg_type == 'term_resize' and pty_master_fd is not None:
-                    winsize = struct.pack('HHHH', msg.get('rows', 24), msg.get('cols', 80), 0, 0)
+                    rows, cols = msg.get('rows', 24), msg.get('cols', 80)
+                    print_action("Term Resize", f"rows={rows}, cols={cols}")
+                    winsize = struct.pack('HHHH', rows, cols, 0, 0)
                     fcntl.ioctl(pty_master_fd, termios.TIOCSWINSZ, winsize)
 
                 else:
@@ -565,18 +598,18 @@ async def websocket_handler(websocket):
 
 async def start_server():
     """Starts the WebSocket server."""
-    log.info(f"Starting sk-local server on ws://{HOST}:{PORT}")
     async with serve(websocket_handler, HOST, PORT):
         await asyncio.Future()  # run forever
 
 
 def main(args):
     """Entry point for `sk local` command."""
+    print_startup_banner()
     init_db()  # Initialize the database on startup
     try:
         asyncio.run(start_server())
     except KeyboardInterrupt:
-        log.info("Server stopped by user.")
+        print_shutdown_message()
     except OSError as e:
         if e.errno == 98:  # Address already in use
             log.error(f"Error: Port {PORT} is already in use.")
@@ -587,3 +620,4 @@ def main(args):
         if DB_CONN:
             DB_CONN.close()
             log.info("Database connection closed.")
+        print_stopped_message()
