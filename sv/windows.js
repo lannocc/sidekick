@@ -619,6 +619,99 @@ function createWindowManager() {
         });
     };
 
+    // <<< FIX: Add the new restoreLayout function
+    const restoreLayout = (layout) => {
+        if (!layout || !layout.windowGroups) return;
+
+        const idMap = new Map(); // Map<originalId, newId>
+
+        // --- Scaling Logic ---
+        const savedDesktopWidth = layout.desktop?.width || window.innerWidth;
+        const savedDesktopHeight = layout.desktop?.height || (window.innerHeight - 40);
+        const currentDesktopWidth = window.innerWidth;
+        const currentDesktopHeight = window.innerHeight - 40;
+        const scaleX = currentDesktopWidth / savedDesktopWidth;
+        const scaleY = currentDesktopHeight / savedDesktopHeight;
+
+        const newGroups = [];
+
+        // --- 1st Pass: Create new objects, generate new IDs, and populate map ---
+        for (const groupData of layout.windowGroups) {
+            const scaledGroupData = { ...groupData };
+            if (!scaledGroupData.maximized) {
+                scaledGroupData.x = Math.round(scaledGroupData.x * scaleX);
+                scaledGroupData.y = Math.round(scaledGroupData.y * scaleY);
+                scaledGroupData.width = Math.round(scaledGroupData.width * scaleX);
+                scaledGroupData.height = Math.round(scaledGroupData.height * scaleY);
+            }
+
+            const newTabs = scaledGroupData.tabs.map(tabData => {
+                const component = componentMap[tabData.componentType];
+                if (!component) return null;
+
+                const { componentType, originalId, ...props } = tabData;
+                const allWindowSettings = get(windowSettings);
+                const componentSettings = allWindowSettings[tabData.componentType];
+                const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
+                const newTabId = ++tabIdCounter;
+                idMap.set(originalId, newTabId);
+
+                return {
+                    id: newTabId,
+                    component,
+                    componentName: tabData.componentType,
+                    ...props,
+                    zoom: props.zoom ?? defaultZoom,
+                    originalId: originalId // Keep for 2nd pass
+                };
+            }).filter(Boolean);
+
+            if (newTabs.length === 0) continue;
+
+            const newGroup = {
+                id: ++windowGroupIdCounter,
+                x: scaledGroupData.x, y: scaledGroupData.y, width: scaledGroupData.width, height: scaledGroupData.height,
+                minimized: false,
+                maximized: scaledGroupData.maximized,
+                isActive: false, // Set later
+                zIndex: 0,       // Set later
+                prevX: scaledGroupData.x, prevY: scaledGroupData.y, prevWidth: scaledGroupData.width, prevHeight: scaledGroupData.height,
+                notice: null,
+                tabs: newTabs,
+                activeTabId: scaledGroupData.activeTabId, // Keep old ID for 2nd pass
+                lockedIn: scaledGroupData.lockedIn || false,
+            };
+            newGroups.push(newGroup);
+        }
+
+        // --- 2nd Pass: Remap all ID-based references ---
+        for (const group of newGroups) {
+            group.activeTabId = idMap.get(group.activeTabId) || (group.tabs.length > 0 ? group.tabs[0].id : null);
+            for (const tab of group.tabs) {
+                if (tab.consoleId) {
+                    tab.consoleId = idMap.get(tab.consoleId) || tab.consoleId;
+                }
+                delete tab.originalId;
+            }
+        }
+
+        // --- Final Step: Update the Svelte store once with all new windows ---
+        update(windows => {
+            const updatedWindows = windows.map(w => ({ ...w, isActive: false }));
+            let maxZ = updatedWindows.reduce((max, w) => Math.max(max, w.zIndex), 99);
+
+            newGroups.forEach(g => {
+                g.zIndex = ++maxZ;
+            });
+
+            if (newGroups.length > 0) {
+                newGroups[newGroups.length - 1].isActive = true;
+            }
+
+            return [...updatedWindows, ...newGroups];
+        });
+    };
+
     // --- Sentinel Implementation ---
 
     const resolveNoticeSettings = (componentName) => {
@@ -725,6 +818,7 @@ function createWindowManager() {
         reorderTab,
         detachTabToNewWindow,
         restoreWindow,
+        restoreLayout, // <<< FIX: Export the new function
         notifyActivity,
     };
 }

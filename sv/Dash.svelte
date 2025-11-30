@@ -115,6 +115,7 @@
                     originalId: tab.id,
                     componentType: getComponentType(tab.component),
                     title: tab.title,
+                    consoleId: tab.consoleId, // <<< FIX: Explicitly save consoleId
                     maximized: group.maximized, // This is a group property but convenient here
                     wsUrl: tab.wsUrl, username: tab.username,
                     localUser: tab.localUser, remoteUser: tab.remoteUser, 
@@ -209,26 +210,11 @@
         isLayoutDirty = false;
     }
 
+
     function handleRestoreLayout(layout) {
         if (!layout || !layout.windowGroups) return;
-
-        const savedDesktopWidth = layout.desktop?.width || window.innerWidth;
-        const savedDesktopHeight = layout.desktop?.height || (window.innerHeight - 40);
-        const currentDesktopWidth = window.innerWidth;
-        const currentDesktopHeight = window.innerHeight - 40;
-        const scaleX = currentDesktopWidth / savedDesktopWidth;
-        const scaleY = currentDesktopHeight / savedDesktopHeight;
-
-        for (const groupData of layout.windowGroups) {
-            const scaledGroupData = { ...groupData };
-            if (!scaledGroupData.maximized) {
-                scaledGroupData.x = Math.round(scaledGroupData.x * scaleX);
-                scaledGroupData.y = Math.round(scaledGroupData.y * scaleY);
-                scaledGroupData.width = Math.round(scaledGroupData.width * scaleX);
-                scaledGroupData.height = Math.round(scaledGroupData.height * scaleY);
-            }
-            windows.restoreWindow(scaledGroupData);
-        }
+        // <<< FIX: Call a new batch-restore function instead of looping
+        windows.restoreLayout(layout);
         dashActive.set(false);
     }
 
