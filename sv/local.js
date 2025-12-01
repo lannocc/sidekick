@@ -55,6 +55,9 @@ export function savePanelConfig(box_id, location, board_type, board_config) {
 export function updateBoxTransform(id, x, y, scale) {
     sendMessage({ type: 'update_box_transform', id, x, y, scale });
 }
+export function setBoxCover(box_id, location) {
+    sendMessage({ type: 'set_box_cover', box_id, location });
+}
 
 
 function attemptConnection() {
@@ -113,7 +116,7 @@ function attemptConnection() {
                         const updatedBoxes = newBoxesFromBackend.map(b => {
                             const existingBox = currentBoxMap.get(b.id);
                             return {
-                                ...b, // name, type, context, x, y, scale from backend
+                                ...b, // name, type, context, x, y, scale, cover_panel_location from backend
                                 panels: existingBox ? existingBox.panels : {} // preserve panels
                             };
                         });

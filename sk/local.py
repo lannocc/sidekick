@@ -111,7 +111,8 @@ def init_db():
             context TEXT NOT NULL,
             x INTEGER DEFAULT 100,
             y INTEGER DEFAULT 100,
-            scale REAL DEFAULT 1.0
+            scale REAL DEFAULT 1.0,
+            cover_panel_location TEXT
         );
     """)
 
@@ -128,12 +129,15 @@ def init_db():
         if 'scale' not in columns:
             log.info("Migrating 'box' table: adding 'scale' column.")
             cursor.execute("ALTER TABLE box ADD COLUMN scale REAL DEFAULT 1.0")
+        if 'cover_panel_location' not in columns:
+            log.info("Migrating 'box' table: adding 'cover_panel_location' column.")
+            cursor.execute("ALTER TABLE box ADD COLUMN cover_panel_location TEXT")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS panel (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             box_id INTEGER NOT NULL,
-            location TEXT NOT NULL CHECK(location IN ('center', 'top', 'bottom', 'left', 'right', 'cover')),
+            location TEXT NOT NULL CHECK(location IN ('center', 'top', 'bottom', 'left', 'right')),
             board_type TEXT NOT NULL CHECK(board_type IN ('empty', 'window', 'tabs', 'dash', 'image')),
             board_config TEXT, -- JSON blob for the BOARD configuration
             FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
@@ -150,7 +154,7 @@ async def broadcast_box_list():
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, name, type, context, x, y, scale FROM box ORDER BY name")
+    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location FROM box ORDER BY name")
     boxes = [dict(row) for row in cursor.fetchall()]
     
     message = json.dumps({'type': 'box_list', 'boxes': boxes})
@@ -439,7 +443,7 @@ async def websocket_handler(websocket):
                 elif msg_type == 'list_boxes':
                     print_action("List Boxes")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT id, name, type, context, x, y, scale FROM box ORDER BY name")
+                    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location FROM box ORDER BY name")
                     boxes = [dict(row) for row in cursor.fetchall()]
                     await websocket.send(json.dumps({'type': 'box_list', 'boxes': boxes}))
                 
@@ -498,7 +502,7 @@ async def websocket_handler(websocket):
 
                     DB_CONN.commit()
                     await broadcast_box_list()
-                    await broadcast_box_config(new_id) # <<< ADD THIS LINE
+                    await broadcast_box_config(new_id)
 
                 elif msg_type == 'update_box':
                     box_id = msg.get('id')
@@ -520,6 +524,18 @@ async def websocket_handler(websocket):
                     cursor.execute(
                         "UPDATE box SET x = ?, y = ?, scale = ? WHERE id = ?",
                         (x, y, scale, box_id)
+                    )
+                    DB_CONN.commit()
+                    await broadcast_box_list()
+
+                elif msg_type == 'set_box_cover':
+                    box_id = msg.get('box_id')
+                    location = msg.get('location') # can be 'top', 'left', etc., or None
+                    print_action("Set Box Cover", f"id={box_id}, loc='{location}'")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "UPDATE box SET cover_panel_location = ? WHERE id = ?",
+                        (location, box_id)
                     )
                     DB_CONN.commit()
                     await broadcast_box_list()
