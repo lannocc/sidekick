@@ -147,20 +147,28 @@
     let saveTransformTimeout;
 
     // --- Hover State for Unfolding ---
-    let isHovered = false;
+    let isMouseOver = false;
     let hoverTimeout;
     let hoveredPanelKey = null; // Key ('x_y') of the currently hovered panel
 
+    $: isMenuOpen = contextMenu.visible || panelContextMenu.visible || showBoardPicker;
+    $: isHovered = isMouseOver || isMenuOpen;
+    
+    // When the box is no longer hovered (mouse leaves AND menus are closed),
+    // also clear the specific panel key to hide available slots.
+    $: if (!isHovered) {
+        hoveredPanelKey = null;
+    }
+
     function handleMouseEnter() {
         if (hoverTimeout) clearTimeout(hoverTimeout);
-        isHovered = true;
+        isMouseOver = true;
     }
 
     function handleMouseLeave() {
         // Use a timeout to keep the panels open while the mouse travels over the gap
         hoverTimeout = setTimeout(() => {
-            isHovered = false;
-            hoveredPanelKey = null; // Also clear the specific panel key
+            isMouseOver = false;
         }, 150);
     }
 
@@ -209,7 +217,7 @@
         panelContextMenu.visible = false;
     }
 
-    // Close menu on outside click
+    // Close menu on outside click or Esc key
     function handleWindowClick(event) {
         if (contextMenu.visible && !event.target.closest('.context-menu')) {
             closeContextMenu();
@@ -221,11 +229,24 @@
             showBoardPicker = false;
         }
     }
+
+    function handleKeyDown(event) {
+        if (event.key === 'Escape') {
+            if (contextMenu.visible) closeContextMenu();
+            if (panelContextMenu.visible) closePanelContextMenu();
+            if (showBoardPicker) showBoardPicker = false;
+        }
+    }
+
     onMount(() => {
         updateUnfoldDirection(); // Set initial direction
         window.addEventListener('click', handleWindowClick);
+        window.addEventListener('keydown', handleKeyDown);
     });
-    onDestroy(() => window.removeEventListener('click', handleWindowClick));
+    onDestroy(() => {
+        window.removeEventListener('click', handleWindowClick);
+        window.removeEventListener('keydown', handleKeyDown);
+    });
 
     // --- Context Menu Actions ---
     function renameBox() {
