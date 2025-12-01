@@ -46,7 +46,7 @@
         if (fitAddon && term) {
             try {
                 fitAddon.fit();
-                sendMessage({ type: 'term_resize', rows: term.rows, cols: term.cols });
+                sendMessage({ type: 'term_resize', term_id: id, rows: term.rows, cols: term.cols });
             } catch (e) {
                 // can happen if not fully visible
             }
@@ -66,12 +66,12 @@
         term.open(terminalEl);
 
         term.onData(data => {
-            sendMessage({ type: 'term_data', data: data });
+            sendMessage({ type: 'term_data', term_id: id, data: data });
         });
 
         unsubscribeStatus = connectionStatus.subscribe(status => {
             if (status === 'connected' && !initialTermOpenSent) {
-                const openMessage = { type: 'term_open' };
+                const openMessage = { type: 'term_open', term_id: id };
                 if (initialPath) {
                     openMessage.path = initialPath;
                 }
@@ -87,7 +87,7 @@
         });
 
         unsubscribeTerminalData = terminalData.subscribe(msg => {
-            if (msg && term) {
+            if (msg && term && msg.term_id === id) {
                 // SENTINEL INTEGRATION
                 if (canNotify && !get(windows).find(w => w.id === groupId)?.isActive) {
                     windows.notifyActivity(groupId, id, { summary: 'New terminal output' });
@@ -104,6 +104,7 @@
         resizeObserver.observe(terminalEl.parentElement);
 
         return () => {
+            sendMessage({ type: 'term_close', term_id: id });
             if (unsubscribeTerminalData) unsubscribeTerminalData();
             if (unsubscribeStatus) unsubscribeStatus();
             resizeObserver.disconnect();

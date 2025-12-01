@@ -371,37 +371,33 @@ async def handle_ask_stats(msg):
         return {'type': 'fs_error', 'error': 'Failed to calculate stats.', 'nonce': msg.get('nonce')}
 
 
-async def pty_reader(pty_master_fd, websocket):
+async def pty_reader(pty_master_fd, websocket, term_id):
     """Reads from the pty and sends data to the websocket."""
     try:
         while websocket.open:
             try:
                 data = os.read(pty_master_fd, 1024)
                 if data:
-                    await websocket.send(json.dumps({'type': 'term_data', 'data': data.decode('utf-8', errors='ignore')}))
+                    await websocket.send(json.dumps({'type': 'term_data', 'term_id': term_id, 'data': data.decode('utf-8', errors='ignore')}))
                 else:
-                    log.info("PTY child process exited.")
+                    log.info(f"PTY child process for term_id {term_id} exited.")
                     break  # EOF
             except BlockingIOError:
                 await asyncio.sleep(0.01)
                 continue
     except (ConnectionClosed, BrokenPipeError):
-        log.info("PTY reader: Connection closed.")
+        log.info(f"PTY reader for term_id {term_id}: Connection closed.")
     except Exception as e:
-        log.error(f"Error in pty_reader: {e}")
+        log.error(f"Error in pty_reader for term_id {term_id}: {e}")
     finally:
-        log.info("PTY reader task finished.")
-        if websocket.open:
-            await websocket.close(reason='PTY process exited')
+        log.info(f"PTY reader task for term_id {term_id} finished.")
 
 
 async def websocket_handler(websocket):
     """Main handler for each WebSocket connection."""
     log.info(f"Client connected from {websocket.remote_address}")
     CONNECTED_CLIENTS.add(websocket)
-    pty_master_fd = None
-    pty_child_pid = None
-    reader_task = None
+    active_terminals = {} # term_id -> {'pid': pid, 'fd': fd, 'task': task}
 
     try:
         async for message in websocket:
@@ -542,40 +538,65 @@ async def websocket_handler(websocket):
 
                 # --- Terminal Operations ---
                 elif pty and msg_type == 'term_open':
-                    if pty_child_pid:
-                        log.warning("Terminal already open for this connection.")
+                    term_id = msg.get('term_id')
+                    if not term_id:
+                        log.error("term_open message missing term_id")
+                        continue
+                    
+                    if term_id in active_terminals:
+                        log.warning(f"Terminal with term_id {term_id} already open for this connection.")
                         continue
                     
                     path = msg.get('path')
-                    print_action("Term Open", f"path='{path}'" if path else "")
+                    print_action("Term Open", f"id='{term_id}', path='{path}'" if path else f"id='{term_id}'")
                     (pid, fd) = pty.fork()
-                    pty_master_fd, pty_child_pid = fd, pid
 
                     if pid == 0:  # Child process
                         if path and os.path.isdir(path):
                             try:
                                 os.chdir(path)
-                                log.info(f"Child process changed directory to: {path}")
+                                log.info(f"Child process for term_id {term_id} changed directory to: {path}")
                             except Exception as e:
-                                log.error(f"Could not change directory to {path}: {e}")
+                                log.error(f"Could not change directory to {path} for term_id {term_id}: {e}")
                         
                         shell = os.environ.get('SHELL', 'sh')
-                        log.info(f"Child process launching shell: {shell}")
+                        log.info(f"Child process for term_id {term_id} launching shell: {shell}")
                         os.execvpe(shell, [shell], os.environ)
                     else:  # Parent process
-                        log.info(f"PTY forked with child PID: {pid}")
-                        fl = fcntl.fcntl(pty_master_fd, fcntl.F_GETFL)
-                        fcntl.fcntl(pty_master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-                        reader_task = asyncio.create_task(pty_reader(pty_master_fd, websocket))
+                        log.info(f"PTY forked for term_id {term_id} with child PID: {pid}")
+                        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+                        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+                        reader_task = asyncio.create_task(pty_reader(fd, websocket, term_id))
+                        active_terminals[term_id] = {'pid': pid, 'fd': fd, 'task': reader_task}
 
-                elif pty and msg_type == 'term_data' and pty_master_fd is not None:
-                    os.write(pty_master_fd, msg.get('data', '').encode('utf-8'))
+                elif pty and msg_type == 'term_data':
+                    term_id = msg.get('term_id')
+                    term_session = active_terminals.get(term_id)
+                    if term_session:
+                        os.write(term_session['fd'], msg.get('data', '').encode('utf-8'))
 
-                elif pty and msg_type == 'term_resize' and pty_master_fd is not None:
-                    rows, cols = msg.get('rows', 24), msg.get('cols', 80)
-                    print_action("Term Resize", f"rows={rows}, cols={cols}")
-                    winsize = struct.pack('HHHH', rows, cols, 0, 0)
-                    fcntl.ioctl(pty_master_fd, termios.TIOCSWINSZ, winsize)
+                elif pty and msg_type == 'term_resize':
+                    term_id = msg.get('term_id')
+                    term_session = active_terminals.get(term_id)
+                    if term_session:
+                        rows, cols = msg.get('rows', 24), msg.get('cols', 80)
+                        print_action("Term Resize", f"id='{term_id}', rows={rows}, cols={cols}")
+                        winsize = struct.pack('HHHH', rows, cols, 0, 0)
+                        fcntl.ioctl(term_session['fd'], termios.TIOCSWINSZ, winsize)
+
+                elif pty and msg_type == 'term_close':
+                    term_id = msg.get('term_id')
+                    if term_id in active_terminals:
+                        print_action("Term Close", f"id='{term_id}'")
+                        term_session = active_terminals.pop(term_id)
+                        term_session['task'].cancel()
+                        os.close(term_session['fd'])
+                        try:
+                            os.kill(term_session['pid'], 15)  # SIGTERM
+                        except ProcessLookupError:
+                            pass # Process may have already exited
+                    else:
+                        log.warning(f"Received term_close for non-existent term_id: {term_id}")
 
                 else:
                     if msg_type and msg_type.startswith('term_') and not pty:
@@ -592,16 +613,16 @@ async def websocket_handler(websocket):
         log.info("Client disconnected.")
     finally:
         CONNECTED_CLIENTS.remove(websocket)
-        if pty_child_pid:
-            log.info(f"Cleaning up PTY resources for PID {pty_child_pid}.")
-            if reader_task:
-                reader_task.cancel()
-            if pty_master_fd:
-                os.close(pty_master_fd)
-            try:
-                os.kill(pty_child_pid, 15)  # SIGTERM
-            except ProcessLookupError:
-                pass  # Process may have already exited
+        if active_terminals:
+            log.info(f"Cleaning up {len(active_terminals)} PTY resources for disconnected client.")
+            for term_id, term_session in active_terminals.items():
+                log.info(f"  - Cleaning up term_id {term_id} (PID: {term_session['pid']})")
+                term_session['task'].cancel()
+                os.close(term_session['fd'])
+                try:
+                    os.kill(term_session['pid'], 15)  # SIGTERM
+                except ProcessLookupError:
+                    pass
 
 
 async def start_server():
