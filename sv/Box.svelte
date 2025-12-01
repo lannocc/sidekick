@@ -527,18 +527,22 @@
     .box.is-hovered .panel.is-empty.from-bottom {
         transform-origin: bottom center;
         transform: var(--pos-transform, translate(0,0)) scaleY(0.15);
+        clip-path: polygon(0% 100%, 100% 100%, 85% 0%, 15% 0%);
     }
     .box.is-hovered .panel.is-empty.from-top {
         transform-origin: top center;
         transform: var(--pos-transform, translate(0,0)) scaleY(0.15);
+        clip-path: polygon(15% 100%, 85% 100%, 100% 0%, 0% 0%);
     }
     .box.is-hovered .panel.is-empty.from-right {
         transform-origin: right center;
         transform: var(--pos-transform, translate(0,0)) scaleX(0.15);
+        clip-path: polygon(0% 15%, 0% 85%, 100% 100%, 100% 0%);
     }
     .box.is-hovered .panel.is-empty.from-left {
         transform-origin: left center;
         transform: var(--pos-transform, translate(0,0)) scaleX(0.15);
+        clip-path: polygon(0% 0%, 100% 15%, 100% 85%, 0% 100%);
     }
 
     .box-name {
