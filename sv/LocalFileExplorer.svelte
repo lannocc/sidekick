@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus } from './local.js';
+    import { sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus, createBox } from './local.js';
     import { newAskWindow, windows } from './windows.js';
     import { fileSelection } from './iosk.js';
 
@@ -50,6 +50,23 @@
             : (currentPath === '/' ? `/${contextMenu.item.name}` : `${currentPath}/${contextMenu.item.name}`);
         
         newAskWindow([itemPath]);
+        closeContextMenu();
+    }
+
+    function onBoxThis() {
+        if (!contextMenu.item || contextMenu.item.type !== 'dir') return;
+
+        const itemName = contextMenu.item.name;
+        const itemPath = itemName === '..'
+            ? (currentPath.substring(0, currentPath.lastIndexOf('/')) || '/')
+            : (currentPath === '/' ? `/${itemName}` : `${currentPath}/${itemName}`);
+        
+        const defaultBoxName = itemPath.split('/').pop() || (itemPath === '/' ? 'root' : 'New Box');
+
+        const boxName = prompt(`Enter a name for the new Box for path "${itemPath}":`, defaultBoxName);
+        if (!boxName) return;
+
+        createBox(boxName, 'local', itemPath);
         closeContextMenu();
     }
 
@@ -213,6 +230,9 @@
     {#if contextMenu.visible}
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
             <button on:click={onAsk}>Ask...</button>
+            {#if contextMenu.item && contextMenu.item.type === 'dir'}
+                <button on:click={onBoxThis}>Box this</button>
+            {/if}
         </div>
     {/if}
 </div>
