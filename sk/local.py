@@ -210,7 +210,7 @@ async def broadcast_box_config(box_id):
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT box_id, loc_x, loc_y, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
+    cursor.execute("SELECT id, box_id, loc_x, loc_y, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
     panels = []
     for row in cursor.fetchall():
         panel = dict(row)
@@ -591,7 +591,7 @@ async def websocket_handler(websocket):
                     box_id = msg.get('id')
                     print_action("Get Box Cfg", f"id={box_id}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT box_id, loc_x, loc_y, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
+                    cursor.execute("SELECT id, box_id, loc_x, loc_y, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
                     panels = []
                     for row in cursor.fetchall():
                         panel = dict(row)
