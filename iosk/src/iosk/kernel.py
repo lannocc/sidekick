@@ -156,6 +156,23 @@ class IOSK:
             await self.fs.create_dir(Context(self, self.CONSOLE_DEV), Context.CODE, parents=True)
             await self.fs.create_dir(Context(self, self.CONSOLE_DEV), '/var/log/trip', parents=True)
 
+            # SEE_MOUNT_FIX:
+            # In Mounted Media Mode, ensure the mount point directory exists in the
+            # virtual filesystem so it is browsable. This is a system-level setup
+            # operation, so the directory is created in the system workspace (.iosk).
+            if self.mount_point:
+                # We temporarily modify self.mount_point to force fs.create_dir (via
+                # box_for_write) to route this operation to the system workspace
+                # instead of the user media.
+                original_mount_point = self.mount_point
+                self.mount_point += '/TEMP'
+                try:
+                    # A temporary context is sufficient here for system startup.
+                    await self.fs.create_dir(Context(self, self.CONSOLE_DEV), original_mount_point, parents=True)
+                finally:
+                    # Restore the mount point for all subsequent FS operations.
+                    self.mount_point = original_mount_point
+
 
         if not fail:
             io = self.system = Context(self, self.CONSOLE_DEV,
