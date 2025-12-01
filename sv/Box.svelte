@@ -25,36 +25,53 @@
     $: canSetCover = !coverPanelLocation;
 
     /**
-     * Calculates the shortest path distance from the center (0,0) to each panel
-     * by traversing the grid of existing panels using a Breadth-First Search (BFS).
+     * Calculates the path distance from the center (0,0) to each panel
+     * by traversing the parent-child links of the panels. This ensures the
+     * unfold animation follows the attachment order.
      * @param {Object} panels - The map of panel objects.
      * @returns {Object} A map of panel key ('x_y') to its distance from the center.
      */
     function getPanelDistances(panels) {
         const distances = { '0_0': 0 };
-        const queue = [{x: 0, y: 0, dist: 0}];
-        const visited = new Set(['0_0']);
+        const panelKeys = Object.keys(panels);
 
-        let head = 0;
-        while(head < queue.length) {
-            const { x, y, dist } = queue[head++];
-            const neighbors = [
-                { nx: x, ny: y - 1 }, // up
-                { nx: x, ny: y + 1 }, // down
-                { nx: x - 1, ny: y }, // left
-                { nx: x + 1, ny: y }, // right
-            ];
+        let changed = true;
+        // Iteratively calculate distances. A panel's distance can only be calculated
+        // if its parent's distance is already known. The loop continues until a full
+        // pass makes no new calculations, meaning all connected panels are resolved.
+        while (changed) {
+            changed = false;
+            for (const key of panelKeys) {
+                if (distances[key] !== undefined) continue;
 
-            for (const { nx, ny } of neighbors) {
-                const key = `${nx}_${ny}`;
-                // Only traverse through existing panels
-                if (panels[key] && !visited.has(key)) {
-                    visited.add(key);
-                    distances[key] = dist + 1;
-                    queue.push({ x: nx, y: ny, dist: dist + 1 });
+                const panel = panels[key];
+
+                // Check if the panel has a defined parent.
+                if (panel && panel.parent_loc_x != null && panel.parent_loc_y != null) {
+                    const parentKey = `${panel.parent_loc_x}_${panel.parent_loc_y}`;
+                    // If the parent's distance is known, calculate this panel's distance.
+                    if (distances[parentKey] !== undefined) {
+                        distances[key] = distances[parentKey] + 1;
+                        changed = true;
+                    }
+                } else if (key !== '0_0') {
+                    // For panels without a parent (e.g., legacy data), or orphans,
+                    // fallback to Manhattan distance from the center.
+                    distances[key] = Math.abs(panel.loc_x) + Math.abs(panel.loc_y);
+                    changed = true;
                 }
             }
         }
+        
+        // Final fallback for any panels that might be part of a detached chain
+        // where the root of the chain has no parent info.
+        for (const key of panelKeys) {
+            if (distances[key] === undefined) {
+                const panel = panels[key];
+                distances[key] = Math.abs(panel.loc_x) + Math.abs(panel.loc_y);
+            }
+        }
+
         return distances;
     }
 
