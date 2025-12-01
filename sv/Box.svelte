@@ -74,35 +74,42 @@
     $: availableSlots = (() => {
         const slots = new Map();
 
-        const addNeighbors = (loc_x, loc_y) => {
-            const parentDist = panelDistances[`${loc_x}_${loc_y}`] ?? (Math.abs(loc_x) + Math.abs(loc_y));
+        // Create a map of all coordinates to check for neighbors, ensuring uniqueness
+        const coordsToCheck = new Map([['0_0', { x: 0, y: 0, key: '0_0' }]]);
+        for (const panel of Object.values(panels)) {
+            const key = `${panel.loc_x}_${panel.loc_y}`;
+            coordsToCheck.set(key, { x: panel.loc_x, y: panel.loc_y, key });
+        }
+        
+        // Sort them by path distance from center to ensure deterministic behavior.
+        // Fallback to manhattan distance for disconnected panels.
+        const sortedCoords = Array.from(coordsToCheck.values()).sort((a, b) => {
+            const distA = panelDistances[a.key] ?? (Math.abs(a.x) + Math.abs(a.y));
+            const distB = panelDistances[b.key] ?? (Math.abs(b.x) + Math.abs(b.y));
+            if (distA !== distB) return distA - distB;
+            // Stable sort for items with same distance
+            if (a.y !== b.y) return a.y - b.y;
+            return a.x - b.x;
+        });
+
+        for (const coord of sortedCoords) {
+            const { x: loc_x, y: loc_y, key: parentKey } = coord;
+            const parentDist = panelDistances[parentKey] ?? (Math.abs(loc_x) + Math.abs(loc_y));
             const neighbors = [
-                { x: loc_x, y: loc_y - 1, from: 'bottom' }, // Slot is above panel, animates from bottom
-                { x: loc_x, y: loc_y + 1, from: 'top' },    // Slot is below panel, animates from top
-                { x: loc_x - 1, y: loc_y, from: 'right' },  // Slot is left of panel, animates from right
-                { x: loc_x + 1, y: loc_y, from: 'left' },   // Slot is right of panel, animates from left
+                { x: loc_x, y: loc_y - 1, from: 'bottom' }, // Slot is above panel
+                { x: loc_x, y: loc_y + 1, from: 'top' },    // Slot is below panel
+                { x: loc_x - 1, y: loc_y, from: 'right' },  // Slot is left of panel
+                { x: loc_x + 1, y: loc_y, from: 'left' },   // Slot is right of panel
             ];
+
             for (const neighbor of neighbors) {
                 const neighborKey = `${neighbor.x}_${neighbor.y}`;
-                if (neighborKey !== '0_0' && !occupiedCoords.has(neighborKey)) {
-                    const newDistance = parentDist + 1;
-                    const existingSlot = slots.get(neighborKey);
-                    // Add slot if it's new, or update it if we found a shorter path to it
-                    if (!existingSlot || newDistance < existingSlot.distance) {
-                        slots.set(neighborKey, { ...neighbor, distance: newDistance });
-                    }
+                // Because we process parents in order of distance from center,
+                // the first parent to "claim" a slot determines its properties.
+                if (neighborKey !== '0_0' && !occupiedCoords.has(neighborKey) && !slots.has(neighborKey)) {
+                    slots.set(neighborKey, { ...neighbor, distance: parentDist + 1 });
                 }
             }
-        };
-
-        // Always generate available slots around the center panel, even if it's empty.
-        addNeighbors(0, 0);
-
-        // Then, add neighbors from any other existing panels.
-        for (const key in panels) {
-            if (key === '0_0') continue; // We already processed the center panel.
-            const panel = panels[key];
-            addNeighbors(panel.loc_x, panel.loc_y);
         }
 
         return Array.from(slots.values());

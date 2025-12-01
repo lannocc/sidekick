@@ -99,10 +99,6 @@ def init_db():
     DB_CONN.execute("PRAGMA foreign_keys = ON;") # Enforce foreign key constraints
     cursor = DB_CONN.cursor()
     
-    # Check if box table exists to decide if we need to check for migration
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='box';")
-    box_table_exists = cursor.fetchone()
-    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS box (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,72 +112,18 @@ def init_db():
         );
     """)
 
-    # If table already existed, check if we need to add columns for migration
-    if box_table_exists:
-        cursor.execute("PRAGMA table_info(box)")
-        columns = [col['name'] for col in cursor.fetchall()]
-        if 'x' not in columns:
-            log.info("Migrating 'box' table: adding 'x' column.")
-            cursor.execute("ALTER TABLE box ADD COLUMN x INTEGER DEFAULT 100")
-        if 'y' not in columns:
-            log.info("Migrating 'box' table: adding 'y' column.")
-            cursor.execute("ALTER TABLE box ADD COLUMN y INTEGER DEFAULT 100")
-        if 'scale' not in columns:
-            log.info("Migrating 'box' table: adding 'scale' column.")
-            cursor.execute("ALTER TABLE box ADD COLUMN scale REAL DEFAULT 1.0")
-        if 'cover_panel_location' not in columns:
-            log.info("Migrating 'box' table: adding 'cover_panel_location' column.")
-            cursor.execute("ALTER TABLE box ADD COLUMN cover_panel_location TEXT")
-
-    # Check for old panel schema and migrate if necessary
-    cursor.execute("PRAGMA table_info(panel)")
-    panel_columns = [col['name'] for col in cursor.fetchall()]
-    is_old_panel_schema = 'location' in panel_columns and 'loc_x' not in panel_columns
-    
-    if is_old_panel_schema:
-        log.info("Old 'panel' schema detected. Migrating to coordinate-based locations...")
-        try:
-            cursor.execute("ALTER TABLE panel RENAME TO panel_old;")
-            cursor.execute("""
-                CREATE TABLE panel (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    box_id INTEGER NOT NULL,
-                    loc_x INTEGER NOT NULL,
-                    loc_y INTEGER NOT NULL,
-                    board_type TEXT NOT NULL CHECK(board_type IN ('empty', 'window', 'tabs', 'dash', 'image')),
-                    board_config TEXT, -- JSON blob for the BOARD configuration
-                    FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
-                    UNIQUE(box_id, loc_x, loc_y)
-                );
-            """)
-            cursor.execute("""
-                INSERT INTO panel (id, box_id, loc_x, loc_y, board_type, board_config)
-                SELECT
-                    id, box_id,
-                    CASE location WHEN 'center' THEN 0 WHEN 'left' THEN -1 WHEN 'right' THEN 1 ELSE 0 END as loc_x,
-                    CASE location WHEN 'center' THEN 0 WHEN 'top' THEN -1 WHEN 'bottom' THEN 1 ELSE 0 END as loc_y,
-                    board_type, board_config
-                FROM panel_old;
-            """)
-            cursor.execute("DROP TABLE panel_old;")
-            log.info("Panel table migration successful.")
-        except Exception as e:
-            log.error(f"Database migration for 'panel' table failed: {e}", exc_info=True)
-            DB_CONN.rollback()
-            raise
-    else:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS panel (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                box_id INTEGER NOT NULL,
-                loc_x INTEGER NOT NULL,
-                loc_y INTEGER NOT NULL,
-                board_type TEXT NOT NULL CHECK(board_type IN ('empty', 'window', 'tabs', 'dash', 'image')),
-                board_config TEXT, -- JSON blob for the BOARD configuration
-                FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
-                UNIQUE(box_id, loc_x, loc_y)
-            );
-        """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS panel (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            box_id INTEGER NOT NULL,
+            loc_x INTEGER NOT NULL,
+            loc_y INTEGER NOT NULL,
+            board_type TEXT NOT NULL CHECK(board_type IN ('empty', 'window', 'tabs', 'dash', 'image')),
+            board_config TEXT, -- JSON blob for the BOARD configuration
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
+            UNIQUE(box_id, loc_x, loc_y)
+        );
+    """)
     DB_CONN.commit()
     log.info("Skybox database initialized.")
 
