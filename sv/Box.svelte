@@ -23,7 +23,7 @@
     $: if (box.scale != null) scale = box.scale;
     $: coverPanelLocation = box.cover_panel_location;
     $: emptySidePanels = ['top', 'bottom', 'left', 'right'].filter(loc => !box.panels?.[loc]);
-    $: canSetCover = emptySidePanels.length > 0;
+    $: canSetCover = emptySidePanels.length > 0 && !coverPanelLocation;
 
     const BASE_WIDTH = 180;
     let desktopWidth = window.innerWidth;
@@ -136,7 +136,7 @@
     function setCoverImage() {
         closeContextMenu();
         if (!canSetCover) {
-            alert("No empty side panels available to set a cover image.");
+            alert("No empty side panels available or a cover is already set.");
             return;
         }
         const url = prompt("Enter URL for cover image:");
@@ -144,6 +144,19 @@
             // Pick the first available empty panel
             const location = emptySidePanels[0];
             // Save the image to that panel
+            savePanelConfig(box.id, location, 'image', { url });
+            // Designate that panel as the cover
+            setBoxCover(box.id, location);
+        }
+    }
+
+    function setCoverImageFromPicker() {
+        const { location } = boardPickerProps;
+        showBoardPicker = false;
+        
+        const url = prompt("Enter URL for cover image:");
+        if (url) {
+            // Save the image to the specific panel that was clicked
             savePanelConfig(box.id, location, 'image', { url });
             // Designate that panel as the cover
             setBoxCover(box.id, location);
@@ -603,6 +616,13 @@
 <!-- Board Picker UI -->
 {#if showBoardPicker}
     <div class="board-picker" style:top="{boardPickerProps.y}px" style:left="{boardPickerProps.x}px" on:click|stopPropagation>
+        {#if !coverPanelLocation}
+            <button class="picker-item" on:click={setCoverImageFromPicker}>
+                Set Cover Image...
+            </button>
+            <div class="menu-separator"></div>
+        {/if}
+
         <div class="picker-header">Open Windows</div>
         {#each $windows as win (win.id)}
             <button class="picker-item" on:click={() => selectWindow(win)}>
