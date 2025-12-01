@@ -346,6 +346,15 @@
         if (wasDragging) {
             updateBoxTransform(box.id, Math.round(x), Math.round(y), scale);
         }
+        
+        // After a mouseup, the wasDragging flag has served its purpose for the
+        // impending click event. We reset it in a timeout to ensure this
+        // reset happens *after* the click event handler has had a chance to run
+        // in the current event loop tick. This prevents a drag from being registered
+        // as a click, and correctly cleans up the state for the next interaction.
+        setTimeout(() => {
+            wasDragging = false;
+        }, 0);
     }
     
     function handleWheel(event) {
