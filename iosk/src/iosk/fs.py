@@ -36,9 +36,13 @@ class FileSystemManager:
 
     def _remove_tombstone_if_exists(self, normalized_virtual_path: str):
         """Helper to remove a tombstone file for a given virtual path."""
-        dir_name, file_name = posixpath.split(normalized_virtual_path)
-        tombstone_dir_host = self._to_host_path(self.os.workspace_root, dir_name)
+        # The tombstone lives in the same writable layer as the file itself would.
+        # We find its parent directory by getting the write path for the original
+        # file and taking its host directory name.
+        file_write_path = self.box_for_write(normalized_virtual_path)
+        tombstone_dir_host = os.path.dirname(file_write_path)
 
+        _, file_name = posixpath.split(normalized_virtual_path)
         tombstone_name = f'.iosk.rm.{file_name}'
         tombstone_py_name = f'.iosk.rm.{file_name}.py'
         
@@ -77,11 +81,35 @@ class FileSystemManager:
 
     def box_for_write(self, virtual_path_input: str, io_context=None) -> str:
         """
-        Sandboxes a virtual path for writing, ALWAYS targeting the workspace.
+        Sandboxes a virtual path for writing. In Mounted Media Mode, it routes
+        writes to either the User Media (the workspace) or the System Workspace
+        (a hidden subdirectory). Otherwise, it targets the main workspace.
         Returns the absolute host filesystem path where the write should occur.
         """
         normalized_virtual_path = self._resolve_virtual_path(virtual_path_input, io_context)
-        return self._to_host_path(self.os.workspace_root, normalized_virtual_path)
+
+        # --- Mounted Media Mode (3M) Write Routing ---
+        if self.os.mount_point:
+            mount_point = posixpath.normpath(self.os.mount_point)
+
+            # Check if the virtual path is at or below the mount point.
+            if normalized_virtual_path == mount_point or \
+               normalized_virtual_path.startswith(mount_point + '/'):
+
+                # This write goes to the "User Media" (the main workspace directory).
+                # We calculate the path relative to the mount point...
+                relative_path = posixpath.relpath(normalized_virtual_path, mount_point)
+
+                # ...and map it to the host filesystem under the workspace root.
+                path_components = [] if relative_path == '.' else relative_path.split('/')
+                host_path = os.path.join(self.os.workspace_root, *path_components)
+                return os.path.abspath(host_path)
+
+        # --- Standard Mode OR write outside mount point in 3M ---
+        # The write goes to the "System Workspace".
+        # In standard mode, system_workspace_root == workspace_root.
+        # In 3M mode, system_workspace_root == <workspace_root>/.iosk.
+        return self._to_host_path(self.os.system_workspace_root, normalized_virtual_path)
 
     # --- Core FS API ---
 
@@ -194,7 +222,7 @@ class FileSystemManager:
         return False
 
     async def remove(self, io:Context, path:str):
-        """Removes a file. If in workspace, it's deleted. If only in distribution, creates a tombstone."""
+        """Removes a file. If in a writable layer, it's deleted. If only in distribution, creates a tombstone."""
         if not await self.exists(io, path): # Checks merged view, respecting tombstones
             await io.error(f'!! remove path not found: {path}')
             return False
@@ -205,22 +233,40 @@ class FileSystemManager:
             return False
 
         normalized_virtual_path = self._resolve_virtual_path(path, io_context=io)
-        workspace_path = self._to_host_path(self.os.workspace_root, normalized_virtual_path)
-        dist_path = self._to_host_path(self.os.dist_root, normalized_virtual_path)
-
-        # Also check for .py versions
-        workspace_py_path = workspace_path + '.py'
-        dist_py_path = dist_path + '.py'
         
-        # If it exists in the workspace, delete it.
-        if isfile(workspace_py_path):
-            os.remove(workspace_py_path)
-            return True
-        if isfile(workspace_path):
-            os.remove(workspace_path)
+        # Identify potential host paths in both writable layers
+        user_media_path = self._to_host_path(self.os.workspace_root, normalized_virtual_path)
+        system_workspace_path = self._to_host_path(self.os.system_workspace_root, normalized_virtual_path)
+        
+        user_media_py_path = user_media_path + '.py'
+        system_workspace_py_path = system_workspace_path + '.py'
+        
+        deleted_something = False
+        
+        # Attempt to delete from the system workspace layer.
+        if isfile(system_workspace_py_path):
+            os.remove(system_workspace_py_path)
+            deleted_something = True
+        if isfile(system_workspace_path):
+            os.remove(system_workspace_path)
+            deleted_something = True
+        
+        # If in 3M mode, also attempt to delete from the user media layer.
+        # In standard mode, these paths are the same, so this check is skipped.
+        if self.os.system_workspace_root != self.os.workspace_root:
+            if isfile(user_media_py_path):
+                os.remove(user_media_py_path)
+                deleted_something = True
+            if isfile(user_media_path):
+                os.remove(user_media_path)
+                deleted_something = True
+
+        if deleted_something:
             return True
 
         # If it only exists in the distribution, create a tombstone.
+        dist_path = self._to_host_path(self.os.dist_root, normalized_virtual_path)
+        dist_py_path = dist_path + '.py'
         tombstone_target = None
         if isfile(dist_py_path):
             tombstone_target = normalized_virtual_path + '.py'
@@ -293,8 +339,12 @@ class FileSystemManager:
              await io.error(f"!! unrm: cannot restore '{path}': file already exists.")
              return False
 
-        dir_name, file_name = posixpath.split(normalized_virtual_path)
-        tombstone_dir_host = self._to_host_path(self.os.workspace_root, dir_name)
+        # The tombstone lives in the same writable layer as the file itself would.
+        # We find its parent directory by getting the write path for the original
+        # file and taking its host directory name.
+        file_write_path = self.box_for_write(normalized_virtual_path)
+        tombstone_dir_host = os.path.dirname(file_write_path)
+        _, file_name = posixpath.split(normalized_virtual_path)
 
         tombstone_name = f'.iosk.rm.{file_name}'
         tombstone_py_name = f'.iosk.rm.{file_name}.py'
