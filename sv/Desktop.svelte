@@ -13,6 +13,7 @@
     import { get } from 'svelte/store';
     import InstanceRegistrar from './InstanceRegistrar.svelte';
     import { connectionStatus } from './local.js';
+    import { fade } from 'svelte/transition';
 
     let backgroundStyle = '';
     let componentInstances = {};
@@ -124,6 +125,81 @@
             windows.updateTabProps(tab.group.id, tab.id, { lastFocusedElement: event.target });
         }
     }
+    
+    // --- View Controls State & Logic ---
+    let controlsVisible = false;
+    let controlsTimeout;
+
+    function showControls() {
+        controlsVisible = true;
+        if (controlsTimeout) clearTimeout(controlsTimeout);
+        controlsTimeout = setTimeout(() => {
+            controlsVisible = false;
+        }, 3000); // Linger for 3 seconds
+    }
+
+    const panStep = 50;
+    const zoomStepButton = 0.2;
+    const minZoom = 0.2;
+    const maxZoom = 3.0;
+
+    function pan(dx, dy) {
+        showControls();
+        desktopView.update(view => ({
+            ...view,
+            panX: view.panX + dx,
+            panY: view.panY + dy,
+        }));
+        updateDesktopSettings(get(desktopView));
+    }
+
+    function zoom(direction) { // 1 for in, -1 for out
+        showControls();
+        desktopView.update(view => {
+            const newZoom = Math.max(minZoom, Math.min(maxZoom, view.zoom + direction * zoomStepButton));
+            if (newZoom === view.zoom) return view;
+
+            // Zoom towards center of the screen
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+
+            const mouseWorldX = (centerX - view.panX) / view.zoom;
+            const mouseWorldY = (centerY - view.panY) / view.zoom;
+            
+            const newPanX = centerX - mouseWorldX * newZoom;
+            const newPanY = centerY - mouseWorldY * newZoom;
+
+            return { zoom: newZoom, panX: newPanX, panY: newPanY };
+        });
+        updateDesktopSettings(get(desktopView));
+    }
+
+    function resetPan() {
+        showControls();
+        desktopView.update(v => ({ ...v, panX: 0, panY: 0 }));
+        updateDesktopSettings(get(desktopView));
+    }
+
+    function resetZoom() {
+        showControls();
+        desktopView.update(view => {
+            if (view.zoom === 1.0) return view;
+            const newZoom = 1.0;
+            
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+
+            const mouseWorldX = (centerX - view.panX) / view.zoom;
+            const mouseWorldY = (centerY - view.panY) / view.zoom;
+            
+            const newPanX = centerX - mouseWorldX * newZoom;
+            const newPanY = centerY - mouseWorldY * newZoom;
+
+            return { zoom: newZoom, panX: newPanX, panY: newPanY };
+        });
+        updateDesktopSettings(get(desktopView));
+    }
+
 
     // --- Pan and Zoom state ---
     let isPanning = false;
@@ -146,6 +222,7 @@
     function handleDesktopMouseMove(event) {
         if (!isPanning) return;
         wasPanning = true; // If we move, it's a pan
+        showControls();
         
         const dx = event.clientX - lastMousePos.x;
         const dy = event.clientY - lastMousePos.y;
@@ -173,6 +250,7 @@
         if (event.target !== event.currentTarget) return;
         
         event.preventDefault();
+        showControls();
 
         const zoomFactor = 0.001;
         const minZoom = 0.2;
@@ -216,6 +294,7 @@
         window.removeEventListener('click', closeContextMenu);
         Object.values(focusTimeoutDesktop).forEach(clearTimeout);
         if (saveViewTimeout) clearTimeout(saveViewTimeout);
+        if (controlsTimeout) clearTimeout(controlsTimeout);
         window.removeEventListener('mousemove', handleDesktopMouseMove);
         window.removeEventListener('mouseup', handleDesktopMouseUp);
     });
@@ -360,6 +439,71 @@
         pointer-events: auto;
         background-color: var(--window-bg);
     }
+
+    /* --- View Controls --- */
+    .view-controls {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        backdrop-filter: blur(5px);
+        gap: 10px;
+        border-radius: 8px;
+        padding: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    .pan-controls {
+        display: grid;
+        grid-template-areas:
+            ". up ."
+            "left reset right"
+            ". down .";
+        gap: 4px;
+    }
+    .pan-up { grid-area: up; }
+    .pan-left { grid-area: left; }
+    .pan-reset { grid-area: reset; }
+    .pan-right { grid-area: right; }
+    .pan-down { grid-area: down; }
+
+    .zoom-controls {
+        display: flex;
+        gap: 4px;
+        justify-content: center;
+    }
+
+    .view-controls button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        background-color: rgba(40, 40, 40, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 16px;
+        font-weight: bold;
+        line-height: 1;
+        padding: 0;
+        transition: background-color 0.2s;
+    }
+    .view-controls button:hover {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+    .view-controls button:active {
+        background-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .zoom-controls .zoom-reset {
+        width: auto;
+        padding: 0 8px;
+        font-size: 14px;
+    }
 </style>
 
 <div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleDesktopMouseDown} on:wheel={handleDesktopWheel}>
@@ -421,6 +565,23 @@
             {/each}
         </div>
     </div>
+
+    {#if controlsVisible}
+        <div class="view-controls" transition:fade={{ duration: 142 }}>
+            <div class="zoom-controls">
+                <button on:click={() => zoom(-1)} title="Zoom Out">-</button>
+                <button class="zoom-reset" on:click={resetZoom} title="Reset Zoom">1:1</button>
+                <button on:click={() => zoom(1)} title="Zoom In">+</button>
+            </div>
+            <div class="pan-controls">
+                <button class="pan-up" on:click={() => pan(0, panStep)} title="Pan Up">▲</button>
+                <button class="pan-left" on:click={() => pan(panStep, 0)} title="Pan Left">◀</button>
+                <button class="pan-reset" on:click={resetPan} title="Reset Pan">●</button>
+                <button class="pan-right" on:click={() => pan(-panStep, 0)} title="Pan Right">▶</button>
+                <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
+            </div>
+        </div>
+    {/if}
 
     {#if contextMenu.visible && !wasPanning}
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
