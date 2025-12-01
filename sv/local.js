@@ -49,8 +49,16 @@ export function deleteBox(id) {
 export function getBoxConfig(id) {
     sendMessage({ type: 'get_box_config', id });
 }
-export function savePanelConfig(box_id, loc_x, loc_y, board_type, board_config) {
-    sendMessage({ type: 'set_panel_config', box_id, loc_x, loc_y, board_type, board_config });
+export function savePanelConfig(box_id, loc_x, loc_y, board_type, board_config, parent) {
+    const message = { type: 'set_panel_config', box_id, loc_x, loc_y, board_type, board_config };
+    if (parent && parent.x != null && parent.y != null) {
+        message.parent_loc_x = parent.x;
+        message.parent_loc_y = parent.y;
+    } else if (loc_x === 0 && loc_y === 0) {
+        message.parent_loc_x = null;
+        message.parent_loc_y = null;
+    }
+    sendMessage(message);
 }
 export function updateBoxTransform(id, x, y, scale) {
     sendMessage({ type: 'update_box_transform', id, x, y, scale });

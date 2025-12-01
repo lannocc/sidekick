@@ -118,12 +118,23 @@ def init_db():
             box_id INTEGER NOT NULL,
             loc_x INTEGER NOT NULL,
             loc_y INTEGER NOT NULL,
+            parent_loc_x INTEGER,
+            parent_loc_y INTEGER,
             board_type TEXT NOT NULL CHECK(board_type IN ('empty', 'window', 'tabs', 'dash', 'image')),
             board_config TEXT, -- JSON blob for the BOARD configuration
             FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
             UNIQUE(box_id, loc_x, loc_y)
         );
     """)
+
+    # Simple migration for existing databases
+    cursor.execute("PRAGMA table_info(panel)")
+    columns = [row['name'] for row in cursor.fetchall()]
+    if 'parent_loc_x' not in columns:
+        cursor.execute("ALTER TABLE panel ADD COLUMN parent_loc_x INTEGER")
+    if 'parent_loc_y' not in columns:
+        cursor.execute("ALTER TABLE panel ADD COLUMN parent_loc_y INTEGER")
+
     DB_CONN.commit()
     log.info("Skybox database initialized.")
 
@@ -152,7 +163,7 @@ async def broadcast_box_config(box_id):
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, box_id, loc_x, loc_y, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
+    cursor.execute("SELECT id, box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
     panels = []
     for row in cursor.fetchall():
         panel = dict(row)
@@ -456,8 +467,8 @@ async def websocket_handler(websocket):
                         ]
                     }
                     cursor.execute(
-                        "INSERT INTO panel (box_id, loc_x, loc_y, board_type, board_config) VALUES (?, ?, ?, ?, ?)",
-                        (new_id, -1, 0, 'window', json.dumps(files_board_config))
+                        "INSERT INTO panel (box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (new_id, -1, 0, 0, 0, 'window', json.dumps(files_board_config))
                     )
 
                     # Right Panel: Terminal (1, 0)
@@ -476,8 +487,8 @@ async def websocket_handler(websocket):
                         ]
                     }
                     cursor.execute(
-                        "INSERT INTO panel (box_id, loc_x, loc_y, board_type, board_config) VALUES (?, ?, ?, ?, ?)",
-                        (new_id, 1, 0, 'window', json.dumps(terminal_board_config))
+                        "INSERT INTO panel (box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (new_id, 1, 0, 0, 0, 'window', json.dumps(terminal_board_config))
                     )
 
                     DB_CONN.commit()
@@ -533,7 +544,7 @@ async def websocket_handler(websocket):
                     box_id = msg.get('id')
                     print_action("Get Box Cfg", f"id={box_id}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT id, box_id, loc_x, loc_y, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
+                    cursor.execute("SELECT id, box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
                     panels = []
                     for row in cursor.fetchall():
                         panel = dict(row)
@@ -555,8 +566,10 @@ async def websocket_handler(websocket):
                     box_id = msg.get('box_id')
                     loc_x = msg.get('loc_x')
                     loc_y = msg.get('loc_y')
+                    parent_loc_x = msg.get('parent_loc_x')
+                    parent_loc_y = msg.get('parent_loc_y')
                     board_type = msg.get('board_type')
-                    print_action("Set Panel", f"box_id={box_id}, loc=({loc_x},{loc_y}), type='{board_type}'")
+                    print_action("Set Panel", f"box_id={box_id}, loc=({loc_x},{loc_y}), parent=({parent_loc_x},{parent_loc_y}), type='{board_type}'")
                     board_config = msg.get('board_config') # This is a dict from client
 
                     cursor = DB_CONN.cursor()
@@ -571,12 +584,14 @@ async def websocket_handler(websocket):
                         
                         # Use UPSERT (INSERT ... ON CONFLICT)
                         cursor.execute("""
-                            INSERT INTO panel (box_id, loc_x, loc_y, board_type, board_config)
-                            VALUES (?, ?, ?, ?, ?)
+                            INSERT INTO panel (box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
                             ON CONFLICT(box_id, loc_x, loc_y) DO UPDATE SET
+                                parent_loc_x = excluded.parent_loc_x,
+                                parent_loc_y = excluded.parent_loc_y,
                                 board_type = excluded.board_type,
                                 board_config = excluded.board_config;
-                        """, (box_id, loc_x, loc_y, board_type, board_config_json))
+                        """, (box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config_json))
                     
                     DB_CONN.commit()
                     # After successful update, broadcast the new state to all clients
