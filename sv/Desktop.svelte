@@ -386,10 +386,10 @@
                     class="tab-content-wrapper"
                     class:maximized={group.maximized}
                     style:display={(tab.id === group.activeTabId && !group.minimized) ? 'flex' : 'none'}
-                    style:left="{group.maximized ? 0 : group.x}px"
-                    style:top="{group.maximized ? 0 : group.y}px"
-                    style:width="{group.maximized ? '100%' : group.width + 'px'}"
-                    style:height="{group.maximized ? '100%' : group.height + 'px'}"
+                    style:left="{group.maximized ? `calc(-${$desktopView.panX}px / ${$desktopView.zoom})` : `${group.x}px`}"
+                    style:top="{group.maximized ? `calc(-${$desktopView.panY}px / ${$desktopView.zoom})` : `${group.y}px`}"
+                    style:width="{group.maximized ? `calc(100% / ${$desktopView.zoom})` : `${group.width}px`}"
+                    style:height="{group.maximized ? `calc(100% / ${$desktopView.zoom})` : `${group.height}px`}"
                     style:z-index="{tab.isSettingsModalOpen ? group.zIndex + 1 : group.zIndex - 1}"
                     on:focusout={e => handleFocusOut(e, tab)}
                     on:contextmenu|preventDefault|stopPropagation
