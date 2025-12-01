@@ -454,7 +454,7 @@ async def websocket_handler(websocket):
                         (name, box_type, context)
                     )
                     new_id = cursor.lastrowid
-                    
+
                     # Create default panels for the new box
                     # Left Panel: Files
                     files_board_config = {
@@ -498,6 +498,7 @@ async def websocket_handler(websocket):
 
                     DB_CONN.commit()
                     await broadcast_box_list()
+                    await broadcast_box_config(new_id) # <<< ADD THIS LINE
 
                 elif msg_type == 'update_box':
                     box_id = msg.get('id')
