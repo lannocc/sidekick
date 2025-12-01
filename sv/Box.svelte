@@ -7,7 +7,7 @@
     import { get } from 'svelte/store';
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
     import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover } from './local.js';
-    import { dashLayouts } from './desktop.js';
+    import { dashLayouts, desktopView } from './desktop.js';
     import Board from './Board.svelte';
 
     export let box;
@@ -356,8 +356,14 @@
         
         wasDragging = false; // Reset for the new interaction
         isDragging = true;
-        dragOffsetX = event.clientX - x;
-        dragOffsetY = event.clientY - y;
+
+        const { panX, panY, zoom } = get(desktopView);
+        const worldMouseX = (event.clientX - panX) / zoom;
+        const worldMouseY = (event.clientY - panY) / zoom;
+
+        dragOffsetX = worldMouseX - x;
+        dragOffsetY = worldMouseY - y;
+
         window.addEventListener('mousemove', onDrag);
         window.addEventListener('mouseup', onDragEnd, { once: true });
         document.body.style.cursor = 'move';
@@ -366,8 +372,13 @@
     function onDrag(event) {
         if (!isDragging) return;
         wasDragging = true; // If we move, it's a drag
-        x = event.clientX - dragOffsetX;
-        y = event.clientY - dragOffsetY;
+        
+        const { panX, panY, zoom } = get(desktopView);
+        const worldMouseX = (event.clientX - panX) / zoom;
+        const worldMouseY = (event.clientY - panY) / zoom;
+        
+        x = worldMouseX - dragOffsetX;
+        y = worldMouseY - dragOffsetY;
     }
 
     function onDragEnd() {
