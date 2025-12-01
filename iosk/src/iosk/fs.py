@@ -67,7 +67,12 @@ class FileSystemManager:
             if normalized_virtual_path == mount_point or \
                normalized_virtual_path.startswith(mount_point + '/'):
                 
-                user_media_path = self._to_host_path(self.os.workspace_root, normalized_virtual_path)
+                # The path needs to be calculated relative to the mount point, not from the virtual root.
+                relative_path = posixpath.relpath(normalized_virtual_path, mount_point)
+                path_components = [] if relative_path == '.' else relative_path.split('/')
+                user_media_path = os.path.join(self.os.workspace_root, *path_components)
+                user_media_path = os.path.abspath(user_media_path)
+
                 # Per proposal, paths inside the mount point do not fall back to other layers.
                 # This creates a "clean" mounted volume. `box` returns the potential host path,
                 # and callers like `exists` or `get` will determine if it's actually present.
@@ -456,7 +461,12 @@ class FileSystemManager:
                     is_under_mount = True
             
             if is_under_mount:
-                user_media_path = self._to_host_path(self.os.workspace_root, virtual_base_path)
+                # The path needs to be calculated relative to the mount point, not from the virtual root.
+                relative_path = posixpath.relpath(virtual_base_path, mount_point)
+                path_components = [] if relative_path == '.' else relative_path.split('/')
+                user_media_path = os.path.join(self.os.workspace_root, *path_components)
+                user_media_path = os.path.abspath(user_media_path)
+
                 if isdir(user_media_path):
                     for name in os.listdir(user_media_path):
                         if name.startswith('.iosk.rm.'):
