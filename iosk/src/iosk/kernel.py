@@ -42,10 +42,19 @@ class IOSK:
     SKRC = '/etc/skrc'
     SKEL_SKRC = '/etc/skel/skrc' # Added for the new requirement
 
-    def __init__(self, workspace_root):
+    def __init__(self, workspace_root, mount_point=None):
         self.workspace_root = abspath(workspace_root)
+        self.mount_point = mount_point
+        self.system_workspace_root = None
         self.dist_root = None
         self.started = None
+
+        if self.mount_point:
+            # 3M mode: system state is in a hidden subdirectory.
+            self.system_workspace_root = path_join(self.workspace_root, '.iosk')
+        else:
+            # Standard mode: system state is mixed with user files.
+            self.system_workspace_root = self.workspace_root
 
         # --- Find Distribution Root ---
         try:
@@ -112,6 +121,16 @@ class IOSK:
                 fail = f'bad workspace: could not create: {e}'
         elif not isdir(self.workspace_root):
             fail = f'bad workspace: not a directory: {self.workspace_root}'
+
+        if not fail and self.mount_point:
+            # In Mounted Media Mode, also ensure the system workspace (.iosk) exists.
+            if not exists(self.system_workspace_root):
+                try:
+                    os.makedirs(self.system_workspace_root)
+                except OSError as e:
+                    fail = f'bad system workspace: could not create: {e}'
+            elif not isdir(self.system_workspace_root):
+                fail = f'bad system workspace: not a directory: {self.system_workspace_root}'
 
         io = None
 
