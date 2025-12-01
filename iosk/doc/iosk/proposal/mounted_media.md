@@ -1,6 +1,6 @@
 # Proposal: Mounted Media Mode for IOSK Workspaces
 
-**Status**: Proposed
+**Status**: Implemented
 
 ### Introduction
 
