@@ -24,16 +24,58 @@
     $: coverPanelLocation = box.cover_panel_location;
     $: canSetCover = !coverPanelLocation;
 
+    /**
+     * Calculates the shortest path distance from the center (0,0) to each panel
+     * by traversing the grid of existing panels using a Breadth-First Search (BFS).
+     * @param {Object} panels - The map of panel objects.
+     * @returns {Object} A map of panel key ('x_y') to its distance from the center.
+     */
+    function getPanelDistances(panels) {
+        const distances = { '0_0': 0 };
+        const queue = [{x: 0, y: 0, dist: 0}];
+        const visited = new Set(['0_0']);
+
+        let head = 0;
+        while(head < queue.length) {
+            const { x, y, dist } = queue[head++];
+            const neighbors = [
+                { nx: x, ny: y - 1 }, // up
+                { nx: x, ny: y + 1 }, // down
+                { nx: x - 1, ny: y }, // left
+                { nx: x + 1, ny: y }, // right
+            ];
+
+            for (const { nx, ny } of neighbors) {
+                const key = `${nx}_${ny}`;
+                // Only traverse through existing panels
+                if (panels[key] && !visited.has(key)) {
+                    visited.add(key);
+                    distances[key] = dist + 1;
+                    queue.push({ x: nx, y: ny, dist: dist + 1 });
+                }
+            }
+        }
+        return distances;
+    }
+
     // --- Panel Grid Logic ---
     $: panels = box.panels || {};
+    $: panelDistances = getPanelDistances(panels);
+
     $: centerPanel = panels['0_0'];
-    $: sidePanels = Object.values(panels).filter(p => p.loc_x !== 0 || p.loc_y !== 0);
+    $: sidePanels = Object.values(panels)
+        .filter(p => p.loc_x !== 0 || p.loc_y !== 0)
+        .map(p => ({
+            ...p,
+            distance: panelDistances[`${p.loc_x}_${p.loc_y}`] ?? (Math.abs(p.loc_x) + Math.abs(p.loc_y))
+        }));
     
     $: occupiedCoords = new Set(Object.keys(panels));
     $: availableSlots = (() => {
         const slots = new Map();
 
         const addNeighbors = (loc_x, loc_y) => {
+            const parentDist = panelDistances[`${loc_x}_${loc_y}`] ?? (Math.abs(loc_x) + Math.abs(loc_y));
             const neighbors = [
                 { x: loc_x, y: loc_y - 1, from: 'bottom' }, // Slot is above panel, animates from bottom
                 { x: loc_x, y: loc_y + 1, from: 'top' },    // Slot is below panel, animates from top
@@ -42,9 +84,13 @@
             ];
             for (const neighbor of neighbors) {
                 const neighborKey = `${neighbor.x}_${neighbor.y}`;
-                // An available slot cannot be the center (0,0), already occupied, or already in the list
-                if (neighborKey !== '0_0' && !occupiedCoords.has(neighborKey) && !slots.has(neighborKey)) {
-                    slots.set(neighborKey, neighbor);
+                if (neighborKey !== '0_0' && !occupiedCoords.has(neighborKey)) {
+                    const newDistance = parentDist + 1;
+                    const existingSlot = slots.get(neighborKey);
+                    // Add slot if it's new, or update it if we found a shorter path to it
+                    if (!existingSlot || newDistance < existingSlot.distance) {
+                        slots.set(neighborKey, { ...neighbor, distance: newDistance });
+                    }
                 }
             }
         };
@@ -474,6 +520,7 @@
         opacity: 1;
         transform: var(--pos-transform, translate(0,0));
         pointer-events: auto;
+        transition-delay: var(--unfold-delay, 0s);
     }
 
     /* Skinny/flat styles for empty side panels when hovered */
@@ -600,7 +647,7 @@
     {#each sidePanels as panel (panel.id)}
         <div
             class="panel"
-            style="--pos-transform: translateX({panel.loc_x * 105}%) translateY({panel.loc_y * 105}%)"
+            style="--pos-transform: translateX({panel.loc_x * 105}%) translateY({panel.loc_y * 105}%); --unfold-delay: {(panel.distance - 1) * 75}ms;"
             on:click={e => handlePanelClick(e, panel.loc_x, panel.loc_y)}
             on:contextmenu={e => handlePanelRightClick(e, panel.loc_x, panel.loc_y)}
             class:drop-target={isDropTarget(panel.loc_x, panel.loc_y)}
@@ -617,7 +664,7 @@
     {#each availableSlots as slot (`${slot.x}_${slot.y}`)}
         <div
             class="panel is-empty from-{slot.from}"
-            style="--pos-transform: translateX({slot.x * 105}%) translateY({slot.y * 105}%)"
+            style="--pos-transform: translateX({slot.x * 105}%) translateY({slot.y * 105}%); --unfold-delay: {(slot.distance - 1) * 75}ms;"
             on:click={e => handlePanelClick(e, slot.x, slot.y, true)}
             on:contextmenu|preventDefault|stopPropagation
             class:drop-target={isDropTarget(slot.x, slot.y)}
