@@ -49,8 +49,8 @@ export function deleteBox(id) {
 export function getBoxConfig(id) {
     sendMessage({ type: 'get_box_config', id });
 }
-export function savePanelConfig(box_id, location, board_type, board_config) {
-    sendMessage({ type: 'set_panel_config', box_id, location, board_type, board_config });
+export function savePanelConfig(box_id, loc_x, loc_y, board_type, board_config) {
+    sendMessage({ type: 'set_panel_config', box_id, loc_x, loc_y, board_type, board_config });
 }
 export function updateBoxTransform(id, x, y, scale) {
     sendMessage({ type: 'update_box_transform', id, x, y, scale });
@@ -134,7 +134,7 @@ function attemptConnection() {
                         return allBoxes.map(box => {
                             if (box.id === msg.box_id) {
                                 const panelMap = msg.panels.reduce((acc, panel) => {
-                                    acc[panel.location] = panel;
+                                    acc[`${panel.loc_x}_${panel.loc_y}`] = panel;
                                     return acc;
                                 }, {});
                                 return { ...box, panels: panelMap }; // Return new object for reactivity

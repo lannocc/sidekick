@@ -133,17 +133,55 @@ def init_db():
             log.info("Migrating 'box' table: adding 'cover_panel_location' column.")
             cursor.execute("ALTER TABLE box ADD COLUMN cover_panel_location TEXT")
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS panel (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            box_id INTEGER NOT NULL,
-            location TEXT NOT NULL CHECK(location IN ('center', 'top', 'bottom', 'left', 'right')),
-            board_type TEXT NOT NULL CHECK(board_type IN ('empty', 'window', 'tabs', 'dash', 'image')),
-            board_config TEXT, -- JSON blob for the BOARD configuration
-            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
-            UNIQUE(box_id, location)
-        );
-    """)
+    # Check for old panel schema and migrate if necessary
+    cursor.execute("PRAGMA table_info(panel)")
+    panel_columns = [col['name'] for col in cursor.fetchall()]
+    is_old_panel_schema = 'location' in panel_columns and 'loc_x' not in panel_columns
+    
+    if is_old_panel_schema:
+        log.info("Old 'panel' schema detected. Migrating to coordinate-based locations...")
+        try:
+            cursor.execute("ALTER TABLE panel RENAME TO panel_old;")
+            cursor.execute("""
+                CREATE TABLE panel (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    box_id INTEGER NOT NULL,
+                    loc_x INTEGER NOT NULL,
+                    loc_y INTEGER NOT NULL,
+                    board_type TEXT NOT NULL CHECK(board_type IN ('empty', 'window', 'tabs', 'dash', 'image')),
+                    board_config TEXT, -- JSON blob for the BOARD configuration
+                    FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
+                    UNIQUE(box_id, loc_x, loc_y)
+                );
+            """)
+            cursor.execute("""
+                INSERT INTO panel (id, box_id, loc_x, loc_y, board_type, board_config)
+                SELECT
+                    id, box_id,
+                    CASE location WHEN 'center' THEN 0 WHEN 'left' THEN -1 WHEN 'right' THEN 1 ELSE 0 END as loc_x,
+                    CASE location WHEN 'center' THEN 0 WHEN 'top' THEN -1 WHEN 'bottom' THEN 1 ELSE 0 END as loc_y,
+                    board_type, board_config
+                FROM panel_old;
+            """)
+            cursor.execute("DROP TABLE panel_old;")
+            log.info("Panel table migration successful.")
+        except Exception as e:
+            log.error(f"Database migration for 'panel' table failed: {e}", exc_info=True)
+            DB_CONN.rollback()
+            raise
+    else:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS panel (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                box_id INTEGER NOT NULL,
+                loc_x INTEGER NOT NULL,
+                loc_y INTEGER NOT NULL,
+                board_type TEXT NOT NULL CHECK(board_type IN ('empty', 'window', 'tabs', 'dash', 'image')),
+                board_config TEXT, -- JSON blob for the BOARD configuration
+                FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
+                UNIQUE(box_id, loc_x, loc_y)
+            );
+        """)
     DB_CONN.commit()
     log.info("Skybox database initialized.")
 
@@ -172,7 +210,7 @@ async def broadcast_box_config(box_id):
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT box_id, location, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
+    cursor.execute("SELECT box_id, loc_x, loc_y, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
     panels = []
     for row in cursor.fetchall():
         panel = dict(row)
@@ -180,7 +218,7 @@ async def broadcast_box_config(box_id):
             if panel['board_config']:
                 panel['board_config'] = json.loads(panel['board_config'])
         except json.JSONDecodeError:
-            log.warning(f"Could not decode board_config for panel {panel['location']} in box {box_id}")
+            log.warning(f"Could not decode board_config for panel at ({panel['loc_x']},{panel['loc_y']}) in box {box_id}")
             panel['board_config'] = None
         panels.append(panel)
 
@@ -460,7 +498,7 @@ async def websocket_handler(websocket):
                     new_id = cursor.lastrowid
 
                     # Create default panels for the new box
-                    # Left Panel: Files
+                    # Left Panel: Files (-1, 0)
                     files_board_config = {
                         "x": 100, "y": 100,
                         "width": 500, "height": 600,
@@ -476,11 +514,11 @@ async def websocket_handler(websocket):
                         ]
                     }
                     cursor.execute(
-                        "INSERT INTO panel (box_id, location, board_type, board_config) VALUES (?, ?, ?, ?)",
-                        (new_id, 'left', 'window', json.dumps(files_board_config))
+                        "INSERT INTO panel (box_id, loc_x, loc_y, board_type, board_config) VALUES (?, ?, ?, ?, ?)",
+                        (new_id, -1, 0, 'window', json.dumps(files_board_config))
                     )
 
-                    # Right Panel: Terminal
+                    # Right Panel: Terminal (1, 0)
                     terminal_board_config = {
                         "x": 150, "y": 150,
                         "width": 800, "height": 500,
@@ -496,8 +534,8 @@ async def websocket_handler(websocket):
                         ]
                     }
                     cursor.execute(
-                        "INSERT INTO panel (box_id, location, board_type, board_config) VALUES (?, ?, ?, ?)",
-                        (new_id, 'right', 'window', json.dumps(terminal_board_config))
+                        "INSERT INTO panel (box_id, loc_x, loc_y, board_type, board_config) VALUES (?, ?, ?, ?, ?)",
+                        (new_id, 1, 0, 'window', json.dumps(terminal_board_config))
                     )
 
                     DB_CONN.commit()
@@ -530,7 +568,7 @@ async def websocket_handler(websocket):
 
                 elif msg_type == 'set_box_cover':
                     box_id = msg.get('box_id')
-                    location = msg.get('location') # can be 'top', 'left', etc., or None
+                    location = msg.get('location') # can be a coordinate string 'x_y' or None
                     print_action("Set Box Cover", f"id={box_id}, loc='{location}'")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
@@ -553,7 +591,7 @@ async def websocket_handler(websocket):
                     box_id = msg.get('id')
                     print_action("Get Box Cfg", f"id={box_id}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT box_id, location, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
+                    cursor.execute("SELECT box_id, loc_x, loc_y, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
                     panels = []
                     for row in cursor.fetchall():
                         panel = dict(row)
@@ -561,7 +599,7 @@ async def websocket_handler(websocket):
                             if panel['board_config']:
                                 panel['board_config'] = json.loads(panel['board_config'])
                         except json.JSONDecodeError:
-                            log.warning(f"Could not decode board_config for panel {panel['location']} in box {box_id}")
+                            log.warning(f"Could not decode board_config for panel at ({panel['loc_x']},{panel['loc_y']}) in box {box_id}")
                             panel['board_config'] = None
                         panels.append(panel)
                     
@@ -573,16 +611,17 @@ async def websocket_handler(websocket):
 
                 elif msg_type == 'set_panel_config':
                     box_id = msg.get('box_id')
-                    location = msg.get('location')
+                    loc_x = msg.get('loc_x')
+                    loc_y = msg.get('loc_y')
                     board_type = msg.get('board_type')
-                    print_action("Set Panel", f"box_id={box_id}, loc='{location}', type='{board_type}'")
+                    print_action("Set Panel", f"box_id={box_id}, loc=({loc_x},{loc_y}), type='{board_type}'")
                     board_config = msg.get('board_config') # This is a dict from client
 
                     cursor = DB_CONN.cursor()
                     if board_type == 'empty':
                         cursor.execute(
-                            "DELETE FROM panel WHERE box_id = ? AND location = ?",
-                            (box_id, location)
+                            "DELETE FROM panel WHERE box_id = ? AND loc_x = ? AND loc_y = ?",
+                            (box_id, loc_x, loc_y)
                         )
                     else:
                         # Serialize the board_config dict to a JSON string for storage
@@ -590,12 +629,12 @@ async def websocket_handler(websocket):
                         
                         # Use UPSERT (INSERT ... ON CONFLICT)
                         cursor.execute("""
-                            INSERT INTO panel (box_id, location, board_type, board_config)
-                            VALUES (?, ?, ?, ?)
-                            ON CONFLICT(box_id, location) DO UPDATE SET
+                            INSERT INTO panel (box_id, loc_x, loc_y, board_type, board_config)
+                            VALUES (?, ?, ?, ?, ?)
+                            ON CONFLICT(box_id, loc_x, loc_y) DO UPDATE SET
                                 board_type = excluded.board_type,
                                 board_config = excluded.board_config;
-                        """, (box_id, location, board_type, board_config_json))
+                        """, (box_id, loc_x, loc_y, board_type, board_config_json))
                     
                     DB_CONN.commit()
                     # After successful update, broadcast the new state to all clients

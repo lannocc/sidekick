@@ -22,8 +22,35 @@
     $: if (box.y != null) y = box.y;
     $: if (box.scale != null) scale = box.scale;
     $: coverPanelLocation = box.cover_panel_location;
-    $: emptySidePanels = ['top', 'bottom', 'left', 'right'].filter(loc => !box.panels?.[loc]);
-    $: canSetCover = emptySidePanels.length > 0 && !coverPanelLocation;
+    $: canSetCover = !coverPanelLocation;
+
+    // --- Panel Grid Logic ---
+    $: panels = box.panels || {};
+    $: centerPanel = panels['0_0'];
+    $: sidePanels = Object.values(panels).filter(p => p.loc_x !== 0 || p.loc_y !== 0);
+    
+    $: occupiedCoords = new Set(Object.keys(panels));
+    $: availableSlots = (() => {
+        const slots = new Map();
+        for (const key in panels) {
+            const panel = panels[key];
+            const { loc_x, loc_y } = panel;
+            const neighbors = [
+                { x: loc_x, y: loc_y - 1, from: 'bottom' }, // Slot is above panel, animates from bottom
+                { x: loc_x, y: loc_y + 1, from: 'top' },    // Slot is below panel, animates from top
+                { x: loc_x - 1, y: loc_y, from: 'right' },  // Slot is left of panel, animates from right
+                { x: loc_x + 1, y: loc_y, from: 'left' },   // Slot is right of panel, animates from left
+            ];
+            for (const neighbor of neighbors) {
+                const neighborKey = `${neighbor.x}_${neighbor.y}`;
+                if (!occupiedCoords.has(neighborKey) && !slots.has(neighborKey)) {
+                    slots.set(neighborKey, neighbor);
+                }
+            }
+        }
+        return Array.from(slots.values());
+    })();
+
 
     const BASE_WIDTH = 180;
     let desktopWidth = window.innerWidth;
@@ -73,14 +100,15 @@
     let contextMenu = { visible: false, x: 0, y: 0 };
     let panelContextMenu = { visible: false, x: 0, y: 0, location: null };
 
-    function handlePanelRightClick(event, location) {
+    function handlePanelRightClick(event, loc_x, loc_y) {
         event.preventDefault();
         event.stopPropagation();
-
-        const panelConfig = box.panels?.[location];
+        
+        const panelKey = `${loc_x}_${loc_y}`;
+        const panelConfig = panels[panelKey];
 
         // If center panel is empty, show the main box context menu.
-        if (location === 'center' && !panelConfig) {
+        if (loc_x === 0 && loc_y === 0 && !panelConfig) {
             closePanelContextMenu();
             contextMenu = { visible: true, x: event.clientX, y: event.clientY };
             return;
@@ -89,7 +117,7 @@
         // For any non-empty panel (including a non-empty center), show the panel context menu.
         if (panelConfig) {
             closeContextMenu();
-            panelContextMenu = { visible: true, x: event.clientX, y: event.clientY, location };
+            panelContextMenu = { visible: true, x: event.clientX, y: event.clientY, location: { x: loc_x, y: loc_y } };
         }
     }
     function closeContextMenu() {
@@ -157,54 +185,54 @@
     function setCoverImage() {
         closeContextMenu();
         if (!canSetCover) {
-            alert("No empty side panels available or a cover is already set.");
+            alert("A cover image is already set.");
             return;
         }
         const url = prompt("Enter URL for cover image:");
         if (url) {
-            // Pick the first available empty panel
-            const location = emptySidePanels[0];
-            // Save the image to that panel
-            savePanelConfig(box.id, location, 'image', { url });
-            // Designate that panel as the cover
-            setBoxCover(box.id, location);
+            // Pick a preferred empty slot, e.g., 'top' at (0, -1)
+            const preferredSlot = availableSlots.find(s => s.x === 0 && s.y === -1) || availableSlots[0];
+            if (!preferredSlot) {
+                alert("Could not find an available panel slot.");
+                return;
+            }
+            const { x, y } = preferredSlot;
+            const locationKey = `${x}_${y}`;
+            savePanelConfig(box.id, x, y, 'image', { url });
+            setBoxCover(box.id, locationKey);
         }
     }
 
     function setCoverImageFromPicker() {
-        const { location } = boardPickerProps;
+        const { location } = boardPickerProps; // location is {x, y}
         showBoardPicker = false;
         
         const url = prompt("Enter URL for cover image:");
         if (url) {
-            // Save the image to the specific panel that was clicked
-            savePanelConfig(box.id, location, 'image', { url });
-            // Designate that panel as the cover
-            setBoxCover(box.id, location);
+            const locationKey = `${location.x}_${location.y}`;
+            savePanelConfig(box.id, location.x, location.y, 'image', { url });
+            setBoxCover(box.id, locationKey);
         }
     }
 
     function clearCoverImage() {
         closeContextMenu();
         if (coverPanelLocation) {
-            // Set board to empty for that panel, which will delete the panel record
-            savePanelConfig(box.id, coverPanelLocation, 'empty', null);
-            // Unset the cover location on the box
+            const [loc_x, loc_y] = coverPanelLocation.split('_').map(Number);
+            savePanelConfig(box.id, loc_x, loc_y, 'empty', null);
             setBoxCover(box.id, null);
         }
     }
 
     function clearPanel() {
-        const { location } = panelContextMenu;
+        const { location } = panelContextMenu; // location is {x, y}
         closePanelContextMenu();
-        if (location && box.panels?.[location]) {
-            // Clearing a cover panel requires special handling
-            if (coverPanelLocation === location) {
-                // Unset the cover location on the box
+        const panelKey = `${location.x}_${location.y}`;
+        if (location && panels[panelKey]) {
+            if (coverPanelLocation === panelKey) {
                 setBoxCover(box.id, null);
             }
-            // Set board to empty for that panel, which will delete the panel record
-            savePanelConfig(box.id, location, 'empty', null);
+            savePanelConfig(box.id, location.x, location.y, 'empty', null);
         }
     }
 
@@ -253,16 +281,17 @@
         }
     }
 
-    function handlePanelMouseEnter(location) {
+    function handlePanelMouseEnter(loc_x, loc_y) {
         const state = get(dragState);
         if (state?.draggingGroupId) {
-            dragState.update(s => ({...s, dropTargetBoxPanel: { boxId: box.id, location }}));
+            dragState.update(s => ({...s, dropTargetBoxPanel: { boxId: box.id, location: {x: loc_x, y: loc_y} }}));
         }
     }
 
-    function handlePanelMouseLeave(location) {
+    function handlePanelMouseLeave(loc_x, loc_y) {
         const state = get(dragState);
-        if (state?.dropTargetBoxPanel?.boxId === box.id && state?.dropTargetBoxPanel?.location === location) {
+        const currentTarget = state?.dropTargetBoxPanel;
+        if (currentTarget?.boxId === box.id && currentTarget?.location?.x === loc_x && currentTarget?.location?.y === loc_y) {
             dragState.update(s => ({...s, dropTargetBoxPanel: null}));
         }
     }
@@ -272,12 +301,12 @@
         event.dataTransfer.dropEffect = 'link';
     }
 
-    function handleDrop(event, location) {
+    function handleDrop(event, loc_x, loc_y) {
         event.preventDefault();
         try {
             const data = JSON.parse(event.dataTransfer.getData('application/json'));
             if (data.type === 'dashLayout') {
-                savePanelConfig(box.id, location, 'dash', data.layout);
+                savePanelConfig(box.id, loc_x, loc_y, 'dash', data.layout);
             }
         } catch(e) {
             console.error("Drop failed:", e);
@@ -286,7 +315,7 @@
 
     // --- Board Picker State & Logic ---
     let showBoardPicker = false;
-    let boardPickerProps = {}; // { location, x, y }
+    let boardPickerProps = {}; // { location: {x,y}, clientX, clientY }
 
     function getActiveTabTitle(win) {
         if (!win || !win.tabs) return '...';
@@ -295,83 +324,73 @@
     }
 
     function selectWindow(group) {
-        const { location } = boardPickerProps;
+        const { location } = boardPickerProps; // location is {x, y}
         const board_config = generateBoardConfigFromWindow(group);
         const board_type = group.tabs.length > 1 ? 'tabs' : 'window';
-        savePanelConfig(box.id, location, board_type, board_config);
+        savePanelConfig(box.id, location.x, location.y, board_type, board_config);
         windows.removeWindow(group.id);
         showBoardPicker = false;
     }
 
     function selectDash(layout) {
-        const { location } = boardPickerProps;
-        savePanelConfig(box.id, location, 'dash', layout);
+        const { location } = boardPickerProps; // location is {x, y}
+        savePanelConfig(box.id, location.x, location.y, 'dash', layout);
         showBoardPicker = false;
     }
 
-    function handlePanelClick(event, location) {
-        if (wasDragging) {
-            // This was a drag, not a click. Do nothing.
-            return;
-        }
-
+    function handlePanelClick(event, loc_x, loc_y, isAvailableSlot = false) {
+        if (wasDragging) return;
         if (showBoardPicker) {
             showBoardPicker = false;
             return;
         }
+        
+        const panelKey = `${loc_x}_${loc_y}`;
+        const panelConfig = panels[panelKey];
 
-        const panelConfig = box.panels?.[location];
-        const isSidePanel = ['top', 'bottom', 'left', 'right'].includes(location);
-
-        if (!panelConfig || panelConfig.board_type === 'empty') {
-            // Handle clicks on empty panels
-            if (location === 'center' && box.type === 'local') {
+        if (isAvailableSlot || !panelConfig || panelConfig.board_type === 'empty') {
+            // Click on an empty or potential panel
+            if (loc_x === 0 && loc_y === 0 && box.type === 'local') {
                 newLocalFileExplorer({ initialPath: box.context, title: `Local Files - ${box.name}` });
-            } else if (isSidePanel) {
+            } else if (loc_x !== 0 || loc_y !== 0) {
                 // For side panels, open the board picker.
-                // We must stop propagation so the window's 'click' listener doesn't immediately close the picker.
                 event.stopPropagation();
                 boardPickerProps = {
-                    location,
-                    x: event.clientX,
-                    y: event.clientY,
+                    location: { x: loc_x, y: loc_y },
+                    clientX: event.clientX,
+                    clientY: event.clientY,
                 };
                 showBoardPicker = true;
             }
-            // Clicking empty center (non-local) panels does nothing.
         } else {
-            // Handle clicks on occupied panels
+            // Click on an occupied panel
             const { board_type, board_config } = panelConfig;
+            const isSide = loc_x !== 0 || loc_y !== 0;
 
             if (board_type === 'image') {
-                // Action for any image panel
-                if (board_config?.url) {
-                    newWebBrowser({ initialUrl: board_config.url });
-                }
-            } else if (isSidePanel) {
-                // For occupied side panels, restore the board
+                if (board_config?.url) newWebBrowser({ initialUrl: board_config.url });
+            } else if (isSide) {
                 if (board_type === 'window' || board_type === 'tabs') {
                     windows.restoreWindow(board_config);
-                    // savePanelConfig(box.id, location, 'empty', null); // Keep board on panel after restore
-                } else if (board_type === 'dash') {
-                    if (board_config?.windowGroups) {
-                        for (const group of board_config.windowGroups) {
-                            windows.restoreWindow(group);
-                        }
+                } else if (board_type === 'dash' && board_config?.windowGroups) {
+                    for (const group of board_config.windowGroups) {
+                        windows.restoreWindow(group);
                     }
-                    // savePanelConfig(box.id, location, 'empty', null); // Keep board on panel after restore
                 }
             }
-            // Clicking occupied center (non-image) panels does nothing for now.
         }
     }
+
+    function isDropTarget(loc_x, loc_y) {
+        const target = $dragState?.dropTargetBoxPanel;
+        return target?.boxId === box.id && target?.location?.x === loc_x && target?.location?.y === loc_y;
+    }
+
 </script>
 
 <style>
     .box {
         position: absolute;
-        /* width: 180px; */ /* Now set by style directive */
-        /* height: 120px; */ /* Now set by style directive */
         cursor: pointer;
         user-select: none;
         z-index: 10;
@@ -414,54 +433,36 @@
     }
 
     /* All side panels start hidden and scaled down */
-    .top, .bottom, .left, .right {
+    .panel:not(.center) {
         z-index: 1;
         opacity: 0;
-        transform: scale(0.95);
+        transform: scale(0.95) var(--pos-transform, translate(0,0));
         pointer-events: none;
     }
 
-
-    /* --- Unfolding Animations on Hover --- */
-
-    .box.is-hovered .top {
-        transform: translateY(-105%);
+    /* Unfold all side panels on hover */
+    .box.is-hovered .panel:not(.center) {
         opacity: 1;
+        transform: var(--pos-transform, translate(0,0));
         pointer-events: auto;
     }
-    .box.is-hovered .bottom {
-        transform: translateY(105%);
-        opacity: 1;
-        pointer-events: auto;
-    }
-    .box.is-hovered .left {
-        transform: translateX(-105%);
-        opacity: 1;
-        pointer-events: auto;
-    }
-    .box.is-hovered .right {
-        transform: translateX(105%);
-        opacity: 1;
-        pointer-events: auto;
-    }
-
 
     /* Skinny/flat styles for empty side panels when hovered */
-    .box.is-hovered .top.is-empty {
+    .box.is-hovered .panel.is-empty.from-bottom {
         transform-origin: bottom center;
-        transform: translateY(-105%) scaleY(0.15);
+        transform: var(--pos-transform, translate(0,0)) scaleY(0.15);
     }
-    .box.is-hovered .bottom.is-empty {
+    .box.is-hovered .panel.is-empty.from-top {
         transform-origin: top center;
-        transform: translateY(105%) scaleY(0.15);
+        transform: var(--pos-transform, translate(0,0)) scaleY(0.15);
     }
-    .box.is-hovered .left.is-empty {
+    .box.is-hovered .panel.is-empty.from-right {
         transform-origin: right center;
-        transform: translateX(-105%) scaleX(0.15);
+        transform: var(--pos-transform, translate(0,0)) scaleX(0.15);
     }
-    .box.is-hovered .right.is-empty {
+    .box.is-hovered .panel.is-empty.from-left {
         transform-origin: left center;
-        transform: translateX(105%) scaleX(0.15);
+        transform: var(--pos-transform, translate(0,0)) scaleX(0.15);
     }
 
     .box-name {
@@ -556,8 +557,6 @@
 
 <div
     class="box"
-    class:unfold-up={unfoldDirection === 'up'}
-    class:unfold-down={unfoldDirection === 'down'}
     class:is-hovered={isHovered}
     bind:this={boxEl}
     style:left="{x}px"
@@ -568,24 +567,42 @@
     on:mouseleave={handleMouseLeave}
     on:wheel={handleWheel}
 >
-    <!-- Panels for Unfolding Animation -->
-    <div class="panel top" on:click={e => handlePanelClick(e, 'top')} on:contextmenu={e => handlePanelRightClick(e, 'top')} class:is-empty={!box.panels?.top} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'top'} on:mouseenter={() => handlePanelMouseEnter('top')} on:mouseleave={() => handlePanelMouseLeave('top')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'top')}>
-        {#if box.panels?.top} <Board board_type={box.panels.top.board_type} board_config={box.panels.top.board_config} /> {/if}
-    </div>
-    <div class="panel bottom" on:click={e => handlePanelClick(e, 'bottom')} on:contextmenu={e => handlePanelRightClick(e, 'bottom')} class:is-empty={!box.panels?.bottom} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'bottom'} on:mouseenter={() => handlePanelMouseEnter('bottom')} on:mouseleave={() => handlePanelMouseLeave('bottom')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'bottom')}>
-        {#if box.panels?.bottom} <Board board_type={box.panels.bottom.board_type} board_config={box.panels.bottom.board_config} /> {/if}
-    </div>
-    <div class="panel left" on:click={e => handlePanelClick(e, 'left')} on:contextmenu={e => handlePanelRightClick(e, 'left')} class:is-empty={!box.panels?.left} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'left'} on:mouseenter={() => handlePanelMouseEnter('left')} on:mouseleave={() => handlePanelMouseLeave('left')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'left')}>
-        {#if box.panels?.left} <Board board_type={box.panels.left.board_type} board_config={box.panels.left.board_config} /> {/if}
-    </div>
-    <div class="panel right" on:click={e => handlePanelClick(e, 'right')} on:contextmenu={e => handlePanelRightClick(e, 'right')} class:is-empty={!box.panels?.right} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'right'} on:mouseenter={() => handlePanelMouseEnter('right')} on:mouseleave={() => handlePanelMouseLeave('right')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'right')}>
-        {#if box.panels?.right} <Board board_type={box.panels.right.board_type} board_config={box.panels.right.board_config} /> {/if}
-    </div>
+    <!-- Existing Side Panels -->
+    {#each sidePanels as panel (panel.id)}
+        <div
+            class="panel"
+            style="--pos-transform: translateX({panel.loc_x * 105}%) translateY({panel.loc_y * 105}%)"
+            on:click={e => handlePanelClick(e, panel.loc_x, panel.loc_y)}
+            on:contextmenu={e => handlePanelRightClick(e, panel.loc_x, panel.loc_y)}
+            class:drop-target={isDropTarget(panel.loc_x, panel.loc_y)}
+            on:mouseenter={() => handlePanelMouseEnter(panel.loc_x, panel.loc_y)}
+            on:mouseleave={() => handlePanelMouseLeave(panel.loc_x, panel.loc_y)}
+            on:dragover={handleDragOver}
+            on:drop={e => handleDrop(e, panel.loc_x, panel.loc_y)}
+        >
+            <Board board_type={panel.board_type} board_config={panel.board_config} />
+        </div>
+    {/each}
+
+    <!-- Available Slots for new panels -->
+    {#each availableSlots as slot (`${slot.x}_${slot.y}`)}
+        <div
+            class="panel is-empty from-{slot.from}"
+            style="--pos-transform: translateX({slot.x * 105}%) translateY({slot.y * 105}%)"
+            on:click={e => handlePanelClick(e, slot.x, slot.y, true)}
+            on:contextmenu|preventDefault|stopPropagation
+            class:drop-target={isDropTarget(slot.x, slot.y)}
+            on:mouseenter={() => handlePanelMouseEnter(slot.x, slot.y)}
+            on:mouseleave={() => handlePanelMouseLeave(slot.x, slot.y)}
+            on:dragover={handleDragOver}
+            on:drop={e => handleDrop(e, slot.x, slot.y)}
+        />
+    {/each}
 
     <!-- Center Panel with Content -->
-    <div class="panel center" on:mousedown={onDragStart} on:click={e => handlePanelClick(e, 'center')} on:contextmenu={e => handlePanelRightClick(e, 'center')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')}>
-        {#if box.panels?.center}
-            <Board board_type={box.panels.center.board_type} board_config={box.panels.center.board_config} />
+    <div class="panel center" on:mousedown={onDragStart} on:click={e => handlePanelClick(e, 0, 0)} on:contextmenu={e => handlePanelRightClick(e, 0, 0)} class:drop-target={isDropTarget(0, 0)} on:mouseenter={() => handlePanelMouseEnter(0, 0)} on:mouseleave={() => handlePanelMouseLeave(0, 0)} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 0, 0)}>
+        {#if centerPanel}
+            <Board board_type={centerPanel.board_type} board_config={centerPanel.board_config} />
         {:else}
             <div class="box-name">{box.name}</div>
             <div class="box-context" title={box.context}>{box.context}</div>
@@ -616,7 +633,7 @@
 
 <!-- Board Picker UI -->
 {#if showBoardPicker}
-    <div class="board-picker" style:top="{boardPickerProps.y}px" style:left="{boardPickerProps.x}px" on:click|stopPropagation>
+    <div class="board-picker" style:top="{boardPickerProps.clientY}px" style:left="{boardPickerProps.clientX}px" on:click|stopPropagation>
         {#if !coverPanelLocation}
             <button class="picker-item" on:click={setCoverImageFromPicker}>
                 Set Cover Image...
