@@ -32,9 +32,8 @@
     $: occupiedCoords = new Set(Object.keys(panels));
     $: availableSlots = (() => {
         const slots = new Map();
-        for (const key in panels) {
-            const panel = panels[key];
-            const { loc_x, loc_y } = panel;
+
+        const addNeighbors = (loc_x, loc_y) => {
             const neighbors = [
                 { x: loc_x, y: loc_y - 1, from: 'bottom' }, // Slot is above panel, animates from bottom
                 { x: loc_x, y: loc_y + 1, from: 'top' },    // Slot is below panel, animates from top
@@ -43,11 +42,23 @@
             ];
             for (const neighbor of neighbors) {
                 const neighborKey = `${neighbor.x}_${neighbor.y}`;
-                if (!occupiedCoords.has(neighborKey) && !slots.has(neighborKey)) {
+                // An available slot cannot be the center (0,0), already occupied, or already in the list
+                if (neighborKey !== '0_0' && !occupiedCoords.has(neighborKey) && !slots.has(neighborKey)) {
                     slots.set(neighborKey, neighbor);
                 }
             }
+        };
+
+        // Always generate available slots around the center panel, even if it's empty.
+        addNeighbors(0, 0);
+
+        // Then, add neighbors from any other existing panels.
+        for (const key in panels) {
+            if (key === '0_0') continue; // We already processed the center panel.
+            const panel = panels[key];
+            addNeighbors(panel.loc_x, panel.loc_y);
         }
+
         return Array.from(slots.values());
     })();
 
