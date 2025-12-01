@@ -440,6 +440,24 @@
         pointer-events: none;
     }
 
+    /* Initial state for empty panels - start scaled to zero for correct animation */
+    .panel.is-empty.from-bottom {
+        transform-origin: bottom center;
+        transform: var(--pos-transform, translate(0,0)) scaleY(0);
+    }
+    .panel.is-empty.from-top {
+        transform-origin: top center;
+        transform: var(--pos-transform, translate(0,0)) scaleY(0);
+    }
+    .panel.is-empty.from-right {
+        transform-origin: right center;
+        transform: var(--pos-transform, translate(0,0)) scaleX(0);
+    }
+    .panel.is-empty.from-left {
+        transform-origin: left center;
+        transform: var(--pos-transform, translate(0,0)) scaleX(0);
+    }
+
     /* Unfold all side panels on hover */
     .box.is-hovered .panel:not(.center) {
         opacity: 1;
