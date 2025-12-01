@@ -127,6 +127,18 @@ def init_db():
         );
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS desktop_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+    """)
+    # Set default values if they don't exist
+    cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('panX', json.dumps(0)))
+    cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('panY', json.dumps(0)))
+    cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('zoom', json.dumps(1.0)))
+
+
     # Simple migration for existing databases
     cursor.execute("PRAGMA table_info(panel)")
     columns = [row['name'] for row in cursor.fetchall()]
@@ -179,6 +191,22 @@ async def broadcast_box_config(box_id):
 
     if CONNECTED_CLIENTS:
         log.info(f"Broadcasting box_config for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
+        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
+
+async def broadcast_desktop_settings():
+    """Fetches desktop settings and broadcasts them to all connected clients."""
+    if not DB_CONN:
+        log.error("Database not connected, cannot broadcast desktop settings.")
+        return
+
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT key, value FROM desktop_settings")
+    settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
+    
+    message = json.dumps({'type': 'desktop_settings', 'settings': settings})
+    
+    if CONNECTED_CLIENTS:
+        log.info(f"Broadcasting desktop_settings to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
@@ -404,6 +432,12 @@ async def websocket_handler(websocket):
     active_terminals = {} # term_id -> {'pid': pid, 'fd': fd, 'task': task}
 
     try:
+        # Send initial desktop settings on connect
+        cursor = DB_CONN.cursor()
+        cursor.execute("SELECT key, value FROM desktop_settings")
+        settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
+        await websocket.send(json.dumps({'type': 'desktop_settings', 'settings': settings}))
+
         async for message in websocket:
             try:
                 msg = json.loads(message)
@@ -429,6 +463,19 @@ async def websocket_handler(websocket):
                     print_action("Ask Stats", f"prompt_len={len(msg.get('prompt', ''))}, files={len(msg.get('files', []))}")
                     response = await handle_ask_stats(msg)
                     await websocket.send(json.dumps(response))
+
+                # --- Desktop Settings ---
+                elif msg_type == 'update_desktop_settings':
+                    settings_to_update = msg.get('settings', {})
+                    print_action("Update Dsk Cfg", f"{settings_to_update}")
+                    cursor = DB_CONN.cursor()
+                    for key, value in settings_to_update.items():
+                        cursor.execute(
+                            "INSERT OR REPLACE INTO desktop_settings (key, value) VALUES (?, ?)",
+                            (key, json.dumps(value))
+                        )
+                    DB_CONN.commit()
+                    await broadcast_desktop_settings()
 
                 # --- Skybox Box Operations ---
                 elif msg_type == 'list_boxes':

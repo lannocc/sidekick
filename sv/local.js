@@ -1,4 +1,5 @@
 import { writable, get } from 'svelte/store';
+import { desktopView } from './desktop.js';
 
 const PORT = 4210;
 const URL = `ws://localhost:${PORT}`;
@@ -66,6 +67,9 @@ export function updateBoxTransform(id, x, y, scale) {
 export function setBoxCover(box_id, location) {
     sendMessage({ type: 'set_box_cover', box_id, location });
 }
+export function updateDesktopSettings(settings) {
+    sendMessage({ type: 'update_desktop_settings', settings });
+}
 
 
 function attemptConnection() {
@@ -116,6 +120,9 @@ function attemptConnection() {
                     break;
                 case 'ask_stats_response':
                     askStatsResponse.set({ ...msg, timestamp: Date.now() });
+                    break;
+                case 'desktop_settings':
+                    desktopView.set(msg.settings || { panX: 0, panY: 0, zoom: 1.0 });
                     break;
                 case 'box_list':
                     const newBoxesFromBackend = msg.boxes;

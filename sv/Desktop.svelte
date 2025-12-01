@@ -5,7 +5,8 @@
 <script>
     import { windows, newSettings, dragRequest } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, boxes } from './desktop.js';
+    import { desktopSettings, dashActive, boxes, desktopView } from './desktop.js';
+    import { updateDesktopSettings } from './local.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import { onMount, onDestroy } from 'svelte';
@@ -96,6 +97,8 @@
 
 
     function handleRightClick(event) {
+        // Prevent context menu if panning
+        if (isPanning) return;
         if (get(dashActive)) return; // Don't show if dash is active
 
         contextMenu = {
@@ -122,6 +125,89 @@
         }
     }
 
+    // --- Pan and Zoom state ---
+    let isPanning = false;
+    let wasPanning = false;
+    let lastMousePos = { x: 0, y: 0 };
+    let saveViewTimeout;
+
+    function handleDesktopMouseDown(event) {
+        // Only pan if clicking on the desktop background itself and not with right-click
+        if (event.target !== event.currentTarget || event.button !== 0) return;
+        
+        isPanning = true;
+        wasPanning = false;
+        lastMousePos = { x: event.clientX, y: event.clientY };
+        
+        window.addEventListener('mousemove', handleDesktopMouseMove);
+        window.addEventListener('mouseup', handleDesktopMouseUp, { once: true });
+    }
+
+    function handleDesktopMouseMove(event) {
+        if (!isPanning) return;
+        wasPanning = true; // If we move, it's a pan
+        
+        const dx = event.clientX - lastMousePos.x;
+        const dy = event.clientY - lastMousePos.y;
+        
+        desktopView.update(view => ({
+            ...view,
+            panX: view.panX + dx,
+            panY: view.panY + dy
+        }));
+
+        lastMousePos = { x: event.clientX, y: event.clientY };
+    }
+
+    function handleDesktopMouseUp() {
+        if (isPanning && wasPanning) {
+            // Persist final position if we actually panned
+            updateDesktopSettings(get(desktopView));
+        }
+        isPanning = false;
+        window.removeEventListener('mousemove', handleDesktopMouseMove);
+    }
+    
+    function handleDesktopWheel(event) {
+        // Only zoom if scrolling on the desktop background itself
+        if (event.target !== event.currentTarget) return;
+        
+        event.preventDefault();
+
+        const zoomFactor = 0.001;
+        const minZoom = 0.2;
+        const maxZoom = 3.0;
+
+        const currentView = get(desktopView);
+        const newZoom = Math.max(minZoom, Math.min(maxZoom, currentView.zoom - event.deltaY * zoomFactor));
+        
+        if (newZoom === currentView.zoom) return;
+
+        const mouseX = event.clientX;
+        const mouseY = event.clientY;
+
+        // Position of the mouse in world coordinates before zoom
+        const mouseWorldX = (mouseX - currentView.panX) / currentView.zoom;
+        const mouseWorldY = (mouseY - currentView.panY) / currentView.zoom;
+
+        // New pan to keep the world coordinate under the mouse
+        const newPanX = mouseX - mouseWorldX * newZoom;
+        const newPanY = mouseY - mouseWorldY * newZoom;
+        
+        desktopView.set({
+            zoom: newZoom,
+            panX: newPanX,
+            panY: newPanY
+        });
+
+        // Debounce saving
+        if (saveViewTimeout) clearTimeout(saveViewTimeout);
+        saveViewTimeout = setTimeout(() => {
+            updateDesktopSettings(get(desktopView));
+        }, 300);
+    }
+
+
     onMount(() => {
         // The WebSocket connection is now established in SideKick.svelte
         window.addEventListener('click', closeContextMenu);
@@ -129,6 +215,9 @@
     onDestroy(() => {
         window.removeEventListener('click', closeContextMenu);
         Object.values(focusTimeoutDesktop).forEach(clearTimeout);
+        if (saveViewTimeout) clearTimeout(saveViewTimeout);
+        window.removeEventListener('mousemove', handleDesktopMouseMove);
+        window.removeEventListener('mouseup', handleDesktopMouseUp);
     });
 
     desktopSettings.subscribe(settings => {
@@ -178,9 +267,7 @@
         background-position: center;
         transition: background 0.5s ease-in-out;
     }
-    .desktop.dash-active .windows-layer,
-    .desktop.dash-active .tab-contents-layer,
-    .desktop.dash-active .boxes-layer {
+    .desktop.dash-active .desktop-content {
         /* Hide windows without unmounting components, preserving their state */
         visibility: hidden;
     }
@@ -224,6 +311,15 @@
     .context-menu button:hover {
         background-color: var(--taskbar-button-hover-bg);
     }
+    
+    .desktop-content {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        transform-origin: 0 0;
+    }
 
     .boxes-layer {
         position: absolute;
@@ -235,7 +331,7 @@
         pointer-events: auto; /* Children (boxes) are interactive */
     }
 
-    .tab-contents-layer {
+    .windows-layer, .tab-contents-layer {
         position: absolute;
         top: 0; left: 0;
         width: 100%; height: 100%;
@@ -265,64 +361,67 @@
     }
 </style>
 
-<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick}>
-    {#if $connectionStatus === 'connected'}
-        <div class="boxes-layer">
-            {#each $boxes as box (box.id)}
-                <Box {box} />
+<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleDesktopMouseDown} on:wheel={handleDesktopWheel}>
+    
+    <div class="desktop-content" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
+        {#if $connectionStatus === 'connected'}
+            <div class="boxes-layer">
+                {#each $boxes as box (box.id)}
+                    <Box {box} />
+                {/each}
+            </div>
+        {/if}
+
+        <div class="windows-layer">
+            {#each $windows as win (win.id)}
+                <Window {...win} />
             {/each}
         </div>
-    {/if}
 
-    <div class="windows-layer">
-        {#each $windows as win (win.id)}
-            <Window {...win} />
-        {/each}
-    </div>
-
-    <div class="tab-contents-layer">
-        {#each $windows.flatMap(w => w.tabs.map(t => ({...t, group: w}))) as tab (tab.id)}
-            {@const group = tab.group}
-            <div
-                class="tab-content-wrapper"
-                class:maximized={group.maximized}
-                style:display={(tab.id === group.activeTabId && !group.minimized) ? 'flex' : 'none'}
-                style:left="{group.maximized ? 0 : group.x}px"
-                style:top="{group.maximized ? 0 : group.y}px"
-                style:width="{group.maximized ? '100%' : group.width + 'px'}"
-                style:height="{group.maximized ? '100%' : group.height + 'px'}"
-                style:z-index="{tab.isSettingsModalOpen ? group.zIndex + 1 : group.zIndex - 1}"
-                on:focusout={e => handleFocusOut(e, tab)}
-                on:contextmenu|preventDefault|stopPropagation
-            >
+        <div class="tab-contents-layer">
+            {#each $windows.flatMap(w => w.tabs.map(t => ({...t, group: w}))) as tab (tab.id)}
+                {@const group = tab.group}
                 <div
-                    class="content-area-container"
-                    on:mouseenter={() => handleContentMouseEnter(group)}
-                    on:mouseleave={() => handleContentMouseLeave(group)}
-                    on:mousedown={e => handleContentMouseDown(e, group)}
-                    on:wheel={e => handleContentWheel(e, tab)}
+                    class="tab-content-wrapper"
+                    class:maximized={group.maximized}
+                    style:display={(tab.id === group.activeTabId && !group.minimized) ? 'flex' : 'none'}
+                    style:left="{group.maximized ? 0 : group.x}px"
+                    style:top="{group.maximized ? 0 : group.y}px"
+                    style:width="{group.maximized ? '100%' : group.width + 'px'}"
+                    style:height="{group.maximized ? '100%' : group.height + 'px'}"
+                    style:z-index="{tab.isSettingsModalOpen ? group.zIndex + 1 : group.zIndex - 1}"
+                    on:focusout={e => handleFocusOut(e, tab)}
+                    on:contextmenu|preventDefault|stopPropagation
                 >
-                    <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
-                        <svelte:component
-                            bind:this={componentInstances[tab.id]}
-                            this={tab.component}
-                            {...tab}
-                            groupId={group.id}
-                            id={tab.id}
-                            isActive={group.isActive && tab.id === group.activeTabId}
-                            x={group.x} y={group.y} width={group.width} height={group.height}
-                            maximized={group.maximized}
-                        />
-                        {#if componentInstances[tab.id]}
-                            <InstanceRegistrar tabId={tab.id} instance={componentInstances[tab.id]} />
-                        {/if}
+                    <div
+                        class="content-area-container"
+                        on:mouseenter={() => handleContentMouseEnter(group)}
+                        on:mouseleave={() => handleContentMouseLeave(group)}
+                        on:mousedown={e => handleContentMouseDown(e, group)}
+                        on:wheel={e => handleContentWheel(e, tab)}
+                    >
+                        <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
+                            <svelte:component
+                                bind:this={componentInstances[tab.id]}
+                                this={tab.component}
+                                {...tab}
+                                groupId={group.id}
+                                id={tab.id}
+                                isActive={group.isActive && tab.id === group.activeTabId}
+                                x={group.x} y={group.y} width={group.width} height={group.height}
+                                maximized={group.maximized}
+                            />
+                            {#if componentInstances[tab.id]}
+                                <InstanceRegistrar tabId={tab.id} instance={componentInstances[tab.id]} />
+                            {/if}
+                        </div>
                     </div>
                 </div>
-            </div>
-        {/each}
+            {/each}
+        </div>
     </div>
 
-    {#if contextMenu.visible}
+    {#if contextMenu.visible && !wasPanning}
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
             <button on:click={openSettingsMenu}>Settings...</button>
         </div>
