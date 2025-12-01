@@ -204,20 +204,24 @@
         event.preventDefault();
         event.stopPropagation();
         
+        const { panX, panY, zoom } = get(desktopView);
+        const menuX = (event.clientX - panX) / zoom;
+        const menuY = (event.clientY - panY) / zoom;
+
         const panelKey = `${loc_x}_${loc_y}`;
         const panelConfig = panels[panelKey];
 
         // If center panel is empty, show the main box context menu.
         if (loc_x === 0 && loc_y === 0 && !panelConfig) {
             closePanelContextMenu();
-            contextMenu = { visible: true, x: event.clientX, y: event.clientY };
+            contextMenu = { visible: true, x: menuX, y: menuY };
             return;
         }
 
         // For any non-empty panel (including a non-empty center), show the panel context menu.
         if (panelConfig) {
             closeContextMenu();
-            panelContextMenu = { visible: true, x: event.clientX, y: event.clientY, location: { x: loc_x, y: loc_y } };
+            panelContextMenu = { visible: true, x: menuX, y: menuY, location: { x: loc_x, y: loc_y } };
         }
     }
     function closeContextMenu() {
@@ -495,11 +499,12 @@
             } else if (loc_x !== 0 || loc_y !== 0) {
                 // For side panels, open the board picker.
                 event.stopPropagation();
+                const { panX, panY, zoom } = get(desktopView);
                 boardPickerProps = {
                     location: { x: loc_x, y: loc_y },
                     parent: parent,
-                    clientX: event.clientX,
-                    clientY: event.clientY,
+                    clientX: (event.clientX - panX) / zoom,
+                    clientY: (event.clientY - panY) / zoom,
                 };
                 showBoardPicker = true;
             }
