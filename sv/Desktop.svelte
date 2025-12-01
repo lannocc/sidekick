@@ -361,9 +361,9 @@
     }
 </style>
 
-<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleDesktopMouseDown} on:wheel={handleDesktopWheel}>
-    
-    <div class="desktop-content" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
+<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle}>
+
+    <div class="desktop-content" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})" on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleDesktopMouseDown} on:wheel={handleDesktopWheel}>
         {#if $connectionStatus === 'connected'}
             <div class="boxes-layer">
                 {#each $boxes as box (box.id)}
