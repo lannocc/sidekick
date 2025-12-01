@@ -446,18 +446,57 @@ async def websocket_handler(websocket):
                 elif msg_type == 'create_box':
                     name = msg.get('name')
                     box_type = msg.get('box_type')
+                    context = msg.get('context')
                     print_action("Create Box", f"name='{name}', type='{box_type}'")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
                         "INSERT INTO box (name, type, context) VALUES (?, ?, ?)",
-                        (msg.get('name'), msg.get('box_type'), msg.get('context'))
+                        (name, box_type, context)
                     )
                     new_id = cursor.lastrowid
+                    
+                    # Create default panels for the new box
+                    # Left Panel: Files
+                    files_board_config = {
+                        "x": 100, "y": 100,
+                        "width": 500, "height": 600,
+                        "maximized": False,
+                        "activeTabId": 1,
+                        "tabs": [
+                            {
+                                "originalId": 1,
+                                "componentType": "LocalFileExplorer",
+                                "title": f"Files - {name}",
+                                "initialPath": context
+                            }
+                        ]
+                    }
+                    cursor.execute(
+                        "INSERT INTO panel (box_id, location, board_type, board_config) VALUES (?, ?, ?, ?)",
+                        (new_id, 'left', 'window', json.dumps(files_board_config))
+                    )
+
+                    # Right Panel: Terminal
+                    terminal_board_config = {
+                        "x": 150, "y": 150,
+                        "width": 800, "height": 500,
+                        "maximized": False,
+                        "activeTabId": 1,
+                        "tabs": [
+                            {
+                                "originalId": 1,
+                                "componentType": "LocalTerminal",
+                                "title": f"Terminal - {name}",
+                                "initialPath": context
+                            }
+                        ]
+                    }
+                    cursor.execute(
+                        "INSERT INTO panel (box_id, location, board_type, board_config) VALUES (?, ?, ?, ?)",
+                        (new_id, 'right', 'window', json.dumps(terminal_board_config))
+                    )
+
                     DB_CONN.commit()
-                    cursor.execute("SELECT * FROM box WHERE id = ?", (new_id,))
-                    new_box_row = cursor.fetchone()
-                    new_box = dict(new_box_row) if new_box_row else None
-                    await websocket.send(json.dumps({'type': 'box_created', 'box': new_box}))
                     await broadcast_box_list()
 
                 elif msg_type == 'update_box':
