@@ -24,6 +24,20 @@
     $: coverPanelLocation = box.cover_panel_location;
     $: canSetCover = !coverPanelLocation;
 
+    // --- Panel Grid Logic ---
+    $: panels = box.panels || {};
+    $: panelDistances = getPanelDistances(panels);
+
+    // Get the URL for the cover image if one is set
+    $: coverImageUrl = (() => {
+        if (!coverPanelLocation || !panels) return null;
+        const coverPanel = panels[coverPanelLocation];
+        if (coverPanel?.board_type === 'image' && coverPanel.board_config?.url) {
+            return coverPanel.board_config.url;
+        }
+        return null;
+    })();
+
     /**
      * Calculates the path distance from the center (0,0) to each panel
      * by traversing the parent-child links of the panels. This ensures the
@@ -74,10 +88,6 @@
 
         return distances;
     }
-
-    // --- Panel Grid Logic ---
-    $: panels = box.panels || {};
-    $: panelDistances = getPanelDistances(panels);
 
     $: centerPanel = panels['0_0'];
     $: sidePanels = Object.values(panels)
@@ -522,6 +532,31 @@
         transition-delay: 0s;
     }
 
+    .box-cover {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 4; /* On top of the center panel */
+        border-radius: 6px;
+        overflow: hidden;
+        opacity: 1;
+        transition: opacity 0.3s ease-in-out;
+        cursor: move;
+    }
+
+    .box.is-hovered .box-cover {
+        opacity: 0;
+        pointer-events: none; /* Allow interaction with panels underneath when hovered */
+    }
+
+    .cover-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
     .panel {
         position: absolute;
         top: 0;
@@ -717,6 +752,13 @@
     on:mouseleave={handleMouseLeave}
     on:wheel={handleWheel}
 >
+    <!-- Box Cover Image (dissolves on hover) -->
+    {#if coverImageUrl}
+        <div class="box-cover" on:mousedown={onDragStart}>
+            <img src={coverImageUrl} alt="{box.name} cover" class="cover-image" />
+        </div>
+    {/if}
+
     <!-- Existing Side Panels -->
     {#each sidePanels as panel (panel.id)}
         {@const parent = {x: panel.parent_loc_x, y: panel.parent_loc_y}}
