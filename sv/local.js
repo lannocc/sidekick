@@ -11,6 +11,7 @@ export const connectionStatus = writable('disconnected'); // 'connecting', 'conn
 
 // Stores for different message types
 export const terminalData = writable(null);
+export const terminalExit = writable(null);
 export const fsListResponse = writable(null);
 export const fsReadResponse = writable(null);
 export const fsError = writable(null);
@@ -80,6 +81,9 @@ function attemptConnection() {
             switch (msg.type) {
                 case 'term_data':
                     terminalData.set(msg);
+                    break;
+                case 'term_exit':
+                    terminalExit.set(msg);
                     break;
                 case 'fs_list_response':
                     fsListResponse.set(msg);

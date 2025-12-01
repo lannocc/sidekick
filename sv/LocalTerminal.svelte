@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { sendMessage, terminalData, connectionStatus } from './local.js';
+    import { sendMessage, terminalData, connectionStatus, terminalExit } from './local.js';
     import { dragRequest, windows } from './windows.js';
 
     import { Terminal } from '@xterm/xterm';
@@ -26,6 +26,7 @@
 
     let unsubscribeTerminalData;
     let unsubscribeStatus;
+    let unsubscribeTerminalExit;
 
     function handleMouseDown(event) {
         if ((event.altKey || event.metaKey) && event.button === 0 && !maximized) {
@@ -98,6 +99,12 @@
             }
         });
 
+        unsubscribeTerminalExit = terminalExit.subscribe(msg => {
+            if (msg && msg.term_id === id) {
+                windows.removeTab(groupId, id);
+            }
+        });
+
         const resizeObserver = new ResizeObserver(() => {
             resizeTerminal();
         });
@@ -107,6 +114,7 @@
             sendMessage({ type: 'term_close', term_id: id });
             if (unsubscribeTerminalData) unsubscribeTerminalData();
             if (unsubscribeStatus) unsubscribeStatus();
+            if (unsubscribeTerminalExit) unsubscribeTerminalExit();
             resizeObserver.disconnect();
             term.dispose();
         };

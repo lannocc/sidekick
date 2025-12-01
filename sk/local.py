@@ -385,12 +385,21 @@ async def pty_reader(pty_master_fd, websocket, term_id):
             except BlockingIOError:
                 await asyncio.sleep(0.01)
                 continue
+            except OSError as e:
+                # This is expected when the child process exits.
+                log.info(f"PTY child process for term_id {term_id} exited (OSError: {e}).")
+                break
     except (ConnectionClosed, BrokenPipeError):
         log.info(f"PTY reader for term_id {term_id}: Connection closed.")
     except Exception as e:
         log.error(f"Error in pty_reader for term_id {term_id}: {e}")
     finally:
-        log.info(f"PTY reader task for term_id {term_id} finished.")
+        log.info(f"PTY reader task for term_id {term_id} finished, notifying client of exit.")
+        if websocket.open:
+            try:
+                await websocket.send(json.dumps({'type': 'term_exit', 'term_id': term_id}))
+            except ConnectionClosed:
+                pass # Client may have disconnected in the meantime.
 
 
 async def websocket_handler(websocket):
