@@ -6,7 +6,7 @@
     import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { windows, dragState, instanceRegistry, dragRequest, generateBoardConfigFromWindow } from './windows.js';
-    import { desktopSettings, windowSettings } from './desktop.js';
+    import { desktopSettings, windowSettings, desktopView } from './desktop.js';
     import { savePanelConfig } from './local.js';
     import IoskConsole from './IoskConsole.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
@@ -218,8 +218,14 @@
     function onDragStart(event) {
         isDragging = true;
         dragState.set({ draggingGroupId: id, dropTargetGroupId: null, dropTargetBoxPanel: null });
-        dragOffsetX = event.clientX - x;
-        dragOffsetY = event.clientY - y;
+
+        const { panX, panY, zoom } = get(desktopView);
+        const worldMouseX = (event.clientX - panX) / zoom;
+        const worldMouseY = (event.clientY - panY) / zoom;
+
+        dragOffsetX = worldMouseX - x;
+        dragOffsetY = worldMouseY - y;
+        
         window.addEventListener('mousemove', onDrag);
         window.addEventListener('mouseup', onDragEnd, { once: true });
         windows.focusWindow(id);
@@ -228,9 +234,15 @@
 
     function onDrag(event) {
         if (!isDragging) return;
-        x = event.clientX - dragOffsetX;
-        y = event.clientY - dragOffsetY;
-        windows.updateWindowProps(id, { x, y });
+        
+        const { panX, panY, zoom } = get(desktopView);
+        const worldMouseX = (event.clientX - panX) / zoom;
+        const worldMouseY = (event.clientY - panY) / zoom;
+
+        const newX = worldMouseX - dragOffsetX;
+        const newY = worldMouseY - dragOffsetY;
+
+        windows.updateWindowProps(id, { x: newX, y: newY });
 
         // Drop target detection logic
         titleBarEl.style.pointerEvents = 'none';
@@ -288,8 +300,10 @@
     function onResize(event) {
         if (!isResizing) return;
         const { x: ix, y: iy, width: iw, height: ih, mouseX: startX, mouseY: startY } = initialResizeState;
-        const dx = event.clientX - startX;
-        const dy = event.clientY - startY;
+
+        const { zoom } = get(desktopView);
+        const dx = (event.clientX - startX) / zoom;
+        const dy = (event.clientY - startY) / zoom;
         const minWidth = 250, minHeight = 150;
 
         let newX = ix;

@@ -132,8 +132,8 @@
     let saveViewTimeout;
 
     function handleDesktopMouseDown(event) {
-        // Only pan if clicking on the desktop background itself and not with right-click
-        if (event.target !== event.currentTarget || event.button !== 0) return;
+        // Only pan if clicking on the desktop background itself and with the middle mouse button
+        if (event.target !== event.currentTarget || event.button !== 1) return;
         
         isPanning = true;
         wasPanning = false;
@@ -361,9 +361,9 @@
     }
 </style>
 
-<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle}>
+<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleDesktopMouseDown} on:wheel={handleDesktopWheel}>
 
-    <div class="desktop-content" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})" on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleDesktopMouseDown} on:wheel={handleDesktopWheel}>
+    <div class="desktop-content" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
         {#if $connectionStatus === 'connected'}
             <div class="boxes-layer">
                 {#each $boxes as box (box.id)}
