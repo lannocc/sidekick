@@ -206,7 +206,7 @@
         
         const { panX, panY, zoom } = get(desktopView);
         const menuX = (event.clientX - panX) / zoom;
-        const menuY = (event.clientY - panY) / zoom;
+        const menuY = (event.clientY - 40 - panY) / zoom; // -40 for taskbar height
 
         const panelKey = `${loc_x}_${loc_y}`;
         const panelConfig = panels[panelKey];
@@ -504,7 +504,7 @@
                     location: { x: loc_x, y: loc_y },
                     parent: parent,
                     clientX: (event.clientX - panX) / zoom,
-                    clientY: (event.clientY - panY) / zoom,
+                    clientY: (event.clientY - 40 - panY) / zoom, // -40 for taskbar height
                 };
                 showBoardPicker = true;
             }
