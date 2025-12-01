@@ -251,16 +251,17 @@ class FileSystemManager:
 
         normalized_virtual_path = self._resolve_virtual_path(path, io_context=io)
         
-        # Identify potential host paths in both writable layers
-        user_media_path = self._to_host_path(self.os.workspace_root, normalized_virtual_path)
-        system_workspace_path = self._to_host_path(self.os.system_workspace_root, normalized_virtual_path)
-        
-        user_media_py_path = user_media_path + '.py'
-        system_workspace_py_path = system_workspace_path + '.py'
+        # --- BEGIN FIX ---
+        # The logic below must check for and delete the file from any applicable writable layer.
         
         deleted_something = False
         
-        # Attempt to delete from the system workspace layer.
+        # 1. Check and delete from the System Workspace layer.
+        #    In standard mode, this is the main workspace. In 3M mode, it's the .iosk directory.
+        #    The path is a direct mapping from the virtual root.
+        system_workspace_path = self._to_host_path(self.os.system_workspace_root, normalized_virtual_path)
+        system_workspace_py_path = system_workspace_path + '.py'
+        
         if isfile(system_workspace_py_path):
             os.remove(system_workspace_py_path)
             deleted_something = True
@@ -268,18 +269,29 @@ class FileSystemManager:
             os.remove(system_workspace_path)
             deleted_something = True
         
-        # If in 3M mode, also attempt to delete from the user media layer.
-        # In standard mode, these paths are the same, so this check is skipped.
-        if self.os.system_workspace_root != self.os.workspace_root:
-            if isfile(user_media_py_path):
-                os.remove(user_media_py_path)
-                deleted_something = True
-            if isfile(user_media_path):
-                os.remove(user_media_path)
-                deleted_something = True
+        # 2. In 3M mode, also check and delete from the User Media layer if the path is under the mount point.
+        #    In standard mode, this location is the same as the system workspace and was already checked.
+        if self.os.mount_point and self.os.system_workspace_root != self.os.workspace_root:
+            mount_point = posixpath.normpath(self.os.mount_point)
+            if normalized_virtual_path == mount_point or \
+               normalized_virtual_path.startswith(mount_point + '/'):
+                
+                # The host path is calculated relative to the mount point.
+                relative_path = posixpath.relpath(normalized_virtual_path, mount_point)
+                path_components = [] if relative_path == '.' else relative_path.split('/')
+                user_media_path = os.path.join(self.os.workspace_root, *path_components)
+                user_media_py_path = user_media_path + '.py'
+
+                if isfile(user_media_py_path):
+                    os.remove(user_media_py_path)
+                    deleted_something = True
+                if isfile(user_media_path):
+                    os.remove(user_media_path)
+                    deleted_something = True
 
         if deleted_something:
             return True
+        # --- END FIX ---
 
         # If it only exists in the distribution, create a tombstone.
         dist_path = self._to_host_path(self.os.dist_root, normalized_virtual_path)
