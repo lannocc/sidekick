@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer } from './windows.js';
+    import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
     import { updateBox, deleteBox, savePanelConfig, updateBoxTransform } from './local.js';
     import { dashLayouts } from './desktop.js';
     import Board from './Board.svelte';
@@ -113,8 +113,20 @@
         closeContextMenu();
         if (box.type === 'local') {
             newAskWindow([box.context]);
-        } else {
-            alert(`"Ask..." for 'iosk' boxes is not yet implemented.`);
+        }
+    }
+
+    function openTerminal() {
+        closeContextMenu();
+        if (box.type === 'local' && box.context) {
+            newLocalTerminal({ title: `Terminal - ${box.name}`, initialPath: box.context });
+        }
+    }
+
+    function openFiles() {
+        closeContextMenu();
+        if (box.type === 'local' && box.context) {
+            newLocalFileExplorer({ title: `Files - ${box.name}`, initialPath: box.context });
         }
     }
     
@@ -427,6 +439,11 @@
     .context-menu button:hover {
         background-color: var(--taskbar-button-hover-bg);
     }
+    .context-menu button:disabled {
+        color: #7f8c8d;
+        cursor: not-allowed;
+        background-color: transparent;
+    }
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
     .context-menu .delete { color: #e74c3c; }
     .context-menu .delete:hover { background-color: #c0392b; color: white; }
@@ -483,7 +500,6 @@
     style:top="{y}px"
     style:width="{boxWidth}px"
     style:height="{boxHeight}px"
-    on:contextmenu={handleRightClick}
     on:mouseenter={handleMouseEnter}
     on:mouseleave={handleMouseLeave}
     on:wheel={handleWheel}
@@ -508,7 +524,7 @@
     </div>
 
     <!-- Center Panel with Content -->
-    <div class="panel center" on:mousedown={onDragStart} on:click={e => handlePanelClick(e, 'center')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')}>
+    <div class="panel center" on:mousedown={onDragStart} on:click={e => handlePanelClick(e, 'center')} on:contextmenu={handleRightClick} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')}>
         {#if box.panels?.center}
             <Board board_type={box.panels.center.board_type} board_config={box.panels.center.board_config} />
         {:else}
@@ -520,7 +536,10 @@
 
 {#if contextMenu.visible}
     <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
-        <button on:click={askBox}>Ask...</button>
+        <button on:click={askBox} disabled={box.type !== 'local'}>Ask...</button>
+        <button on:click={openTerminal} disabled={box.type !== 'local'}>Terminal</button>
+        <button on:click={openFiles} disabled={box.type !== 'local'}>Files</button>
+        <div class="menu-separator"></div>
         <button on:click={renameBox}>Rename...</button>
         <div class="menu-separator"></div>
         <button on:click={setCoverImage}>Set Cover Image...</button>

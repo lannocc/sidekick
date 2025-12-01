@@ -545,12 +545,20 @@ async def websocket_handler(websocket):
                     if pty_child_pid:
                         log.warning("Terminal already open for this connection.")
                         continue
-
-                    print_action("Term Open")
+                    
+                    path = msg.get('path')
+                    print_action("Term Open", f"path='{path}'" if path else "")
                     (pid, fd) = pty.fork()
                     pty_master_fd, pty_child_pid = fd, pid
 
                     if pid == 0:  # Child process
+                        if path and os.path.isdir(path):
+                            try:
+                                os.chdir(path)
+                                log.info(f"Child process changed directory to: {path}")
+                            except Exception as e:
+                                log.error(f"Could not change directory to {path}: {e}")
+                        
                         shell = os.environ.get('SHELL', 'sh')
                         log.info(f"Child process launching shell: {shell}")
                         os.execvpe(shell, [shell], os.environ)

@@ -16,6 +16,7 @@
     export let isActive;
     export let groupId;
     export let maximized;
+    export let initialPath = null;
 
     let terminalEl;
     let term;
@@ -70,7 +71,11 @@
 
         unsubscribeStatus = connectionStatus.subscribe(status => {
             if (status === 'connected' && !initialTermOpenSent) {
-                sendMessage({ type: 'term_open' });
+                const openMessage = { type: 'term_open' };
+                if (initialPath) {
+                    openMessage.path = initialPath;
+                }
+                sendMessage(openMessage);
                 initialTermOpenSent = true;
                 resizeTerminal();
                 term.focus();
