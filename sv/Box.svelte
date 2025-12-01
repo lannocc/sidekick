@@ -303,13 +303,13 @@
                 };
                 showBoardPicker = true;
             }
-            // Clicking empty center (non-local) or cover panels does nothing.
+            // Clicking empty center (non-local) panels does nothing.
         } else {
             // Handle clicks on occupied panels
             const { board_type, board_config } = panelConfig;
 
-            if (board_type === 'image' && location === coverPanelLocation) {
-                // Special action for cover image
+            if (board_type === 'image') {
+                // Action for any image panel
                 if (board_config?.url) {
                     newWebBrowser({ initialUrl: board_config.url });
                 }
@@ -327,7 +327,7 @@
                     // savePanelConfig(box.id, location, 'empty', null); // Keep board on panel after restore
                 }
             }
-            // Clicking occupied center or non-image cover panels does nothing for now.
+            // Clicking occupied center (non-image) panels does nothing for now.
         }
     }
 </script>
@@ -378,30 +378,12 @@
         cursor: move;
     }
 
-    /* When a cover is present and the box is not hovered, the center panel is obscured */
-    .box.has-cover:not(.is-hovered) .center {
-        pointer-events: none;
-    }
-    .box.has-cover .center {
-        cursor: default;
-    }
-
-
     /* All side panels start hidden and scaled down */
     .top, .bottom, .left, .right {
         z-index: 1;
         opacity: 0;
         transform: scale(0.95);
         pointer-events: none;
-    }
-
-    /* A panel designated as cover is visible by default, on top, and draggable */
-    .box.has-cover .panel.is-cover {
-        opacity: 1;
-        transform: scale(1);
-        z-index: 4;
-        pointer-events: auto;
-        cursor: move;
     }
 
 
@@ -426,23 +408,6 @@
         transform: translateX(105%);
         opacity: 1;
         pointer-events: auto;
-    }
-
-    /* The cover panel moves further out on hover and sits behind other panels */
-    .box.is-hovered .panel.is-cover {
-        z-index: 2; /* Sits behind center panel but visible */
-    }
-    .box.is-hovered.cover-top .panel.top.is-cover {
-        transform: translateY(-210%);
-    }
-    .box.is-hovered.cover-bottom .panel.bottom.is-cover {
-        transform: translateY(210%);
-    }
-    .box.is-hovered.cover-left .panel.left.is-cover {
-        transform: translateX(-210%);
-    }
-    .box.is-hovered.cover-right .panel.right.is-cover {
-        transform: translateX(210%);
     }
 
 
@@ -556,11 +521,6 @@
 
 <div
     class="box"
-    class:has-cover={coverPanelLocation}
-    class:cover-top={coverPanelLocation === 'top'}
-    class:cover-bottom={coverPanelLocation === 'bottom'}
-    class:cover-left={coverPanelLocation === 'left'}
-    class:cover-right={coverPanelLocation === 'right'}
     class:unfold-up={unfoldDirection === 'up'}
     class:unfold-down={unfoldDirection === 'down'}
     class:is-hovered={isHovered}
@@ -574,21 +534,21 @@
     on:wheel={handleWheel}
 >
     <!-- Panels for Unfolding Animation -->
-    <div class="panel top" class:is-cover={coverPanelLocation === 'top'} on:mousedown={coverPanelLocation === 'top' ? onDragStart : undefined} on:click={e => handlePanelClick(e, 'top')} class:is-empty={!box.panels?.top} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'top'} on:mouseenter={() => handlePanelMouseEnter('top')} on:mouseleave={() => handlePanelMouseLeave('top')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'top')}>
+    <div class="panel top" on:click={e => handlePanelClick(e, 'top')} class:is-empty={!box.panels?.top} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'top'} on:mouseenter={() => handlePanelMouseEnter('top')} on:mouseleave={() => handlePanelMouseLeave('top')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'top')}>
         {#if box.panels?.top} <Board board_type={box.panels.top.board_type} board_config={box.panels.top.board_config} /> {/if}
     </div>
-    <div class="panel bottom" class:is-cover={coverPanelLocation === 'bottom'} on:mousedown={coverPanelLocation === 'bottom' ? onDragStart : undefined} on:click={e => handlePanelClick(e, 'bottom')} class:is-empty={!box.panels?.bottom} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'bottom'} on:mouseenter={() => handlePanelMouseEnter('bottom')} on:mouseleave={() => handlePanelMouseLeave('bottom')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'bottom')}>
+    <div class="panel bottom" on:click={e => handlePanelClick(e, 'bottom')} class:is-empty={!box.panels?.bottom} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'bottom'} on:mouseenter={() => handlePanelMouseEnter('bottom')} on:mouseleave={() => handlePanelMouseLeave('bottom')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'bottom')}>
         {#if box.panels?.bottom} <Board board_type={box.panels.bottom.board_type} board_config={box.panels.bottom.board_config} /> {/if}
     </div>
-    <div class="panel left" class:is-cover={coverPanelLocation === 'left'} on:mousedown={coverPanelLocation === 'left' ? onDragStart : undefined} on:click={e => handlePanelClick(e, 'left')} class:is-empty={!box.panels?.left} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'left'} on:mouseenter={() => handlePanelMouseEnter('left')} on:mouseleave={() => handlePanelMouseLeave('left')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'left')}>
+    <div class="panel left" on:click={e => handlePanelClick(e, 'left')} class:is-empty={!box.panels?.left} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'left'} on:mouseenter={() => handlePanelMouseEnter('left')} on:mouseleave={() => handlePanelMouseLeave('left')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'left')}>
         {#if box.panels?.left} <Board board_type={box.panels.left.board_type} board_config={box.panels.left.board_config} /> {/if}
     </div>
-    <div class="panel right" class:is-cover={coverPanelLocation === 'right'} on:mousedown={coverPanelLocation === 'right' ? onDragStart : undefined} on:click={e => handlePanelClick(e, 'right')} class:is-empty={!box.panels?.right} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'right'} on:mouseenter={() => handlePanelMouseEnter('right')} on:mouseleave={() => handlePanelMouseLeave('right')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'right')}>
+    <div class="panel right" on:click={e => handlePanelClick(e, 'right')} class:is-empty={!box.panels?.right} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'right'} on:mouseenter={() => handlePanelMouseEnter('right')} on:mouseleave={() => handlePanelMouseLeave('right')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'right')}>
         {#if box.panels?.right} <Board board_type={box.panels.right.board_type} board_config={box.panels.right.board_config} /> {/if}
     </div>
 
     <!-- Center Panel with Content -->
-    <div class="panel center" on:mousedown={!coverPanelLocation ? onDragStart : undefined} on:click={e => handlePanelClick(e, 'center')} on:contextmenu={handleRightClick} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')}>
+    <div class="panel center" on:mousedown={onDragStart} on:click={e => handlePanelClick(e, 'center')} on:contextmenu={handleRightClick} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')}>
         {#if box.panels?.center}
             <Board board_type={box.panels.center.board_type} board_config={box.panels.center.board_config} />
         {:else}
