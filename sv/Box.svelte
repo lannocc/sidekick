@@ -71,20 +71,41 @@
 
     // --- Context Menu State ---
     let contextMenu = { visible: false, x: 0, y: 0 };
+    let panelContextMenu = { visible: false, x: 0, y: 0, location: null };
 
-    function handleRightClick(event) {
+    function handlePanelRightClick(event, location) {
         event.preventDefault();
         event.stopPropagation();
-        contextMenu = { visible: true, x: event.clientX, y: event.clientY };
+
+        const panelConfig = box.panels?.[location];
+
+        // If center panel is empty, show the main box context menu.
+        if (location === 'center' && !panelConfig) {
+            closePanelContextMenu();
+            contextMenu = { visible: true, x: event.clientX, y: event.clientY };
+            return;
+        }
+
+        // For any non-empty panel (including a non-empty center), show the panel context menu.
+        if (panelConfig) {
+            closeContextMenu();
+            panelContextMenu = { visible: true, x: event.clientX, y: event.clientY, location };
+        }
     }
     function closeContextMenu() {
         contextMenu.visible = false;
+    }
+    function closePanelContextMenu() {
+        panelContextMenu.visible = false;
     }
 
     // Close menu on outside click
     function handleWindowClick(event) {
         if (contextMenu.visible && !event.target.closest('.context-menu')) {
             closeContextMenu();
+        }
+        if (panelContextMenu.visible && !event.target.closest('.context-menu')) {
+            closePanelContextMenu();
         }
         if (showBoardPicker && !event.target.closest('.board-picker')) {
             showBoardPicker = false;
@@ -170,6 +191,20 @@
             savePanelConfig(box.id, coverPanelLocation, 'empty', null);
             // Unset the cover location on the box
             setBoxCover(box.id, null);
+        }
+    }
+
+    function clearPanel() {
+        const { location } = panelContextMenu;
+        closePanelContextMenu();
+        if (location && box.panels?.[location]) {
+            // Clearing a cover panel requires special handling
+            if (coverPanelLocation === location) {
+                // Unset the cover location on the box
+                setBoxCover(box.id, null);
+            }
+            // Set board to empty for that panel, which will delete the panel record
+            savePanelConfig(box.id, location, 'empty', null);
         }
     }
 
@@ -534,21 +569,21 @@
     on:wheel={handleWheel}
 >
     <!-- Panels for Unfolding Animation -->
-    <div class="panel top" on:click={e => handlePanelClick(e, 'top')} class:is-empty={!box.panels?.top} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'top'} on:mouseenter={() => handlePanelMouseEnter('top')} on:mouseleave={() => handlePanelMouseLeave('top')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'top')}>
+    <div class="panel top" on:click={e => handlePanelClick(e, 'top')} on:contextmenu={e => handlePanelRightClick(e, 'top')} class:is-empty={!box.panels?.top} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'top'} on:mouseenter={() => handlePanelMouseEnter('top')} on:mouseleave={() => handlePanelMouseLeave('top')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'top')}>
         {#if box.panels?.top} <Board board_type={box.panels.top.board_type} board_config={box.panels.top.board_config} /> {/if}
     </div>
-    <div class="panel bottom" on:click={e => handlePanelClick(e, 'bottom')} class:is-empty={!box.panels?.bottom} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'bottom'} on:mouseenter={() => handlePanelMouseEnter('bottom')} on:mouseleave={() => handlePanelMouseLeave('bottom')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'bottom')}>
+    <div class="panel bottom" on:click={e => handlePanelClick(e, 'bottom')} on:contextmenu={e => handlePanelRightClick(e, 'bottom')} class:is-empty={!box.panels?.bottom} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'bottom'} on:mouseenter={() => handlePanelMouseEnter('bottom')} on:mouseleave={() => handlePanelMouseLeave('bottom')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'bottom')}>
         {#if box.panels?.bottom} <Board board_type={box.panels.bottom.board_type} board_config={box.panels.bottom.board_config} /> {/if}
     </div>
-    <div class="panel left" on:click={e => handlePanelClick(e, 'left')} class:is-empty={!box.panels?.left} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'left'} on:mouseenter={() => handlePanelMouseEnter('left')} on:mouseleave={() => handlePanelMouseLeave('left')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'left')}>
+    <div class="panel left" on:click={e => handlePanelClick(e, 'left')} on:contextmenu={e => handlePanelRightClick(e, 'left')} class:is-empty={!box.panels?.left} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'left'} on:mouseenter={() => handlePanelMouseEnter('left')} on:mouseleave={() => handlePanelMouseLeave('left')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'left')}>
         {#if box.panels?.left} <Board board_type={box.panels.left.board_type} board_config={box.panels.left.board_config} /> {/if}
     </div>
-    <div class="panel right" on:click={e => handlePanelClick(e, 'right')} class:is-empty={!box.panels?.right} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'right'} on:mouseenter={() => handlePanelMouseEnter('right')} on:mouseleave={() => handlePanelMouseLeave('right')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'right')}>
+    <div class="panel right" on:click={e => handlePanelClick(e, 'right')} on:contextmenu={e => handlePanelRightClick(e, 'right')} class:is-empty={!box.panels?.right} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'right'} on:mouseenter={() => handlePanelMouseEnter('right')} on:mouseleave={() => handlePanelMouseLeave('right')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'right')}>
         {#if box.panels?.right} <Board board_type={box.panels.right.board_type} board_config={box.panels.right.board_config} /> {/if}
     </div>
 
     <!-- Center Panel with Content -->
-    <div class="panel center" on:mousedown={onDragStart} on:click={e => handlePanelClick(e, 'center')} on:contextmenu={handleRightClick} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')}>
+    <div class="panel center" on:mousedown={onDragStart} on:click={e => handlePanelClick(e, 'center')} on:contextmenu={e => handlePanelRightClick(e, 'center')} class:drop-target={$dragState?.dropTargetBoxPanel?.boxId === box.id && $dragState?.dropTargetBoxPanel?.location === 'center'} on:mouseenter={() => handlePanelMouseEnter('center')} on:mouseleave={() => handlePanelMouseLeave('center')} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 'center')}>
         {#if box.panels?.center}
             <Board board_type={box.panels.center.board_type} board_config={box.panels.center.board_config} />
         {:else}
@@ -570,6 +605,12 @@
         <button on:click={clearCoverImage} disabled={!coverPanelLocation}>Clear Cover Image</button>
         <div class="menu-separator"></div>
         <button on:click={deleteBoxConfirm} class="delete">Delete</button>
+    </div>
+{/if}
+
+{#if panelContextMenu.visible}
+    <div class="context-menu" style="top: {panelContextMenu.y}px; left: {panelContextMenu.x}px;" on:click|stopPropagation>
+        <button on:click={clearPanel}>Clear</button>
     </div>
 {/if}
 
