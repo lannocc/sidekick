@@ -149,6 +149,7 @@
     // --- Hover State for Unfolding ---
     let isHovered = false;
     let hoverTimeout;
+    let hoveredPanelKey = null; // Key ('x_y') of the currently hovered panel
 
     function handleMouseEnter() {
         if (hoverTimeout) clearTimeout(hoverTimeout);
@@ -159,6 +160,7 @@
         // Use a timeout to keep the panels open while the mouse travels over the gap
         hoverTimeout = setTimeout(() => {
             isHovered = false;
+            hoveredPanelKey = null; // Also clear the specific panel key
         }, 150);
     }
 
@@ -362,6 +364,13 @@
     }
 
     function handlePanelMouseEnter(loc_x, loc_y) {
+        const panelKey = `${loc_x}_${loc_y}`;
+        // Only update hovered key for existing panels or the center panel.
+        // This makes adjacent slots appear.
+        if (panels[panelKey] || (loc_x === 0 && loc_y === 0)) {
+            hoveredPanelKey = panelKey;
+        }
+
         const state = get(dragState);
         if (state?.draggingGroupId) {
             dragState.update(s => ({...s, dropTargetBoxPanel: { boxId: box.id, location: {x: loc_x, y: loc_y} }}));
@@ -539,31 +548,38 @@
         transform: var(--pos-transform, translate(0,0)) scaleX(0);
     }
 
-    /* Unfold all side panels on hover */
-    .box.is-hovered .panel:not(.center) {
+    /* Unfold EXISTING side panels on hover */
+    .box.is-hovered .panel:not(.center):not(.is-empty) {
         opacity: 1;
         transform: var(--pos-transform, translate(0,0));
         pointer-events: auto;
         transition-delay: var(--unfold-delay, 0s);
     }
 
-    /* Skinny/flat styles for empty side panels when hovered */
-    .box.is-hovered .panel.is-empty.from-bottom {
+    /* Make VISIBLE empty slots interactive */
+    .box.is-hovered .panel.is-empty.is-visible {
+        opacity: 1;
+        pointer-events: auto;
+        transition-delay: var(--unfold-delay, 0s);
+    }
+
+    /* Skinny/flat styles for VISIBLE empty side panels when hovered */
+    .box.is-hovered .panel.is-empty.is-visible.from-bottom {
         transform-origin: bottom center;
         transform: var(--pos-transform, translate(0,0)) scaleY(0.15);
         clip-path: polygon(0% 100%, 100% 100%, 85% 0%, 15% 0%);
     }
-    .box.is-hovered .panel.is-empty.from-top {
+    .box.is-hovered .panel.is-empty.is-visible.from-top {
         transform-origin: top center;
         transform: var(--pos-transform, translate(0,0)) scaleY(0.15);
         clip-path: polygon(15% 100%, 85% 100%, 100% 0%, 0% 0%);
     }
-    .box.is-hovered .panel.is-empty.from-right {
+    .box.is-hovered .panel.is-empty.is-visible.from-right {
         transform-origin: right center;
         transform: var(--pos-transform, translate(0,0)) scaleX(0.15);
         clip-path: polygon(0% 15%, 0% 85%, 100% 100%, 100% 0%);
     }
-    .box.is-hovered .panel.is-empty.from-left {
+    .box.is-hovered .panel.is-empty.is-visible.from-left {
         transform-origin: left center;
         transform: var(--pos-transform, translate(0,0)) scaleX(0.15);
         clip-path: polygon(0% 0%, 100% 15%, 100% 85%, 0% 100%);
@@ -691,8 +707,10 @@
 
     <!-- Available Slots for new panels -->
     {#each availableSlots as slot (`${slot.x}_${slot.y}_from_${slot.parent.x}_${slot.parent.y}`)}
+        {@const parentKey = `${slot.parent.x}_${slot.parent.y}`}
         <div
             class="panel is-empty from-{slot.from}"
+            class:is-visible={hoveredPanelKey === parentKey}
             style="--pos-transform: translateX({slot.x * 105}%) translateY({slot.y * 105}%); --unfold-delay: {(slot.distance - 1) * 75}ms;"
             on:click={e => handlePanelClick(e, slot.x, slot.y, true, slot.parent)}
             on:contextmenu|preventDefault|stopPropagation
