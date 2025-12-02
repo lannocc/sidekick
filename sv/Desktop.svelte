@@ -136,7 +136,6 @@
     }
 
     // --- Bird's Eye View & Fit/Center Logic ---
-    // --- Bird's Eye View & Fit/Center Logic ---
     $: allItems = [
         ...$windows,
         ...($boxes || []).map(b => {
@@ -792,21 +791,6 @@
 
     {#if controlsVisible}
         <div class="view-controls" transition:fade={{ duration: 142 }}>
-            <div class="zoom-controls">
-                <button on:click={() => zoom(-1)} title="Zoom Out">-</button>
-                <button on:click={() => zoom(1)} title="Zoom In">+</button>
-            </div>
-            <div class="zoom-controls">
-                <button class="zoom-reset" on:click={resetZoom} title="Reset Zoom">1:1</button>
-                <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content">Fit</button>
-            </div>
-            <div class="pan-controls">
-                <button class="pan-up" on:click={() => pan(0, panStep)} title="Pan Up">▲</button>
-                <button class="pan-left" on:click={() => pan(panStep, 0)} title="Pan Left">◀</button>
-                <button class="pan-reset" on:click={resetPan} title="Reset Pan">●</button>
-                <button class="pan-right" on:click={() => pan(-panStep, 0)} title="Pan Right">▶</button>
-                <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
-            </div>
             {#if contentBounds && contentBounds.defined && minimapWidth > 0 && minimapHeight > 0}
                 <div class="birdseye-view" style:width="{minimapWidth}px" style:height="{minimapHeight}px" on:mousedown={handleMinimapMouseDown}>
                     <!-- Items -->
@@ -830,6 +814,21 @@
                     />
                 </div>
             {/if}
+            <div class="zoom-controls">
+                <button class="zoom-reset" on:click={resetZoom} title="Reset Zoom">1:1</button>
+                <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content">Fit</button>
+            </div>
+            <div class="zoom-controls">
+                <button on:click={() => zoom(-1)} title="Zoom Out">-</button>
+                <button on:click={() => zoom(1)} title="Zoom In">+</button>
+            </div>
+            <div class="pan-controls">
+                <button class="pan-up" on:click={() => pan(0, panStep)} title="Pan Up">▲</button>
+                <button class="pan-left" on:click={() => pan(panStep, 0)} title="Pan Left">◀</button>
+                <button class="pan-reset" on:click={resetPan} title="Reset Pan">●</button>
+                <button class="pan-right" on:click={() => pan(-panStep, 0)} title="Pan Right">▶</button>
+                <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
+            </div>
         </div>
     {/if}
 
