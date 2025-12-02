@@ -586,8 +586,9 @@
                         pushedItemsOriginalPositions.set(pushedId, { x: pushed.x, y: pushed.y });
                     }
 
-                    const overlapX = Math.min(pusherBox.x + pusherBox.width, pushedBox.x + pushedBox.width) - Math.max(pusherBox.x, pusherBox.x);
-                    const overlapY = Math.min(pusherBox.y + pusherBox.height, pushedBox.y + pushedBox.height) - Math.max(pusherBox.y, pusherBox.y);
+                    // CHANGED: Corrected overlap calculation to prevent "jumping"
+                    const overlapX = Math.min(pusherBox.x + pusherBox.width, pushedBox.x + pushedBox.width) - Math.max(pusherBox.x, pushedBox.x);
+                    const overlapY = Math.min(pusherBox.y + pusherBox.height, pushedBox.y + pushedBox.height) - Math.max(pusherBox.y, pushedBox.y);
 
                     if (overlapX < overlapY) {
                         const sign = Math.sign((pushedBox.x + pushedBox.width / 2) - (pusherBox.x + pusherBox.width / 2));
@@ -602,24 +603,36 @@
             if (collisionsFound === 0) break; // If no collisions in a full pass, the layout is stable
         }
 
+        // 4. Update Svelte stores for any items that have been part of the drag interaction
+        // CHANGED: This whole block is replaced to fix items not returning to their original positions.
+        const itemsToUpdate = new Set([...draggedItemIds, ...pushedItemsOriginalPositions.keys()]);
+        
+        if (itemsToUpdate.size > 0) {
+            const newBoxPositions = new Map();
+            const newShortcutPositions = new Map();
 
-        // 4. Update Svelte stores for items that have moved
-        const newBoxPositions = new Map();
-        const newShortcutPositions = new Map();
+            frameItems.forEach(item => {
+                const idStr = String(item.id);
+                if (itemsToUpdate.has(idStr)) {
+                    const newPos = { x: Math.round(item.x), y: Math.round(item.y) };
+                    if (item.type === 'box') newBoxPositions.set(idStr, newPos);
+                    else if (item.type === 'shortcut') newShortcutPositions.set(idStr, newPos);
+                }
+            });
 
-        frameItems.forEach(item => {
-            const originalItem = dragStartItemStates.find(i => String(i.id) === String(item.id));
-            const newX = Math.round(item.x);
-            const newY = Math.round(item.y);
-            if (originalItem && (newX !== originalItem.x || newY !== originalItem.y)) {
-                if (item.type === 'box') newBoxPositions.set(String(item.id), { x: newX, y: newY });
-                else if (item.type === 'shortcut') newShortcutPositions.set(String(item.id), { x: newX, y: newY });
+            // Only call update if there are relevant items to change, to avoid unnecessary updates
+            if (newBoxPositions.size > 0) {
+                boxes.update(all => all.map(b => {
+                    const idStr = String(b.id);
+                    return newBoxPositions.has(idStr) ? { ...b, ...newBoxPositions.get(idStr) } : b;
+                }));
             }
-        });
-
-        if (newBoxPositions.size > 0 || newShortcutPositions.size > 0) {
-            boxes.update(all => all.map(b => newBoxPositions.has(String(b.id)) ? { ...b, ...newBoxPositions.get(String(b.id)) } : b));
-            desktopShortcuts.update(all => all.map(s => newShortcutPositions.has(String(s.id)) ? { ...s, ...newShortcutPositions.get(String(s.id)) } : s));
+            if (newShortcutPositions.size > 0) {
+                desktopShortcuts.update(all => all.map(s => {
+                    const idStr = String(s.id);
+                    return newShortcutPositions.has(idStr) ? { ...s, ...newShortcutPositions.get(idStr) } : s;
+                }));
+            }
         }
     }
 
