@@ -27,7 +27,10 @@ function loadSettings() {
                 sound: 'ding.wav', // Default: Ding
                 url: '',
             }
-        }
+        },
+        panX: 0,
+        panY: 0,
+        zoom: 1.0
     };
 
     try {

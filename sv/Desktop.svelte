@@ -15,9 +15,17 @@
     import { connectionStatus } from './local.js';
     import { fade } from 'svelte/transition';
 
+    const initialSettings = get(desktopSettings);
+    desktopView.set({
+        panX: initialSettings.panX,
+        panY: initialSettings.panY,
+        zoom: initialSettings.zoom,
+    });
+
     let backgroundStyle = '';
     let componentInstances = {};
     let innerWidth, innerHeight;
+    let contentBounds;
 
     // --- Context Menu State ---
     let contextMenu = {
@@ -26,7 +34,7 @@
         y: 0,
         sourceEvent: null,
     };
-    
+
     // --- Focus Follows Mouse Logic ---
     let focusTimeoutDesktop = {};
 
@@ -49,7 +57,7 @@
     function handleContentMouseDown(event, group) {
         if ((event.altKey || event.metaKey) && !group.maximized) {
             event.preventDefault();
-            
+
             if (event.button === 0) { // Left click for move
                 dragRequest.set({
                     id: group.id,
@@ -65,13 +73,13 @@
                 let yDir = '';
                 if (relY < group.height / 3) yDir = 'n';
                 else if (relY > (group.height * 2) / 3) yDir = 's';
-                
+
                 let xDir = '';
                 if (relX < group.width / 3) xDir = 'w';
                 else if (relX > (group.width * 2) / 3) xDir = 'e';
 
                 const direction = yDir + xDir;
-                
+
                 if (direction) { // Only trigger resize if not in the center
                     dragRequest.set({
                         id: group.id,
@@ -128,36 +136,68 @@
     }
 
     // --- Bird's Eye View & Fit/Center Logic ---
-    $: allItems = [...$windows, ...$boxes];
+    // --- Bird's Eye View & Fit/Center Logic ---
+    $: allItems = [
+        ...$windows,
+        ...($boxes || []).map(b => {
+            // If panels aren't loaded yet, or there are none, we can't calculate real bounds.
+            if (!b.panels || Object.keys(b.panels).length === 0) {
+                // Return the box with 0 dimensions to avoid NaN values in calculations.
+                return { ...b, width: 0, height: 0 };
+            }
 
-    $: contentBounds = (() => {
+            const windowPanels = Object.values(b.panels).filter(p => p.board_type === 'window' && p.board_config);
+
+            if (windowPanels.length === 0) {
+                return { ...b, width: 0, height: 0 };
+            }
+
+            // Assumes panel window coordinates are relative to the box's own (x, y) origin.
+            const minX = Math.min(...windowPanels.map(p => p.board_config.x));
+            const minY = Math.min(...windowPanels.map(p => p.board_config.y));
+            const maxX = Math.max(...windowPanels.map(p => p.board_config.x + p.board_config.width));
+            const maxY = Math.max(...windowPanels.map(p => p.board_config.y + p.board_config.height));
+
+            // Create a temporary object for allItems that represents the box's true bounding box on the desktop.
+            // This does not affect the props passed to the <Box> component itself.
+            return {
+                ...b, // keep id, etc.
+                x: b.x + minX,
+                y: b.y + minY,
+                width: maxX - minX,
+                height: maxY - minY,
+            };
+        })
+    ];
+
+    $: {
         if (allItems.length === 0) {
-            return { x: 0, y: 0, width: 0, height: 0, defined: false };
+            contentBounds = { x: 0, y: 0, width: 0, height: 0, defined: false };
+        } else {
+            const minX = Math.min(...allItems.map(i => i.x));
+            const minY = Math.min(...allItems.map(i => i.y));
+            const maxX = Math.max(...allItems.map(i => i.x + i.width));
+            const maxY = Math.max(...allItems.map(i => i.y + i.height));
+
+            contentBounds = {
+                x: minX,
+                y: minY,
+                width: maxX - minX,
+                height: maxY - minY,
+                defined: true
+            };
         }
-
-        const minX = Math.min(...allItems.map(i => i.x));
-        const minY = Math.min(...allItems.map(i => i.y));
-        const maxX = Math.max(...allItems.map(i => i.x + i.width));
-        const maxY = Math.max(...allItems.map(i => i.y + i.height));
-
-        return {
-            x: minX,
-            y: minY,
-            width: maxX - minX,
-            height: maxY - minY,
-            defined: true
-        };
-    })();
+    }
 
     const MINIMAP_MAX_DIM = 150; // pixels
-    $: minimapScale = contentBounds.defined && contentBounds.width > 0 && contentBounds.height > 0
+    $: minimapScale = contentBounds && contentBounds.defined && contentBounds.width > 0 && contentBounds.height > 0
         ? Math.min(MINIMAP_MAX_DIM / contentBounds.width, MINIMAP_MAX_DIM / contentBounds.height)
         : 0;
 
-    $: minimapWidth = contentBounds.defined ? contentBounds.width * minimapScale : 0;
-    $: minimapHeight = contentBounds.defined ? contentBounds.height * minimapScale : 0;
+    $: minimapWidth = contentBounds && contentBounds.defined ? contentBounds.width * minimapScale : 0;
+    $: minimapHeight = contentBounds && contentBounds.defined ? contentBounds.height * minimapScale : 0;
 
-    $: viewportRect = contentBounds.defined && $desktopView.zoom > 0 ? {
+    $: viewportRect = contentBounds && contentBounds.defined && $desktopView.zoom > 0 ? {
         x: ((-$desktopView.panX / $desktopView.zoom) - contentBounds.x) * minimapScale,
         y: ((-$desktopView.panY / $desktopView.zoom) - contentBounds.y) * minimapScale,
         width: (innerWidth / $desktopView.zoom) * minimapScale,
@@ -204,7 +244,7 @@
 
             const mouseWorldX = (centerX - view.panX) / view.zoom;
             const mouseWorldY = (centerY - view.panY) / view.zoom;
-            
+
             const newPanX = centerX - mouseWorldX * newZoom;
             const newPanY = centerY - mouseWorldY * newZoom;
 
@@ -224,13 +264,13 @@
         desktopView.update(view => {
             if (view.zoom === 1.0) return view;
             const newZoom = 1.0;
-            
+
             const centerX = window.innerWidth / 2;
             const centerY = window.innerHeight / 2;
 
             const mouseWorldX = (centerX - view.panX) / view.zoom;
             const mouseWorldY = (centerY - view.panY) / view.zoom;
-            
+
             const newPanX = centerX - mouseWorldX * newZoom;
             const newPanY = centerY - mouseWorldY * newZoom;
 
@@ -273,7 +313,7 @@
 
         const newPanX = (innerWidth / 2) - (contentCenterX * newZoom);
         const newPanY = (innerHeight / 2) - (contentCenterY * newZoom);
-        
+
         desktopView.set({
             zoom: newZoom,
             panX: newPanX,
@@ -292,11 +332,11 @@
     function handleDesktopMouseDown(event) {
         // Only pan if clicking on the desktop background itself and with the middle mouse button
         if (event.target !== event.currentTarget || event.button !== 1) return;
-        
+
         isPanning = true;
         wasPanning = false;
         lastMousePos = { x: event.clientX, y: event.clientY };
-        
+
         window.addEventListener('mousemove', handleDesktopMouseMove);
         window.addEventListener('mouseup', handleDesktopMouseUp, { once: true });
     }
@@ -305,10 +345,10 @@
         if (!isPanning) return;
         wasPanning = true; // If we move, it's a pan
         showControls();
-        
+
         const dx = event.clientX - lastMousePos.x;
         const dy = event.clientY - lastMousePos.y;
-        
+
         desktopView.update(view => ({
             ...view,
             panX: view.panX + dx,
@@ -326,11 +366,11 @@
         isPanning = false;
         window.removeEventListener('mousemove', handleDesktopMouseMove);
     }
-    
+
     function handleDesktopWheel(event) {
         // Only zoom if scrolling on the desktop background itself
         if (event.target !== event.currentTarget) return;
-        
+
         event.preventDefault();
         showControls();
 
@@ -340,7 +380,7 @@
 
         const currentView = get(desktopView);
         const newZoom = Math.max(minZoom, Math.min(maxZoom, currentView.zoom - event.deltaY * zoomFactor));
-        
+
         if (newZoom === currentView.zoom) return;
 
         const mouseX = event.clientX;
@@ -353,7 +393,7 @@
         // New pan to keep the world coordinate under the mouse
         const newPanX = mouseX - mouseWorldX * newZoom;
         const newPanY = mouseY - mouseWorldY * newZoom;
-        
+
         desktopView.set({
             zoom: newZoom,
             panX: newPanX,
@@ -472,7 +512,7 @@
     .context-menu button:hover {
         background-color: var(--taskbar-button-hover-bg);
     }
-    
+
     .desktop-content {
         position: absolute;
         top: 0;
@@ -697,7 +737,7 @@
                 <button class="pan-right" on:click={() => pan(-panStep, 0)} title="Pan Right">▶</button>
                 <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
             </div>
-            {#if contentBounds.defined && minimapWidth > 0 && minimapHeight > 0}
+            {#if contentBounds && contentBounds.defined && minimapWidth > 0 && minimapHeight > 0}
                 <div class="birdseye-view" style:width="{minimapWidth}px" style:height="{minimapHeight}px">
                     <!-- Items -->
                     {#each allItems as item (item.id)}
@@ -733,3 +773,4 @@
         <Dash />
     {/if}
 </div>
+
