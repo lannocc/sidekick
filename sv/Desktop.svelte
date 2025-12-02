@@ -17,6 +17,7 @@
 
     let backgroundStyle = '';
     let componentInstances = {};
+    let innerWidth, innerHeight;
 
     // --- Context Menu State ---
     let contextMenu = {
@@ -125,7 +126,45 @@
             windows.updateTabProps(tab.group.id, tab.id, { lastFocusedElement: event.target });
         }
     }
-    
+
+    // --- Bird's Eye View & Fit/Center Logic ---
+    $: allItems = [...$windows, ...$boxes];
+
+    $: contentBounds = (() => {
+        if (allItems.length === 0) {
+            return { x: 0, y: 0, width: 0, height: 0, defined: false };
+        }
+
+        const minX = Math.min(...allItems.map(i => i.x));
+        const minY = Math.min(...allItems.map(i => i.y));
+        const maxX = Math.max(...allItems.map(i => i.x + i.width));
+        const maxY = Math.max(...allItems.map(i => i.y + i.height));
+
+        return {
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY,
+            defined: true
+        };
+    })();
+
+    const MINIMAP_MAX_DIM = 150; // pixels
+    $: minimapScale = contentBounds.defined && contentBounds.width > 0 && contentBounds.height > 0
+        ? Math.min(MINIMAP_MAX_DIM / contentBounds.width, MINIMAP_MAX_DIM / contentBounds.height)
+        : 0;
+
+    $: minimapWidth = contentBounds.defined ? contentBounds.width * minimapScale : 0;
+    $: minimapHeight = contentBounds.defined ? contentBounds.height * minimapScale : 0;
+
+    $: viewportRect = contentBounds.defined && $desktopView.zoom > 0 ? {
+        x: ((-$desktopView.panX / $desktopView.zoom) - contentBounds.x) * minimapScale,
+        y: ((-$desktopView.panY / $desktopView.zoom) - contentBounds.y) * minimapScale,
+        width: (innerWidth / $desktopView.zoom) * minimapScale,
+        height: (innerHeight / $desktopView.zoom) * minimapScale
+    } : { x: 0, y: 0, width: 0, height: 0 };
+
+
     // --- View Controls State & Logic ---
     let controlsVisible = false;
     let controlsTimeout;
@@ -196,6 +235,49 @@
             const newPanY = centerY - mouseWorldY * newZoom;
 
             return { zoom: newZoom, panX: newPanX, panY: newPanY };
+        });
+        updateDesktopSettings(get(desktopView));
+    }
+
+    function fitAndCenterView() {
+        showControls();
+
+        if (!contentBounds.defined || allItems.length === 0) {
+            // No items, just reset the view
+            desktopView.set({ panX: 0, panY: 0, zoom: 1.0 });
+            updateDesktopSettings(get(desktopView));
+            return;
+        }
+
+        const PADDING = 100; // pixels in world space
+        const bounds = contentBounds;
+
+        const contentWidth = bounds.width + PADDING * 2;
+        const contentHeight = bounds.height + PADDING * 2;
+
+        if (contentWidth <= 0 || contentHeight <= 0) {
+            // Items have no size, just reset
+            desktopView.set({ panX: 0, panY: 0, zoom: 1.0 });
+            updateDesktopSettings(get(desktopView));
+            return;
+        }
+
+        const zoomX = innerWidth / contentWidth;
+        const zoomY = innerHeight / contentHeight;
+        let newZoom = Math.min(zoomX, zoomY);
+
+        newZoom = Math.max(minZoom, Math.min(maxZoom, newZoom)); // Clamp zoom
+
+        const contentCenterX = bounds.x + bounds.width / 2;
+        const contentCenterY = bounds.y + bounds.height / 2;
+
+        const newPanX = (innerWidth / 2) - (contentCenterX * newZoom);
+        const newPanY = (innerHeight / 2) - (contentCenterY * newZoom);
+        
+        desktopView.set({
+            zoom: newZoom,
+            panX: newPanX,
+            panY: newPanY
         });
         updateDesktopSettings(get(desktopView));
     }
@@ -448,6 +530,7 @@
         z-index: 10000;
         display: flex;
         flex-direction: column;
+        align-items: center;
         backdrop-filter: blur(5px);
         gap: 10px;
         border-radius: 8px;
@@ -504,7 +587,38 @@
         padding: 0 8px;
         font-size: 14px;
     }
+
+    /* --- Bird's Eye View --- */
+    .birdseye-view {
+        position: relative;
+        background-color: rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 4px;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+
+    .birdseye-item {
+        position: absolute;
+        background-color: rgba(255,255,255,0.3);
+        border: 1px solid rgba(255,255,255,0.5);
+        box-sizing: border-box;
+    }
+
+    .birdseye-item.window {
+        background-color: rgba(100, 150, 255, 0.4);
+        border-color: rgba(100, 150, 255, 0.7);
+    }
+
+    .birdseye-viewport {
+        position: absolute;
+        border: 1px solid #f39c12; /* Orange, stands out */
+        box-sizing: border-box;
+        pointer-events: none;
+    }
 </style>
+
+<svelte:window bind:innerWidth bind:innerHeight />
 
 <div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleDesktopMouseDown} on:wheel={handleDesktopWheel}>
 
@@ -570,8 +684,11 @@
         <div class="view-controls" transition:fade={{ duration: 142 }}>
             <div class="zoom-controls">
                 <button on:click={() => zoom(-1)} title="Zoom Out">-</button>
-                <button class="zoom-reset" on:click={resetZoom} title="Reset Zoom">1:1</button>
                 <button on:click={() => zoom(1)} title="Zoom In">+</button>
+            </div>
+            <div class="zoom-controls">
+                <button class="zoom-reset" on:click={resetZoom} title="Reset Zoom">1:1</button>
+                <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content">Fit</button>
             </div>
             <div class="pan-controls">
                 <button class="pan-up" on:click={() => pan(0, panStep)} title="Pan Up">▲</button>
@@ -580,6 +697,29 @@
                 <button class="pan-right" on:click={() => pan(-panStep, 0)} title="Pan Right">▶</button>
                 <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
             </div>
+            {#if contentBounds.defined && minimapWidth > 0 && minimapHeight > 0}
+                <div class="birdseye-view" style:width="{minimapWidth}px" style:height="{minimapHeight}px">
+                    <!-- Items -->
+                    {#each allItems as item (item.id)}
+                        <div
+                            class="birdseye-item"
+                            class:window={$windows.some(w => w.id === item.id)}
+                            style:left="{(item.x - contentBounds.x) * minimapScale}px"
+                            style:top="{(item.y - contentBounds.y) * minimapScale}px"
+                            style:width="{item.width * minimapScale}px"
+                            style:height="{item.height * minimapScale}px"
+                        />
+                    {/each}
+                    <!-- Viewport -->
+                    <div
+                        class="birdseye-viewport"
+                        style:left="{viewportRect.x}px"
+                        style:top="{viewportRect.y}px"
+                        style:width="{viewportRect.width}px"
+                        style:height="{viewportRect.height}px"
+                    />
+                </div>
+            {/if}
         </div>
     {/if}
 
