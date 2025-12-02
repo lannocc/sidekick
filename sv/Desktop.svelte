@@ -139,7 +139,7 @@
     // --- Bird's Eye View & Fit/Center Logic ---
     $: allItems = [
         ...$windows.filter(w => !w.maximized), // Filter out maximized windows
-        ...($desktopShortcuts || []).map(s => ({ ...s, type: 'shortcut' })),
+        ...($desktopShortcuts || []).map(s => ({ ...s, type: 'shortcut', width: 80, height: 80 })),
         ...($boxes || []).map(b => {
             // ... (rest of the mapping function)
             const BASE_WIDTH = 180;
@@ -452,7 +452,7 @@
         const { panX, panY, zoom } = get(desktopView);
         dragStartData.mouse = {
             x: (event.clientX - panX) / zoom,
-            y: (event.clientY - panY) / zoom
+            y: ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom
         };
 
         dragStartData.items.clear();
@@ -474,7 +474,7 @@
         const { panX, panY, zoom } = get(desktopView);
         const mouseNow = {
             x: (event.clientX - panX) / zoom,
-            y: (event.clientY - panY) / zoom
+            y: ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom
         };
 
         const dx = mouseNow.x - dragStartData.mouse.x;
@@ -544,9 +544,9 @@
 
         const { panX, panY, zoom } = get(desktopView);
         const x1 = (Math.min(selectionRect.x1, selectionRect.x2) - panX) / zoom;
-        const y1 = (Math.min(selectionRect.y1, selectionRect.y2) - panY) / zoom;
+        const y1 = ((Math.min(selectionRect.y1, selectionRect.y2) - TASKBAR_HEIGHT) - panY) / zoom;
         const x2 = (Math.max(selectionRect.x1, selectionRect.x2) - panX) / zoom;
-        const y2 = (Math.max(selectionRect.y1, selectionRect.y2) - panY) / zoom;
+        const y2 = ((Math.max(selectionRect.y1, selectionRect.y2) - TASKBAR_HEIGHT) - panY) / zoom;
         
         const currentlySelected = get(selectedItems);
         const newlySelected = new Set(currentlySelected);
