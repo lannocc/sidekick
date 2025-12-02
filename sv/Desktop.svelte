@@ -498,84 +498,110 @@
         const dx = mouseNow.x - dragStartData.mouse.x;
         const dy = mouseNow.y - dragStartData.mouse.y;
 
-        // 1. Create a working copy from the initial state at drag start
+        // 1. Create a working copy and apply user drag delta
         let frameItems = dragStartItemStates.map(i => ({...i}));
         const draggedItemIds = new Set(dragStartData.items.keys());
 
-        // 2. Apply drag delta to the dragged items
         frameItems.forEach(item => {
             const idStr = String(item.id);
             if (draggedItemIds.has(idStr)) {
                 const initial = dragStartData.items.get(idStr);
-                item.x = Math.round(initial.x + dx);
-                item.y = Math.round(initial.y + dy);
+                item.x = initial.x + dx;
+                item.y = initial.y + dy;
             }
         });
 
-        // 3. Collision detection and resolution
-        const currentlyDraggedItems = frameItems.filter(i => draggedItemIds.has(String(i.id)));
-        const staticItems = frameItems.filter(i => !draggedItemIds.has(String(i.id)));
-        const newlyPushedIds = new Set();
+        // 2. Iteratively resolve collisions
+        const MAX_ITERATIONS = 30; // Safety break for complex chain reactions
         const BASE_SHORTCUT_DIM = 80; // From Shortcut.svelte's CSS width
 
-        currentlyDraggedItems.forEach(dragged => {
-            // Calculate dragged item's visual bounding box, accounting for transform-origin: center
-            let draggedBox = { x: dragged.x, y: dragged.y, width: dragged.width, height: dragged.height };
-            if (dragged.type === 'shortcut') {
-                const scale = dragged.scale || 1.0;
-                draggedBox.x = dragged.x + (BASE_SHORTCUT_DIM / 2) * (1 - scale);
-                draggedBox.y = dragged.y + (BASE_SHORTCUT_DIM / 2) * (1 - scale);
+        const getItemBoundingBox = (item) => {
+            let box = { x: item.x, y: item.y, width: item.width, height: item.height };
+            if (item.type === 'shortcut') {
+                const scale = item.scale || 1.0;
+                const offset = (BASE_SHORTCUT_DIM / 2) * (1 - scale);
+                box.x = item.x + offset;
+                box.y = item.y + offset;
             }
+            return box;
+        };
 
-            staticItems.forEach(staticItem => {
-                // Calculate static item's visual bounding box
-                let staticBox = { x: staticItem.x, y: staticItem.y, width: staticItem.width, height: staticItem.height };
-                if (staticItem.type === 'shortcut') {
-                    const scale = staticItem.scale || 1.0;
-                    staticBox.x = staticItem.x + (BASE_SHORTCUT_DIM / 2) * (1 - scale);
-                    staticBox.y = staticItem.y + (BASE_SHORTCUT_DIM / 2) * (1 - scale);
-                }
+        const isColliding = (boxA, boxB) => (
+            boxA.x < boxB.x + boxB.width &&
+            boxA.x + boxA.width > boxB.x &&
+            boxA.y < boxB.y + boxB.height &&
+            boxA.y + boxA.height > boxB.y
+        );
 
-                // AABB collision check using visual bounding boxes
-                if (
-                    draggedBox.x < staticBox.x + staticBox.width &&
-                    draggedBox.x + draggedBox.width > staticBox.x &&
-                    draggedBox.y < staticBox.y + staticBox.height &&
-                    draggedBox.y + draggedBox.height > staticBox.y
-                ) {
-                    const staticIdStr = String(staticItem.id);
-                    newlyPushedIds.add(staticIdStr);
-                    if (!pushedItemsOriginalPositions.has(staticIdStr)) {
-                        pushedItemsOriginalPositions.set(staticIdStr, { x: staticItem.x, y: staticItem.y });
-                    }
+        for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+            let collisionsFound = 0;
 
-                    // Resolve collision by pushing staticItem. The update is applied to the layout
-                    // coordinates (item.x, item.y), but the calculation uses visual boxes.
-                    const overlapX = Math.min(draggedBox.x + draggedBox.width, staticBox.x + staticBox.width) - Math.max(draggedBox.x, staticBox.x);
-                    const overlapY = Math.min(draggedBox.y + draggedBox.height, staticBox.y + staticBox.height) - Math.max(draggedBox.y, staticBox.y);
-                    
-                    if (overlapX < overlapY) {
-                        const sign = Math.sign((staticBox.x + staticBox.width / 2) - (draggedBox.x + draggedBox.width / 2));
-                        staticItem.x += overlapX * (sign || 1);
+            for (let i = 0; i < frameItems.length; i++) {
+                for (let j = i + 1; j < frameItems.length; j++) {
+                    const itemA = frameItems[i];
+                    const itemB = frameItems[j];
+
+                    const boxA = getItemBoundingBox(itemA);
+                    const boxB = getItemBoundingBox(itemB);
+
+                    if (!isColliding(boxA, boxB)) continue;
+
+                    collisionsFound++;
+
+                    const idA = String(itemA.id);
+                    const idB = String(itemB.id);
+
+                    const isADragged = draggedItemIds.has(idA);
+                    const isBDragged = draggedItemIds.has(idB);
+
+                    if (isADragged && isBDragged) continue; // Items dragged together don't push each other
+
+                    const originalA = dragStartItemStates.find(s => String(s.id) === idA);
+                    const originalB = dragStartItemStates.find(s => String(s.id) === idB);
+                    // Check if item has moved from its initial position at the start of the drag
+                    const hasAMoved = Math.abs(itemA.x - originalA.x) > 0.1 || Math.abs(itemA.y - originalA.y) > 0.1;
+                    const hasBMoved = Math.abs(itemB.x - originalB.x) > 0.1 || Math.abs(itemB.y - originalB.y) > 0.1;
+
+                    let pusher, pushed, pusherBox, pushedBox;
+
+                    if (isADragged) {
+                        [pusher, pushed, pusherBox, pushedBox] = [itemA, itemB, boxA, boxB];
+                    } else if (isBDragged) {
+                        [pusher, pushed, pusherBox, pushedBox] = [itemB, itemA, boxB, boxA];
+                    } else if (hasAMoved && !hasBMoved) {
+                        // A moved item pushes a static item
+                        [pusher, pushed, pusherBox, pushedBox] = [itemA, itemB, boxA, boxB];
+                    } else if (!hasAMoved && hasBMoved) {
+                        // A moved item pushes a static item
+                        [pusher, pushed, pusherBox, pushedBox] = [itemB, itemA, boxB, boxA];
                     } else {
-                        const sign = Math.sign((staticBox.y + staticBox.height / 2) - (draggedBox.y + draggedBox.height / 2));
-                        staticItem.y += overlapY * (sign || 1);
+                        // Both moved or neither moved.
+                        // If neither moved, it's a pre-existing overlap. Don't resolve.
+                        // If both moved, it's a conflict. Safest to do nothing to prevent oscillations.
+                        continue;
+                    }
+
+                    const pushedId = String(pushed.id);
+                    if (!pushedItemsOriginalPositions.has(pushedId)) {
+                        pushedItemsOriginalPositions.set(pushedId, { x: pushed.x, y: pushed.y });
+                    }
+
+                    const overlapX = Math.min(pusherBox.x + pusherBox.width, pushedBox.x + pushedBox.width) - Math.max(pusherBox.x, pusherBox.x);
+                    const overlapY = Math.min(pusherBox.y + pusherBox.height, pushedBox.y + pushedBox.height) - Math.max(pusherBox.y, pusherBox.y);
+
+                    if (overlapX < overlapY) {
+                        const sign = Math.sign((pushedBox.x + pushedBox.width / 2) - (pusherBox.x + pusherBox.width / 2));
+                        pushed.x += overlapX * (sign || 1);
+                    } else {
+                        const sign = Math.sign((pushedBox.y + pushedBox.height / 2) - (pusherBox.y + pusherBox.height / 2));
+                        pushed.y += overlapY * (sign || 1);
                     }
                 }
-            });
-        });
-
-        // Revert items that were pushed but are no longer colliding
-        pushedItemsOriginalPositions.forEach((originalPos, pushedId) => {
-            if (!newlyPushedIds.has(pushedId)) {
-                const itemToRevert = frameItems.find(i => String(i.id) === pushedId);
-                if (itemToRevert) {
-                    itemToRevert.x = originalPos.x;
-                    itemToRevert.y = originalPos.y;
-                }
-                pushedItemsOriginalPositions.delete(pushedId);
             }
-        });
+
+            if (collisionsFound === 0) break; // If no collisions in a full pass, the layout is stable
+        }
+
 
         // 4. Update Svelte stores for items that have moved
         const newBoxPositions = new Map();
