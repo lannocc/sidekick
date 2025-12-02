@@ -5,7 +5,8 @@
 -->
 <script>
     import { newLocalFileExplorer, newLocalFileViewer } from './windows.js';
-    import { desktopShortcuts, desktopView } from './desktop.js';
+    import { desktopView } from './desktop.js';
+    import { desktopShortcuts } from './local.js';
     import { get } from 'svelte/store';
 
     export let id;

@@ -22,6 +22,22 @@ export const askExit = writable(null);
 export const askStatsResponse = writable(null);
 export const boxes = writable([]);
 
+// --- Desktop Shortcuts Store ---
+const { subscribe: shortcutsSubscribe, set: shortcutsSet } = writable([]);
+export const desktopShortcuts = {
+    subscribe: shortcutsSubscribe,
+    add: (shortcut) => {
+        sendMessage({ type: 'create_shortcut', ...shortcut });
+    },
+    remove: (id) => {
+        sendMessage({ type: 'delete_shortcut', id });
+    },
+    updatePosition: (id, x, y) => {
+        sendMessage({ type: 'update_shortcut_position', id, x, y });
+    }
+};
+
+
 let messageQueue = [];
 
 function processQueue() {
@@ -123,6 +139,9 @@ function attemptConnection() {
                     break;
                 case 'desktop_settings':
                     desktopView.set(msg.settings || { panX: 0, panY: 0, zoom: 1.0 });
+                    break;
+                case 'shortcut_list':
+                    shortcutsSet(msg.shortcuts || []);
                     break;
                 case 'box_list':
                     const newBoxesFromBackend = msg.boxes;

@@ -81,22 +81,6 @@ function loadWindowSettings() {
     return defaults;
 }
 
-function loadDesktopShortcuts() {
-    const defaults = [];
-    try {
-        if (typeof localStorage !== 'undefined') {
-            const saved = localStorage.getItem('sidekickDesktopShortcuts');
-            if (saved) {
-                return JSON.parse(saved);
-            }
-        }
-    } catch (e) {
-        console.error("Could not load desktop shortcuts from localStorage", e);
-    }
-    return defaults;
-}
-
-
 export const desktopSettings = writable(loadSettings());
 
 // Subscribe to changes and save them to localStorage
@@ -144,43 +128,6 @@ windowSettings.subscribe(value => {
     }
 });
 
-function createDesktopShortcutsStore() {
-    const initialShortcuts = loadDesktopShortcuts();
-    const { subscribe, set, update } = writable(initialShortcuts);
-
-    const save = (shortcuts) => {
-         try {
-            if (typeof localStorage !== 'undefined') {
-                localStorage.setItem('sidekickDesktopShortcuts', JSON.stringify(shortcuts));
-            }
-        } catch (e) {
-            console.error("Could not save desktop shortcuts to localStorage", e);
-        }
-    };
-
-    return {
-        subscribe,
-        add: (shortcut) => update(shortcuts => {
-            const newShortcut = { ...shortcut, id: Date.now() + Math.random() };
-            const all = [...shortcuts, newShortcut];
-            save(all);
-            return all;
-        }),
-        remove: (id) => update(shortcuts => {
-            const all = shortcuts.filter(s => s.id !== id);
-            save(all);
-            return all;
-        }),
-        updatePosition: (id, x, y) => update(shortcuts => {
-            const all = shortcuts.map(s => s.id === id ? { ...s, x, y } : s);
-            save(all);
-            return all;
-        }),
-        set
-    };
-}
-export const desktopShortcuts = createDesktopShortcutsStore();
-
 // New store for desktop pan and zoom
 export const desktopView = writable({ panX: 0, panY: 0, zoom: 1.0 });
 
@@ -189,5 +136,3 @@ export const desktopView = writable({ panX: 0, panY: 0, zoom: 1.0 });
 export const notificationHistory = writable([]);
 export const unreadNoticeCount = writable(0);
 
-// Re-export Skybox stores
-export { boxes } from './local.js';

@@ -5,8 +5,8 @@
 <script>
     import { windows, newSettings, dragRequest } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, boxes, desktopView, desktopShortcuts } from './desktop.js';
-    import { updateDesktopSettings } from './local.js';
+    import { desktopSettings, dashActive, desktopView } from './desktop.js';
+    import { boxes, desktopShortcuts, updateDesktopSettings } from './local.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import Shortcut from './Shortcut.svelte';
@@ -787,13 +787,13 @@
 <div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleDesktopMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
 
     <div class="desktop-content" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
-        <div class="shortcuts-layer">
-            {#each $desktopShortcuts as shortcut (shortcut.id)}
-                <Shortcut {...shortcut} />
-            {/each}
-        </div>
         
         {#if $connectionStatus === 'connected'}
+            <div class="shortcuts-layer">
+                {#each $desktopShortcuts as shortcut (shortcut.id)}
+                    <Shortcut {...shortcut} />
+                {/each}
+            </div>
             <div class="boxes-layer">
                 {#each $boxes as box (box.id)}
                     <Box {box} />

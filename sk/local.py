@@ -138,6 +138,16 @@ def init_db():
     cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('panY', json.dumps(0)))
     cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('zoom', json.dumps(1.0)))
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS desktop_shortcut (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('file', 'dir')),
+            path TEXT NOT NULL UNIQUE,
+            x REAL NOT NULL,
+            y REAL NOT NULL
+        );
+    """)
 
     # Simple migration for existing databases
     cursor.execute("PRAGMA table_info(panel)")
@@ -165,6 +175,20 @@ async def broadcast_box_list():
     if CONNECTED_CLIENTS:
         log.info(f"Broadcasting box_list to {len(CONNECTED_CLIENTS)} clients.")
         # Concurrently send the message to all clients.
+        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
+
+
+async def broadcast_shortcut_list():
+    """Fetches all shortcuts and broadcasts them to all connected clients."""
+    if not DB_CONN:
+        log.error("Database not connected, cannot broadcast shortcut list.")
+        return
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT id, name, type, path, x, y FROM desktop_shortcut")
+    shortcuts = [dict(row) for row in cursor.fetchall()]
+    message = json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts})
+    if CONNECTED_CLIENTS:
+        log.info(f"Broadcasting shortcut_list to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
@@ -437,6 +461,12 @@ async def websocket_handler(websocket):
         cursor.execute("SELECT key, value FROM desktop_settings")
         settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
         await websocket.send(json.dumps({'type': 'desktop_settings', 'settings': settings}))
+        
+        # Send initial shortcut list on connect
+        cursor.execute("SELECT id, name, type, path, x, y FROM desktop_shortcut")
+        shortcuts = [dict(row) for row in cursor.fetchall()]
+        await websocket.send(json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts}))
+
 
         async for message in websocket:
             try:
@@ -476,6 +506,40 @@ async def websocket_handler(websocket):
                         )
                     DB_CONN.commit()
                     await broadcast_desktop_settings()
+                
+                # --- Desktop Shortcut Operations ---
+                elif msg_type == 'create_shortcut':
+                    name, type, path, x, y = msg['name'], msg['type'], msg['path'], msg['x'], msg['y']
+                    print_action("Create Shortcut", f"path='{path}'")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("""
+                        INSERT INTO desktop_shortcut (name, type, path, x, y)
+                        VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(path) DO UPDATE SET
+                            x = excluded.x,
+                            y = excluded.y;
+                    """, (name, type, path, x, y))
+                    DB_CONN.commit()
+                    await broadcast_shortcut_list()
+
+                elif msg_type == 'update_shortcut_position':
+                    shortcut_id, x, y = msg['id'], msg['x'], msg['y']
+                    print_action("Move Shortcut", f"id={shortcut_id}, x={int(x)}, y={int(y)}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "UPDATE desktop_shortcut SET x = ?, y = ? WHERE id = ?",
+                        (x, y, shortcut_id)
+                    )
+                    DB_CONN.commit()
+                    await broadcast_shortcut_list()
+                
+                elif msg_type == 'delete_shortcut':
+                    shortcut_id = msg['id']
+                    print_action("Delete Shortcut", f"id={shortcut_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("DELETE FROM desktop_shortcut WHERE id = ?", (shortcut_id,))
+                    DB_CONN.commit()
+                    await broadcast_shortcut_list()
 
                 # --- Skybox Box Operations ---
                 elif msg_type == 'list_boxes':
