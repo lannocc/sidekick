@@ -39,9 +39,6 @@ export const desktopShortcuts = {
     },
     remove: (id) => {
         sendMessage({ type: 'delete_shortcut', id });
-    },
-    updatePosition: (id, x, y) => {
-        sendMessage({ type: 'update_shortcut_position', id, x, y });
     }
 };
 
@@ -93,6 +90,9 @@ export function setBoxCover(box_id, location) {
 }
 export function updateDesktopSettings(settings) {
     sendMessage({ type: 'update_desktop_settings', settings });
+}
+export function updateShortcutPosition(id, x, y) {
+    sendMessage({ type: 'update_shortcut_position', id, x, y });
 }
 
 
@@ -216,4 +216,3 @@ function attemptConnection() {
 export function initializeLocalConnection() {
     attemptConnection();
 }
-

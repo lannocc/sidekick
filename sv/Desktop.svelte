@@ -699,7 +699,7 @@
         if (shortcutMoveData) {
             try {
                 const { id } = JSON.parse(shortcutMoveData);
-                desktopShortcuts.updatePosition(id, worldX, worldY);
+                updateShortcutPosition(id, worldX, worldY);
             } catch (e) {
                 console.error("Failed to handle shortcut move drop:", e);
             }
