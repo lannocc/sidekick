@@ -5,7 +5,7 @@
 -->
 <script>
     import { newLocalFileExplorer, newLocalFileViewer } from './windows.js';
-    import { desktopView } from './desktop.js';
+    import { desktopView, selectedItems, wasDraggingItems } from './desktop.js';
     import { desktopShortcuts } from './local.js';
     import { get } from 'svelte/store';
 
@@ -16,10 +16,10 @@
     export let x;
     export let y;
 
-    let wasDragged = false;
+    $: isSelected = $selectedItems.has(id);
 
     function handleClick() {
-        if (wasDragged) {
+        if (get(wasDraggingItems)) {
             return;
         }
         if (type === 'dir') {
@@ -27,17 +27,6 @@
         } else if (type === 'file') {
             newLocalFileViewer({ path, title: name });
         }
-    }
-
-    function onDragStart(event) {
-        wasDragged = true;
-        event.dataTransfer.setData('application/sidekick-shortcut-move', JSON.stringify({id}));
-        event.dataTransfer.effectAllowed = 'move';
-    }
-
-    function handleMouseDown() {
-        // A new mousedown event starts a new interaction, so reset the drag flag.
-        wasDragged = false;
     }
 </script>
 
@@ -54,9 +43,17 @@
         border-radius: 4px;
         transition: background-color 0.1s ease-in-out;
         pointer-events: auto;
+        border: 1px solid transparent;
+    }
+    .shortcut.selected {
+        background-color: rgba(52, 152, 219, 0.3);
+        border-color: rgba(52, 152, 219, 0.7);
     }
     .shortcut:hover {
         background-color: rgba(255, 255, 255, 0.1);
+    }
+    .shortcut.selected:hover {
+        background-color: rgba(52, 152, 219, 0.4);
     }
     .icon {
         font-size: 48px;
@@ -75,12 +72,12 @@
 
 <div
     class="shortcut"
+    class:selected={isSelected}
+    data-id={id}
+    data-type="shortcut"
     style:left="{x}px"
     style:top="{y}px"
     on:click={handleClick}
-    on:mousedown={handleMouseDown}
-    draggable="true"
-    on:dragstart={onDragStart}
 >
     <div class="icon">{type === 'dir' ? '🗂️' : '📄'}</div>
     <div class="name">{name}</div>

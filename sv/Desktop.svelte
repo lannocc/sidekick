@@ -5,8 +5,8 @@
 <script>
     import { windows, newSettings, dragRequest } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, desktopView, TASKBAR_HEIGHT } from './desktop.js';
-    import { boxes, desktopShortcuts, updateDesktopSettings } from './local.js';
+    import { desktopSettings, dashActive, desktopView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems } from './desktop.js';
+    import { boxes, desktopShortcuts, updateDesktopSettings, updateBoxTransform } from './local.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import Shortcut from './Shortcut.svelte';
@@ -139,6 +139,7 @@
     // --- Bird's Eye View & Fit/Center Logic ---
     $: allItems = [
         ...$windows.filter(w => !w.maximized), // Filter out maximized windows
+        ...($desktopShortcuts || []).map(s => ({ ...s, type: 'shortcut' })),
         ...($boxes || []).map(b => {
             // ... (rest of the mapping function)
             const BASE_WIDTH = 180;
@@ -153,6 +154,7 @@
                 ...b,
                 width: boxWidth,
                 height: boxHeight,
+                type: 'box',
             };
         })
     ];
@@ -409,10 +411,167 @@
         window.removeEventListener('mousemove', handleMinimapMouseMove);
     }
 
-    function handleDesktopMouseDown(event) {
-        // Only pan if clicking on the desktop background itself and with the middle mouse button
-        if (event.target !== event.currentTarget || event.button !== 1) return;
+    // --- Selection and Dragging State ---
+    let isSelecting = false;
+    let isDraggingItems = false;
+    let selectionRect = { visible: false, x1: 0, y1: 0, x2: 0, y2: 0 };
+    let dragStartData = { mouse: { x: 0, y: 0 }, items: new Map() };
+    
+    function handleGlobalMouseDown(event) {
+        const targetItemEl = event.target.closest('.shortcut, .box');
+        
+        if (targetItemEl) {
+            handleItemMouseDown(event, targetItemEl);
+        } else if (event.target.classList.contains('desktop')) {
+            if (event.button === 1) { // Middle mouse for panning
+                handleDesktopPanStart(event);
+            } else if (event.button === 0) { // Left mouse for selection
+                handleMarqueeSelectStart(event);
+            }
+        }
+    }
 
+    function handleItemMouseDown(event, itemEl) {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+
+        const id = itemEl.dataset.id;
+        
+        // Update selection
+        if (event.ctrlKey) {
+            selectedItems.update(s => {
+                s.has(id) ? s.delete(id) : s.add(id);
+                return s;
+            });
+        } else if (!get(selectedItems).has(id)) {
+            selectedItems.set(new Set([id]));
+        }
+
+        // Prepare for dragging
+        isDraggingItems = true;
+        const { panX, panY, zoom } = get(desktopView);
+        dragStartData.mouse = {
+            x: (event.clientX - panX) / zoom,
+            y: (event.clientY - panY) / zoom
+        };
+
+        dragStartData.items.clear();
+        get(selectedItems).forEach(selId => {
+            const item = allItems.find(i => i.id === selId);
+            if (item) {
+                dragStartData.items.set(selId, { x: item.x, y: item.y, type: item.type, scale: item.scale });
+            }
+        });
+
+        window.addEventListener('mousemove', handleItemDragMove);
+        window.addEventListener('mouseup', handleItemDragEnd, { once: true });
+    }
+
+    function handleItemDragMove(event) {
+        if (!isDraggingItems) return;
+        wasDraggingItems.set(true);
+
+        const { panX, panY, zoom } = get(desktopView);
+        const mouseNow = {
+            x: (event.clientX - panX) / zoom,
+            y: (event.clientY - panY) / zoom
+        };
+
+        const dx = mouseNow.x - dragStartData.mouse.x;
+        const dy = mouseNow.y - dragStartData.mouse.y;
+
+        dragStartData.items.forEach((initial, id) => {
+            const newX = Math.round(initial.x + dx);
+            const newY = Math.round(initial.y + dy);
+
+            if (initial.type === 'box') {
+                boxes.update(all => all.map(b => b.id === id ? { ...b, x: newX, y: newY } : b));
+            } else if (initial.type === 'shortcut') {
+                desktopShortcuts.update(all => all.map(s => s.id === id ? { ...s, x: newX, y: newY } : s));
+            }
+        });
+    }
+
+    function handleItemDragEnd() {
+        if (get(wasDraggingItems)) {
+            // Persist final positions
+            dragStartData.items.forEach((initial, id) => {
+                const item = allItems.find(i => i.id === id);
+                if (!item) return;
+
+                if (item.type === 'box') {
+                    updateBoxTransform(id, item.x, item.y, item.scale);
+                } else if (item.type === 'shortcut') {
+                    desktopShortcuts.updatePosition(id, item.x, item.y);
+                }
+            });
+        }
+        
+        isDraggingItems = false;
+        window.removeEventListener('mousemove', handleItemDragMove);
+        setTimeout(() => wasDraggingItems.set(false), 0);
+    }
+    
+    function handleMarqueeSelectStart(event) {
+        isSelecting = true;
+        wasDraggingItems.set(false);
+
+        selectionRect = {
+            visible: true,
+            x1: event.clientX,
+            y1: event.clientY,
+            x2: event.clientX,
+            y2: event.clientY
+        };
+
+        if (!event.ctrlKey) {
+            selectedItems.set(new Set());
+        }
+        
+        window.addEventListener('mousemove', handleMarqueeSelectMove);
+        window.addEventListener('mouseup', handleMarqueeSelectEnd, { once: true });
+    }
+
+    function handleMarqueeSelectMove(event) {
+        if (!isSelecting) return;
+        wasDraggingItems.set(true);
+        selectionRect.x2 = event.clientX;
+        selectionRect.y2 = event.clientY;
+    }
+
+    function handleMarqueeSelectEnd() {
+        if (!isSelecting) return;
+
+        const { panX, panY, zoom } = get(desktopView);
+        const x1 = (Math.min(selectionRect.x1, selectionRect.x2) - panX) / zoom;
+        const y1 = (Math.min(selectionRect.y1, selectionRect.y2) - panY) / zoom;
+        const x2 = (Math.max(selectionRect.x1, selectionRect.x2) - panX) / zoom;
+        const y2 = (Math.max(selectionRect.y1, selectionRect.y2) - panY) / zoom;
+        
+        const currentlySelected = get(selectedItems);
+        const newlySelected = new Set(currentlySelected);
+
+        allItems.forEach(item => {
+            if (item.type === 'box' || item.type === 'shortcut') {
+                const itemRight = item.x + item.width;
+                const itemBottom = item.y + item.height;
+                // Check for intersection
+                if (item.x < x2 && itemRight > x1 && item.y < y2 && itemBottom > y1) {
+                    newlySelected.add(item.id);
+                }
+            }
+        });
+
+        selectedItems.set(newlySelected);
+
+        isSelecting = false;
+        selectionRect.visible = false;
+        window.removeEventListener('mousemove', handleMarqueeSelectMove);
+        setTimeout(() => wasDraggingItems.set(false), 0);
+    }
+
+    function handleDesktopPanStart(event) {
+        if (event.target !== event.currentTarget) return;
         isPanning = true;
         wasPanning = false;
         lastMousePos = { x: event.clientX, y: event.clientY };
@@ -535,6 +694,10 @@
         window.removeEventListener('mouseup', handleDesktopMouseUp);
         window.removeEventListener('mousemove', handleMinimapMouseMove);
         window.removeEventListener('mouseup', handleMinimapMouseUp);
+        window.removeEventListener('mousemove', handleItemDragMove);
+        window.removeEventListener('mouseup', handleItemDragEnd);
+        window.removeEventListener('mousemove', handleMarqueeSelectMove);
+        window.removeEventListener('mouseup', handleMarqueeSelectEnd);
     });
 
     desktopSettings.subscribe(settings => {
@@ -570,6 +733,13 @@
             backgroundStyle = `linear-gradient(45deg, #2c3e50 0%, #46627f 100%)`;
         }
     });
+
+    $: normalizedSelectionRect = {
+        left: Math.min(selectionRect.x1, selectionRect.x2),
+        top: Math.min(selectionRect.y1, selectionRect.y2),
+        width: Math.abs(selectionRect.x1 - selectionRect.x2),
+        height: Math.abs(selectionRect.y1 - selectionRect.y2)
+    };
 </script>
 
 <style>
@@ -684,6 +854,14 @@
         pointer-events: auto;
         background-color: var(--window-bg);
     }
+    
+    .selection-box {
+        position: fixed;
+        border: 1px solid rgba(52, 152, 219, 0.8);
+        background-color: rgba(52, 152, 219, 0.2);
+        z-index: 9999;
+        pointer-events: none;
+    }
 
     /* --- View Controls --- */
     .view-controls {
@@ -784,7 +962,7 @@
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
-<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleDesktopMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
+<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
 
     <div class="desktop-content" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
         
@@ -849,6 +1027,16 @@
             {/each}
         </div>
     </div>
+
+    {#if selectionRect.visible}
+        <div 
+            class="selection-box"
+            style:left="{normalizedSelectionRect.left}px"
+            style:top="{normalizedSelectionRect.top}px"
+            style:width="{normalizedSelectionRect.width}px"
+            style:height="{normalizedSelectionRect.height}px"
+        />
+    {/if}
 
     {#if controlsVisible}
         <div class="view-controls" transition:fade={{ duration: 142 }} on:mouseenter={handleControlsMouseEnter} on:mouseleave={handleControlsMouseLeave}>

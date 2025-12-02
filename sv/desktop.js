@@ -133,8 +133,13 @@ windowSettings.subscribe(value => {
 // New store for desktop pan and zoom
 export const desktopView = writable({ panX: 0, panY: 0, zoom: 1.0 });
 
+// New store for selected desktop items
+export const selectedItems = writable(new Set());
+
+// New store to track dragging state to suppress clicks
+export const wasDraggingItems = writable(false);
+
 
 // New stores for Notification Center
 export const notificationHistory = writable([]);
 export const unreadNoticeCount = writable(0);
-

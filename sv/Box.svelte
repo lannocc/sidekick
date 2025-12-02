@@ -7,7 +7,7 @@
     import { get } from 'svelte/store';
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
     import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover } from './local.js';
-    import { dashLayouts, desktopView } from './desktop.js';
+    import { dashLayouts, desktopView, selectedItems, wasDraggingItems } from './desktop.js';
     import Board from './Board.svelte';
 
     export let box;
@@ -23,6 +23,7 @@
     $: if (box.scale != null) scale = box.scale;
     $: coverPanelLocation = box.cover_panel_location;
     $: canSetCover = !coverPanelLocation;
+    $: isSelected = $selectedItems.has(box.id);
 
     // --- Panel Grid Logic ---
     $: panels = box.panels || {};
@@ -150,9 +151,6 @@
     $: boxWidth = BASE_WIDTH * scale;
     $: boxHeight = BASE_WIDTH * aspectRatio * scale;
 
-    let isDragging = false;
-    let wasDragging = false; // To distinguish between a drag and a click
-    let dragOffsetX, dragOffsetY;
     let boxEl;
     let saveTransformTimeout;
 
@@ -353,56 +351,7 @@
         }
     }
 
-    // --- Dragging, Scaling & Drop Target Logic ---
-    function onDragStart(event) {
-        // Prevent dragging if it's not a left-click.
-        if (event.button !== 0) return;
-        
-        wasDragging = false; // Reset for the new interaction
-        isDragging = true;
-
-        const { panX, panY, zoom } = get(desktopView);
-        const worldMouseX = (event.clientX - panX) / zoom;
-        const worldMouseY = (event.clientY - panY) / zoom;
-
-        dragOffsetX = worldMouseX - x;
-        dragOffsetY = worldMouseY - y;
-
-        window.addEventListener('mousemove', onDrag);
-        window.addEventListener('mouseup', onDragEnd, { once: true });
-        document.body.style.cursor = 'move';
-    }
-
-    function onDrag(event) {
-        if (!isDragging) return;
-        wasDragging = true; // If we move, it's a drag
-        
-        const { panX, panY, zoom } = get(desktopView);
-        const worldMouseX = (event.clientX - panX) / zoom;
-        const worldMouseY = (event.clientY - panY) / zoom;
-        
-        x = worldMouseX - dragOffsetX;
-        y = worldMouseY - dragOffsetY;
-    }
-
-    function onDragEnd() {
-        isDragging = false;
-        document.body.style.cursor = 'auto';
-        window.removeEventListener('mousemove', onDrag);
-        if (wasDragging) {
-            updateBoxTransform(box.id, Math.round(x), Math.round(y), scale);
-        }
-        
-        // After a mouseup, the wasDragging flag has served its purpose for the
-        // impending click event. We reset it in a timeout to ensure this
-        // reset happens *after* the click event handler has had a chance to run
-        // in the current event loop tick. This prevents a drag from being registered
-        // as a click, and correctly cleans up the state for the next interaction.
-        setTimeout(() => {
-            wasDragging = false;
-        }, 0);
-    }
-    
+    // --- Scaling & Drop Target Logic ---
     function handleWheel(event) {
         if (event.ctrlKey || event.altKey) {
             event.preventDefault();
@@ -483,7 +432,7 @@
     }
 
     function handlePanelClick(event, loc_x, loc_y, isAvailableSlot = false, parent = null) {
-        if (wasDragging) return;
+        if (get(wasDraggingItems)) return;
         
         if (!isUnfolded) {
             isUnfolded = true;
@@ -547,6 +496,12 @@
         user-select: none;
         z-index: 10;
         transition: z-index 0s 0.3s; /* Delay z-index change until after animation */
+        border: 1px solid transparent;
+        border-radius: 7px; /* A bit larger than panel's 6px */
+    }
+    .box.selected {
+        border-color: rgba(52, 152, 219, 0.9);
+        box-shadow: 0 0 8px rgba(52, 152, 219, 0.7);
     }
 
     .box.is-unfolded {
@@ -765,6 +720,9 @@
 <div
     class="box"
     class:is-unfolded={isExpanded}
+    class:selected={isSelected}
+    data-id={box.id}
+    data-type="box"
     bind:this={boxEl}
     style:left="{x}px"
     style:top="{y}px"
@@ -774,7 +732,7 @@
 >
     <!-- Box Cover Image (dissolves on unfold) -->
     {#if coverImageUrl}
-        <div class="box-cover" on:mousedown={onDragStart} on:click={() => { if (!wasDragging) isUnfolded = true; }}>
+        <div class="box-cover" on:click={() => { if (!get(wasDraggingItems)) isUnfolded = true; }}>
             <img src={coverImageUrl} alt="{box.name} cover" class="cover-image" />
         </div>
     {/if}
@@ -815,7 +773,7 @@
     {/each}
 
     <!-- Center Panel with Content -->
-    <div class="panel center" on:mousedown={onDragStart} on:click={e => handlePanelClick(e, 0, 0, false, null)} on:contextmenu={e => handlePanelRightClick(e, 0, 0)} class:drop-target={isDropTarget(0, 0)} on:mouseenter={() => handlePanelMouseEnter(0, 0)} on:mouseleave={() => handlePanelMouseLeave(0, 0)} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 0, 0, null)}>
+    <div class="panel center" on:click={e => handlePanelClick(e, 0, 0, false, null)} on:contextmenu={e => handlePanelRightClick(e, 0, 0)} class:drop-target={isDropTarget(0, 0)} on:mouseenter={() => handlePanelMouseEnter(0, 0)} on:mouseleave={() => handlePanelMouseLeave(0, 0)} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 0, 0, null)}>
         {#if centerPanel}
             <Board board_type={centerPanel.board_type} board_config={centerPanel.board_config} />
         {:else}
