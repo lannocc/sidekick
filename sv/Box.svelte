@@ -24,6 +24,7 @@
     $: coverPanelLocation = box.cover_panel_location;
     $: canSetCover = !coverPanelLocation;
     $: isSelected = $selectedItems.has(String(box.id));
+    $: maxWindowZ = Math.max(100, ...$windows.map(w => w.zIndex));
 
     // --- Panel Grid Logic ---
     $: panels = box.panels || {};
@@ -219,21 +220,28 @@
 
     // Close menu or fold box on outside click or Esc key
     function handleWindowClick(event) {
-        // If a menu is open, the first click outside should close the menu, not the box.
-        if (isUnfolded && !isMenuOpen && boxEl && !boxEl.contains(event.target)) {
-            const isClickOnAnotherBox = event.target.closest('.box');
-            if (!isClickOnAnotherBox || !isClickOnAnotherBox.contains(boxEl)) {
-                 isUnfolded = false;
+        const clickedOnAnotherBox = event.target.closest('.box') && !boxEl?.contains(event.target);
+
+        // Determine if the click was inside this component's interactive area (box + its popups)
+        const clickedInsideComponent = boxEl?.contains(event.target) ||
+            (contextMenu.visible && event.target.closest('.context-menu')) ||
+            (panelContextMenu.visible && event.target.closest('.context-menu')) ||
+            (showBoardPicker && event.target.closest('.board-picker'));
+
+        if (!clickedInsideComponent && !clickedOnAnotherBox) {
+            if (isUnfolded) {
+                isUnfolded = false;
             }
-        }
-        if (contextMenu.visible && !event.target.closest('.context-menu')) {
-            closeContextMenu();
-        }
-        if (panelContextMenu.visible && !event.target.closest('.context-menu')) {
-            closePanelContextMenu();
-        }
-        if (showBoardPicker && !event.target.closest('.board-picker')) {
-            showBoardPicker = false;
+            // Also close any open menus
+            if (contextMenu.visible) {
+                closeContextMenu();
+            }
+            if (panelContextMenu.visible) {
+                closePanelContextMenu();
+            }
+            if (showBoardPicker) {
+                showBoardPicker = false;
+            }
         }
     }
 
@@ -253,11 +261,11 @@
 
     onMount(() => {
         updateUnfoldDirection(); // Set initial direction
-        window.addEventListener('click', handleWindowClick);
+        window.addEventListener('click', handleWindowClick, true); // Use capture phase
         window.addEventListener('keydown', handleKeyDown);
     });
     onDestroy(() => {
-        window.removeEventListener('click', handleWindowClick);
+        window.removeEventListener('click', handleWindowClick, true); // Use capture phase
         window.removeEventListener('keydown', handleKeyDown);
         if (clickTimeout) clearTimeout(clickTimeout);
     });
@@ -525,7 +533,6 @@
         position: absolute;
         cursor: pointer;
         user-select: none;
-        z-index: 10;
         transition: z-index 0s 0.3s, border-color 0.2s ease-in-out; /* Delay z-index change until after animation */
         border: 1px solid transparent;
         border-radius: 7px; /* A bit larger than panel's 6px */
@@ -539,7 +546,6 @@
     }
 
     .box.is-unfolded {
-        z-index: 100;
         transition-delay: 0s;
     }
 
@@ -762,6 +768,7 @@
     style:top="{y}px"
     style:width="{boxWidth}px"
     style:height="{boxHeight}px"
+    style:z-index={isExpanded ? maxWindowZ + 1 : 10}
     on:wheel={handleWheel}
 >
     <!-- Box Cover Image (dissolves on unfold) -->
@@ -867,4 +874,3 @@
         {/each}
     </div>
 {/if}
-
