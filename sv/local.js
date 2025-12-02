@@ -23,9 +23,10 @@ export const askStatsResponse = writable(null);
 export const boxes = writable([]);
 
 // --- Desktop Shortcuts Store ---
-const { subscribe: shortcutsSubscribe, set: shortcutsSet } = writable([]);
+const { subscribe: shortcutsSubscribe, set: shortcutsSet, update: shortcutsUpdate } = writable([]);
 export const desktopShortcuts = {
     subscribe: shortcutsSubscribe,
+    update: shortcutsUpdate,
     add: (shortcut) => {
         // FIX: The original implementation had a key collision on 'type'.
         // The message type ('create_shortcut') was being overwritten by the shortcut type ('dir' or 'file').
