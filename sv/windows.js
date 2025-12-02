@@ -8,6 +8,7 @@ import WebBrowser from './WebBrowser.svelte';
 import IoskPrivateChat from './IoskPrivateChat.svelte';
 import LocalTerminal from './LocalTerminal.svelte';
 import LocalFileExplorer from './LocalFileExplorer.svelte';
+import LocalFileViewer from './LocalFileViewer.svelte';
 import Ask from './Ask.svelte';
 import IoskWatch from './IoskWatch.svelte';
 import IoskUserInspector from './IoskUserInspector.svelte';
@@ -39,6 +40,7 @@ const componentMap = {
     'IoskPrivateChat': IoskPrivateChat,
     'LocalTerminal': LocalTerminal,
     'LocalFileExplorer': LocalFileExplorer,
+    'LocalFileViewer': LocalFileViewer,
     'Ask': Ask,
     'IoskWatch': IoskWatch,
     'IoskUserInspector': IoskUserInspector,
@@ -971,6 +973,11 @@ export function newLocalTerminal(props = {}) {
 export function newLocalFileExplorer(props = {}) {
     const defaultProps = { title: 'Local Files', width: 500, height: 600 };
     windows.addWindow(LocalFileExplorer, { ...defaultProps, ...props });
+}
+
+export function newLocalFileViewer(props = {}) {
+    const title = (props.path || '').split('/').pop() || props.path;
+    windows.addWindow(LocalFileViewer, { title: `View - ${title}`, width: 700, height: 500, ...props });
 }
 
 export function newAskWindow(initialFiles = [], props = {}) {

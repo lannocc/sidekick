@@ -5,10 +5,11 @@
 <script>
     import { windows, newSettings, dragRequest } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, boxes, desktopView } from './desktop.js';
+    import { desktopSettings, dashActive, boxes, desktopView, desktopShortcuts } from './desktop.js';
     import { updateDesktopSettings } from './local.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
+    import Shortcut from './Shortcut.svelte';
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import InstanceRegistrar from './InstanceRegistrar.svelte';
@@ -486,6 +487,40 @@
         }, 300);
     }
 
+    function handleDrop(event) {
+        event.preventDefault();
+
+        const shortcutMoveData = event.dataTransfer.getData('application/sidekick-shortcut-move');
+        const fsItemData = event.dataTransfer.getData('application/sidekick-fs-item');
+        const { panX, panY, zoom } = get(desktopView);
+        
+        // Adjust for icon size so it's centered on cursor
+        const iconWidth = 80 / 2;
+        const iconHeight = 64 / 2;
+        const worldX = ((event.clientX - panX) / zoom) - iconWidth;
+        const worldY = ((event.clientY - panY) / zoom) - iconHeight;
+
+        if (shortcutMoveData) {
+            try {
+                const { id } = JSON.parse(shortcutMoveData);
+                desktopShortcuts.updatePosition(id, worldX, worldY);
+            } catch (e) {
+                console.error("Failed to handle shortcut move drop:", e);
+            }
+        } else if (fsItemData) {
+            try {
+                const item = JSON.parse(fsItemData);
+                desktopShortcuts.add({
+                    ...item,
+                    x: worldX,
+                    y: worldY
+                });
+            } catch (e) {
+                console.error("Failed to handle fs item drop:", e);
+            }
+        }
+    }
+
 
     onMount(() => {
         // The WebSocket connection is now established in SideKick.svelte
@@ -604,14 +639,21 @@
         pointer-events: none;
     }
 
+    .shortcuts-layer {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        pointer-events: none;
+    }
+
     .boxes-layer {
         position: absolute;
         top: 0; left: 0;
         width: 100%; height: 100%;
         pointer-events: none; /* Parent container is not interactive */
     }
-    .boxes-layer > :global(*) {
-        pointer-events: auto; /* Children (boxes) are interactive */
+    .boxes-layer > :global(*), .shortcuts-layer > :global(*) {
+        pointer-events: auto; /* Children (boxes, shortcuts) are interactive */
     }
 
     .windows-layer, .tab-contents-layer {
@@ -742,9 +784,15 @@
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
-<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleDesktopMouseDown} on:wheel={handleDesktopWheel}>
+<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleDesktopMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
 
     <div class="desktop-content" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
+        <div class="shortcuts-layer">
+            {#each $desktopShortcuts as shortcut (shortcut.id)}
+                <Shortcut {...shortcut} />
+            {/each}
+        </div>
+        
         {#if $connectionStatus === 'connected'}
             <div class="boxes-layer">
                 {#each $boxes as box (box.id)}

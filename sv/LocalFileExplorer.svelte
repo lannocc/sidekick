@@ -104,6 +104,21 @@
         }
     }
 
+    function handleDragStart(event, item) {
+        if (!item || item.name === '..') {
+            event.preventDefault();
+            return;
+        }
+        const itemPath = currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`;
+        const data = {
+            type: item.type, // 'file' or 'dir'
+            path: itemPath,
+            name: item.name
+        };
+        event.dataTransfer.setData('application/sidekick-fs-item', JSON.stringify(data));
+        event.dataTransfer.effectAllowed = 'copy';
+    }
+
     onMount(() => {
         window.addEventListener('click', closeContextMenu);
 
@@ -197,7 +212,14 @@
     {/if}
     <div class="item-list">
         {#each items as item (item.name)}
-            <div class="item" on:click={() => handleItemClick(item)} on:contextmenu={e => handleRightClick(e, item)} title={item.name}>
+            <div 
+                class="item" 
+                on:click={() => handleItemClick(item)} 
+                on:contextmenu={e => handleRightClick(e, item)} 
+                title={item.name}
+                draggable="true"
+                on:dragstart={e => handleDragStart(e, item)}
+            >
                 <span class="item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
                 <span class="item-name">{item.name}</span>
                 <span class="item-size">
