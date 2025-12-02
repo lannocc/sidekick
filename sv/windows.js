@@ -13,9 +13,7 @@ import Ask from './Ask.svelte';
 import IoskWatch from './IoskWatch.svelte';
 import IoskUserInspector from './IoskUserInspector.svelte';
 import NotificationCenter from './NotificationCenter.svelte';
-import { desktopSettings, windowSettings, notificationHistory, unreadNoticeCount, desktopView } from './desktop.js';
-
-const TASKBAR_HEIGHT = 40; // Height of the taskbar in pixels
+import { TASKBAR_HEIGHT, desktopSettings, windowSettings, notificationHistory, unreadNoticeCount, desktopView } from './desktop.js';
 
 let windowGroupIdCounter = 0;
 let tabIdCounter = 0;

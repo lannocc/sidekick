@@ -1,5 +1,7 @@
 import { writable } from 'svelte/store';
 
+export const TASKBAR_HEIGHT = 40; // Height of the taskbar in pixels
+
 // Function to load settings from localStorage, or return defaults
 function loadSettings() {
     const defaults = {
