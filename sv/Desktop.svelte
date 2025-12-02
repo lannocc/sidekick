@@ -783,8 +783,8 @@
     $: normalizedSelectionRect = {
         left: Math.min(selectionRect.x1, selectionRect.x2),
         top: Math.min(selectionRect.y1, selectionRect.y2),
-        width: Math.abs(selectionRect.x1, selectionRect.x2),
-        height: Math.abs(selectionRect.y1, selectionRect.y2)
+        width: Math.abs(selectionRect.x1 - selectionRect.x2),
+        height: Math.abs(selectionRect.y1 - selectionRect.y2)
     };
 </script>
 
