@@ -964,13 +964,17 @@
         font-weight: bold;
         line-height: 1;
         padding: 0;
-        transition: background-color 0.2s;
+        transition: background-color 0.2s, opacity 0.2s;
     }
-    .view-controls button:hover {
+    .view-controls button:not(:disabled):hover {
         background-color: rgba(255, 255, 255, 0.2);
     }
-    .view-controls button:active {
+    .view-controls button:not(:disabled):active {
         background-color: rgba(255, 255, 255, 0.3);
+    }
+    .view-controls button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 
     .view-controls .zoom-reset {
