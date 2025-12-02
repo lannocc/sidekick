@@ -5,7 +5,7 @@
 <script>
     import { windows, newSettings, dragRequest } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, desktopView } from './desktop.js';
+    import { desktopSettings, dashActive, desktopView, TASKBAR_HEIGHT } from './desktop.js';
     import { boxes, desktopShortcuts, updateDesktopSettings } from './local.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
@@ -498,7 +498,7 @@
         const iconWidth = 80 / 2;
         const iconHeight = 64 / 2;
         const worldX = ((event.clientX - panX) / zoom) - iconWidth;
-        const worldY = ((event.clientY - panY) / zoom) - iconHeight;
+        const worldY = (((event.clientY - TASKBAR_HEIGHT) - panY) / zoom) - iconHeight;
 
         if (shortcutMoveData) {
             try {
