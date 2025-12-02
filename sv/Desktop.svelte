@@ -423,6 +423,8 @@
     let isDraggingItems = false;
     let selectionRect = { visible: false, x1: 0, y1: 0, x2: 0, y2: 0 };
     let dragStartData = { mouse: { x: 0, y: 0 }, items: new Map() };
+    let dragStartItemStates = [];
+    let pushedItemsOriginalPositions = new Map();
 
     function handleGlobalMouseDown(event) {
         const targetItemEl = event.target.closest('.shortcut, .box');
@@ -457,6 +459,9 @@
 
         // Prepare for dragging
         isDraggingItems = true;
+        dragStartItemStates = allItems.map(i => ({ ...i })); // Capture initial state of all items
+        pushedItemsOriginalPositions.clear(); // Reset pushed items map
+
         const { panX, panY, zoom } = get(desktopView);
         dragStartData.mouse = {
             x: (event.clientX - panX) / zoom,
@@ -490,68 +495,110 @@
             x: (event.clientX - panX) / zoom,
             y: ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom
         };
-
         const dx = mouseNow.x - dragStartData.mouse.x;
         const dy = mouseNow.y - dragStartData.mouse.y;
 
-        const newBoxPositions = new Map();
-        const newShortcutPositions = new Map();
+        // 1. Create a working copy from the initial state at drag start
+        let frameItems = dragStartItemStates.map(i => ({...i}));
+        const draggedItemIds = new Set(dragStartData.items.keys());
 
-        dragStartData.items.forEach((initial, id) => {
-            const newX = Math.round(initial.x + dx);
-            const newY = Math.round(initial.y + dy);
-
-            if (initial.type === 'box') {
-                newBoxPositions.set(id, { x: newX, y: newY });
-            } else if (initial.type === 'shortcut') {
-                newShortcutPositions.set(id, { x: newX, y: newY });
+        // 2. Apply drag delta to the dragged items
+        frameItems.forEach(item => {
+            const idStr = String(item.id);
+            if (draggedItemIds.has(idStr)) {
+                const initial = dragStartData.items.get(idStr);
+                item.x = Math.round(initial.x + dx);
+                item.y = Math.round(initial.y + dy);
             }
         });
 
-        if (newBoxPositions.size > 0) {
-            boxes.update(all => all.map(b => {
-                const idStr = String(b.id); // Convert ID to string
-                if (newBoxPositions.has(idStr)) {
-                    const newPos = newBoxPositions.get(idStr);
-                    return { ...b, x: newPos.x, y: newPos.y };
-                }
-                return b;
-            }));
-        }
+        // 3. Collision detection and resolution
+        const currentlyDraggedItems = frameItems.filter(i => draggedItemIds.has(String(i.id)));
+        const staticItems = frameItems.filter(i => !draggedItemIds.has(String(i.id)));
+        const newlyPushedIds = new Set();
 
-        if (newShortcutPositions.size > 0) {
-            desktopShortcuts.update(all => all.map(s => {
-                const idStr = String(s.id); // Convert ID to string
-                if (newShortcutPositions.has(idStr)) {
-                    const newPos = newShortcutPositions.get(idStr);
-                    return { ...s, x: newPos.x, y: newPos.y };
+        currentlyDraggedItems.forEach(dragged => {
+            staticItems.forEach(staticItem => {
+                // AABB collision check
+                if (
+                    dragged.x < staticItem.x + staticItem.width &&
+                    dragged.x + dragged.width > staticItem.x &&
+                    dragged.y < staticItem.y + staticItem.height &&
+                    dragged.y + dragged.height > staticItem.y
+                ) {
+                    const staticIdStr = String(staticItem.id);
+                    newlyPushedIds.add(staticIdStr);
+                    if (!pushedItemsOriginalPositions.has(staticIdStr)) {
+                        pushedItemsOriginalPositions.set(staticIdStr, { x: staticItem.x, y: staticItem.y });
+                    }
+
+                    // Resolve collision by pushing staticItem
+                    const overlapX = Math.min(dragged.x + dragged.width, staticItem.x + staticItem.width) - Math.max(dragged.x, staticItem.x);
+                    const overlapY = Math.min(dragged.y + dragged.height, staticItem.y + staticItem.height) - Math.max(dragged.y, staticItem.y);
+                    
+                    if (overlapX < overlapY) {
+                        const sign = Math.sign((staticItem.x + staticItem.width / 2) - (dragged.x + dragged.width / 2));
+                        staticItem.x += overlapX * (sign || 1);
+                    } else {
+                        const sign = Math.sign((staticItem.y + staticItem.height / 2) - (dragged.y + dragged.height / 2));
+                        staticItem.y += overlapY * (sign || 1);
+                    }
                 }
-                return s;
-            }));
+            });
+        });
+
+        // Revert items that were pushed but are no longer colliding
+        pushedItemsOriginalPositions.forEach((originalPos, pushedId) => {
+            if (!newlyPushedIds.has(pushedId)) {
+                const itemToRevert = frameItems.find(i => String(i.id) === pushedId);
+                if (itemToRevert) {
+                    itemToRevert.x = originalPos.x;
+                    itemToRevert.y = originalPos.y;
+                }
+                pushedItemsOriginalPositions.delete(pushedId);
+            }
+        });
+
+        // 4. Update Svelte stores for items that have moved
+        const newBoxPositions = new Map();
+        const newShortcutPositions = new Map();
+
+        frameItems.forEach(item => {
+            const originalItem = dragStartItemStates.find(i => String(i.id) === String(item.id));
+            const newX = Math.round(item.x);
+            const newY = Math.round(item.y);
+            if (originalItem && (newX !== originalItem.x || newY !== originalItem.y)) {
+                if (item.type === 'box') newBoxPositions.set(String(item.id), { x: newX, y: newY });
+                else if (item.type === 'shortcut') newShortcutPositions.set(String(item.id), { x: newX, y: newY });
+            }
+        });
+
+        if (newBoxPositions.size > 0 || newShortcutPositions.size > 0) {
+            boxes.update(all => all.map(b => newBoxPositions.has(String(b.id)) ? { ...b, ...newBoxPositions.get(String(b.id)) } : b));
+            desktopShortcuts.update(all => all.map(s => newShortcutPositions.has(String(s.id)) ? { ...s, ...newShortcutPositions.get(String(s.id)) } : s));
         }
     }
 
     function handleItemDragEnd() {
         document.body.classList.remove('is-dragging-item');
         if (get(wasDraggingItems)) {
-            // Persist final positions
-            dragStartData.items.forEach((initial, id) => {
-                // FIX 1: Use a safe string comparison to find the item.
-                // This ensures items are found regardless of whether their ID is a number or string.
-                const item = allItems.find(i => String(i.id) === id);
-                if (!item) return;
+            // Persist final positions for both dragged and pushed items.
+            const finalItems = allItems.filter(item => 
+                dragStartData.items.has(String(item.id)) || pushedItemsOriginalPositions.has(String(item.id))
+            );
 
+            finalItems.forEach(item => {
                 if (item.type === 'box') {
-                    updateBoxTransform(id, item.x, item.y, item.scale);
+                    updateBoxTransform(item.id, item.x, item.y, item.scale);
                 } else if (item.type === 'shortcut') {
-                    // FIX 2: Use a dedicated persistence function for shortcuts,
-                    // analogous to updateBoxTransform for boxes.
-                    updateShortcutTransform(id, item.x, item.y, item.scale || 1.0);
+                    updateShortcutTransform(item.id, item.x, item.y, item.scale || 1.0);
                 }
             });
         }
 
         isDraggingItems = false;
+        dragStartItemStates = [];
+        pushedItemsOriginalPositions.clear();
         window.removeEventListener('mousemove', handleItemDragMove);
         setTimeout(() => wasDraggingItems.set(false), 0);
     }
