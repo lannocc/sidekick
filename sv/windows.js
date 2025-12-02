@@ -14,6 +14,8 @@ import IoskUserInspector from './IoskUserInspector.svelte';
 import NotificationCenter from './NotificationCenter.svelte';
 import { desktopSettings, windowSettings, notificationHistory, unreadNoticeCount, desktopView } from './desktop.js';
 
+const TASKBAR_HEIGHT = 40; // Height of the taskbar in pixels
+
 let windowGroupIdCounter = 0;
 let tabIdCounter = 0;
 
@@ -96,13 +98,12 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
     }
 
     const { width, height, sourceEvent, sourceTabId } = props;
-    const taskbarHeight = 40; // Assume taskbar is 40px at the top.
     const desktopMargin = 10; // Margin from viewport edges.
     const desktop = {
         x: desktopMargin,
-        y: taskbarHeight + desktopMargin,
+        y: TASKBAR_HEIGHT + desktopMargin,
         width: window.innerWidth - (desktopMargin * 2),
-        height: window.innerHeight - taskbarHeight - (desktopMargin * 2)
+        height: window.innerHeight - TASKBAR_HEIGHT - (desktopMargin * 2)
     };
 
     const obstacles = allWindows.filter(w => !w.minimized).map(w => ({
@@ -196,7 +197,7 @@ function createWindowManager() {
         desktopView.subscribe(({ panX, panY, zoom }) => {
             update(windows => {
                 const desktopWidth = window.innerWidth;
-                const desktopHeight = window.innerHeight; // The .desktop div's height is managed by flexbox
+                const desktopHeight = window.innerHeight - TASKBAR_HEIGHT;
                 let changed = false;
 
                 const newWindows = windows.map(w => {
@@ -459,7 +460,7 @@ function createWindowManager() {
         update(windows => {
             const { panX, panY, zoom } = get(desktopView);
             const desktopWidth = window.innerWidth;
-            const desktopHeight = window.innerHeight;
+            const desktopHeight = window.innerHeight - TASKBAR_HEIGHT;
 
             const maxZ = windows.reduce((max, w) => Math.max(max, w.zIndex), 99);
             return windows.map(w => {
@@ -1031,4 +1032,3 @@ export function newIoskUserInspector(consoleTabId, targetUser, consoleWs, props 
         ...props,
     });
 }
-
