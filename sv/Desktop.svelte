@@ -341,6 +341,7 @@
     function handleMinimapMouseMove(event) {
         if (!isMinimapDragging) return;
         wasMinimapDragging = true; // Any move is a drag
+        showControls(); // Keep controls visible while dragging
 
         const dx = event.clientX - minimapLastPos.x;
         const dy = event.clientY - minimapLastPos.y;
