@@ -318,6 +318,83 @@
     let lastMousePos = { x: 0, y: 0 };
     let saveViewTimeout;
 
+    // --- Minimap Interaction State ---
+    let isMinimapDragging = false;
+    let wasMinimapDragging = false;
+    let minimapLastPos = {x: 0, y: 0};
+    let minimapElementRef = null;
+
+    function handleMinimapMouseDown(event) {
+        if (event.button !== 0) return; // Only left-click
+        event.stopPropagation(); // Prevent desktop panning
+
+        isMinimapDragging = true;
+        wasMinimapDragging = false;
+        minimapLastPos = { x: event.clientX, y: event.clientY };
+        minimapElementRef = event.currentTarget; // Get ref to the birdseye-view div
+        showControls();
+
+        window.addEventListener('mousemove', handleMinimapMouseMove);
+        window.addEventListener('mouseup', handleMinimapMouseUp, { once: true });
+    }
+
+    function handleMinimapMouseMove(event) {
+        if (!isMinimapDragging) return;
+        wasMinimapDragging = true; // Any move is a drag
+
+        const dx = event.clientX - minimapLastPos.x;
+        const dy = event.clientY - minimapLastPos.y;
+
+        if (minimapScale > 0) {
+            const panDx = -(dx / minimapScale) * $desktopView.zoom;
+            const panDy = -(dy / minimapScale) * $desktopView.zoom;
+
+            desktopView.update(view => ({
+                ...view,
+                panX: view.panX + panDx,
+                panY: view.panY + panDy
+            }));
+        }
+
+        minimapLastPos = { x: event.clientX, y: event.clientY };
+    }
+
+    function handleMinimapMouseUp(event) {
+        if (!isMinimapDragging) return;
+
+        if (wasMinimapDragging) {
+            // Persist final position after drag
+            updateDesktopSettings(get(desktopView));
+        } else if (minimapElementRef) {
+            // This was a click, not a drag.
+            const rect = minimapElementRef.getBoundingClientRect();
+            const clickOnMinimapX = event.clientX - rect.left;
+            const clickOnMinimapY = event.clientY - rect.top;
+
+            if (minimapScale > 0) {
+                // Convert click coordinates from minimap space to world space
+                const clickedWorldX = (clickOnMinimapX / minimapScale) + contentBounds.x;
+                const clickedWorldY = (clickOnMinimapY / minimapScale) + contentBounds.y;
+
+                // We want this world point to be at the center of the viewport.
+                // pan = screen_center - world_point * zoom
+                const newPanX = (innerWidth / 2) - (clickedWorldX * $desktopView.zoom);
+                const newPanY = (innerHeight / 2) - (clickedWorldY * $desktopView.zoom);
+
+                desktopView.set({
+                    zoom: $desktopView.zoom, // keep current zoom
+                    panX: newPanX,
+                    panY: newPanY
+                });
+                updateDesktopSettings(get(desktopView));
+            }
+        }
+
+        isMinimapDragging = false;
+        minimapElementRef = null;
+        window.removeEventListener('mousemove', handleMinimapMouseMove);
+    }
+
     function handleDesktopMouseDown(event) {
         // Only pan if clicking on the desktop background itself and with the middle mouse button
         if (event.target !== event.currentTarget || event.button !== 1) return;
@@ -408,6 +485,8 @@
         if (controlsTimeout) clearTimeout(controlsTimeout);
         window.removeEventListener('mousemove', handleDesktopMouseMove);
         window.removeEventListener('mouseup', handleDesktopMouseUp);
+        window.removeEventListener('mousemove', handleMinimapMouseMove);
+        window.removeEventListener('mouseup', handleMinimapMouseUp);
     });
 
     desktopSettings.subscribe(settings => {
@@ -625,6 +704,7 @@
         border-radius: 4px;
         overflow: hidden;
         flex-shrink: 0;
+        cursor: pointer; /* To indicate it's interactive */
     }
 
     .birdseye-item {
@@ -727,7 +807,7 @@
                 <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
             </div>
             {#if contentBounds && contentBounds.defined && minimapWidth > 0 && minimapHeight > 0}
-                <div class="birdseye-view" style:width="{minimapWidth}px" style:height="{minimapHeight}px">
+                <div class="birdseye-view" style:width="{minimapWidth}px" style:height="{minimapHeight}px" on:mousedown={handleMinimapMouseDown}>
                     <!-- Items -->
                     {#each allItems as item (item.id)}
                         <div
@@ -762,4 +842,3 @@
         <Dash />
     {/if}
 </div>
-
