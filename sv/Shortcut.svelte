@@ -16,7 +16,12 @@
     export let x;
     export let y;
 
-    function handleDoubleClick() {
+    let wasDragged = false;
+
+    function handleClick() {
+        if (wasDragged) {
+            return;
+        }
         if (type === 'dir') {
             newLocalFileExplorer({ initialPath: path, title: `Files - ${name}` });
         } else if (type === 'file') {
@@ -25,8 +30,14 @@
     }
 
     function onDragStart(event) {
+        wasDragged = true;
         event.dataTransfer.setData('application/sidekick-shortcut-move', JSON.stringify({id}));
         event.dataTransfer.effectAllowed = 'move';
+    }
+
+    function handleMouseDown() {
+        // A new mousedown event starts a new interaction, so reset the drag flag.
+        wasDragged = false;
     }
 </script>
 
@@ -66,7 +77,8 @@
     class="shortcut"
     style:left="{x}px"
     style:top="{y}px"
-    on:dblclick={handleDoubleClick}
+    on:click={handleClick}
+    on:mousedown={handleMouseDown}
     draggable="true"
     on:dragstart={onDragStart}
 >

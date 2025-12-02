@@ -156,30 +156,17 @@
     let boxEl;
     let saveTransformTimeout;
 
-    // --- Hover State for Unfolding ---
-    let isMouseOver = false;
-    let hoverTimeout;
+    // --- Unfold State ---
+    let isUnfolded = false;
     let hoveredPanelKey = null; // Key ('x_y') of the currently hovered panel
 
     $: isMenuOpen = contextMenu.visible || panelContextMenu.visible || showBoardPicker;
-    $: isHovered = isMouseOver || isMenuOpen;
+    $: isExpanded = isUnfolded || isMenuOpen;
     
-    // When the box is no longer hovered (mouse leaves AND menus are closed),
+    // When the box is no longer expanded (closed AND menus are closed),
     // also clear the specific panel key to hide available slots.
-    $: if (!isHovered) {
+    $: if (!isExpanded) {
         hoveredPanelKey = null;
-    }
-
-    function handleMouseEnter() {
-        if (hoverTimeout) clearTimeout(hoverTimeout);
-        isMouseOver = true;
-    }
-
-    function handleMouseLeave() {
-        // Use a timeout to keep the panels open while the mouse travels over the gap
-        hoverTimeout = setTimeout(() => {
-            isMouseOver = false;
-        }, 150);
     }
 
     // --- Dynamic Unfold Direction ---
@@ -231,8 +218,15 @@
         panelContextMenu.visible = false;
     }
 
-    // Close menu on outside click or Esc key
+    // Close menu or fold box on outside click or Esc key
     function handleWindowClick(event) {
+        // If a menu is open, the first click outside should close the menu, not the box.
+        if (isUnfolded && !isMenuOpen && boxEl && !boxEl.contains(event.target)) {
+            const isClickOnAnotherBox = event.target.closest('.box');
+            if (!isClickOnAnotherBox || !isClickOnAnotherBox.contains(boxEl)) {
+                 isUnfolded = false;
+            }
+        }
         if (contextMenu.visible && !event.target.closest('.context-menu')) {
             closeContextMenu();
         }
@@ -246,9 +240,15 @@
 
     function handleKeyDown(event) {
         if (event.key === 'Escape') {
-            if (contextMenu.visible) closeContextMenu();
-            if (panelContextMenu.visible) closePanelContextMenu();
-            if (showBoardPicker) showBoardPicker = false;
+            if (contextMenu.visible) {
+                closeContextMenu();
+            } else if (panelContextMenu.visible) {
+                closePanelContextMenu();
+            } else if (showBoardPicker) {
+                showBoardPicker = false;
+            } else if (isUnfolded) {
+                isUnfolded = false;
+            }
         }
     }
 
@@ -484,6 +484,12 @@
 
     function handlePanelClick(event, loc_x, loc_y, isAvailableSlot = false, parent = null) {
         if (wasDragging) return;
+        
+        if (!isUnfolded) {
+            isUnfolded = true;
+            return;
+        }
+
         if (showBoardPicker) {
             showBoardPicker = false;
             return;
@@ -543,7 +549,7 @@
         transition: z-index 0s 0.3s; /* Delay z-index change until after animation */
     }
 
-    .box.is-hovered {
+    .box.is-unfolded {
         z-index: 100;
         transition-delay: 0s;
     }
@@ -562,9 +568,9 @@
         cursor: move;
     }
 
-    .box.is-hovered .box-cover {
+    .box.is-unfolded .box-cover {
         opacity: 0;
-        pointer-events: none; /* Allow interaction with panels underneath when hovered */
+        pointer-events: none; /* Allow interaction with panels underneath when unfolded */
     }
 
     .cover-image {
@@ -629,8 +635,8 @@
         transform: var(--pos-transform, translate(0,0)) scaleX(0);
     }
 
-    /* Unfold EXISTING side panels on hover */
-    .box.is-hovered .panel:not(.center):not(.is-empty) {
+    /* Unfold EXISTING side panels on click */
+    .box.is-unfolded .panel:not(.center):not(.is-empty) {
         opacity: 1;
         transform: var(--pos-transform, translate(0,0));
         pointer-events: auto;
@@ -638,29 +644,29 @@
     }
 
     /* Make VISIBLE empty slots interactive */
-    .box.is-hovered .panel.is-empty.is-visible {
+    .box.is-unfolded .panel.is-empty.is-visible {
         opacity: 1;
         pointer-events: auto;
         transition-delay: var(--unfold-delay, 0s);
     }
 
-    /* Skinny/flat styles for VISIBLE empty side panels when hovered */
-    .box.is-hovered .panel.is-empty.is-visible.from-bottom {
+    /* Skinny/flat styles for VISIBLE empty side panels when expanded */
+    .box.is-unfolded .panel.is-empty.is-visible.from-bottom {
         transform-origin: bottom center;
         transform: var(--pos-transform, translate(0,0)) scaleY(0.15);
         clip-path: polygon(0% 100%, 100% 100%, 85% 0%, 15% 0%);
     }
-    .box.is-hovered .panel.is-empty.is-visible.from-top {
+    .box.is-unfolded .panel.is-empty.is-visible.from-top {
         transform-origin: top center;
         transform: var(--pos-transform, translate(0,0)) scaleY(0.15);
         clip-path: polygon(15% 100%, 85% 100%, 100% 0%, 0% 0%);
     }
-    .box.is-hovered .panel.is-empty.is-visible.from-right {
+    .box.is-unfolded .panel.is-empty.is-visible.from-right {
         transform-origin: right center;
         transform: var(--pos-transform, translate(0,0)) scaleX(0.15);
         clip-path: polygon(0% 15%, 0% 85%, 100% 100%, 100% 0%);
     }
-    .box.is-hovered .panel.is-empty.is-visible.from-left {
+    .box.is-unfolded .panel.is-empty.is-visible.from-left {
         transform-origin: left center;
         transform: var(--pos-transform, translate(0,0)) scaleX(0.15);
         clip-path: polygon(0% 0%, 100% 15%, 100% 85%, 0% 100%);
@@ -758,19 +764,17 @@
 
 <div
     class="box"
-    class:is-hovered={isHovered}
+    class:is-unfolded={isExpanded}
     bind:this={boxEl}
     style:left="{x}px"
     style:top="{y}px"
     style:width="{boxWidth}px"
     style:height="{boxHeight}px"
-    on:mouseenter={handleMouseEnter}
-    on:mouseleave={handleMouseLeave}
     on:wheel={handleWheel}
 >
-    <!-- Box Cover Image (dissolves on hover) -->
+    <!-- Box Cover Image (dissolves on unfold) -->
     {#if coverImageUrl}
-        <div class="box-cover" on:mousedown={onDragStart}>
+        <div class="box-cover" on:mousedown={onDragStart} on:click={() => { if (!wasDragging) isUnfolded = true; }}>
             <img src={coverImageUrl} alt="{box.name} cover" class="cover-image" />
         </div>
     {/if}
