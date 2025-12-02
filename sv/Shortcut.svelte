@@ -6,8 +6,9 @@
 <script>
     import { newLocalFileExplorer, newLocalFileViewer } from './windows.js';
     import { desktopView, selectedItems, wasDraggingItems } from './desktop.js';
-    import { desktopShortcuts } from './local.js';
+    import { desktopShortcuts, updateShortcutTransform } from './local.js';
     import { get } from 'svelte/store';
+    import { onDestroy } from 'svelte';
 
     export let id;
     export let name;
@@ -15,8 +16,10 @@
     export let path;
     export let x;
     export let y;
+    export let scale = 1.0;
 
     $: isSelected = $selectedItems.has(String(id));
+    let saveTransformTimeout;
 
     function handleClick(event) {
         if (get(wasDraggingItems) || event.ctrlKey) {
@@ -28,6 +31,28 @@
             newLocalFileViewer({ path, title: name });
         }
     }
+
+    function handleWheel(event) {
+        if (event.ctrlKey || event.altKey) {
+            event.preventDefault();
+            const zoomStep = 0.05;
+            const delta = event.deltaY < 0 ? zoomStep : -zoomStep;
+            const newScale = Math.max(0.2, (scale || 1.0) + delta);
+
+            desktopShortcuts.update(shortcuts =>
+                shortcuts.map(s => (s.id === id ? { ...s, scale: newScale } : s))
+            );
+
+            if (saveTransformTimeout) clearTimeout(saveTransformTimeout);
+            saveTransformTimeout = setTimeout(() => {
+                updateShortcutTransform(id, x, y, newScale);
+            }, 300);
+        }
+    }
+
+    onDestroy(() => {
+        if (saveTransformTimeout) clearTimeout(saveTransformTimeout);
+    });
 </script>
 
 <style>
@@ -41,7 +66,7 @@
         user-select: none;
         padding: 4px;
         border-radius: 4px;
-        transition: background-color 0.1s ease-in-out;
+        transition: background-color 0.1s ease-in-out, transform 0.1s ease-out;
         pointer-events: auto;
         border: 1px solid transparent;
     }
@@ -77,7 +102,9 @@
     data-type="shortcut"
     style:left="{x}px"
     style:top="{y}px"
+    style:transform="scale({scale || 1.0})"
     on:click={handleClick}
+    on:wheel={handleWheel}
 >
     <div class="icon">{type === 'dir' ? '🗂️' : '📄'}</div>
     <div class="name">{name}</div>

@@ -157,6 +157,12 @@ def init_db():
     if 'parent_loc_y' not in columns:
         cursor.execute("ALTER TABLE panel ADD COLUMN parent_loc_y INTEGER")
 
+    cursor.execute("PRAGMA table_info(desktop_shortcut)")
+    columns = [row['name'] for row in cursor.fetchall()]
+    if 'scale' not in columns:
+        cursor.execute("ALTER TABLE desktop_shortcut ADD COLUMN scale REAL NOT NULL DEFAULT 1.0")
+
+
     DB_CONN.commit()
     log.info("Skybox database initialized.")
 
@@ -184,7 +190,7 @@ async def broadcast_shortcut_list():
         log.error("Database not connected, cannot broadcast shortcut list.")
         return
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, name, type, path, x, y FROM desktop_shortcut")
+    cursor.execute("SELECT id, name, type, path, x, y, scale FROM desktop_shortcut")
     shortcuts = [dict(row) for row in cursor.fetchall()]
     message = json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts})
     if CONNECTED_CLIENTS:
@@ -463,7 +469,7 @@ async def websocket_handler(websocket):
         await websocket.send(json.dumps({'type': 'desktop_settings', 'settings': settings}))
 
         # Send initial shortcut list on connect
-        cursor.execute("SELECT id, name, type, path, x, y FROM desktop_shortcut")
+        cursor.execute("SELECT id, name, type, path, x, y, scale FROM desktop_shortcut")
         shortcuts = [dict(row) for row in cursor.fetchall()]
         await websocket.send(json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts}))
 
@@ -523,13 +529,13 @@ async def websocket_handler(websocket):
                     DB_CONN.commit()
                     await broadcast_shortcut_list()
 
-                elif msg_type == 'update_shortcut_position':
-                    shortcut_id, x, y = msg['id'], msg['x'], msg['y']
-                    print_action("Move Shortcut", f"id={shortcut_id}, x={int(x)}, y={int(y)}")
+                elif msg_type == 'update_shortcut_transform':
+                    shortcut_id, x, y, scale = msg['id'], msg['x'], msg['y'], msg.get('scale', 1.0)
+                    print_action("Shortcut Xform", f"id={shortcut_id}, x={int(x)}, y={int(y)}, scale={scale:.2f}")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
-                        "UPDATE desktop_shortcut SET x = ?, y = ? WHERE id = ?",
-                        (x, y, shortcut_id)
+                        "UPDATE desktop_shortcut SET x = ?, y = ?, scale = ? WHERE id = ?",
+                        (x, y, scale, shortcut_id)
                     )
                     DB_CONN.commit()
                     await broadcast_shortcut_list()
@@ -823,4 +829,3 @@ def main(args):
             DB_CONN.close()
             log.info("Database connection closed.")
         print_stopped_message()
-

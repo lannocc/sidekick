@@ -6,7 +6,7 @@
     import { windows, newSettings, dragRequest } from './windows.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive, desktopView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems } from './desktop.js';
-    import { boxes, desktopShortcuts, updateDesktopSettings, updateBoxTransform, updateShortcutPosition } from './local.js';
+    import { boxes, desktopShortcuts, updateDesktopSettings, updateBoxTransform, updateShortcutTransform } from './local.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import Shortcut from './Shortcut.svelte';
@@ -139,7 +139,10 @@
     // --- Bird's Eye View & Fit/Center Logic ---
     $: allItems = [
         ...$windows.filter(w => !w.maximized), // Filter out maximized windows
-        ...($desktopShortcuts || []).map(s => ({ ...s, type: 'shortcut', width: 80, height: 80 })),
+        ...($desktopShortcuts || []).map(s => {
+            const scale = s.scale || 1.0;
+            return { ...s, type: 'shortcut', width: 80 * scale, height: 80 * scale };
+        }),
         ...($boxes || []).map(b => {
             // ... (rest of the mapping function)
             const BASE_WIDTH = 180;
@@ -543,7 +546,7 @@
                 } else if (item.type === 'shortcut') {
                     // FIX 2: Use a dedicated persistence function for shortcuts,
                     // analogous to updateBoxTransform for boxes.
-                    updateShortcutPosition(id, item.x, item.y);
+                    updateShortcutTransform(id, item.x, item.y, item.scale || 1.0);
                 }
             });
         }
@@ -703,7 +706,9 @@
         if (shortcutMoveData) {
             try {
                 const { id } = JSON.parse(shortcutMoveData);
-                updateShortcutPosition(id, worldX, worldY);
+                const shortcut = get(desktopShortcuts).find(s => s.id === id);
+                const currentScale = shortcut ? shortcut.scale || 1.0 : 1.0;
+                updateShortcutTransform(id, worldX, worldY, currentScale);
             } catch (e) {
                 console.error("Failed to handle shortcut move drop:", e);
             }
@@ -778,8 +783,8 @@
     $: normalizedSelectionRect = {
         left: Math.min(selectionRect.x1, selectionRect.x2),
         top: Math.min(selectionRect.y1, selectionRect.y2),
-        width: Math.abs(selectionRect.x1 - selectionRect.x2),
-        height: Math.abs(selectionRect.y1 - selectionRect.y2)
+        width: Math.abs(selectionRect.x1, selectionRect.x2),
+        height: Math.abs(selectionRect.y1, selectionRect.y2)
     };
 </script>
 

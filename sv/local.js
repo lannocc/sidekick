@@ -92,8 +92,8 @@ export function setBoxCover(box_id, location) {
 export function updateDesktopSettings(settings) {
     sendMessage({ type: 'update_desktop_settings', settings });
 }
-export function updateShortcutPosition(id, x, y) {
-    sendMessage({ type: 'update_shortcut_position', id, x, y });
+export function updateShortcutTransform(id, x, y, scale) {
+    sendMessage({ type: 'update_shortcut_transform', id, x, y, scale });
 }
 
 
