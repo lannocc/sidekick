@@ -23,7 +23,7 @@
     $: if (box.scale != null) scale = box.scale;
     $: coverPanelLocation = box.cover_panel_location;
     $: canSetCover = !coverPanelLocation;
-    $: isSelected = $selectedItems.has(box.id);
+    $: isSelected = $selectedItems.has(String(box.id));
 
     // --- Panel Grid Logic ---
     $: panels = box.panels || {};
@@ -432,7 +432,7 @@
     }
 
     function handlePanelClick(event, loc_x, loc_y, isAvailableSlot = false, parent = null) {
-        if (get(wasDraggingItems)) return;
+        if (get(wasDraggingItems) || event.ctrlKey) return;
         
         if (!isUnfolded) {
             isUnfolded = true;
@@ -732,7 +732,7 @@
 >
     <!-- Box Cover Image (dissolves on unfold) -->
     {#if coverImageUrl}
-        <div class="box-cover" on:click={() => { if (!get(wasDraggingItems)) isUnfolded = true; }}>
+        <div class="box-cover" on:click={(e) => { if (!get(wasDraggingItems) && !e.ctrlKey) isUnfolded = true; }}>
             <img src={coverImageUrl} alt="{box.name} cover" class="cover-image" />
         </div>
     {/if}

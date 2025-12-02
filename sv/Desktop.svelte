@@ -780,7 +780,7 @@
 </script>
 
 <style>
-    :global(body.is-dragging-item) {
+    :global(body.is-dragging-item), :global(body.is-dragging-item *) {
         cursor: move !important;
     }
     .desktop {

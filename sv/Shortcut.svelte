@@ -18,8 +18,8 @@
 
     $: isSelected = $selectedItems.has(String(id));
 
-    function handleClick() {
-        if (get(wasDraggingItems)) {
+    function handleClick(event) {
+        if (get(wasDraggingItems) || event.ctrlKey) {
             return;
         }
         if (type === 'dir') {
