@@ -16,7 +16,7 @@
     export let x;
     export let y;
 
-    $: isSelected = $selectedItems.has(id);
+    $: isSelected = $selectedItems.has(String(id));
 
     function handleClick() {
         if (get(wasDraggingItems)) {
