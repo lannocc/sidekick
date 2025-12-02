@@ -291,12 +291,13 @@
 
     function fitAndCenterView() {
         showControls();
+        desktopView.set(targetFitView);
+        updateDesktopSettings(get(desktopView));
+    }
 
+    $: targetFitView = (() => {
         if (!contentBounds.defined || allItems.length === 0) {
-            // No items, just reset the view
-            desktopView.set({ panX: 0, panY: 0, zoom: 1.0 });
-            updateDesktopSettings(get(desktopView));
-            return;
+            return { panX: 0, panY: 0, zoom: 1.0 };
         }
 
         const PADDING = 100; // pixels in world space
@@ -306,10 +307,7 @@
         const contentHeight = bounds.height + PADDING * 2;
 
         if (contentWidth <= 0 || contentHeight <= 0) {
-            // Items have no size, just reset
-            desktopView.set({ panX: 0, panY: 0, zoom: 1.0 });
-            updateDesktopSettings(get(desktopView));
-            return;
+            return { panX: 0, panY: 0, zoom: 1.0 };
         }
 
         const zoomX = innerWidth / contentWidth;
@@ -324,13 +322,13 @@
         const newPanX = (innerWidth / 2) - (contentCenterX * newZoom);
         const newPanY = (innerHeight / 2) - (contentCenterY * newZoom);
 
-        desktopView.set({
-            zoom: newZoom,
-            panX: newPanX,
-            panY: newPanY
-        });
-        updateDesktopSettings(get(desktopView));
-    }
+        return { zoom: newZoom, panX: newPanX, panY: newPanY };
+    })();
+
+    $: isBestFit = $desktopView && targetFitView &&
+        (Math.abs($desktopView.zoom - targetFitView.zoom) < 0.01 &&
+         Math.abs($desktopView.panX - targetFitView.panX) < 1 &&
+         Math.abs($desktopView.panY - targetFitView.panY) < 1);
 
 
     // --- Pan and Zoom state ---
@@ -1117,18 +1115,18 @@
             {/if}
             <div class="zoom-controls">
                 <button on:click={() => zoom(-1)} title="Zoom Out">-</button>
-                <button class="zoom-reset" on:click={resetZoom} title="Reset Zoom">1:1</button>
+                <button class="zoom-reset" on:click={resetZoom} title="Reset Zoom" disabled={$desktopView.zoom === 1.0}>1:1</button>
                 <button on:click={() => zoom(1)} title="Zoom In">+</button>
             </div>
             <div class="pan-controls">
                 <button class="pan-up" on:click={() => pan(0, panStep)} title="Pan Up">▲</button>
                 <button class="pan-left" on:click={() => pan(panStep, 0)} title="Pan Left">◀</button>
-                <button class="pan-reset" on:click={resetPan} title="Reset Pan">●</button>
+                <button class="pan-reset" on:click={resetPan} title="Reset Pan" disabled={$desktopView.panX === 0 && $desktopView.panY === 0}>●</button>
                 <button class="pan-right" on:click={() => pan(-panStep, 0)} title="Pan Right">▶</button>
                 <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
             </div>
             <div class="action-controls">
-                <button class="zoom-reset" on:click={resetView} title="Reset View">Reset</button>         <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content">Fit</button>
+                <button class="zoom-reset" on:click={resetView} title="Reset View" disabled={$desktopView.panX === 0 && $desktopView.panY === 0 && $desktopView.zoom === 1.0}>Reset</button>         <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content" disabled={isBestFit}>Fit</button>
             </div>
         </div>
     {/if}
@@ -1143,4 +1141,3 @@
         <Dash />
     {/if}
 </div>
-
