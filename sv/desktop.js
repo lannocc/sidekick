@@ -132,6 +132,7 @@ windowSettings.subscribe(value => {
 // New store for desktop pan and zoom
 export const desktopView = writable({ panX: 0, panY: 0, zoom: 1.0 });
 
+
 // New stores for Notification Center
 export const notificationHistory = writable([]);
 export const unreadNoticeCount = writable(0);

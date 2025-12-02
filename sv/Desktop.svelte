@@ -137,13 +137,11 @@
 
     // --- Bird's Eye View & Fit/Center Logic ---
     $: allItems = [
-        ...$windows,
+        ...$windows.filter(w => !w.maximized), // Filter out maximized windows
         ...($boxes || []).map(b => {
-            // For the minimap and fit-to-view, use the box's collapsed size,
-            // not the expanded size with all panels.
+            // ... (rest of the mapping function)
             const BASE_WIDTH = 180;
             const scale = b.scale ?? 1.0;
-            // Replicate aspect ratio calculation from Box.svelte (approx 40px taskbar)
             const desktopHeight = innerHeight - 40;
             const aspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
 
@@ -151,7 +149,7 @@
             const boxHeight = BASE_WIDTH * aspectRatio * scale;
 
             return {
-                ...b, // Keep original box properties like id, x, y
+                ...b,
                 width: boxWidth,
                 height: boxHeight,
             };
@@ -768,10 +766,10 @@
                     class="tab-content-wrapper"
                     class:maximized={group.maximized}
                     style:display={(tab.id === group.activeTabId && !group.minimized) ? 'flex' : 'none'}
-                    style:left="{group.maximized ? `calc(-${$desktopView.panX}px / ${$desktopView.zoom})` : `${group.x}px`}"
-                    style:top="{group.maximized ? `calc(-${$desktopView.panY}px / ${$desktopView.zoom})` : `${group.y}px`}"
-                    style:width="{group.maximized ? `calc(100% / ${$desktopView.zoom})` : `${group.width}px`}"
-                    style:height="{group.maximized ? `calc(100% / ${$desktopView.zoom})` : `${group.height}px`}"
+                    style:left="{group.x}px"
+                    style:top="{group.y}px"
+                    style:width="{group.width}px"
+                    style:height="{group.height}px"
                     style:z-index="{tab.isSettingsModalOpen ? group.zIndex + 1 : group.zIndex - 1}"
                     on:focusout={e => handleFocusOut(e, tab)}
                     on:contextmenu|preventDefault|stopPropagation

@@ -12,7 +12,7 @@ import Ask from './Ask.svelte';
 import IoskWatch from './IoskWatch.svelte';
 import IoskUserInspector from './IoskUserInspector.svelte';
 import NotificationCenter from './NotificationCenter.svelte';
-import { desktopSettings, windowSettings, notificationHistory, unreadNoticeCount } from './desktop.js';
+import { desktopSettings, windowSettings, notificationHistory, unreadNoticeCount, desktopView } from './desktop.js';
 
 let windowGroupIdCounter = 0;
 let tabIdCounter = 0;
@@ -71,7 +71,7 @@ export function generateBoardConfigFromWindow(group) {
             title: tab.title,
             maximized: group.maximized,
             wsUrl: tab.wsUrl, username: tab.username,
-            localUser: tab.localUser, remoteUser: tab.remoteUser, 
+            localUser: tab.localUser, remoteUser: tab.remoteUser,
             consoleConnection: tab.consoleConnection || (associatedConsole ? associatedConsole.consoleConnection : null),
             initialPath: tab.currentPath, path: tab.path,
             mode: tab.mode, initialUrl: tab.currentUrl,
@@ -190,6 +190,32 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
 
 function createWindowManager() {
     const { subscribe, update } = writable([]);
+
+    // Subscribe to desktop view changes to update maximized windows
+    if (typeof window !== 'undefined') {
+        desktopView.subscribe(({ panX, panY, zoom }) => {
+            update(windows => {
+                const desktopWidth = window.innerWidth;
+                const desktopHeight = window.innerHeight; // The .desktop div's height is managed by flexbox
+                let changed = false;
+
+                const newWindows = windows.map(w => {
+                    if (w.maximized) {
+                        changed = true;
+                        return {
+                            ...w,
+                            x: -panX / zoom,
+                            y: -panY / zoom,
+                            width: desktopWidth / zoom,
+                            height: desktopHeight / zoom,
+                        };
+                    }
+                    return w;
+                });
+                return changed ? newWindows : windows;
+            });
+        });
+    }
 
     const addWindow = (component, props = {}) => {
         const groupProps = { x: props.x, y: props.y, width: props.width, height: props.height };
@@ -401,11 +427,11 @@ function createWindowManager() {
         if (!group) return;
         const tab = group.tabs.find(t => t.id === tabId);
         if (!tab) return;
-    
+
         const allWindowSettings = get(windowSettings);
         const componentSettings = allWindowSettings[tab.componentName];
         const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
-    
+
         updateTabProps(groupId, tabId, { zoom: defaultZoom });
     };
 
@@ -431,12 +457,23 @@ function createWindowManager() {
 
     const toggleMaximize = (id) => {
         update(windows => {
+            const { panX, panY, zoom } = get(desktopView);
+            const desktopWidth = window.innerWidth;
+            const desktopHeight = window.innerHeight;
+
             const maxZ = windows.reduce((max, w) => Math.max(max, w.zIndex), 99);
             return windows.map(w => {
                 if (w.id === id) {
                     const newProps = w.maximized
                         ? { maximized: false, x: w.prevX, y: w.prevY, width: w.prevWidth, height: w.prevHeight }
-                        : { maximized: true, prevX: w.x, prevY: w.y, prevWidth: w.width, prevHeight: w.height, x: 0, y: 0 };
+                        : {
+                            maximized: true,
+                            prevX: w.x, prevY: w.y, prevWidth: w.width, prevHeight: w.height,
+                            x: -panX / zoom,
+                            y: -panY / zoom,
+                            width: desktopWidth / zoom,
+                            height: desktopHeight / zoom,
+                          };
                     return { ...w, ...newProps, zIndex: maxZ + 1, isActive: true };
                 }
                 return { ...w, isActive: false };
@@ -479,7 +516,7 @@ function createWindowManager() {
             return updatedWindows;
         });
     };
-    
+
     const cycleWindow = (forward) => {
         update(currentWindows => {
             const openWindows = currentWindows.filter(w => !w.minimized).sort((a, b) => b.zIndex - a.zIndex);
@@ -488,7 +525,7 @@ function createWindowManager() {
             let newOrder = [...openWindows];
             if (forward) newOrder.push(newOrder.shift());
             else newOrder.unshift(newOrder.pop());
-            
+
             const newProps = {};
             const activeId = newOrder[0].id;
             newOrder.forEach((win, index) => {
@@ -503,15 +540,15 @@ function createWindowManager() {
         update(windows => {
             const groupIndex = windows.findIndex(g => g.id === groupId);
             if (groupIndex === -1) return windows;
-    
+
             const group = windows[groupIndex];
             const tabs = [...group.tabs];
-            
+
             const draggedIndex = tabs.findIndex(t => t.id == draggedTabId);
             if (draggedIndex === -1) return windows;
-    
+
             const [draggedTab] = tabs.splice(draggedIndex, 1);
-            
+
             if (targetTabId === null) {
                 tabs.push(draggedTab);
             } else {
@@ -522,7 +559,7 @@ function createWindowManager() {
                     tabs.push(draggedTab);
                 }
             }
-    
+
             const newGroup = { ...group, tabs };
             const newWindows = [...windows];
             newWindows[groupIndex] = newGroup;
@@ -542,13 +579,13 @@ function createWindowManager() {
             // 1. Modify source group
             const newSourceTabs = sourceGroup.tabs.filter(t => t.id !== tabId);
             let newWindows = [...windows];
-            
+
             let newActiveTabId = sourceGroup.activeTabId;
             if (newActiveTabId === tabId) {
                 newActiveTabId = newSourceTabs[0].id;
             }
             newWindows[sourceGroupIndex] = { ...sourceGroup, tabs: newSourceTabs, activeTabId: newActiveTabId };
-            
+
             // 2. Create new group for detached tab
             const newWindowGroup = {
                 id: ++windowGroupIdCounter,
@@ -560,12 +597,12 @@ function createWindowManager() {
                 activeTabId: tabToDetach.id,
                 notice: null,
             };
-            
+
             // 3. Add new group and update z-indices/active state
             newWindows = newWindows.map(w => ({ ...w, isActive: w.id === newWindowGroup.id, zIndex: w.id === sourceGroupId ? w.zIndex : w.zIndex - 1 }));
             newWindowGroup.zIndex = newWindows.reduce((max, w) => Math.max(max, w.zIndex), 99) + 1;
             newWindows.push(newWindowGroup);
-            
+
             return newWindows;
         });
     };
@@ -574,9 +611,9 @@ function createWindowManager() {
         const tabs = groupData.tabs.map(tabData => {
             const component = componentMap[tabData.componentType];
             if (!component) return null;
-            
+
             const { componentType, ...props } = tabData;
-    
+
             const allWindowSettings = get(windowSettings);
             const componentSettings = allWindowSettings[tabData.componentType];
             const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
@@ -589,19 +626,19 @@ function createWindowManager() {
                 zoom: props.zoom ?? defaultZoom,
             };
         }).filter(Boolean);
-    
+
         if (tabs.length === 0) return;
-    
+
         const activeTabInNewGroup = tabs.find(t => t.originalId === groupData.activeTabId);
         const newActiveTabId = activeTabInNewGroup ? activeTabInNewGroup.id : (tabs[0] ? tabs[0].id : null);
-    
+
         // Clean up originalId from tabs
         tabs.forEach(t => delete t.originalId);
-    
+
         update(windows => {
             const updatedWindows = windows.map(w => ({ ...w, isActive: false }));
             const maxZ = updatedWindows.reduce((max, w) => Math.max(max, w.zIndex), 99);
-    
+
             const newGroup = {
                 id: ++windowGroupIdCounter,
                 x: groupData.x, y: groupData.y, width: groupData.width, height: groupData.height,
@@ -749,7 +786,7 @@ function createWindowManager() {
             console.error("Could not play notice audio.", e);
         }
     };
-    
+
     const logToNotificationCenter = (group, tab, payload) => {
         const newNotification = {
             id: Date.now(),
@@ -770,28 +807,28 @@ function createWindowManager() {
             if (!group || (group.isActive && !force)) {
                 return windows; // Don't notify for active windows unless forced
             }
-    
+
             const tab = group.tabs.find(t => t.id === tabId);
             if (!tab) return windows;
-    
+
             const settings = resolveNoticeSettings(tab.componentName);
             if (!settings.enabled) return windows;
-    
+
             const noticeId = Date.now();
             const updatedGroup = { ...group, notice: { id: noticeId, color: settings.visual.color } };
-    
+
             if (settings.audio.enabled && settings.audio.sound && settings.audio.sound !== 'none') {
                 playNoticeSound(settings.audio);
             }
-    
+
             logToNotificationCenter(group, tab, payload);
-    
+
             setTimeout(() => {
                 update(currentWindows => currentWindows.map(w =>
                     (w.id === groupId && w.notice?.id === noticeId) ? { ...w, notice: null } : w
                 ));
             }, settings.visual.duration);
-    
+
             return windows.map(w => w.id === groupId ? updatedGroup : w);
         });
     };
@@ -994,3 +1031,4 @@ export function newIoskUserInspector(consoleTabId, targetUser, consoleWs, props 
         ...props,
     });
 }
+
