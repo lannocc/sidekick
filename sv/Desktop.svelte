@@ -6,7 +6,7 @@
     import { windows, newSettings, dragRequest } from './windows.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive, desktopView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems } from './desktop.js';
-    import { boxes, desktopShortcuts, updateDesktopSettings, updateBoxTransform } from './local.js';
+    import { boxes, desktopShortcuts, updateDesktopSettings, updateBoxTransform, updateShortcutPosition } from './local.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import Shortcut from './Shortcut.svelte';
@@ -529,13 +529,17 @@
         if (get(wasDraggingItems)) {
             // Persist final positions
             dragStartData.items.forEach((initial, id) => {
-                const item = allItems.find(i => i.id === id);
+                // FIX 1: Use a safe string comparison to find the item.
+                // This ensures items are found regardless of whether their ID is a number or string.
+                const item = allItems.find(i => String(i.id) === id);
                 if (!item) return;
 
                 if (item.type === 'box') {
                     updateBoxTransform(id, item.x, item.y, item.scale);
                 } else if (item.type === 'shortcut') {
-                    desktopShortcuts.updatePosition(id, item.x, item.y);
+                    // FIX 2: Use a dedicated persistence function for shortcuts,
+                    // analogous to updateBoxTransform for boxes.
+                    updateShortcutPosition(id, item.x, item.y);
                 }
             });
         }
@@ -590,7 +594,7 @@
                 const itemBottom = item.y + item.height;
                 // Check for intersection
                 if (item.x < x2 && itemRight > x1 && item.y < y2 && itemBottom > y1) {
-                    newlySelected.add(item.id);
+                    newlySelected.add(String(item.id));
                 }
             }
         });
