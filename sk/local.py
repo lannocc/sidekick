@@ -98,7 +98,7 @@ def init_db():
     DB_CONN.row_factory = sqlite3.Row  # Makes rows dict-like
     DB_CONN.execute("PRAGMA foreign_keys = ON;") # Enforce foreign key constraints
     cursor = DB_CONN.cursor()
-    
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS box (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -169,9 +169,9 @@ async def broadcast_box_list():
     cursor = DB_CONN.cursor()
     cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location FROM box ORDER BY name")
     boxes = [dict(row) for row in cursor.fetchall()]
-    
+
     message = json.dumps({'type': 'box_list', 'boxes': boxes})
-    
+
     if CONNECTED_CLIENTS:
         log.info(f"Broadcasting box_list to {len(CONNECTED_CLIENTS)} clients.")
         # Concurrently send the message to all clients.
@@ -226,9 +226,9 @@ async def broadcast_desktop_settings():
     cursor = DB_CONN.cursor()
     cursor.execute("SELECT key, value FROM desktop_settings")
     settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
-    
+
     message = json.dumps({'type': 'desktop_settings', 'settings': settings})
-    
+
     if CONNECTED_CLIENTS:
         log.info(f"Broadcasting desktop_settings to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
@@ -461,7 +461,7 @@ async def websocket_handler(websocket):
         cursor.execute("SELECT key, value FROM desktop_settings")
         settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
         await websocket.send(json.dumps({'type': 'desktop_settings', 'settings': settings}))
-        
+
         # Send initial shortcut list on connect
         cursor.execute("SELECT id, name, type, path, x, y FROM desktop_shortcut")
         shortcuts = [dict(row) for row in cursor.fetchall()]
@@ -484,7 +484,7 @@ async def websocket_handler(websocket):
                     print_action("FS Read", f"path='{path}'")
                     response = await handle_fs_read(path)
                     await websocket.send(json.dumps(response))
-                
+
                 # --- Ask Operations ---
                 elif msg_type == 'sk_ask':
                     print_action("SK Ask", f"prompt_len={len(msg.get('prompt', ''))}, files={len(msg.get('files', []))}")
@@ -506,10 +506,11 @@ async def websocket_handler(websocket):
                         )
                     DB_CONN.commit()
                     await broadcast_desktop_settings()
-                
+
                 # --- Desktop Shortcut Operations ---
                 elif msg_type == 'create_shortcut':
-                    name, type, path, x, y = msg['name'], msg['type'], msg['path'], msg['x'], msg['y']
+                    # FIX: Use 'shortcut_type' to avoid collision with the message 'type'
+                    name, shortcut_type, path, x, y = msg['name'], msg['shortcut_type'], msg['path'], msg['x'], msg['y']
                     print_action("Create Shortcut", f"path='{path}'")
                     cursor = DB_CONN.cursor()
                     cursor.execute("""
@@ -518,7 +519,7 @@ async def websocket_handler(websocket):
                         ON CONFLICT(path) DO UPDATE SET
                             x = excluded.x,
                             y = excluded.y;
-                    """, (name, type, path, x, y))
+                    """, (name, shortcut_type, path, x, y))
                     DB_CONN.commit()
                     await broadcast_shortcut_list()
 
@@ -532,7 +533,7 @@ async def websocket_handler(websocket):
                     )
                     DB_CONN.commit()
                     await broadcast_shortcut_list()
-                
+
                 elif msg_type == 'delete_shortcut':
                     shortcut_id = msg['id']
                     print_action("Delete Shortcut", f"id={shortcut_id}")
@@ -548,7 +549,7 @@ async def websocket_handler(websocket):
                     cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location FROM box ORDER BY name")
                     boxes = [dict(row) for row in cursor.fetchall()]
                     await websocket.send(json.dumps({'type': 'box_list', 'boxes': boxes}))
-                
+
                 elif msg_type == 'create_box':
                     name = msg.get('name')
                     box_type = msg.get('box_type')
@@ -641,7 +642,7 @@ async def websocket_handler(websocket):
                     )
                     DB_CONN.commit()
                     await broadcast_box_list()
-                
+
                 elif msg_type == 'delete_box':
                     box_id = msg.get('id')
                     print_action("Delete Box", f"id={box_id}")
@@ -649,7 +650,7 @@ async def websocket_handler(websocket):
                     cursor.execute("DELETE FROM box WHERE id = ?", (msg.get('id'),))
                     DB_CONN.commit()
                     await broadcast_box_list()
-                
+
                 # --- Skybox Panel/Board Operations ---
                 elif msg_type == 'get_box_config':
                     box_id = msg.get('id')
@@ -666,7 +667,7 @@ async def websocket_handler(websocket):
                             log.warning(f"Could not decode board_config for panel at ({panel['loc_x']},{panel['loc_y']}) in box {box_id}")
                             panel['board_config'] = None
                         panels.append(panel)
-                    
+
                     await websocket.send(json.dumps({
                         'type': 'box_config_response',
                         'box_id': box_id,
@@ -692,7 +693,7 @@ async def websocket_handler(websocket):
                     else:
                         # Serialize the board_config dict to a JSON string for storage
                         board_config_json = json.dumps(board_config) if board_config else None
-                        
+
                         # Use UPSERT (INSERT ... ON CONFLICT)
                         cursor.execute("""
                             INSERT INTO panel (box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config)
@@ -703,7 +704,7 @@ async def websocket_handler(websocket):
                                 board_type = excluded.board_type,
                                 board_config = excluded.board_config;
                         """, (box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config_json))
-                    
+
                     DB_CONN.commit()
                     # After successful update, broadcast the new state to all clients
                     await broadcast_box_config(box_id)
@@ -714,11 +715,11 @@ async def websocket_handler(websocket):
                     if not term_id:
                         log.error("term_open message missing term_id")
                         continue
-                    
+
                     if term_id in active_terminals:
                         log.warning(f"Terminal with term_id {term_id} already open for this connection.")
                         continue
-                    
+
                     path = msg.get('path')
                     print_action("Term Open", f"id='{term_id}', path='{path}'" if path else f"id='{term_id}'")
                     (pid, fd) = pty.fork()
@@ -730,7 +731,7 @@ async def websocket_handler(websocket):
                                 log.info(f"Child process for term_id {term_id} changed directory to: {path}")
                             except Exception as e:
                                 log.error(f"Could not change directory to {path} for term_id {term_id}: {e}")
-                        
+
                         shell = os.environ.get('SHELL', 'sh')
                         log.info(f"Child process for term_id {term_id} launching shell: {shell}")
                         os.execvpe(shell, [shell], os.environ)
@@ -822,3 +823,4 @@ def main(args):
             DB_CONN.close()
             log.info("Database connection closed.")
         print_stopped_message()
+

@@ -27,7 +27,15 @@ const { subscribe: shortcutsSubscribe, set: shortcutsSet } = writable([]);
 export const desktopShortcuts = {
     subscribe: shortcutsSubscribe,
     add: (shortcut) => {
-        sendMessage({ type: 'create_shortcut', ...shortcut });
+        // FIX: The original implementation had a key collision on 'type'.
+        // The message type ('create_shortcut') was being overwritten by the shortcut type ('dir' or 'file').
+        // We now destructure the shortcut's type into a new key 'shortcut_type' to avoid this.
+        const { type: shortcutType, ...rest } = shortcut;
+        sendMessage({
+            type: 'create_shortcut',
+            shortcut_type: shortcutType,
+            ...rest
+        });
     },
     remove: (id) => {
         sendMessage({ type: 'delete_shortcut', id });
@@ -208,3 +216,4 @@ function attemptConnection() {
 export function initializeLocalConnection() {
     attemptConnection();
 }
+
