@@ -1104,11 +1104,11 @@
                 </div>
             {/if}
             <div class="zoom-controls">
-                <button class="zoom-reset" on:click={resetZoom} title="Reset Zoom">1:1</button>
                 <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content">Fit</button>
             </div>
             <div class="zoom-controls">
                 <button on:click={() => zoom(-1)} title="Zoom Out">-</button>
+                <button class="zoom-reset" on:click={resetZoom} title="Reset Zoom">1:1</button>
                 <button on:click={() => zoom(1)} title="Zoom In">+</button>
             </div>
             <div class="pan-controls">
