@@ -433,6 +433,7 @@
 
     function handleItemMouseDown(event, itemEl) {
         if (event.button !== 0) return;
+        event.preventDefault(); // Prevent text selection, etc.
         event.stopPropagation();
 
         const id = itemEl.dataset.id;
@@ -469,7 +470,12 @@
 
     function handleItemDragMove(event) {
         if (!isDraggingItems) return;
-        wasDraggingItems.set(true);
+
+        if (!get(wasDraggingItems)) {
+            // On first move, set the dragging flag and cursor
+            document.body.classList.add('is-dragging-item');
+            wasDraggingItems.set(true);
+        }
 
         const { panX, panY, zoom } = get(desktopView);
         const mouseNow = {
@@ -480,19 +486,43 @@
         const dx = mouseNow.x - dragStartData.mouse.x;
         const dy = mouseNow.y - dragStartData.mouse.y;
 
+        const newBoxPositions = new Map();
+        const newShortcutPositions = new Map();
+
         dragStartData.items.forEach((initial, id) => {
             const newX = Math.round(initial.x + dx);
             const newY = Math.round(initial.y + dy);
 
             if (initial.type === 'box') {
-                boxes.update(all => all.map(b => b.id === id ? { ...b, x: newX, y: newY } : b));
+                newBoxPositions.set(id, { x: newX, y: newY });
             } else if (initial.type === 'shortcut') {
-                desktopShortcuts.update(all => all.map(s => s.id === id ? { ...s, x: newX, y: newY } : s));
+                newShortcutPositions.set(id, { x: newX, y: newY });
             }
         });
+
+        if (newBoxPositions.size > 0) {
+            boxes.update(all => all.map(b => {
+                if (newBoxPositions.has(b.id)) {
+                    const newPos = newBoxPositions.get(b.id);
+                    return { ...b, x: newPos.x, y: newPos.y };
+                }
+                return b;
+            }));
+        }
+
+        if (newShortcutPositions.size > 0) {
+            desktopShortcuts.update(all => all.map(s => {
+                if (newShortcutPositions.has(s.id)) {
+                    const newPos = newShortcutPositions.get(s.id);
+                    return { ...s, x: newPos.x, y: newPos.y };
+                }
+                return s;
+            }));
+        }
     }
 
     function handleItemDragEnd() {
+        document.body.classList.remove('is-dragging-item');
         if (get(wasDraggingItems)) {
             // Persist final positions
             dragStartData.items.forEach((initial, id) => {
@@ -743,6 +773,9 @@
 </script>
 
 <style>
+    :global(body.is-dragging-item) {
+        cursor: move !important;
+    }
     .desktop {
         flex-grow: 1;
         position: relative;

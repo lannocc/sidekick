@@ -520,7 +520,7 @@
         overflow: hidden;
         opacity: 1;
         transition: opacity 0.3s ease-in-out;
-        cursor: move;
+        cursor: pointer;
     }
 
     .box.is-unfolded .box-cover {
@@ -561,7 +561,7 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        cursor: move;
+        cursor: pointer;
     }
 
     /* All side panels start hidden and scaled down */
