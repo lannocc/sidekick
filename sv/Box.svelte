@@ -77,7 +77,7 @@
                 }
             }
         }
-        
+
         // Final fallback for any panels that might be part of a detached chain
         // where the root of the chain has no parent info.
         for (const key of panelKeys) {
@@ -97,7 +97,7 @@
             ...p,
             distance: panelDistances[`${p.loc_x}_${p.loc_y}`] ?? (Math.abs(p.loc_x) + Math.abs(p.loc_y))
         }));
-    
+
     $: occupiedCoords = new Set(Object.keys(panels));
     $: availableSlots = (() => {
         const slots = [];
@@ -108,7 +108,7 @@
             const key = `${panel.loc_x}_${panel.loc_y}`;
             coordsToCheck.set(key, { x: panel.loc_x, y: panel.loc_y, key });
         }
-        
+
         // Sort them by path distance from center to ensure deterministic behavior.
         // Fallback to manhattan distance for disconnected panels.
         const sortedCoords = Array.from(coordsToCheck.values()).sort((a, b) => {
@@ -153,6 +153,7 @@
 
     let boxEl;
     let saveTransformTimeout;
+    let clickTimeout = null;
 
     // --- Unfold State ---
     let isUnfolded = false;
@@ -160,7 +161,7 @@
 
     $: isMenuOpen = contextMenu.visible || panelContextMenu.visible || showBoardPicker;
     $: isExpanded = isUnfolded || isMenuOpen;
-    
+
     // When the box is no longer expanded (closed AND menus are closed),
     // also clear the specific panel key to hide available slots.
     $: if (!isExpanded) {
@@ -188,7 +189,7 @@
     function handlePanelRightClick(event, loc_x, loc_y) {
         event.preventDefault();
         event.stopPropagation();
-        
+
         const { panX, panY, zoom } = get(desktopView);
         const menuX = (event.clientX - panX) / zoom;
         const menuY = (event.clientY - 40 - panY) / zoom; // -40 for taskbar height
@@ -258,6 +259,7 @@
     onDestroy(() => {
         window.removeEventListener('click', handleWindowClick);
         window.removeEventListener('keydown', handleKeyDown);
+        if (clickTimeout) clearTimeout(clickTimeout);
     });
 
     // --- Context Menu Actions ---
@@ -280,6 +282,7 @@
         closeContextMenu();
         if (box.type === 'local') {
             newAskWindow([box.context]);
+            isUnfolded = false;
         }
     }
 
@@ -287,6 +290,7 @@
         closeContextMenu();
         if (box.type === 'local' && box.context) {
             newLocalTerminal({ title: `Terminal - ${box.name}`, initialPath: box.context });
+            isUnfolded = false;
         }
     }
 
@@ -294,9 +298,10 @@
         closeContextMenu();
         if (box.type === 'local' && box.context) {
             newLocalFileExplorer({ title: `Files - ${box.name}`, initialPath: box.context });
+            isUnfolded = false;
         }
     }
-    
+
     function setCoverImage() {
         closeContextMenu();
         if (!canSetCover) {
@@ -315,13 +320,15 @@
             const locationKey = `${x}_${y}`;
             savePanelConfig(box.id, x, y, 'image', { url }, parent);
             setBoxCover(box.id, locationKey);
+            isUnfolded = false;
         }
     }
 
     function setCoverImageFromPicker() {
         const { location, parent } = boardPickerProps; // location is {x, y}
         showBoardPicker = false;
-        
+        isUnfolded = false;
+
         const url = prompt("Enter URL for cover image:");
         if (url) {
             const locationKey = `${location.x}_${location.y}`;
@@ -348,6 +355,7 @@
                 setBoxCover(box.id, null);
             }
             savePanelConfig(box.id, location.x, location.y, 'empty', null, null);
+            isUnfolded = false;
         }
     }
 
@@ -357,7 +365,7 @@
             event.preventDefault();
             const zoomStep = 0.05;
             const delta = event.deltaY < 0 ? zoomStep : -zoomStep;
-            
+
             scale = Math.max(0.2, scale + delta);
 
             if (saveTransformTimeout) clearTimeout(saveTransformTimeout);
@@ -423,17 +431,29 @@
         savePanelConfig(box.id, location.x, location.y, board_type, board_config, parent);
         windows.removeWindow(group.id);
         showBoardPicker = false;
+        isUnfolded = false;
     }
 
     function selectDash(layout) {
         const { location, parent } = boardPickerProps; // location is {x, y}
         savePanelConfig(box.id, location.x, location.y, 'dash', layout, parent);
         showBoardPicker = false;
+        isUnfolded = false;
     }
 
-    function handlePanelClick(event, loc_x, loc_y, isAvailableSlot = false, parent = null) {
-        if (get(wasDraggingItems) || event.ctrlKey) return;
-        
+    // --- Panel Click Logic ---
+    function handleCenterPanelSingleClick() {
+        isUnfolded = !isUnfolded;
+    }
+
+    function handleCenterPanelDoubleClick() {
+        if (box.type === 'local' && box.context) {
+            isUnfolded = false;
+            newLocalFileExplorer({ initialPath: box.context, title: `Files - ${box.name}` });
+        }
+    }
+
+    function handleSidePanelClick(event, loc_x, loc_y, isAvailableSlot, parent) {
         if (!isUnfolded) {
             isUnfolded = true;
             return;
@@ -443,44 +463,55 @@
             showBoardPicker = false;
             return;
         }
-        
+
         const panelKey = `${loc_x}_${loc_y}`;
         const panelConfig = panels[panelKey];
 
         if (isAvailableSlot || !panelConfig || panelConfig.board_type === 'empty') {
-            // Click on an empty or potential panel
-            if (loc_x === 0 && loc_y === 0 && box.type === 'local') {
-                newLocalFileExplorer({ initialPath: box.context, title: `Local Files - ${box.name}` });
-            } else if (loc_x !== 0 || loc_y !== 0) {
-                // For side panels, open the board picker.
-                event.stopPropagation();
-                const { panX, panY, zoom } = get(desktopView);
-                boardPickerProps = {
-                    location: { x: loc_x, y: loc_y },
-                    parent: parent,
-                    clientX: (event.clientX - panX) / zoom,
-                    clientY: (event.clientY - 40 - panY) / zoom, // -40 for taskbar height
-                };
-                showBoardPicker = true;
-            }
+            event.stopPropagation();
+            const { panX, panY, zoom } = get(desktopView);
+            boardPickerProps = {
+                location: { x: loc_x, y: loc_y },
+                parent: parent,
+                clientX: (event.clientX - panX) / zoom,
+                clientY: (event.clientY - 40 - panY) / zoom,
+            };
+            showBoardPicker = true;
         } else {
-            // Click on an occupied panel
             const { board_type, board_config } = panelConfig;
-            const isSide = loc_x !== 0 || loc_y !== 0;
 
             if (board_type === 'image') {
                 if (board_config?.url) newWebBrowser({ initialUrl: board_config.url });
-            } else if (isSide) {
-                if (board_type === 'window' || board_type === 'tabs') {
-                    windows.restoreWindow(board_config);
-                } else if (board_type === 'dash' && board_config?.windowGroups) {
-                    for (const group of board_config.windowGroups) {
-                        windows.restoreWindow(group);
-                    }
+            } else if (board_type === 'window' || board_type === 'tabs') {
+                windows.restoreWindow(board_config);
+            } else if (board_type === 'dash' && board_config?.windowGroups) {
+                for (const group of board_config.windowGroups) {
+                    windows.restoreWindow(group);
                 }
             }
+            isUnfolded = false;
         }
     }
+
+    function handlePanelClick(event, loc_x, loc_y, isAvailableSlot = false, parent = null) {
+        if (get(wasDraggingItems) || event.ctrlKey) return;
+
+        if (loc_x === 0 && loc_y === 0) { // Center panel
+            if (clickTimeout) {
+                clearTimeout(clickTimeout);
+                clickTimeout = null;
+                handleCenterPanelDoubleClick();
+            } else {
+                clickTimeout = setTimeout(() => {
+                    clickTimeout = null;
+                    handleCenterPanelSingleClick();
+                }, 250);
+            }
+        } else { // Side panel
+            handleSidePanelClick(event, loc_x, loc_y, isAvailableSlot, parent);
+        }
+    }
+
 
     function isDropTarget(loc_x, loc_y) {
         const target = $dragState?.dropTargetBoxPanel;
@@ -495,13 +526,16 @@
         cursor: pointer;
         user-select: none;
         z-index: 10;
-        transition: z-index 0s 0.3s; /* Delay z-index change until after animation */
+        transition: z-index 0s 0.3s, border-color 0.2s ease-in-out; /* Delay z-index change until after animation */
         border: 1px solid transparent;
         border-radius: 7px; /* A bit larger than panel's 6px */
     }
     .box.selected {
         border-color: rgba(52, 152, 219, 0.9);
         box-shadow: 0 0 8px rgba(52, 152, 219, 0.7);
+    }
+    .box:not(.selected):hover {
+        border-color: rgba(255, 255, 255, 0.4);
     }
 
     .box.is-unfolded {
@@ -732,7 +766,7 @@
 >
     <!-- Box Cover Image (dissolves on unfold) -->
     {#if coverImageUrl}
-        <div class="box-cover" on:click={(e) => { if (!get(wasDraggingItems) && !e.ctrlKey) isUnfolded = true; }}>
+        <div class="box-cover" on:click={(e) => handlePanelClick(e, 0, 0)}>
             <img src={coverImageUrl} alt="{box.name} cover" class="cover-image" />
         </div>
     {/if}
@@ -833,3 +867,4 @@
         {/each}
     </div>
 {/if}
+
