@@ -196,10 +196,25 @@
     // --- View Controls State & Logic ---
     let controlsVisible = false;
     let controlsTimeout;
+    let isMouseOverControls = false;
 
     function showControls() {
         controlsVisible = true;
         if (controlsTimeout) clearTimeout(controlsTimeout);
+        if (!isMouseOverControls) {
+            controlsTimeout = setTimeout(() => {
+                controlsVisible = false;
+            }, 3000); // Linger for 3 seconds
+        }
+    }
+
+    function handleControlsMouseEnter() {
+        isMouseOverControls = true;
+        if (controlsTimeout) clearTimeout(controlsTimeout);
+    }
+
+    function handleControlsMouseLeave() {
+        isMouseOverControls = false;
         controlsTimeout = setTimeout(() => {
             controlsVisible = false;
         }, 3000); // Linger for 3 seconds
@@ -790,7 +805,7 @@
     </div>
 
     {#if controlsVisible}
-        <div class="view-controls" transition:fade={{ duration: 142 }}>
+        <div class="view-controls" transition:fade={{ duration: 142 }} on:mouseenter={handleControlsMouseEnter} on:mouseleave={handleControlsMouseLeave}>
             {#if contentBounds && contentBounds.defined && minimapWidth > 0 && minimapHeight > 0}
                 <div class="birdseye-view" style:width="{minimapWidth}px" style:height="{minimapHeight}px" on:mousedown={handleMinimapMouseDown}>
                     <!-- Items -->
