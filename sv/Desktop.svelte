@@ -283,6 +283,12 @@
         updateDesktopSettings(get(desktopView));
     }
 
+    function resetView() {
+        showControls();
+        desktopView.set({ panX: 0, panY: 0, zoom: 1.0 });
+        updateDesktopSettings(get(desktopView));
+    }
+
     function fitAndCenterView() {
         showControls();
 
@@ -416,10 +422,10 @@
     let isDraggingItems = false;
     let selectionRect = { visible: false, x1: 0, y1: 0, x2: 0, y2: 0 };
     let dragStartData = { mouse: { x: 0, y: 0 }, items: new Map() };
-    
+
     function handleGlobalMouseDown(event) {
         const targetItemEl = event.target.closest('.shortcut, .box');
-        
+
         if (targetItemEl) {
             handleItemMouseDown(event, targetItemEl);
         } else if (event.target.classList.contains('desktop')) {
@@ -543,12 +549,12 @@
                 }
             });
         }
-        
+
         isDraggingItems = false;
         window.removeEventListener('mousemove', handleItemDragMove);
         setTimeout(() => wasDraggingItems.set(false), 0);
     }
-    
+
     function handleMarqueeSelectStart(event) {
         isSelecting = true;
         wasDraggingItems.set(false);
@@ -564,7 +570,7 @@
         if (!event.ctrlKey) {
             selectedItems.set(new Set());
         }
-        
+
         window.addEventListener('mousemove', handleMarqueeSelectMove);
         window.addEventListener('mouseup', handleMarqueeSelectEnd, { once: true });
     }
@@ -584,7 +590,7 @@
         const y1 = ((Math.min(selectionRect.y1, selectionRect.y2) - TASKBAR_HEIGHT) - panY) / zoom;
         const x2 = (Math.max(selectionRect.x1, selectionRect.x2) - panX) / zoom;
         const y2 = ((Math.max(selectionRect.y1, selectionRect.y2) - TASKBAR_HEIGHT) - panY) / zoom;
-        
+
         const currentlySelected = get(selectedItems);
         const newlySelected = new Set(currentlySelected);
 
@@ -689,7 +695,7 @@
         const shortcutMoveData = event.dataTransfer.getData('application/sidekick-shortcut-move');
         const fsItemData = event.dataTransfer.getData('application/sidekick-fs-item');
         const { panX, panY, zoom } = get(desktopView);
-        
+
         // Adjust for icon size so it's centered on cursor
         const iconWidth = 80 / 2;
         const iconHeight = 64 / 2;
@@ -894,7 +900,7 @@
         pointer-events: auto;
         background-color: var(--window-bg);
     }
-    
+
     .selection-box {
         position: fixed;
         border: 1px solid rgba(52, 152, 219, 0.8);
@@ -933,6 +939,12 @@
     .pan-right { grid-area: right; }
     .pan-down { grid-area: down; }
 
+    .action-controls {
+        display: flex;
+        width: 100%;
+        justify-content: space-between;
+    }
+
     .zoom-controls {
         display: flex;
         gap: 4px;
@@ -963,7 +975,7 @@
         background-color: rgba(255, 255, 255, 0.3);
     }
 
-    .zoom-controls .zoom-reset {
+    .view-controls .zoom-reset {
         width: auto;
         padding: 0 8px;
         font-size: 14px;
@@ -1005,7 +1017,7 @@
 <div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
 
     <div class="desktop-content" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
-        
+
         {#if $connectionStatus === 'connected'}
             <div class="shortcuts-layer">
                 {#each $desktopShortcuts as shortcut (shortcut.id)}
@@ -1069,7 +1081,7 @@
     </div>
 
     {#if selectionRect.visible}
-        <div 
+        <div
             class="selection-box"
             style:left="{normalizedSelectionRect.left}px"
             style:top="{normalizedSelectionRect.top}px"
@@ -1104,9 +1116,6 @@
                 </div>
             {/if}
             <div class="zoom-controls">
-                <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content">Fit</button>
-            </div>
-            <div class="zoom-controls">
                 <button on:click={() => zoom(-1)} title="Zoom Out">-</button>
                 <button class="zoom-reset" on:click={resetZoom} title="Reset Zoom">1:1</button>
                 <button on:click={() => zoom(1)} title="Zoom In">+</button>
@@ -1117,6 +1126,9 @@
                 <button class="pan-reset" on:click={resetPan} title="Reset Pan">●</button>
                 <button class="pan-right" on:click={() => pan(-panStep, 0)} title="Pan Right">▶</button>
                 <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
+            </div>
+            <div class="action-controls">
+                <button class="zoom-reset" on:click={resetView} title="Reset View">Reset</button>         <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content">Fit</button>
             </div>
         </div>
     {/if}
@@ -1131,3 +1143,4 @@
         <Dash />
     {/if}
 </div>
+
