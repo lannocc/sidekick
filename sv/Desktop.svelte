@@ -516,15 +516,32 @@
         const currentlyDraggedItems = frameItems.filter(i => draggedItemIds.has(String(i.id)));
         const staticItems = frameItems.filter(i => !draggedItemIds.has(String(i.id)));
         const newlyPushedIds = new Set();
+        const BASE_SHORTCUT_DIM = 80; // From Shortcut.svelte's CSS width
 
         currentlyDraggedItems.forEach(dragged => {
+            // Calculate dragged item's visual bounding box, accounting for transform-origin: center
+            let draggedBox = { x: dragged.x, y: dragged.y, width: dragged.width, height: dragged.height };
+            if (dragged.type === 'shortcut') {
+                const scale = dragged.scale || 1.0;
+                draggedBox.x = dragged.x + (BASE_SHORTCUT_DIM / 2) * (1 - scale);
+                draggedBox.y = dragged.y + (BASE_SHORTCUT_DIM / 2) * (1 - scale);
+            }
+
             staticItems.forEach(staticItem => {
-                // AABB collision check
+                // Calculate static item's visual bounding box
+                let staticBox = { x: staticItem.x, y: staticItem.y, width: staticItem.width, height: staticItem.height };
+                if (staticItem.type === 'shortcut') {
+                    const scale = staticItem.scale || 1.0;
+                    staticBox.x = staticItem.x + (BASE_SHORTCUT_DIM / 2) * (1 - scale);
+                    staticBox.y = staticItem.y + (BASE_SHORTCUT_DIM / 2) * (1 - scale);
+                }
+
+                // AABB collision check using visual bounding boxes
                 if (
-                    dragged.x < staticItem.x + staticItem.width &&
-                    dragged.x + dragged.width > staticItem.x &&
-                    dragged.y < staticItem.y + staticItem.height &&
-                    dragged.y + dragged.height > staticItem.y
+                    draggedBox.x < staticBox.x + staticBox.width &&
+                    draggedBox.x + draggedBox.width > staticBox.x &&
+                    draggedBox.y < staticBox.y + staticBox.height &&
+                    draggedBox.y + draggedBox.height > staticBox.y
                 ) {
                     const staticIdStr = String(staticItem.id);
                     newlyPushedIds.add(staticIdStr);
@@ -532,15 +549,16 @@
                         pushedItemsOriginalPositions.set(staticIdStr, { x: staticItem.x, y: staticItem.y });
                     }
 
-                    // Resolve collision by pushing staticItem
-                    const overlapX = Math.min(dragged.x + dragged.width, staticItem.x + staticItem.width) - Math.max(dragged.x, staticItem.x);
-                    const overlapY = Math.min(dragged.y + dragged.height, staticItem.y + staticItem.height) - Math.max(dragged.y, staticItem.y);
+                    // Resolve collision by pushing staticItem. The update is applied to the layout
+                    // coordinates (item.x, item.y), but the calculation uses visual boxes.
+                    const overlapX = Math.min(draggedBox.x + draggedBox.width, staticBox.x + staticBox.width) - Math.max(draggedBox.x, staticBox.x);
+                    const overlapY = Math.min(draggedBox.y + draggedBox.height, staticBox.y + staticBox.height) - Math.max(draggedBox.y, staticBox.y);
                     
                     if (overlapX < overlapY) {
-                        const sign = Math.sign((staticItem.x + staticItem.width / 2) - (dragged.x + dragged.width / 2));
+                        const sign = Math.sign((staticBox.x + staticBox.width / 2) - (draggedBox.x + draggedBox.width / 2));
                         staticItem.x += overlapX * (sign || 1);
                     } else {
-                        const sign = Math.sign((staticItem.y + staticItem.height / 2) - (dragged.y + dragged.height / 2));
+                        const sign = Math.sign((staticBox.y + staticBox.height / 2) - (draggedBox.y + draggedBox.height / 2));
                         staticItem.y += overlapY * (sign || 1);
                     }
                 }
