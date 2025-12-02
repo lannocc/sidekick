@@ -437,7 +437,7 @@
         event.stopPropagation();
 
         const id = itemEl.dataset.id;
-        
+
         // Update selection
         if (event.ctrlKey) {
             selectedItems.update(s => {
@@ -458,7 +458,8 @@
 
         dragStartData.items.clear();
         get(selectedItems).forEach(selId => {
-            const item = allItems.find(i => i.id === selId);
+            // FIX: Convert item's ID to a string for a correct strict comparison
+            const item = allItems.find(i => String(i.id) === selId);
             if (item) {
                 dragStartData.items.set(selId, { x: item.x, y: item.y, type: item.type, scale: item.scale });
             }
@@ -502,8 +503,9 @@
 
         if (newBoxPositions.size > 0) {
             boxes.update(all => all.map(b => {
-                if (newBoxPositions.has(b.id)) {
-                    const newPos = newBoxPositions.get(b.id);
+                const idStr = String(b.id); // Convert ID to string
+                if (newBoxPositions.has(idStr)) {
+                    const newPos = newBoxPositions.get(idStr);
                     return { ...b, x: newPos.x, y: newPos.y };
                 }
                 return b;
@@ -512,8 +514,9 @@
 
         if (newShortcutPositions.size > 0) {
             desktopShortcuts.update(all => all.map(s => {
-                if (newShortcutPositions.has(s.id)) {
-                    const newPos = newShortcutPositions.get(s.id);
+                const idStr = String(s.id); // Convert ID to string
+                if (newShortcutPositions.has(idStr)) {
+                    const newPos = newShortcutPositions.get(idStr);
                     return { ...s, x: newPos.x, y: newPos.y };
                 }
                 return s;
