@@ -140,32 +140,21 @@
     $: allItems = [
         ...$windows,
         ...($boxes || []).map(b => {
-            // If panels aren't loaded yet, or there are none, we can't calculate real bounds.
-            if (!b.panels || Object.keys(b.panels).length === 0) {
-                // Return the box with 0 dimensions to avoid NaN values in calculations.
-                return { ...b, width: 0, height: 0 };
-            }
+            // For the minimap and fit-to-view, use the box's collapsed size,
+            // not the expanded size with all panels.
+            const BASE_WIDTH = 180;
+            const scale = b.scale ?? 1.0;
+            // Replicate aspect ratio calculation from Box.svelte (approx 40px taskbar)
+            const desktopHeight = innerHeight - 40;
+            const aspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
 
-            const windowPanels = Object.values(b.panels).filter(p => p.board_type === 'window' && p.board_config);
+            const boxWidth = BASE_WIDTH * scale;
+            const boxHeight = BASE_WIDTH * aspectRatio * scale;
 
-            if (windowPanels.length === 0) {
-                return { ...b, width: 0, height: 0 };
-            }
-
-            // Assumes panel window coordinates are relative to the box's own (x, y) origin.
-            const minX = Math.min(...windowPanels.map(p => p.board_config.x));
-            const minY = Math.min(...windowPanels.map(p => p.board_config.y));
-            const maxX = Math.max(...windowPanels.map(p => p.board_config.x + p.board_config.width));
-            const maxY = Math.max(...windowPanels.map(p => p.board_config.y + p.board_config.height));
-
-            // Create a temporary object for allItems that represents the box's true bounding box on the desktop.
-            // This does not affect the props passed to the <Box> component itself.
             return {
-                ...b, // keep id, etc.
-                x: b.x + minX,
-                y: b.y + minY,
-                width: maxX - minX,
-                height: maxY - minY,
+                ...b, // Keep original box properties like id, x, y
+                width: boxWidth,
+                height: boxHeight,
             };
         })
     ];
