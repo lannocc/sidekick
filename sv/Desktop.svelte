@@ -29,6 +29,11 @@
     let innerWidth, innerHeight;
     let totalContentBounds;
 
+    $: isDesktopEmpty = $windows.length === 0 && 
+                        ($desktopShortcuts || []).length === 0 && 
+                        ($boxes || []).length === 0 && 
+                        ($backedWindows || []).length === 0;
+
     // --- View Control Mode ---
     let viewControlMode = 'both'; // 'back', 'both', 'front'
     let ctrlPressed = false;
@@ -303,6 +308,7 @@
     let isMouseOverControls = false;
 
     function showControls() {
+        if (isDesktopEmpty) return;
         controlsVisible = true;
         if (controlsTimeout) clearTimeout(controlsTimeout);
         if (!isMouseOverControls) {
@@ -1067,6 +1073,7 @@
     }
 
     function handleDesktopPanStart(event) {
+        if (isDesktopEmpty) return;
         if (event.target !== event.currentTarget) return;
         isPanning = true;
         wasPanning = false;
@@ -1110,6 +1117,7 @@
     }
 
     function handleDesktopWheel(event) {
+        if (isDesktopEmpty) return;
         // Only zoom if scrolling on the desktop background itself
         if (event.target !== event.currentTarget) return;
 
