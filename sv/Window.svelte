@@ -6,7 +6,7 @@
     import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { windows, dragState, instanceRegistry, dragRequest, generateBoardConfigFromWindow } from './windows.js';
-    import { desktopSettings, windowSettings, desktopView } from './desktop.js';
+    import { desktopSettings, windowSettings, windowView, TASKBAR_HEIGHT } from './desktop.js';
     import { savePanelConfig } from './local.js';
     import IoskConsole from './IoskConsole.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
@@ -219,9 +219,9 @@
         isDragging = true;
         dragState.set({ draggingGroupId: id, dropTargetGroupId: null, dropTargetBoxPanel: null });
 
-        const { panX, panY, zoom } = get(desktopView);
+        const { panX, panY, zoom } = get(windowView);
         const worldMouseX = (event.clientX - panX) / zoom;
-        const worldMouseY = (event.clientY - panY) / zoom;
+        const worldMouseY = ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom;
 
         dragOffsetX = worldMouseX - x;
         dragOffsetY = worldMouseY - y;
@@ -235,9 +235,9 @@
     function onDrag(event) {
         if (!isDragging) return;
         
-        const { panX, panY, zoom } = get(desktopView);
+        const { panX, panY, zoom } = get(windowView);
         const worldMouseX = (event.clientX - panX) / zoom;
-        const worldMouseY = (event.clientY - panY) / zoom;
+        const worldMouseY = ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom;
 
         const newX = worldMouseX - dragOffsetX;
         const newY = worldMouseY - dragOffsetY;
@@ -301,7 +301,7 @@
         if (!isResizing) return;
         const { x: ix, y: iy, width: iw, height: ih, mouseX: startX, mouseY: startY } = initialResizeState;
 
-        const { zoom } = get(desktopView);
+        const { zoom } = get(windowView);
         const dx = (event.clientX - startX) / zoom;
         const dy = (event.clientY - startY) / zoom;
         const minWidth = 250, minHeight = 150;

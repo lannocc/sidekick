@@ -1540,7 +1540,7 @@
                     {#each allItems as item (`${item.type}-${item.id}`)}
                         <div
                             class="birdseye-item"
-                            class:window={$windows.some(w => w.id === item.id)}
+                            class:window={item.type === 'window'}
                             style:left="{(item.x - totalContentBounds.x) * minimapScale}px"
                             style:top="{(item.y - totalContentBounds.y) * minimapScale}px"
                             style:width="{item.width * minimapScale}px"
