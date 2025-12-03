@@ -226,12 +226,17 @@
         } else { // 'both' mode
             // Normalize back layer items into the front layer's coordinate space for the minimap
             const frontItems = allItems.filter(item => item.type === 'window');
+
+            // Calculate relative pan offset in front layer's world space
+            const relativePanX = $windowView.zoom > 0 ? ($desktopView.panX - $windowView.panX) / $windowView.zoom : 0;
+            const relativePanY = $windowView.zoom > 0 ? ($desktopView.panY - $windowView.panY) / $windowView.zoom : 0;
+
             const backItems = allItems
                 .filter(item => item.type !== 'window')
                 .map(item => ({
                     ...item,
-                    x: item.x * relativeDesktopZoom,
-                    y: item.y * relativeDesktopZoom,
+                    x: (item.x * relativeDesktopZoom) + relativePanX,
+                    y: (item.y * relativeDesktopZoom) + relativePanY,
                     width: item.width * relativeDesktopZoom,
                     height: item.height * relativeDesktopZoom,
                 }));
@@ -261,15 +266,15 @@
 
     $: backViewportRect = totalContentBounds && totalContentBounds.defined && $desktopView.zoom > 0 ? {
         x: ((viewControlMode === 'both' && $windowView.zoom > 0 ?
-            (-$desktopView.panX / $windowView.zoom) :
+            (-$windowView.panX / $windowView.zoom) :
             (-$desktopView.panX / $desktopView.zoom)
         ) - totalContentBounds.x) * minimapScale,
         y: ((viewControlMode === 'both' && $windowView.zoom > 0 ?
-            (-$desktopView.panY / $windowView.zoom) :
+            (-$windowView.panY / $windowView.zoom) :
             (-$desktopView.panY / $desktopView.zoom)
         ) - totalContentBounds.y) * minimapScale,
-        width: (innerWidth / $desktopView.zoom) * minimapScale,
-        height: (innerHeight / $desktopView.zoom) * minimapScale
+        width: ((viewControlMode === 'both' && $windowView.zoom > 0 ? innerWidth / $windowView.zoom : innerWidth / $desktopView.zoom)) * minimapScale,
+        height: ((viewControlMode === 'both' && $windowView.zoom > 0 ? innerHeight / $windowView.zoom : innerHeight / $desktopView.zoom)) * minimapScale
     } : { x: 0, y: 0, width: 0, height: 0 };
 
     $: frontViewportRect = totalContentBounds && totalContentBounds.defined && $windowView.zoom > 0 ? {
