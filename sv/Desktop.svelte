@@ -567,12 +567,19 @@
 
         if (minimapScale > 0) {
             if (viewControlMode === 'back' || viewControlMode === 'both') {
-                const panDx = -(dx / minimapScale) * $desktopView.zoom;
-                const panDy = -(dy / minimapScale) * $desktopView.zoom;
+                // When in 'both' mode, the minimap is normalized to the front view's coordinate space.
+                // To maintain relative positioning while panning, the pan delta for the back layer must
+                // be calculated using the front layer's zoom as the reference.
+                // When in 'back' only mode, we use its own zoom.
+                const zoomForBackPan = viewControlMode === 'both' ? $windowView.zoom : $desktopView.zoom;
+                const panDx = -(dx / minimapScale) * zoomForBackPan;
+                const panDy = -(dy / minimapScale) * zoomForBackPan;
 
                 desktopView.update(view => ({ ...view, panX: view.panX + panDx, panY: view.panY + panDy }));
             }
             if (viewControlMode === 'front' || viewControlMode === 'both') {
+                // The front layer pan is always calculated with its own zoom, as the minimap
+                // is either showing only front items, or is normalized to the front layer's space.
                 const panDx = -(dx / minimapScale) * $windowView.zoom;
                 const panDy = -(dy / minimapScale) * $windowView.zoom;
 
