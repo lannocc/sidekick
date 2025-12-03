@@ -216,13 +216,26 @@
         })
     ];
 
+    $: relativeDesktopZoom = $windowView.zoom !== 0 ? $desktopView.zoom / $windowView.zoom : 1;
+
     $: minimapItems = (() => {
         if (viewControlMode === 'back') {
             return allItems.filter(item => item.type !== 'window');
         } else if (viewControlMode === 'front') {
             return allItems.filter(item => item.type === 'window');
         } else { // 'both' mode
-            return allItems;
+            // Normalize back layer items into the front layer's coordinate space for the minimap
+            const frontItems = allItems.filter(item => item.type === 'window');
+            const backItems = allItems
+                .filter(item => item.type !== 'window')
+                .map(item => ({
+                    ...item,
+                    x: item.x * relativeDesktopZoom,
+                    y: item.y * relativeDesktopZoom,
+                    width: item.width * relativeDesktopZoom,
+                    height: item.height * relativeDesktopZoom,
+                }));
+            return [...frontItems, ...backItems];
         }
     })();
 
@@ -247,8 +260,14 @@
     $: minimapHeight = totalContentBounds && totalContentBounds.defined ? totalContentBounds.height * minimapScale : 0;
 
     $: backViewportRect = totalContentBounds && totalContentBounds.defined && $desktopView.zoom > 0 ? {
-        x: ((-$desktopView.panX / $desktopView.zoom) - totalContentBounds.x) * minimapScale,
-        y: ((-$desktopView.panY / $desktopView.zoom) - totalContentBounds.y) * minimapScale,
+        x: ((viewControlMode === 'both' && $windowView.zoom > 0 ?
+            (-$desktopView.panX / $windowView.zoom) :
+            (-$desktopView.panX / $desktopView.zoom)
+        ) - totalContentBounds.x) * minimapScale,
+        y: ((viewControlMode === 'both' && $windowView.zoom > 0 ?
+            (-$desktopView.panY / $windowView.zoom) :
+            (-$desktopView.panY / $desktopView.zoom)
+        ) - totalContentBounds.y) * minimapScale,
         width: (innerWidth / $desktopView.zoom) * minimapScale,
         height: (innerHeight / $desktopView.zoom) * minimapScale
     } : { x: 0, y: 0, width: 0, height: 0 };
@@ -539,13 +558,22 @@
 
             if (minimapScale > 0) {
                 // Convert click coordinates from minimap space to world space
-                const clickedWorldX = (clickOnMinimapX / minimapScale) + totalContentBounds.x;
-                const clickedWorldY = (clickOnMinimapY / minimapScale) + totalContentBounds.y;
+                let clickedWorldX = (clickOnMinimapX / minimapScale) + totalContentBounds.x;
+                let clickedWorldY = (clickOnMinimapY / minimapScale) + totalContentBounds.y;
 
                 if (viewControlMode === 'back' || viewControlMode === 'both') {
+                    // When in 'both' mode, the click is in the normalized (front) space.
+                    // We need to convert it back to the back layer's space for that layer.
+                    let backWorldX = clickedWorldX;
+                    let backWorldY = clickedWorldY;
+                    if (viewControlMode === 'both' && relativeDesktopZoom !== 0) {
+                        backWorldX /= relativeDesktopZoom;
+                        backWorldY /= relativeDesktopZoom;
+                    }
+
                     const view = get(desktopView);
-                    const newPanX = (innerWidth / 2) - (clickedWorldX * view.zoom);
-                    const newPanY = (innerHeight / 2) - (clickedWorldY * view.zoom);
+                    const newPanX = (innerWidth / 2) - (backWorldX * view.zoom);
+                    const newPanY = (innerHeight / 2) - (backWorldY * view.zoom);
                     desktopView.set({ zoom: view.zoom, panX: newPanX, panY: newPanY });
                     updateDesktopSettings(get(desktopView));
                 }
