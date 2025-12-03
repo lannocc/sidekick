@@ -31,6 +31,18 @@
 
     // --- View Control Mode ---
     let viewControlMode = 'both'; // 'back', 'both', 'front'
+    let ctrlPressed = false;
+    let shiftPressed = false;
+
+    $: displayViewControlMode = (() => {
+        // Only override when controls are visible, indicating a recent/ongoing interaction
+        if (controlsVisible && (ctrlPressed || shiftPressed)) {
+            if (ctrlPressed && shiftPressed) return 'both';
+            if (ctrlPressed) return 'back';
+            if (shiftPressed) return 'front';
+        }
+        return viewControlMode;
+    })();
 
     // --- Context Menu State ---
     let contextMenu = {
@@ -219,9 +231,9 @@
     $: relativeDesktopZoom = $windowView.zoom !== 0 ? $desktopView.zoom / $windowView.zoom : 1;
 
     $: minimapItems = (() => {
-        if (viewControlMode === 'back') {
+        if (displayViewControlMode === 'back') {
             return allItems.filter(item => item.type !== 'window');
-        } else if (viewControlMode === 'front') {
+        } else if (displayViewControlMode === 'front') {
             return allItems.filter(item => item.type === 'window');
         } else { // 'both' mode
             // Normalize back layer items into the front layer's coordinate space for the minimap
@@ -265,16 +277,16 @@
     $: minimapHeight = totalContentBounds && totalContentBounds.defined ? totalContentBounds.height * minimapScale : 0;
 
     $: backViewportRect = totalContentBounds && totalContentBounds.defined && $desktopView.zoom > 0 ? {
-        x: ((viewControlMode === 'both' && $windowView.zoom > 0 ?
+        x: ((displayViewControlMode === 'both' && $windowView.zoom > 0 ?
             (-$windowView.panX / $windowView.zoom) :
             (-$desktopView.panX / $desktopView.zoom)
         ) - totalContentBounds.x) * minimapScale,
-        y: ((viewControlMode === 'both' && $windowView.zoom > 0 ?
+        y: ((displayViewControlMode === 'both' && $windowView.zoom > 0 ?
             (-$windowView.panY / $windowView.zoom) :
             (-$desktopView.panY / $desktopView.zoom)
         ) - totalContentBounds.y) * minimapScale,
-        width: ((viewControlMode === 'both' && $windowView.zoom > 0 ? innerWidth / $windowView.zoom : innerWidth / $desktopView.zoom)) * minimapScale,
-        height: ((viewControlMode === 'both' && $windowView.zoom > 0 ? innerHeight / $windowView.zoom : innerHeight / $desktopView.zoom)) * minimapScale
+        width: ((displayViewControlMode === 'both' && $windowView.zoom > 0 ? innerWidth / $windowView.zoom : innerWidth / $desktopView.zoom)) * minimapScale,
+        height: ((displayViewControlMode === 'both' && $windowView.zoom > 0 ? innerHeight / $windowView.zoom : innerHeight / $desktopView.zoom)) * minimapScale
     } : { x: 0, y: 0, width: 0, height: 0 };
 
     $: frontViewportRect = totalContentBounds && totalContentBounds.defined && $windowView.zoom > 0 ? {
@@ -417,7 +429,7 @@
         showControls();
         const targetView = targetFitView;
 
-        if (viewControlMode === 'both') {
+        if (displayViewControlMode === 'both') {
             const currentWindowView = get(windowView);
             const currentDesktopView = get(desktopView);
             
@@ -449,10 +461,10 @@
                 updateDesktopSettings(targetView);
                 windowView.set(targetView);
             }
-        } else if (viewControlMode === 'back') {
+        } else if (displayViewControlMode === 'back') {
             desktopView.set(targetView);
             updateDesktopSettings(targetView);
-        } else if (viewControlMode === 'front') {
+        } else if (displayViewControlMode === 'front') {
             windowView.set(targetView);
         }
     }
@@ -494,9 +506,9 @@
                  Math.abs(view.panX - targetFitView.panX) < 1 &&
                  Math.abs(view.panY - targetFitView.panY) < 1);
         };
-        if (viewControlMode === 'back') return checkFit($desktopView);
-        if (viewControlMode === 'front') return checkFit($windowView);
-        if (viewControlMode === 'both') {
+        if (displayViewControlMode === 'back') return checkFit($desktopView);
+        if (displayViewControlMode === 'front') return checkFit($windowView);
+        if (displayViewControlMode === 'both') {
             // In 'both' mode, 'fit' targets the front view and adjusts the back view
             // relatively. So, we only need to check if the front view is fit.
             return checkFit($windowView);
@@ -506,27 +518,27 @@
 
     // --- Dynamic Disabled States for View Controls ---
     $: isZoomResetDisabled = (() => {
-        if (viewControlMode === 'back') return $desktopView.zoom === 1.0;
-        if (viewControlMode === 'front') return $windowView.zoom === 1.0;
-        if (viewControlMode === 'both') return $desktopView.zoom === 1.0 && $windowView.zoom === 1.0;
+        if (displayViewControlMode === 'back') return $desktopView.zoom === 1.0;
+        if (displayViewControlMode === 'front') return $windowView.zoom === 1.0;
+        if (displayViewControlMode === 'both') return $desktopView.zoom === 1.0 && $windowView.zoom === 1.0;
         return false;
     })();
 
     $: isPanResetDisabled = (() => {
         const isBackReset = $desktopView.panX === 0 && $desktopView.panY === 0;
         const isFrontReset = $windowView.panX === 0 && $windowView.panY === 0;
-        if (viewControlMode === 'back') return isBackReset;
-        if (viewControlMode === 'front') return isFrontReset;
-        if (viewControlMode === 'both') return isBackReset && isFrontReset;
+        if (displayViewControlMode === 'back') return isBackReset;
+        if (displayViewControlMode === 'front') return isFrontReset;
+        if (displayViewControlMode === 'both') return isBackReset && isFrontReset;
         return false;
     })();
 
     $: isViewResetDisabled = (() => {
         const isBackReset = $desktopView.panX === 0 && $desktopView.panY === 0 && $desktopView.zoom === 1.0;
         const isFrontReset = $windowView.panX === 0 && $windowView.panY === 0 && $windowView.zoom === 1.0;
-        if (viewControlMode === 'back') return isBackReset;
-        if (viewControlMode === 'front') return isFrontReset;
-        if (viewControlMode === 'both') return isBackReset && isFrontReset;
+        if (displayViewControlMode === 'back') return isBackReset;
+        if (displayViewControlMode === 'front') return isFrontReset;
+        if (displayViewControlMode === 'both') return isBackReset && isFrontReset;
         return false;
     })();
 
@@ -567,18 +579,18 @@
         const dy = event.clientY - minimapLastPos.y;
 
         if (minimapScale > 0) {
-            if (viewControlMode === 'back' || viewControlMode === 'both') {
+            if (displayViewControlMode === 'back' || displayViewControlMode === 'both') {
                 // When in 'both' mode, the minimap is normalized to the front view's coordinate space.
                 // To maintain relative positioning while panning, the pan delta for the back layer must
                 // be calculated using the front layer's zoom as the reference.
                 // When in 'back' only mode, we use its own zoom.
-                const zoomForBackPan = viewControlMode === 'both' ? $windowView.zoom : $desktopView.zoom;
+                const zoomForBackPan = displayViewControlMode === 'both' ? $windowView.zoom : $desktopView.zoom;
                 const panDx = -(dx / minimapScale) * zoomForBackPan;
                 const panDy = -(dy / minimapScale) * zoomForBackPan;
 
                 desktopView.update(view => ({ ...view, panX: view.panX + panDx, panY: view.panY + panDy }));
             }
-            if (viewControlMode === 'front' || viewControlMode === 'both') {
+            if (displayViewControlMode === 'front' || displayViewControlMode === 'both') {
                 // The front layer pan is always calculated with its own zoom, as the minimap
                 // is either showing only front items, or is normalized to the front layer's space.
                 const panDx = -(dx / minimapScale) * $windowView.zoom;
@@ -596,7 +608,7 @@
 
         if (wasMinimapDragging) {
             // Persist final position after drag
-            if (viewControlMode === 'back' || viewControlMode === 'both') {
+            if (displayViewControlMode === 'back' || displayViewControlMode === 'both') {
                 updateDesktopSettings(get(desktopView));
             }
         } else if (minimapElementRef) {
@@ -610,12 +622,12 @@
                 let clickedWorldX = (clickOnMinimapX / minimapScale) + totalContentBounds.x;
                 let clickedWorldY = (clickOnMinimapY / minimapScale) + totalContentBounds.y;
 
-                if (viewControlMode === 'back' || viewControlMode === 'both') {
+                if (displayViewControlMode === 'back' || displayViewControlMode === 'both') {
                     // When in 'both' mode, the click is in the normalized (front) space.
                     // We need to convert it back to the back layer's space for that layer.
                     let backWorldX = clickedWorldX;
                     let backWorldY = clickedWorldY;
-                    if (viewControlMode === 'both' && relativeDesktopZoom !== 0) {
+                    if (displayViewControlMode === 'both' && relativeDesktopZoom !== 0) {
                         backWorldX /= relativeDesktopZoom;
                         backWorldY /= relativeDesktopZoom;
                     }
@@ -626,7 +638,7 @@
                     desktopView.set({ zoom: view.zoom, panX: newPanX, panY: newPanY });
                     updateDesktopSettings(get(desktopView));
                 }
-                if (viewControlMode === 'front' || viewControlMode === 'both') {
+                if (displayViewControlMode === 'front' || displayViewControlMode === 'both') {
                     const view = get(windowView);
                     const newPanX = (innerWidth / 2) - (clickedWorldX * view.zoom);
                     const newPanY = (innerHeight / 2) - (clickedWorldY * view.zoom);
@@ -1525,7 +1537,22 @@
     }
 </style>
 
-<svelte:window bind:innerWidth bind:innerHeight />
+<svelte:window 
+    bind:innerWidth 
+    bind:innerHeight 
+    on:keydown={e => {
+        if (e.key === 'Control' && !e.repeat) ctrlPressed = true;
+        if (e.key === 'Shift' && !e.repeat) shiftPressed = true;
+    }}
+    on:keyup={e => {
+        if (e.key === 'Control') ctrlPressed = false;
+        if (e.key === 'Shift') shiftPressed = false;
+    }}
+    on:blur={() => {
+        ctrlPressed = false;
+        shiftPressed = false;
+    }}
+/>
 
 <div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
 
@@ -1636,9 +1663,9 @@
     {#if controlsVisible}
         <div class="view-controls" transition:fade={{ duration: 142 }} on:mouseenter={handleControlsMouseEnter} on:mouseleave={handleControlsMouseLeave}>
             <div class="view-mode-controls">
-                <button class:active={viewControlMode === 'back'} on:click={() => viewControlMode = 'back'}>Back</button>
-                <button class:active={viewControlMode === 'both'} on:click={() => viewControlMode = 'both'}>Both</button>
-                <button class:active={viewControlMode === 'front'} on:click={() => viewControlMode = 'front'}>Front</button>
+                <button class:active={displayViewControlMode === 'back'} on:click={() => viewControlMode = 'back'}>Back</button>
+                <button class:active={displayViewControlMode === 'both'} on:click={() => viewControlMode = 'both'}>Both</button>
+                <button class:active={displayViewControlMode === 'front'} on:click={() => viewControlMode = 'front'}>Front</button>
             </div>
             {#if totalContentBounds && totalContentBounds.defined && minimapWidth > 0 && minimapHeight > 0}
                 <div class="birdseye-view" style:width="{minimapWidth}px" style:height="{minimapHeight}px" on:mousedown={handleMinimapMouseDown}>
@@ -1654,7 +1681,7 @@
                         />
                     {/each}
                     <!-- Viewports -->
-                    {#if viewControlMode === 'back' || viewControlMode === 'both'}
+                    {#if displayViewControlMode === 'back' || displayViewControlMode === 'both'}
                         <div
                             class="birdseye-viewport back"
                             style:left="{backViewportRect.x}px"
@@ -1663,7 +1690,7 @@
                             style:height="{backViewportRect.height}px"
                         />
                     {/if}
-                    {#if viewControlMode === 'front' || viewControlMode === 'both'}
+                    {#if displayViewControlMode === 'front' || displayViewControlMode === 'both'}
                          <div
                             class="birdseye-viewport front"
                             style:left="{frontViewportRect.x}px"
