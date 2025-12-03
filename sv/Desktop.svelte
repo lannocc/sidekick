@@ -138,7 +138,7 @@
 
     // --- Bird's Eye View & Fit/Center Logic ---
     $: allItems = [
-        ...$windows.filter(w => !w.maximized), // Filter out maximized windows
+        ...$windows.filter(w => !w.maximized).map(w => ({ ...w, type: 'window' })), // Filter out maximized windows and add type
         ...($desktopShortcuts || []).map(s => {
             const scale = s.scale || 1.0;
             // Use rendered dimensions if available, otherwise fallback to a default.
@@ -1334,7 +1334,7 @@
             {#if contentBounds && contentBounds.defined && minimapWidth > 0 && minimapHeight > 0}
                 <div class="birdseye-view" style:width="{minimapWidth}px" style:height="{minimapHeight}px" on:mousedown={handleMinimapMouseDown}>
                     <!-- Items -->
-                    {#each allItems as item (item.id)}
+                    {#each allItems as item (`${item.type}-${item.id}`)}
                         <div
                             class="birdseye-item"
                             class:window={$windows.some(w => w.id === item.id)}
