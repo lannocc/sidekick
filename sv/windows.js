@@ -83,6 +83,7 @@ export function generateBoardConfigFromWindow(group) {
             initialPwd: tab.initialPwd,
             initialInterval: tab.initialInterval,
             initialState: tab.initialState,
+            consoleId: tab.consoleId, // Keep for remapping
         };
     });
     return {
@@ -189,9 +190,129 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
     return clampToDesktop({ x: 50 + (currentWindowId % 10) * 20, y: 50 + (currentWindowId % 10) * 20 });
 }
 
+function createSerializableLayout(allWindows) {
+    if (typeof window === 'undefined') return null;
+
+    const windowGroups = allWindows.map(group => {
+        const config = generateBoardConfigFromWindow(group);
+        return {
+            ...config,
+            zIndex: group.zIndex,
+        };
+    });
+
+    return {
+        desktop: {
+            width: window.innerWidth,
+            height: window.innerHeight - TASKBAR_HEIGHT,
+        },
+        windowGroups,
+    };
+}
+
 
 function createWindowManager() {
-    const { subscribe, update } = writable([]);
+    const rehydrateLayout = (layout) => {
+        if (!layout || !layout.windowGroups) return [];
+        
+        windowGroupIdCounter = 0;
+        tabIdCounter = 0;
+        const idMap = new Map();
+
+        const savedDesktopWidth = layout.desktop?.width || window.innerWidth;
+        const savedDesktopHeight = layout.desktop?.height || (window.innerHeight - 40);
+        const currentDesktopWidth = window.innerWidth;
+        const currentDesktopHeight = window.innerHeight - 40;
+        const scaleX = currentDesktopWidth / savedDesktopWidth;
+        const scaleY = currentDesktopHeight / savedDesktopHeight;
+
+        let newGroups = [];
+        const sortedGroupsData = [...layout.windowGroups].sort((a,b) => (a.zIndex || 0) - (b.zIndex || 0));
+
+        for (const groupData of sortedGroupsData) {
+            const scaledGroupData = { ...groupData };
+            if (!scaledGroupData.maximized) {
+                scaledGroupData.x = Math.round(scaledGroupData.x * scaleX);
+                scaledGroupData.y = Math.round(scaledGroupData.y * scaleY);
+                scaledGroupData.width = Math.round(scaledGroupData.width * scaleX);
+                scaledGroupData.height = Math.round(scaledGroupData.height * scaleY);
+            }
+
+            const newTabs = scaledGroupData.tabs.map(tabData => {
+                const component = componentMap[tabData.componentType];
+                if (!component) return null;
+                const { componentType, originalId, ...props } = tabData;
+                const allWindowSettings = get(windowSettings);
+                const componentSettings = allWindowSettings[tabData.componentType];
+                const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
+                const newTabId = ++tabIdCounter;
+                idMap.set(originalId, newTabId);
+                return { id: newTabId, component, componentName: tabData.componentType, ...props, zoom: props.zoom ?? defaultZoom, originalId };
+            }).filter(Boolean);
+
+            if (newTabs.length === 0) continue;
+
+            newGroups.push({
+                id: ++windowGroupIdCounter,
+                x: scaledGroupData.x, y: scaledGroupData.y, width: scaledGroupData.width, height: scaledGroupData.height,
+                minimized: false,
+                maximized: scaledGroupData.maximized,
+                isActive: false,
+                zIndex: scaledGroupData.zIndex,
+                prevX: scaledGroupData.x, prevY: scaledGroupData.y, prevWidth: scaledGroupData.width, prevHeight: scaledGroupData.height,
+                notice: null,
+                tabs: newTabs,
+                activeTabId: scaledGroupData.activeTabId,
+            });
+        }
+
+        let topZ = -1;
+        let topWindowId = -1;
+        for (const group of newGroups) {
+            group.activeTabId = idMap.get(group.activeTabId) || (group.tabs.length > 0 ? group.tabs[0].id : null);
+            for (const tab of group.tabs) {
+                if (tab.consoleId) {
+                    tab.consoleId = idMap.get(tab.consoleId) || tab.consoleId;
+                }
+                delete tab.originalId;
+            }
+            if (group.zIndex > topZ) {
+                topZ = group.zIndex;
+                topWindowId = group.id;
+            }
+        }
+        if (topWindowId !== -1) {
+            const topWindow = newGroups.find(g => g.id === topWindowId);
+            if (topWindow) topWindow.isActive = true;
+        }
+        
+        return newGroups;
+    };
+
+    let initialWindows = [];
+    if (typeof window !== 'undefined') {
+        try {
+            const savedLayoutJson = localStorage.getItem('sidekickWindowLayout');
+            if (savedLayoutJson) {
+                const savedLayout = JSON.parse(savedLayoutJson);
+                initialWindows = rehydrateLayout(savedLayout);
+            }
+        } catch (e) {
+            console.error("Failed to load and restore window layout:", e);
+            localStorage.removeItem('sidekickWindowLayout');
+        }
+    }
+    
+    const { subscribe, update } = writable(initialWindows);
+
+    subscribe(allWindows => {
+        if (typeof window !== 'undefined') {
+            const layoutToSave = createSerializableLayout(allWindows);
+            if (layoutToSave) {
+                localStorage.setItem('sidekickWindowLayout', JSON.stringify(layoutToSave));
+            }
+        }
+    });
 
     // Subscribe to window view changes to update maximized windows
     if (typeof window !== 'undefined') {
@@ -656,7 +777,6 @@ function createWindowManager() {
         });
     };
 
-    // <<< FIX: Add the new restoreLayout function
     const restoreLayout = (layout) => {
         if (!layout || !layout.windowGroups) return;
 
@@ -871,7 +991,7 @@ function createWindowManager() {
         reorderTab,
         detachTabToNewWindow,
         restoreWindow,
-        restoreLayout, // <<< FIX: Export the new function
+        restoreLayout,
         notifyActivity,
         backWindow,
         unbackWindow,
