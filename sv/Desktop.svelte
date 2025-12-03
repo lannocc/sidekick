@@ -40,6 +40,9 @@
     let shiftPressed = false;
 
     $: displayViewControlMode = (() => {
+        if ($connectionStatus !== 'connected') {
+            return 'front';
+        }
         // Only override when controls are visible, indicating a recent/ongoing interaction
         if (controlsVisible && (ctrlPressed || shiftPressed)) {
             if (ctrlPressed && shiftPressed) return 'both';
@@ -1566,33 +1569,33 @@
 
     <!-- BACK LAYER -->
     <div class="desktop-content back-layer" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
-        <div class="backed-windows-layer">
-            {#each $backedWindows as bw (bw.id)}
-                {@const config = bw.config}
-                {@const activeTabConfig = (config.tabs.find(t => t.originalId === config.activeTabId) || config.tabs[0])}
-                {#if activeTabConfig}
-                    {@const Component = componentMap[activeTabConfig.componentType]}
-                    {#if Component}
-                        {@const tabProps = { ...activeTabConfig, id: activeTabConfig.originalId, groupId: bw.id, isActive: false, isBacked: true, x: bw.x, y: bw.y, width: bw.width, height: bw.height }}
-                        <div
-                            class="tab-content-wrapper backed-window"
-                            style:left="{bw.x}px"
-                            style:top="{bw.y}px"
-                            style:width="{bw.width * (bw.scale || 1.0)}px"
-                            style:height="{bw.height * (bw.scale || 1.0)}px"
-                            style:z-index="{bw.z_index || 1}"
-                            on:contextmenu|preventDefault|stopPropagation={(event) => showBackedWindowContextMenu(event, bw)}
-                        >
-                            <div class="backed-content-area" style:zoom={activeTabConfig.zoom || 1.0}>
-                                <svelte:component this={Component} {...tabProps} />
-                            </div>
-                        </div>
-                    {/if}
-                {/if}
-            {/each}
-        </div>
-
         {#if $connectionStatus === 'connected'}
+            <div class="backed-windows-layer">
+                {#each $backedWindows as bw (bw.id)}
+                    {@const config = bw.config}
+                    {@const activeTabConfig = (config.tabs.find(t => t.originalId === config.activeTabId) || config.tabs[0])}
+                    {#if activeTabConfig}
+                        {@const Component = componentMap[activeTabConfig.componentType]}
+                        {#if Component}
+                            {@const tabProps = { ...activeTabConfig, id: activeTabConfig.originalId, groupId: bw.id, isActive: false, isBacked: true, x: bw.x, y: bw.y, width: bw.width, height: bw.height }}
+                            <div
+                                class="tab-content-wrapper backed-window"
+                                style:left="{bw.x}px"
+                                style:top="{bw.y}px"
+                                style:width="{bw.width * (bw.scale || 1.0)}px"
+                                style:height="{bw.height * (bw.scale || 1.0)}px"
+                                style:z-index="{bw.z_index || 1}"
+                                on:contextmenu|preventDefault|stopPropagation={(event) => showBackedWindowContextMenu(event, bw)}
+                            >
+                                <div class="backed-content-area" style:zoom={activeTabConfig.zoom || 1.0}>
+                                    <svelte:component this={Component} {...tabProps} />
+                                </div>
+                            </div>
+                        {/if}
+                    {/if}
+                {/each}
+            </div>
+
             <div class="shortcuts-layer">
                 {#each $desktopShortcuts as shortcut (shortcut.id)}
                     <Shortcut {...shortcut} on:scale={e => handleItemScaleRequest({ detail: { ...e.detail, type: 'shortcut' } })}/>
@@ -1670,11 +1673,13 @@
 
     {#if controlsVisible}
         <div class="view-controls" transition:fade={{ duration: 142 }} on:mouseenter={handleControlsMouseEnter} on:mouseleave={handleControlsMouseLeave}>
-            <div class="view-mode-controls">
-                <button class:active={displayViewControlMode === 'back'} on:click={() => viewControlMode = 'back'}>Back</button>
-                <button class:active={displayViewControlMode === 'both'} on:click={() => viewControlMode = 'both'}>Both</button>
-                <button class:active={displayViewControlMode === 'front'} on:click={() => viewControlMode = 'front'}>Front</button>
-            </div>
+            {#if $connectionStatus === 'connected'}
+                <div class="view-mode-controls">
+                    <button class:active={displayViewControlMode === 'back'} on:click={() => viewControlMode = 'back'}>Back</button>
+                    <button class:active={displayViewControlMode === 'both'} on:click={() => viewControlMode = 'both'}>Both</button>
+                    <button class:active={displayViewControlMode === 'front'} on:click={() => viewControlMode = 'front'}>Front</button>
+                </div>
+            {/if}
             {#if totalContentBounds && totalContentBounds.defined && minimapWidth > 0 && minimapHeight > 0}
                 <div class="birdseye-view" style:width="{minimapWidth}px" style:height="{minimapHeight}px" on:mousedown={handleMinimapMouseDown}>
                     <!-- Items -->
