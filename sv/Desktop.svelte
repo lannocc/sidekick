@@ -427,6 +427,81 @@
         window.removeEventListener('mousemove', handleMinimapMouseMove);
     }
 
+    // --- Item Scaling State ---
+    let scalingSession = {
+        active: false,
+        targetId: null,
+        startStates: [],
+        pushedItems: new Map(),
+    };
+
+    function handleKeyUpForScale(event) {
+        if ((event.key === 'Control' || event.key === 'Alt') && scalingSession.active) {
+            // Persist final positions for both scaled and pushed items.
+            const finalItems = allItems.filter(item =>
+                String(item.id) === scalingSession.targetId || scalingSession.pushedItems.has(String(item.id))
+            );
+
+            finalItems.forEach(item => {
+                if (item.type === 'box') {
+                    updateBoxTransform(item.id, item.x, item.y, item.scale);
+                } else if (item.type === 'shortcut') {
+                    updateShortcutTransform(item.id, item.x, item.y, item.scale || 1.0);
+                }
+            });
+
+            // Reset session
+            scalingSession.active = false;
+            scalingSession.targetId = null;
+        }
+    }
+
+    function handleItemScaleRequest(event) {
+        const { id, type, newScale } = event.detail;
+        const idStr = String(id);
+
+        // Start a new session if not active or if the target item has changed.
+        if (!scalingSession.active || scalingSession.targetId !== idStr) {
+            scalingSession.active = true;
+            scalingSession.targetId = idStr;
+            scalingSession.startStates = allItems.map(i => ({ ...i }));
+            scalingSession.pushedItems.clear();
+        }
+
+        // 1. Create a working copy from start states and apply the new scale.
+        let frameItems = scalingSession.startStates.map(i => ({ ...i }));
+        const sourceItem = frameItems.find(i => String(i.id) === idStr);
+        if (!sourceItem) return;
+
+        sourceItem.scale = newScale;
+
+        if (type === 'shortcut') {
+            const unscaledWidth = sourceItem.renderWidth || 90;
+            const unscaledHeight = sourceItem.renderHeight || 90;
+            sourceItem.width = unscaledWidth * newScale;
+            sourceItem.height = unscaledHeight * newScale;
+        } else if (type === 'box') {
+            const BASE_WIDTH = 180;
+            const desktopHeight = innerHeight - TASKBAR_HEIGHT;
+            const aspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
+            sourceItem.width = BASE_WIDTH * newScale;
+            sourceItem.height = BASE_WIDTH * aspectRatio * newScale;
+        }
+
+        // 2. Resolve collisions.
+        const activeItemIds = new Set([idStr]);
+        const updatedFrameItems = resolveCollisions(
+            frameItems,
+            activeItemIds,
+            scalingSession.startStates,
+            scalingSession.pushedItems
+        );
+
+        // 3. Update stores for live preview.
+        const itemsToUpdate = new Set([...activeItemIds, ...scalingSession.pushedItems.keys()]);
+        updateStoresAfterCollision(updatedFrameItems, itemsToUpdate);
+    }
+
     // --- Selection and Dragging State ---
     let isSelecting = false;
     let isDraggingItems = false;
@@ -513,6 +588,97 @@
         window.addEventListener('mouseup', handleItemDragEnd, { once: true });
     }
 
+    function resolveCollisions(frameItems, activeItemIds, startStates, pushedItemsMap) {
+        const MAX_ITERATIONS = 30; // Safety break for complex chain reactions
+
+        const isColliding = (boxA, boxB) => (
+            boxA.x < boxB.x + boxB.width &&
+            boxA.x + boxA.width > boxB.x &&
+            boxA.y < boxB.y + boxB.height &&
+            boxA.y + boxA.height > boxB.y
+        );
+
+        for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+            let collisionsFound = 0;
+
+            for (let i = 0; i < frameItems.length; i++) {
+                for (let j = i + 1; j < frameItems.length; j++) {
+                    const itemA = frameItems[i];
+                    const itemB = frameItems[j];
+
+                    const boxA = getItemBoundingBox(itemA);
+                    const boxB = getItemBoundingBox(itemB);
+
+                    if (!isColliding(boxA, boxB)) continue;
+
+                    collisionsFound++;
+
+                    const idA = String(itemA.id);
+                    const idB = String(itemB.id);
+
+                    const isAActive = activeItemIds.has(idA);
+                    const isBActive = activeItemIds.has(idB);
+
+                    // Items in the active set (e.g., dragged together) don't push each other.
+                    if (isAActive && isBActive) continue;
+
+                    const originalA = startStates.find(s => String(s.id) === idA);
+                    const originalB = startStates.find(s => String(s.id) === idB);
+                    const hasAMoved = Math.abs(itemA.x - originalA.x) > 0.1 || Math.abs(itemA.y - originalA.y) > 0.1;
+                    const hasBMoved = Math.abs(itemB.x - originalB.x) > 0.1 || Math.abs(itemB.y - originalB.y) > 0.1;
+
+                    let pusher, pushed, pusherBox, pushedBox;
+
+                    if (isAActive) {
+                        [pusher, pushed, pusherBox, pushedBox] = [itemA, itemB, boxA, boxB];
+                    } else if (isBActive) {
+                        [pusher, pushed, pusherBox, pushedBox] = [itemB, itemA, boxB, boxA];
+                    } else if (hasAMoved && !hasBMoved) {
+                        [pusher, pushed, pusherBox, pushedBox] = [itemA, itemB, boxA, boxB];
+                    } else if (!hasAMoved && hasBMoved) {
+                        [pusher, pushed, pusherBox, pushedBox] = [itemB, itemA, boxB, boxA];
+                    } else {
+                        continue;
+                    }
+
+                    const pushedId = String(pushed.id);
+                    if (!pushedItemsMap.has(pushedId)) {
+                        pushedItemsMap.set(pushedId, { x: pushed.x, y: pushed.y });
+                    }
+
+                    const overlapX = Math.min(pusherBox.x + pusherBox.width, pushedBox.x + pushedBox.width) - Math.max(pusherBox.x, pushedBox.x);
+                    const overlapY = Math.min(pusherBox.y + pusherBox.height, pushedBox.y + pushedBox.height) - Math.max(pusherBox.y, pushedBox.y);
+
+                    if (overlapX < overlapY) {
+                        const sign = Math.sign((pushedBox.x + pushedBox.width / 2) - (pusherBox.x + pusherBox.width / 2));
+                        pushed.x += overlapX * (sign || 1);
+                    } else {
+                        const sign = Math.sign((pushedBox.y + pushedBox.height / 2) - (pusherBox.y + pusherBox.height / 2));
+                        pushed.y += overlapY * (sign || 1);
+                    }
+                }
+            }
+
+            if (collisionsFound === 0) break;
+        }
+        return frameItems;
+    }
+
+    function updateStoresAfterCollision(frameItems, itemsToUpdate) {
+        const newPositions = new Map();
+        frameItems.forEach(item => {
+            const idStr = String(item.id);
+            if (itemsToUpdate.has(idStr)) {
+                newPositions.set(idStr, { x: Math.round(item.x), y: Math.round(item.y), scale: item.scale });
+            }
+        });
+
+        if (newPositions.size === 0) return;
+
+        boxes.update(all => all.map(b => newPositions.has(String(b.id)) ? { ...b, ...newPositions.get(String(b.id)) } : b));
+        desktopShortcuts.update(all => all.map(s => newPositions.has(String(s.id)) ? { ...s, ...newPositions.get(String(s.id)) } : s));
+    }
+
     function handleItemDragMove(event) {
         if (!isDraggingItems) return;
 
@@ -544,116 +710,15 @@
         });
 
         // 2. Iteratively resolve collisions
-        const MAX_ITERATIONS = 30; // Safety break for complex chain reactions
-
-        const isColliding = (boxA, boxB) => (
-            boxA.x < boxB.x + boxB.width &&
-            boxA.x + boxA.width > boxB.x &&
-            boxA.y < boxB.y + boxB.height &&
-            boxA.y + boxA.height > boxB.y
+        const updatedFrameItems = resolveCollisions(
+            frameItems,
+            draggedItemIds,
+            dragStartItemStates,
+            pushedItemsOriginalPositions
         );
 
-        for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-            let collisionsFound = 0;
-
-            for (let i = 0; i < frameItems.length; i++) {
-                for (let j = i + 1; j < frameItems.length; j++) {
-                    const itemA = frameItems[i];
-                    const itemB = frameItems[j];
-
-                    const boxA = getItemBoundingBox(itemA);
-                    const boxB = getItemBoundingBox(itemB);
-
-                    if (!isColliding(boxA, boxB)) continue;
-
-                    collisionsFound++;
-
-                    const idA = String(itemA.id);
-                    const idB = String(itemB.id);
-
-                    const isADragged = draggedItemIds.has(idA);
-                    const isBDragged = draggedItemIds.has(idB);
-
-                    if (isADragged && isBDragged) continue; // Items dragged together don't push each other
-
-                    const originalA = dragStartItemStates.find(s => String(s.id) === idA);
-                    const originalB = dragStartItemStates.find(s => String(s.id) === idB);
-                    // Check if item has moved from its initial position at the start of the drag
-                    const hasAMoved = Math.abs(itemA.x - originalA.x) > 0.1 || Math.abs(itemA.y - originalA.y) > 0.1;
-                    const hasBMoved = Math.abs(itemB.x - originalB.x) > 0.1 || Math.abs(itemB.y - originalB.y) > 0.1;
-
-                    let pusher, pushed, pusherBox, pushedBox;
-
-                    if (isADragged) {
-                        [pusher, pushed, pusherBox, pushedBox] = [itemA, itemB, boxA, boxB];
-                    } else if (isBDragged) {
-                        [pusher, pushed, pusherBox, pushedBox] = [itemB, itemA, boxB, boxA];
-                    } else if (hasAMoved && !hasBMoved) {
-                        // A moved item pushes a static item
-                        [pusher, pushed, pusherBox, pushedBox] = [itemA, itemB, boxA, boxB];
-                    } else if (!hasAMoved && hasBMoved) {
-                        // A moved item pushes a static item
-                        [pusher, pushed, pusherBox, pushedBox] = [itemB, itemA, boxB, boxA];
-                    } else {
-                        // Both moved or neither moved.
-                        // If neither moved, it's a pre-existing overlap. Don't resolve.
-                        // If both moved, it's a conflict. Safest to do nothing to prevent oscillations.
-                        continue;
-                    }
-
-                    const pushedId = String(pushed.id);
-                    if (!pushedItemsOriginalPositions.has(pushedId)) {
-                        pushedItemsOriginalPositions.set(pushedId, { x: pushed.x, y: pushed.y });
-                    }
-
-                    // CHANGED: Corrected overlap calculation to prevent "jumping"
-                    const overlapX = Math.min(pusherBox.x + pusherBox.width, pushedBox.x + pushedBox.width) - Math.max(pusherBox.x, pushedBox.x);
-                    const overlapY = Math.min(pusherBox.y + pusherBox.height, pushedBox.y + pushedBox.height) - Math.max(pusherBox.y, pushedBox.y);
-
-                    if (overlapX < overlapY) {
-                        const sign = Math.sign((pushedBox.x + pushedBox.width / 2) - (pusherBox.x + pusherBox.width / 2));
-                        pushed.x += overlapX * (sign || 1);
-                    } else {
-                        const sign = Math.sign((pushedBox.y + pushedBox.height / 2) - (pusherBox.y + pusherBox.height / 2));
-                        pushed.y += overlapY * (sign || 1);
-                    }
-                }
-            }
-
-            if (collisionsFound === 0) break; // If no collisions in a full pass, the layout is stable
-        }
-
-        // 4. Update Svelte stores for any items that have been part of the drag interaction
-        // CHANGED: This whole block is replaced to fix items not returning to their original positions.
-        const itemsToUpdate = new Set([...draggedItemIds, ...pushedItemsOriginalPositions.keys()]);
-        
-        if (itemsToUpdate.size > 0) {
-            const newBoxPositions = new Map();
-            const newShortcutPositions = new Map();
-
-            frameItems.forEach(item => {
-                const idStr = String(item.id);
-                if (itemsToUpdate.has(idStr)) {
-                    const newPos = { x: Math.round(item.x), y: Math.round(item.y) };
-                    if (item.type === 'box') newBoxPositions.set(idStr, newPos);
-                    else if (item.type === 'shortcut') newShortcutPositions.set(idStr, newPos);
-                }
-            });
-
-            // Only call update if there are relevant items to change, to avoid unnecessary updates
-            if (newBoxPositions.size > 0) {
-                boxes.update(all => all.map(b => {
-                    const idStr = String(b.id);
-                    return newBoxPositions.has(idStr) ? { ...b, ...newBoxPositions.get(idStr) } : b;
-                }));
-            }
-            if (newShortcutPositions.size > 0) {
-                desktopShortcuts.update(all => all.map(s => {
-                    const idStr = String(s.id);
-                    return newShortcutPositions.has(idStr) ? { ...s, ...newShortcutPositions.get(idStr) } : s;
-                }));
-            }
-        }
+        // 3. Update Svelte stores for any items that have been part of the drag interaction
+        updateStoresAfterCollision(updatedFrameItems, itemsToUpdate);
     }
 
     function handleItemDragEnd() {
@@ -855,9 +920,11 @@
     onMount(() => {
         // The WebSocket connection is now established in SideKick.svelte
         window.addEventListener('click', closeContextMenu);
+        window.addEventListener('keyup', handleKeyUpForScale);
     });
     onDestroy(() => {
         window.removeEventListener('click', closeContextMenu);
+        window.removeEventListener('keyup', handleKeyUpForScale);
         Object.values(focusTimeoutDesktop).forEach(clearTimeout);
         if (saveViewTimeout) clearTimeout(saveViewTimeout);
         if (controlsTimeout) clearTimeout(controlsTimeout);
@@ -1153,12 +1220,12 @@
         {#if $connectionStatus === 'connected'}
             <div class="shortcuts-layer">
                 {#each $desktopShortcuts as shortcut (shortcut.id)}
-                    <Shortcut {...shortcut} />
+                    <Shortcut {...shortcut} on:scale={e => handleItemScaleRequest({ detail: { ...e.detail, type: 'shortcut' } })}/>
                 {/each}
             </div>
             <div class="boxes-layer">
                 {#each $boxes as box (box.id)}
-                    <Box {box} />
+                    <Box {box} on:scale={e => handleItemScaleRequest({ detail: { ...e.detail, type: 'box' } })}/>
                 {/each}
             </div>
         {/if}

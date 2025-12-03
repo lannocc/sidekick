@@ -8,7 +8,7 @@
     import { desktopView, selectedItems, wasDraggingItems } from './desktop.js';
     import { desktopShortcuts, updateShortcutTransform } from './local.js';
     import { get } from 'svelte/store';
-    import { onDestroy, afterUpdate } from 'svelte';
+    import { onDestroy, afterUpdate, createEventDispatcher } from 'svelte';
 
     export let id;
     export let name;
@@ -18,8 +18,8 @@
     export let y;
     export let scale = 1.0;
 
+    const dispatch = createEventDispatcher();
     $: isSelected = $selectedItems.has(String(id));
-    let saveTransformTimeout;
     let element;
 
     // By using afterUpdate, we ensure the rendered dimensions are always kept up-to-date
@@ -61,22 +61,10 @@
             event.preventDefault();
             const zoomStep = 0.05;
             const delta = event.deltaY < 0 ? zoomStep : -zoomStep;
-            const newScale = Math.max(0.2, (scale || 1.0) + delta);
-
-            desktopShortcuts.update(shortcuts =>
-                shortcuts.map(s => (s.id === id ? { ...s, scale: newScale } : s))
-            );
-
-            if (saveTransformTimeout) clearTimeout(saveTransformTimeout);
-            saveTransformTimeout = setTimeout(() => {
-                updateShortcutTransform(id, x, y, newScale);
-            }, 300);
+            const newScale = Math.max(0.2, (scale ?? 1.0) + delta);
+            dispatch('scale', { id, newScale });
         }
     }
-
-    onDestroy(() => {
-        if (saveTransformTimeout) clearTimeout(saveTransformTimeout);
-    });
 </script>
 
 <style>
@@ -130,6 +118,7 @@
     style:transform="scale({scale || 1.0})"
     on:click={handleClick}
     on:wheel={handleWheel}
+    on:scale
 >
     <div class="icon">{type === 'dir' ? '🗂️' : '📄'}</div>
     <div class="name">{name}</div>

@@ -3,7 +3,7 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { onMount, onDestroy } from 'svelte';
+    import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
     import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover } from './local.js';
@@ -11,6 +11,8 @@
     import Board from './Board.svelte';
 
     export let box;
+
+    const dispatch = createEventDispatcher();
 
     // --- Position, Size, and Scale ---
     let x = box.x ?? 100 + (box.id % 5) * 200;
@@ -371,13 +373,9 @@
             event.preventDefault();
             const zoomStep = 0.05;
             const delta = event.deltaY < 0 ? zoomStep : -zoomStep;
-
-            scale = Math.max(0.2, scale + delta);
-
-            if (saveTransformTimeout) clearTimeout(saveTransformTimeout);
-            saveTransformTimeout = setTimeout(() => {
-                updateBoxTransform(box.id, Math.round(x), Math.round(y), scale);
-            }, 300);
+            const currentScale = box.scale ?? 1.0;
+            const newScale = Math.max(0.2, currentScale + delta);
+            dispatch('scale', { id: box.id, newScale });
         }
     }
 
@@ -770,6 +768,7 @@
     style:height="{boxHeight}px"
     style:z-index={isExpanded ? maxWindowZ + 1 : 10}
     on:wheel={handleWheel}
+    on:scale
 >
     <!-- Box Cover Image (dissolves on unfold) -->
     {#if coverImageUrl}
