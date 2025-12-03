@@ -8,7 +8,7 @@
     import { desktopView, selectedItems, wasDraggingItems } from './desktop.js';
     import { desktopShortcuts, updateShortcutTransform } from './local.js';
     import { get } from 'svelte/store';
-    import { onMount, onDestroy } from 'svelte';
+    import { onDestroy, afterUpdate } from 'svelte';
 
     export let id;
     export let name;
@@ -22,16 +22,26 @@
     let saveTransformTimeout;
     let element;
 
-    onMount(() => {
+    // By using afterUpdate, we ensure the rendered dimensions are always kept up-to-date
+    // in our central store. This is more robust than onMount because it accounts for
+    // dimension changes that might happen after the initial render, such as a long
+    // name wrapping to a new line, or fonts loading.
+    afterUpdate(() => {
         if (element) {
-            // Update the store with the actual rendered dimensions of this shortcut
-            desktopShortcuts.update(shortcuts =>
-                shortcuts.map(s =>
-                    s.id === id
-                        ? { ...s, renderWidth: element.offsetWidth, renderHeight: element.offsetHeight }
-                        : s
-                )
-            );
+            // Get the currently stored data to compare against.
+            const currentData = get(desktopShortcuts).find(s => s.id === id);
+
+            // Only update the global store if the dimensions have actually changed.
+            // This check is crucial to prevent an infinite loop of updates.
+            if (!currentData || currentData.renderWidth !== element.offsetWidth || currentData.renderHeight !== element.offsetHeight) {
+                desktopShortcuts.update(shortcuts =>
+                    shortcuts.map(s =>
+                        s.id === id
+                            ? { ...s, renderWidth: element.offsetWidth, renderHeight: element.offsetHeight }
+                            : s
+                    )
+                );
+            }
         }
     });
 
