@@ -8,7 +8,7 @@
     import { desktopView, selectedItems, wasDraggingItems } from './desktop.js';
     import { desktopShortcuts, updateShortcutTransform } from './local.js';
     import { get } from 'svelte/store';
-    import { onDestroy } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
 
     export let id;
     export let name;
@@ -20,6 +20,20 @@
 
     $: isSelected = $selectedItems.has(String(id));
     let saveTransformTimeout;
+    let element;
+
+    onMount(() => {
+        if (element) {
+            // Update the store with the actual rendered dimensions of this shortcut
+            desktopShortcuts.update(shortcuts =>
+                shortcuts.map(s =>
+                    s.id === id
+                        ? { ...s, renderWidth: element.offsetWidth, renderHeight: element.offsetHeight }
+                        : s
+                )
+            );
+        }
+    });
 
     function handleClick(event) {
         if (get(wasDraggingItems) || event.ctrlKey) {
@@ -96,6 +110,7 @@
 </style>
 
 <div
+    bind:this={element}
     class="shortcut"
     class:selected={isSelected}
     data-id={id}

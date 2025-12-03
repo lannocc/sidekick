@@ -141,7 +141,16 @@
         ...$windows.filter(w => !w.maximized), // Filter out maximized windows
         ...($desktopShortcuts || []).map(s => {
             const scale = s.scale || 1.0;
-            return { ...s, type: 'shortcut', width: 80 * scale, height: 80 * scale };
+            // Use rendered dimensions if available, otherwise fallback to a default.
+            // The 90px width comes from 80px width + 4px*2 padding + 1px*2 border in Shortcut.svelte CSS
+            const unscaledWidth = s.renderWidth || 90;
+            const unscaledHeight = s.renderHeight || 90;
+            return {
+                ...s,
+                type: 'shortcut',
+                width: unscaledWidth * scale,
+                height: unscaledHeight * scale
+            };
         }),
         ...($boxes || []).map(b => {
             // ... (rest of the mapping function)
@@ -426,6 +435,29 @@
     let dragStartItemStates = [];
     let pushedItemsOriginalPositions = new Map();
 
+    // Helper to get the visual bounding box of an item, accounting for transforms
+    const getItemBoundingBox = (item) => {
+        let box = { x: item.x, y: item.y, width: item.width, height: item.height };
+
+        if (item.type === 'shortcut') {
+            const scale = item.scale || 1.0;
+            if (scale === 1.0) return box;
+
+            // item.width and item.height are already scaled. To get unscaled, we divide by scale.
+            const unscaledWidth = item.width / scale;
+            const unscaledHeight = item.height / scale;
+
+            const offsetX = (unscaledWidth / 2) * (1 - scale);
+            const offsetY = (unscaledHeight / 2) * (1 - scale);
+
+            box.x = item.x + offsetX;
+            box.y = item.y + offsetY;
+        }
+
+        return box;
+    };
+
+
     function handleGlobalMouseDown(event) {
         const targetItemEl = event.target.closest('.shortcut, .box');
 
@@ -513,18 +545,6 @@
 
         // 2. Iteratively resolve collisions
         const MAX_ITERATIONS = 30; // Safety break for complex chain reactions
-        const BASE_SHORTCUT_DIM = 80; // From Shortcut.svelte's CSS width
-
-        const getItemBoundingBox = (item) => {
-            let box = { x: item.x, y: item.y, width: item.width, height: item.height };
-            if (item.type === 'shortcut') {
-                const scale = item.scale || 1.0;
-                const offset = (BASE_SHORTCUT_DIM / 2) * (1 - scale);
-                box.x = item.x + offset;
-                box.y = item.y + offset;
-            }
-            return box;
-        };
 
         const isColliding = (boxA, boxB) => (
             boxA.x < boxB.x + boxB.width &&
@@ -701,10 +721,11 @@
 
         allItems.forEach(item => {
             if (item.type === 'box' || item.type === 'shortcut') {
-                const itemRight = item.x + item.width;
-                const itemBottom = item.y + item.height;
+                const box = getItemBoundingBox(item);
+                const itemRight = box.x + box.width;
+                const itemBottom = box.y + box.height;
                 // Check for intersection
-                if (item.x < x2 && itemRight > x1 && item.y < y2 && itemBottom > y1) {
+                if (box.x < x2 && itemRight > x1 && box.y < y2 && itemBottom > y1) {
                     newlySelected.add(String(item.id));
                 }
             }
