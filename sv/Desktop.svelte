@@ -534,6 +534,7 @@
     // --- Pan and Zoom state ---
     let isPanning = false;
     let wasPanning = false;
+    let pannedBackLayer = false;
     let lastMousePos = { x: 0, y: 0 };
     let saveViewTimeout;
 
@@ -1045,10 +1046,19 @@
         setTimeout(() => wasDraggingItems.set(false), 0);
     }
 
+    function getEffectiveMode(event, baseMode) {
+        // During pan/zoom, modifier keys can temporarily override the mode
+        if (event.ctrlKey && event.shiftKey) return 'both';
+        if (event.ctrlKey) return 'back';
+        if (event.shiftKey) return 'front';
+        return baseMode;
+    }
+
     function handleDesktopPanStart(event) {
         if (event.target !== event.currentTarget) return;
         isPanning = true;
         wasPanning = false;
+        pannedBackLayer = false; // Reset flag
         lastMousePos = { x: event.clientX, y: event.clientY };
 
         window.addEventListener('mousemove', handleDesktopMouseMove);
@@ -1063,10 +1073,13 @@
         const dx = event.clientX - lastMousePos.x;
         const dy = event.clientY - lastMousePos.y;
 
-        if (viewControlMode === 'back' || viewControlMode === 'both') {
+        const mode = getEffectiveMode(event, viewControlMode);
+
+        if (mode === 'back' || mode === 'both') {
+            pannedBackLayer = true;
             desktopView.update(view => ({ ...view, panX: view.panX + dx, panY: view.panY + dy }));
         }
-        if (viewControlMode === 'front' || viewControlMode === 'both') {
+        if (mode === 'front' || mode === 'both') {
             windowView.update(view => ({ ...view, panX: view.panX + dx, panY: view.panY + dy }));
         }
 
@@ -1076,7 +1089,7 @@
     function handleDesktopMouseUp() {
         if (isPanning && wasPanning) {
             // Persist final position if we actually panned
-            if (viewControlMode === 'back' || viewControlMode === 'both') {
+            if (pannedBackLayer) {
                 updateDesktopSettings(get(desktopView));
             }
         }
@@ -1090,6 +1103,8 @@
 
         event.preventDefault();
         showControls();
+
+        const mode = getEffectiveMode(event, viewControlMode);
 
         const zoomer = (currentView) => {
             const zoomFactor = 0.001;
@@ -1106,17 +1121,17 @@
             return { zoom: newZoom, panX: newPanX, panY: newPanY };
         };
 
-        if (viewControlMode === 'back' || viewControlMode === 'both') {
+        if (mode === 'back' || mode === 'both') {
             desktopView.update(zoomer);
         }
-        if (viewControlMode === 'front' || viewControlMode === 'both') {
+        if (mode === 'front' || mode === 'both') {
             windowView.update(zoomer);
         }
 
         // Debounce saving
         if (saveViewTimeout) clearTimeout(saveViewTimeout);
         saveViewTimeout = setTimeout(() => {
-            if (viewControlMode === 'back' || viewControlMode === 'both') {
+            if (mode === 'back' || mode === 'both') {
                 updateDesktopSettings(get(desktopView));
             }
         }, 300);
