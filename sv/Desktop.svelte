@@ -340,7 +340,8 @@
 
     function pan(dx, dy) {
         showControls();
-        if (viewControlMode === 'back' || viewControlMode === 'both') {
+        const mode = getCurrentMode();
+        if (mode === 'back' || mode === 'both') {
             desktopView.update(view => ({
                 ...view,
                 panX: view.panX + dx,
@@ -348,7 +349,7 @@
             }));
             updateDesktopSettings(get(desktopView));
         }
-        if (viewControlMode === 'front' || viewControlMode === 'both') {
+        if (mode === 'front' || mode === 'both') {
             windowView.update(view => ({
                 ...view,
                 panX: view.panX + dx,
@@ -359,6 +360,7 @@
 
     function zoom(direction) { // 1 for in, -1 for out
         showControls();
+        const mode = getCurrentMode();
         const zoomer = (view) => {
             const newZoom = Math.max(minZoom, Math.min(maxZoom, view.zoom + direction * zoomStepButton));
             if (newZoom === view.zoom) return view;
@@ -376,28 +378,30 @@
             return { zoom: newZoom, panX: newPanX, panY: newPanY };
         };
 
-        if (viewControlMode === 'back' || viewControlMode === 'both') {
+        if (mode === 'back' || mode === 'both') {
             desktopView.update(zoomer);
             updateDesktopSettings(get(desktopView));
         }
-        if (viewControlMode === 'front' || viewControlMode === 'both') {
+        if (mode === 'front' || mode === 'both') {
             windowView.update(zoomer);
         }
     }
 
     function resetPan() {
         showControls();
-        if (viewControlMode === 'back' || viewControlMode === 'both') {
+        const mode = getCurrentMode();
+        if (mode === 'back' || mode === 'both') {
             desktopView.update(v => ({ ...v, panX: 0, panY: 0 }));
             updateDesktopSettings(get(desktopView));
         }
-        if (viewControlMode === 'front' || viewControlMode === 'both') {
+        if (mode === 'front' || mode === 'both') {
             windowView.update(v => ({ ...v, panX: 0, panY: 0 }));
         }
     }
 
     function resetZoom() {
         showControls();
+        const mode = getCurrentMode();
         const zoomResetter = (view) => {
             if (view.zoom === 1.0) return view;
             const newZoom = 1.0;
@@ -414,22 +418,23 @@
             return { zoom: newZoom, panX: newPanX, panY: newPanY };
         };
 
-        if (viewControlMode === 'back' || viewControlMode === 'both') {
+        if (mode === 'back' || mode === 'both') {
             desktopView.update(zoomResetter);
             updateDesktopSettings(get(desktopView));
         }
-        if (viewControlMode === 'front' || viewControlMode === 'both') {
+        if (mode === 'front' || mode === 'both') {
             windowView.update(zoomResetter);
         }
     }
 
     function resetView() {
         showControls();
-        if (viewControlMode === 'back' || viewControlMode === 'both') {
+        const mode = getCurrentMode();
+        if (mode === 'back' || mode === 'both') {
             desktopView.set({ panX: 0, panY: 0, zoom: 1.0 });
             updateDesktopSettings(get(desktopView));
         }
-        if (viewControlMode === 'front' || viewControlMode === 'both') {
+        if (mode === 'front' || mode === 'both') {
             windowView.set({ panX: 0, panY: 0, zoom: 1.0 });
         }
     }
@@ -1075,6 +1080,19 @@
         return baseMode;
     }
 
+    function getCurrentMode(event = null) {
+        if (get(connectionStatus) !== 'connected') {
+            return 'front';
+        }
+        // During pan/zoom, modifier keys can temporarily override the mode
+        if (event) {
+            if (event.ctrlKey && event.shiftKey) return 'both';
+            if (event.ctrlKey) return 'back';
+            if (event.shiftKey) return 'front';
+        }
+        return viewControlMode;
+    }
+
     function handleDesktopPanStart(event) {
         if (isDesktopEmpty) return;
         if (event.target !== event.currentTarget) return;
@@ -1095,7 +1113,7 @@
         const dx = event.clientX - lastMousePos.x;
         const dy = event.clientY - lastMousePos.y;
 
-        const mode = getEffectiveMode(event, viewControlMode);
+        const mode = getCurrentMode(event);
 
         if (mode === 'back' || mode === 'both') {
             pannedBackLayer = true;
@@ -1127,7 +1145,7 @@
         event.preventDefault();
         showControls();
 
-        const mode = getEffectiveMode(event, viewControlMode);
+        const mode = getCurrentMode(event);
 
         const zoomer = (currentView) => {
             const zoomFactor = 0.001;
