@@ -624,6 +624,13 @@
 
                     const originalA = startStates.find(s => String(s.id) === idA);
                     const originalB = startStates.find(s => String(s.id) === idB);
+
+                    // Safeguard against missing original states. This shouldn't happen in normal operation
+                    // but prevents errors if the item lists were to change during a drag.
+                    if (!originalA || !originalB) {
+                        continue;
+                    }
+
                     const hasAMoved = Math.abs(itemA.x - originalA.x) > 0.1 || Math.abs(itemA.y - originalA.y) > 0.1;
                     const hasBMoved = Math.abs(itemB.x - originalB.x) > 0.1 || Math.abs(itemB.y - originalB.y) > 0.1;
 
@@ -637,7 +644,20 @@
                         [pusher, pushed, pusherBox, pushedBox] = [itemA, itemB, boxA, boxB];
                     } else if (!hasAMoved && hasBMoved) {
                         [pusher, pushed, pusherBox, pushedBox] = [itemB, itemA, boxB, boxA];
+                    } else if (hasAMoved && hasBMoved) {
+                        // Both items have been pushed and are now colliding.
+                        // Heuristic: The item that has been displaced further is the "pusher".
+                        const displacementA = Math.hypot(itemA.x - originalA.x, itemA.y - originalA.y);
+                        const displacementB = Math.hypot(itemB.x - originalB.x, itemB.y - originalB.y);
+
+                        if (displacementA > displacementB) {
+                            [pusher, pushed, pusherBox, pushedBox] = [itemA, itemB, boxA, boxB];
+                        } else {
+                            [pusher, pushed, pusherBox, pushedBox] = [itemB, itemA, boxB, boxA];
+                        }
                     } else {
+                        // The remaining case is !hasAMoved && !hasBMoved (two static, overlapping items).
+                        // We don't resolve this during a drag operation.
                         continue;
                     }
 
