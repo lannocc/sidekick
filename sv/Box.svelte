@@ -7,7 +7,7 @@
     import { get } from 'svelte/store';
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
     import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover } from './local.js';
-    import { dashLayouts, desktopView, selectedItems, wasDraggingItems } from './desktop.js';
+    import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT } from './desktop.js';
     import Board from './Board.svelte';
 
     export let box;
@@ -143,11 +143,9 @@
         return slots;
     })();
 
-
+    let innerWidth, innerHeight;
     const BASE_WIDTH = 180;
-    let desktopWidth = window.innerWidth;
-    let desktopHeight = window.innerHeight - 40; // Approx taskbar height
-    let aspectRatio = desktopHeight / desktopWidth;
+    $: aspectRatio = (innerHeight > 0 && innerWidth > 0) ? (innerHeight - TASKBAR_HEIGHT) / innerWidth : 0;
 
     $: boxWidth = BASE_WIDTH * scale;
     $: boxHeight = BASE_WIDTH * aspectRatio * scale;
@@ -756,6 +754,8 @@
         font-style: italic;
     }
 </style>
+
+<svelte:window bind:innerWidth bind:innerHeight />
 
 <div
     class="box"

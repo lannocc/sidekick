@@ -147,7 +147,7 @@
             // ... (rest of the mapping function)
             const BASE_WIDTH = 180;
             const scale = b.scale ?? 1.0;
-            const desktopHeight = innerHeight - 40;
+            const desktopHeight = innerHeight - TASKBAR_HEIGHT;
             const aspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
 
             const boxWidth = BASE_WIDTH * scale;
