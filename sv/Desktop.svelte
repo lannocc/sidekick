@@ -3,7 +3,7 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { windows, newSettings, dragRequest } from './windows.js';
+    import { windows, newSettings, dragRequest, componentMap } from './windows.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive, desktopView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems } from './desktop.js';
     import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform } from './local.js';
@@ -35,6 +35,35 @@
         y: 0,
         sourceEvent: null,
     };
+
+    // --- Backed Window Context Menu State ---
+    let backedWindowContextMenu = {
+        visible: false,
+        x: 0,
+        y: 0,
+        window: null,
+    };
+
+    function showBackedWindowContextMenu(event, backedWindow) {
+        closeContextMenu(); // Close the main desktop one if open
+        backedWindowContextMenu = {
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+            window: backedWindow,
+        };
+    }
+
+    function closeBackedWindowContextMenu() {
+        backedWindowContextMenu.visible = false;
+    }
+
+    function unbackAndRestoreWindow() {
+        if (backedWindowContextMenu.window) {
+            windows.unbackWindow(backedWindowContextMenu.window);
+        }
+        closeBackedWindowContextMenu();
+    }
 
     // --- Focus Follows Mouse Logic ---
     let focusTimeoutDesktop = {};
@@ -122,6 +151,7 @@
 
     function closeContextMenu() {
         contextMenu.visible = false;
+        closeBackedWindowContextMenu();
     }
 
     function openSettingsMenu() {
@@ -960,10 +990,12 @@
     onMount(() => {
         // The WebSocket connection is now established in SideKick.svelte
         window.addEventListener('click', closeContextMenu);
+        window.addEventListener('click', closeBackedWindowContextMenu);
         window.addEventListener('keyup', handleKeyUpForScale);
     });
     onDestroy(() => {
         window.removeEventListener('click', closeContextMenu);
+        window.removeEventListener('click', closeBackedWindowContextMenu);
         window.removeEventListener('keyup', handleKeyUpForScale);
         Object.values(focusTimeoutDesktop).forEach(clearTimeout);
         if (saveViewTimeout) clearTimeout(saveViewTimeout);
@@ -1107,6 +1139,13 @@
         pointer-events: auto; /* Children (boxes, shortcuts) are interactive */
     }
 
+    .backed-windows-layer {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+    }
+    .backed-windows-layer > :global(*) {
+        pointer-events: auto; /* Children (boxes, shortcuts) are interactive */
+    }
+
     .windows-layer, .tab-contents-layer {
         position: absolute;
         top: 0; left: 0;
@@ -1134,6 +1173,19 @@
         padding: 5px;
         pointer-events: auto;
         background-color: var(--window-bg);
+    }
+    /* Styles for the frameless backed window */
+    .backed-window.tab-content-wrapper {
+        border: 1px solid var(--border-color);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        background-color: var(--window-bg);
+    }
+    .backed-content-area {
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        padding: 5px;
+        box-sizing: border-box;
     }
 
     .selection-box {
@@ -1257,6 +1309,32 @@
 
     <div class="desktop-content" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
 
+        <div class="backed-windows-layer">
+            {#each $backedWindows as bw (bw.id)}
+                {@const config = bw.config}
+                {@const activeTabConfig = (config.tabs.find(t => t.originalId === config.activeTabId) || config.tabs[0])}
+                {#if activeTabConfig}
+                    {@const Component = componentMap[activeTabConfig.componentType]}
+                    {#if Component}
+                        {@const tabProps = { ...activeTabConfig, id: activeTabConfig.originalId, groupId: bw.id, isActive: false, isBacked: true, x: bw.x, y: bw.y, width: bw.width, height: bw.height }}
+                        <div
+                            class="tab-content-wrapper backed-window"
+                            style:left="{bw.x}px"
+                            style:top="{bw.y}px"
+                            style:width="{bw.width * (bw.scale || 1.0)}px"
+                            style:height="{bw.height * (bw.scale || 1.0)}px"
+                            style:z-index="{bw.z_index || 1}"
+                            on:contextmenu|preventDefault|stopPropagation={(event) => showBackedWindowContextMenu(event, bw)}
+                        >
+                            <div class="backed-content-area" style:zoom={activeTabConfig.zoom || 1.0}>
+                                <svelte:component this={Component} {...tabProps} />
+                            </div>
+                        </div>
+                    {/if}
+                {/if}
+            {/each}
+        </div>
+
         {#if $connectionStatus === 'connected'}
             <div class="shortcuts-layer">
                 {#each $desktopShortcuts as shortcut (shortcut.id)}
@@ -1375,6 +1453,12 @@
     {#if contextMenu.visible && !wasPanning}
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
             <button on:click={openSettingsMenu}>Settings...</button>
+        </div>
+    {/if}
+
+    {#if backedWindowContextMenu.visible}
+        <div class="context-menu" style="top: {backedWindowContextMenu.y}px; left: {backedWindowContextMenu.x}px;" on:click|stopPropagation>
+            <button on:click={unbackAndRestoreWindow}>Restore Window</button>
         </div>
     {/if}
 

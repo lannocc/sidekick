@@ -29,7 +29,7 @@ export const dragState = writable(null);
 export const dragRequest = writable(null);
 
 // Map component type strings to actual components for restoring layouts
-const componentMap = {
+export const componentMap = {
     'IoskConsole': IoskConsole,
     'Calculator': Calculator,
     'Settings': Settings,
