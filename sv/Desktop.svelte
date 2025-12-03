@@ -5,7 +5,7 @@
 <script>
     import { windows, newSettings, dragRequest, componentMap } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, desktopView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems } from './desktop.js';
+    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems } from './desktop.js';
     import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform } from './local.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
@@ -22,11 +22,15 @@
         panY: initialSettings.panY,
         zoom: initialSettings.zoom,
     });
+    // windowView is initialized in desktop.js
 
     let backgroundStyle = '';
     let componentInstances = {};
     let innerWidth, innerHeight;
-    let contentBounds;
+    let totalContentBounds;
+
+    // --- View Control Mode ---
+    let viewControlMode = 'both'; // 'back', 'both', 'front'
 
     // --- Context Menu State ---
     let contextMenu = {
@@ -212,16 +216,16 @@
         })
     ];
 
-    $: {
+    $: totalContentBounds = (() => {
         if (allItems.length === 0) {
-            contentBounds = { x: 0, y: 0, width: 0, height: 0, defined: false };
+            totalContentBounds = { x: 0, y: 0, width: 0, height: 0, defined: false };
         } else {
             const minX = Math.min(...allItems.map(i => i.x));
             const minY = Math.min(...allItems.map(i => i.y));
             const maxX = Math.max(...allItems.map(i => i.x + i.width));
             const maxY = Math.max(...allItems.map(i => i.y + i.height));
 
-            contentBounds = {
+            return {
                 x: minX,
                 y: minY,
                 width: maxX - minX,
@@ -229,21 +233,28 @@
                 defined: true
             };
         }
-    }
+    })();
 
     const MINIMAP_MAX_DIM = 150; // pixels
-    $: minimapScale = contentBounds && contentBounds.defined && contentBounds.width > 0 && contentBounds.height > 0
-        ? Math.min(MINIMAP_MAX_DIM / contentBounds.width, MINIMAP_MAX_DIM / contentBounds.height)
+    $: minimapScale = totalContentBounds && totalContentBounds.defined && totalContentBounds.width > 0 && totalContentBounds.height > 0
+        ? Math.min(MINIMAP_MAX_DIM / totalContentBounds.width, MINIMAP_MAX_DIM / totalContentBounds.height)
         : 0;
 
-    $: minimapWidth = contentBounds && contentBounds.defined ? contentBounds.width * minimapScale : 0;
-    $: minimapHeight = contentBounds && contentBounds.defined ? contentBounds.height * minimapScale : 0;
+    $: minimapWidth = totalContentBounds && totalContentBounds.defined ? totalContentBounds.width * minimapScale : 0;
+    $: minimapHeight = totalContentBounds && totalContentBounds.defined ? totalContentBounds.height * minimapScale : 0;
 
-    $: viewportRect = contentBounds && contentBounds.defined && $desktopView.zoom > 0 ? {
-        x: ((-$desktopView.panX / $desktopView.zoom) - contentBounds.x) * minimapScale,
-        y: ((-$desktopView.panY / $desktopView.zoom) - contentBounds.y) * minimapScale,
+    $: backViewportRect = totalContentBounds && totalContentBounds.defined && $desktopView.zoom > 0 ? {
+        x: ((-$desktopView.panX / $desktopView.zoom) - totalContentBounds.x) * minimapScale,
+        y: ((-$desktopView.panY / $desktopView.zoom) - totalContentBounds.y) * minimapScale,
         width: (innerWidth / $desktopView.zoom) * minimapScale,
         height: (innerHeight / $desktopView.zoom) * minimapScale
+    } : { x: 0, y: 0, width: 0, height: 0 };
+
+    $: frontViewportRect = totalContentBounds && totalContentBounds.defined && $windowView.zoom > 0 ? {
+        x: ((-$windowView.panX / $windowView.zoom) - totalContentBounds.x) * minimapScale,
+        y: ((-$windowView.panY / $windowView.zoom) - totalContentBounds.y) * minimapScale,
+        width: (innerWidth / $windowView.zoom) * minimapScale,
+        height: (innerHeight / $windowView.zoom) * minimapScale
     } : { x: 0, y: 0, width: 0, height: 0 };
 
 
@@ -281,17 +292,26 @@
 
     function pan(dx, dy) {
         showControls();
-        desktopView.update(view => ({
-            ...view,
-            panX: view.panX + dx,
-            panY: view.panY + dy,
-        }));
-        updateDesktopSettings(get(desktopView));
+        if (viewControlMode === 'back' || viewControlMode === 'both') {
+            desktopView.update(view => ({
+                ...view,
+                panX: view.panX + dx,
+                panY: view.panY + dy,
+            }));
+            updateDesktopSettings(get(desktopView));
+        }
+        if (viewControlMode === 'front' || viewControlMode === 'both') {
+            windowView.update(view => ({
+                ...view,
+                panX: view.panX + dx,
+                panY: view.panY + dy,
+            }));
+        }
     }
 
     function zoom(direction) { // 1 for in, -1 for out
         showControls();
-        desktopView.update(view => {
+        const zoomer = (view) => {
             const newZoom = Math.max(minZoom, Math.min(maxZoom, view.zoom + direction * zoomStepButton));
             if (newZoom === view.zoom) return view;
 
@@ -306,19 +326,31 @@
             const newPanY = centerY - mouseWorldY * newZoom;
 
             return { zoom: newZoom, panX: newPanX, panY: newPanY };
-        });
-        updateDesktopSettings(get(desktopView));
+        };
+
+        if (viewControlMode === 'back' || viewControlMode === 'both') {
+            desktopView.update(zoomer);
+            updateDesktopSettings(get(desktopView));
+        }
+        if (viewControlMode === 'front' || viewControlMode === 'both') {
+            windowView.update(zoomer);
+        }
     }
 
     function resetPan() {
         showControls();
-        desktopView.update(v => ({ ...v, panX: 0, panY: 0 }));
-        updateDesktopSettings(get(desktopView));
+        if (viewControlMode === 'back' || viewControlMode === 'both') {
+            desktopView.update(v => ({ ...v, panX: 0, panY: 0 }));
+            updateDesktopSettings(get(desktopView));
+        }
+        if (viewControlMode === 'front' || viewControlMode === 'both') {
+            windowView.update(v => ({ ...v, panX: 0, panY: 0 }));
+        }
     }
 
     function resetZoom() {
         showControls();
-        desktopView.update(view => {
+        const zoomResetter = (view) => {
             if (view.zoom === 1.0) return view;
             const newZoom = 1.0;
 
@@ -332,29 +364,61 @@
             const newPanY = centerY - mouseWorldY * newZoom;
 
             return { zoom: newZoom, panX: newPanX, panY: newPanY };
-        });
-        updateDesktopSettings(get(desktopView));
+        };
+
+        if (viewControlMode === 'back' || viewControlMode === 'both') {
+            desktopView.update(zoomResetter);
+            updateDesktopSettings(get(desktopView));
+        }
+        if (viewControlMode === 'front' || viewControlMode === 'both') {
+            windowView.update(zoomResetter);
+        }
     }
 
     function resetView() {
         showControls();
-        desktopView.set({ panX: 0, panY: 0, zoom: 1.0 });
-        updateDesktopSettings(get(desktopView));
+        if (viewControlMode === 'back' || viewControlMode === 'both') {
+            desktopView.set({ panX: 0, panY: 0, zoom: 1.0 });
+            updateDesktopSettings(get(desktopView));
+        }
+        if (viewControlMode === 'front' || viewControlMode === 'both') {
+            windowView.set({ panX: 0, panY: 0, zoom: 1.0 });
+        }
     }
 
     function fitAndCenterView() {
         showControls();
-        desktopView.set(targetFitView);
-        updateDesktopSettings(get(desktopView));
+        const targetView = targetFitView;
+        if (viewControlMode === 'back' || viewControlMode === 'both') {
+            desktopView.set(targetView);
+            updateDesktopSettings(get(desktopView));
+        }
+        if (viewControlMode === 'front' || viewControlMode === 'both') {
+            windowView.set(targetView);
+        }
     }
 
+    $: fittableItems = allItems.filter(item => item.type !== 'window');
+
+    $: fitContentBounds = (() => {
+        if (fittableItems.length === 0) {
+            return { x: 0, y: 0, width: 0, height: 0, defined: false };
+        } else {
+            const minX = Math.min(...fittableItems.map(i => i.x));
+            const minY = Math.min(...fittableItems.map(i => i.y));
+            const maxX = Math.max(...fittableItems.map(i => i.x + i.width));
+            const maxY = Math.max(...fittableItems.map(i => i.y + i.height));
+            return { x: minX, y: minY, width: maxX - minX, height: maxY - minY, defined: true };
+        }
+    })();
+
     $: targetFitView = (() => {
-        if (!contentBounds.defined || allItems.length === 0) {
+        if (!fitContentBounds.defined || fittableItems.length === 0) {
             return { panX: 0, panY: 0, zoom: 1.0 };
         }
 
         const PADDING = 100; // pixels in world space
-        const bounds = contentBounds;
+        const bounds = fitContentBounds;
 
         const contentWidth = bounds.width + PADDING * 2;
         const contentHeight = bounds.height + PADDING * 2;
@@ -378,10 +442,18 @@
         return { zoom: newZoom, panX: newPanX, panY: newPanY };
     })();
 
-    $: isBestFit = $desktopView && targetFitView &&
-        (Math.abs($desktopView.zoom - targetFitView.zoom) < 0.01 &&
-         Math.abs($desktopView.panX - targetFitView.panX) < 1 &&
-         Math.abs($desktopView.panY - targetFitView.panY) < 1);
+    $: isBestFit = (() => {
+        const checkFit = (view) => {
+            return view && targetFitView &&
+                (Math.abs(view.zoom - targetFitView.zoom) < 0.01 &&
+                 Math.abs(view.panX - targetFitView.panX) < 1 &&
+                 Math.abs(view.panY - targetFitView.panY) < 1);
+        };
+        if (viewControlMode === 'back') return checkFit($desktopView);
+        if (viewControlMode === 'front') return checkFit($windowView);
+        if (viewControlMode === 'both') return checkFit($desktopView) && checkFit($windowView);
+        return false;
+    })();
 
 
     // --- Pan and Zoom state ---
@@ -419,14 +491,18 @@
         const dy = event.clientY - minimapLastPos.y;
 
         if (minimapScale > 0) {
-            const panDx = -(dx / minimapScale) * $desktopView.zoom;
-            const panDy = -(dy / minimapScale) * $desktopView.zoom;
+            if (viewControlMode === 'back' || viewControlMode === 'both') {
+                const panDx = -(dx / minimapScale) * $desktopView.zoom;
+                const panDy = -(dy / minimapScale) * $desktopView.zoom;
 
-            desktopView.update(view => ({
-                ...view,
-                panX: view.panX + panDx,
-                panY: view.panY + panDy
-            }));
+                desktopView.update(view => ({ ...view, panX: view.panX + panDx, panY: view.panY + panDy }));
+            }
+            if (viewControlMode === 'front' || viewControlMode === 'both') {
+                const panDx = -(dx / minimapScale) * $windowView.zoom;
+                const panDy = -(dy / minimapScale) * $windowView.zoom;
+
+                windowView.update(view => ({ ...view, panX: view.panX + panDx, panY: view.panY + panDy }));
+            }
         }
 
         minimapLastPos = { x: event.clientX, y: event.clientY };
@@ -437,7 +513,9 @@
 
         if (wasMinimapDragging) {
             // Persist final position after drag
-            updateDesktopSettings(get(desktopView));
+            if (viewControlMode === 'back' || viewControlMode === 'both') {
+                updateDesktopSettings(get(desktopView));
+            }
         } else if (minimapElementRef) {
             // This was a click, not a drag.
             const rect = minimapElementRef.getBoundingClientRect();
@@ -446,20 +524,22 @@
 
             if (minimapScale > 0) {
                 // Convert click coordinates from minimap space to world space
-                const clickedWorldX = (clickOnMinimapX / minimapScale) + contentBounds.x;
-                const clickedWorldY = (clickOnMinimapY / minimapScale) + contentBounds.y;
+                const clickedWorldX = (clickOnMinimapX / minimapScale) + totalContentBounds.x;
+                const clickedWorldY = (clickOnMinimapY / minimapScale) + totalContentBounds.y;
 
-                // We want this world point to be at the center of the viewport.
-                // pan = screen_center - world_point * zoom
-                const newPanX = (innerWidth / 2) - (clickedWorldX * $desktopView.zoom);
-                const newPanY = (innerHeight / 2) - (clickedWorldY * $desktopView.zoom);
-
-                desktopView.set({
-                    zoom: $desktopView.zoom, // keep current zoom
-                    panX: newPanX,
-                    panY: newPanY
-                });
-                updateDesktopSettings(get(desktopView));
+                if (viewControlMode === 'back' || viewControlMode === 'both') {
+                    const view = get(desktopView);
+                    const newPanX = (innerWidth / 2) - (clickedWorldX * view.zoom);
+                    const newPanY = (innerHeight / 2) - (clickedWorldY * view.zoom);
+                    desktopView.set({ zoom: view.zoom, panX: newPanX, panY: newPanY });
+                    updateDesktopSettings(get(desktopView));
+                }
+                if (viewControlMode === 'front' || viewControlMode === 'both') {
+                    const view = get(windowView);
+                    const newPanX = (innerWidth / 2) - (clickedWorldX * view.zoom);
+                    const newPanY = (innerHeight / 2) - (clickedWorldY * view.zoom);
+                    windowView.set({ zoom: view.zoom, panX: newPanX, panY: newPanY });
+                }
             }
         }
 
@@ -892,11 +972,12 @@
         const dx = event.clientX - lastMousePos.x;
         const dy = event.clientY - lastMousePos.y;
 
-        desktopView.update(view => ({
-            ...view,
-            panX: view.panX + dx,
-            panY: view.panY + dy
-        }));
+        if (viewControlMode === 'back' || viewControlMode === 'both') {
+            desktopView.update(view => ({ ...view, panX: view.panX + dx, panY: view.panY + dy }));
+        }
+        if (viewControlMode === 'front' || viewControlMode === 'both') {
+            windowView.update(view => ({ ...view, panX: view.panX + dx, panY: view.panY + dy }));
+        }
 
         lastMousePos = { x: event.clientX, y: event.clientY };
     }
@@ -904,7 +985,9 @@
     function handleDesktopMouseUp() {
         if (isPanning && wasPanning) {
             // Persist final position if we actually panned
-            updateDesktopSettings(get(desktopView));
+            if (viewControlMode === 'back' || viewControlMode === 'both') {
+                updateDesktopSettings(get(desktopView));
+            }
         }
         isPanning = false;
         window.removeEventListener('mousemove', handleDesktopMouseMove);
@@ -917,36 +1000,34 @@
         event.preventDefault();
         showControls();
 
-        const zoomFactor = 0.001;
-        const minZoom = 0.2;
-        const maxZoom = 3.0;
+        const zoomer = (currentView) => {
+            const zoomFactor = 0.001;
+            const newZoom = Math.max(minZoom, Math.min(maxZoom, currentView.zoom - event.deltaY * zoomFactor));
+            if (newZoom === currentView.zoom) return currentView;
 
-        const currentView = get(desktopView);
-        const newZoom = Math.max(minZoom, Math.min(maxZoom, currentView.zoom - event.deltaY * zoomFactor));
+            const mouseX = event.clientX;
+            const mouseY = event.clientY;
+            const mouseWorldX = (mouseX - currentView.panX) / currentView.zoom;
+            const mouseWorldY = (mouseY - currentView.panY) / currentView.zoom;
+            const newPanX = mouseX - mouseWorldX * newZoom;
+            const newPanY = mouseY - mouseWorldY * newZoom;
 
-        if (newZoom === currentView.zoom) return;
+            return { zoom: newZoom, panX: newPanX, panY: newPanY };
+        };
 
-        const mouseX = event.clientX;
-        const mouseY = event.clientY;
-
-        // Position of the mouse in world coordinates before zoom
-        const mouseWorldX = (mouseX - currentView.panX) / currentView.zoom;
-        const mouseWorldY = (mouseY - currentView.panY) / currentView.zoom;
-
-        // New pan to keep the world coordinate under the mouse
-        const newPanX = mouseX - mouseWorldX * newZoom;
-        const newPanY = mouseY - mouseWorldY * newZoom;
-
-        desktopView.set({
-            zoom: newZoom,
-            panX: newPanX,
-            panY: newPanY
-        });
+        if (viewControlMode === 'back' || viewControlMode === 'both') {
+            desktopView.update(zoomer);
+        }
+        if (viewControlMode === 'front' || viewControlMode === 'both') {
+            windowView.update(zoomer);
+        }
 
         // Debounce saving
         if (saveViewTimeout) clearTimeout(saveViewTimeout);
         saveViewTimeout = setTimeout(() => {
-            updateDesktopSettings(get(desktopView));
+            if (viewControlMode === 'back' || viewControlMode === 'both') {
+                updateDesktopSettings(get(desktopView));
+            }
         }, 300);
     }
 
@@ -1206,10 +1287,42 @@
         flex-direction: column;
         align-items: center;
         backdrop-filter: blur(5px);
-        gap: 10px;
+        gap: 8px;
         border-radius: 8px;
         padding: 8px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    .view-mode-controls {
+        display: flex;
+        background-color: rgba(40, 40, 40, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        overflow: hidden;
+        width: 100%;
+    }
+
+    .view-mode-controls button {
+        flex-grow: 1;
+        background: none;
+        border: none;
+        color: white;
+        padding: 6px 0;
+        cursor: pointer;
+        font-size: 12px;
+        transition: background-color 0.2s;
+        height: auto;
+        width: auto;
+        border-radius: 0;
+    }
+
+    .view-mode-controls button:not(:last-child) {
+        border-right: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .view-mode-controls button.active {
+        background-color: rgba(255, 255, 255, 0.2);
+        font-weight: bold;
     }
 
     .pan-controls {
@@ -1301,14 +1414,17 @@
         box-sizing: border-box;
         pointer-events: none;
     }
+    .birdseye-viewport.front {
+        border: 1px solid #3498db; /* Blue for front layer */
+    }
 </style>
 
 <svelte:window bind:innerWidth bind:innerHeight />
 
 <div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
 
-    <div class="desktop-content" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
-
+    <!-- BACK LAYER -->
+    <div class="desktop-content back-layer" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
         <div class="backed-windows-layer">
             {#each $backedWindows as bw (bw.id)}
                 {@const config = bw.config}
@@ -1347,7 +1463,10 @@
                 {/each}
             </div>
         {/if}
+    </div>
 
+    <!-- FRONT LAYER -->
+    <div class="desktop-content front-layer" style:transform="translate({$windowView.panX}px, {$windowView.panY}px) scale({$windowView.zoom})">
         <div class="windows-layer">
             {#each $windows as win (win.id)}
                 <Window {...win} />
@@ -1397,6 +1516,7 @@
         </div>
     </div>
 
+
     {#if selectionRect.visible}
         <div
             class="selection-box"
@@ -1409,27 +1529,43 @@
 
     {#if controlsVisible}
         <div class="view-controls" transition:fade={{ duration: 142 }} on:mouseenter={handleControlsMouseEnter} on:mouseleave={handleControlsMouseLeave}>
-            {#if contentBounds && contentBounds.defined && minimapWidth > 0 && minimapHeight > 0}
+            <div class="view-mode-controls">
+                <button class:active={viewControlMode === 'back'} on:click={() => viewControlMode = 'back'}>Back</button>
+                <button class:active={viewControlMode === 'both'} on:click={() => viewControlMode = 'both'}>Both</button>
+                <button class:active={viewControlMode === 'front'} on:click={() => viewControlMode = 'front'}>Front</button>
+            </div>
+            {#if totalContentBounds && totalContentBounds.defined && minimapWidth > 0 && minimapHeight > 0}
                 <div class="birdseye-view" style:width="{minimapWidth}px" style:height="{minimapHeight}px" on:mousedown={handleMinimapMouseDown}>
                     <!-- Items -->
                     {#each allItems as item (`${item.type}-${item.id}`)}
                         <div
                             class="birdseye-item"
                             class:window={$windows.some(w => w.id === item.id)}
-                            style:left="{(item.x - contentBounds.x) * minimapScale}px"
-                            style:top="{(item.y - contentBounds.y) * minimapScale}px"
+                            style:left="{(item.x - totalContentBounds.x) * minimapScale}px"
+                            style:top="{(item.y - totalContentBounds.y) * minimapScale}px"
                             style:width="{item.width * minimapScale}px"
                             style:height="{item.height * minimapScale}px"
                         />
                     {/each}
-                    <!-- Viewport -->
-                    <div
-                        class="birdseye-viewport"
-                        style:left="{viewportRect.x}px"
-                        style:top="{viewportRect.y}px"
-                        style:width="{viewportRect.width}px"
-                        style:height="{viewportRect.height}px"
-                    />
+                    <!-- Viewports -->
+                    {#if viewControlMode === 'back' || viewControlMode === 'both'}
+                        <div
+                            class="birdseye-viewport back"
+                            style:left="{backViewportRect.x}px"
+                            style:top="{backViewportRect.y}px"
+                            style:width="{backViewportRect.width}px"
+                            style:height="{backViewportRect.height}px"
+                        />
+                    {/if}
+                    {#if viewControlMode === 'front' || viewControlMode === 'both'}
+                         <div
+                            class="birdseye-viewport front"
+                            style:left="{frontViewportRect.x}px"
+                            style:top="{frontViewportRect.y}px"
+                            style:width="{frontViewportRect.width}px"
+                            style:height="{frontViewportRect.height}px"
+                        />
+                    {/if}
                 </div>
             {/if}
             <div class="zoom-controls">

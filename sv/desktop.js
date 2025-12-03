@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 
 export const TASKBAR_HEIGHT = 40; // Height of the taskbar in pixels
 
@@ -32,7 +32,11 @@ function loadSettings() {
         },
         panX: 0,
         panY: 0,
-        zoom: 1.0
+        zoom: 1.0,
+        // Add settings for the front (window) layer view
+        windowPanX: 0,
+        windowPanY: 0,
+        windowZoom: 1.0
     };
 
     try {
@@ -130,8 +134,28 @@ windowSettings.subscribe(value => {
     }
 });
 
-// New store for desktop pan and zoom
+// Store for BACK layer pan and zoom. Synced with backend.
 export const desktopView = writable({ panX: 0, panY: 0, zoom: 1.0 });
+
+// New store for FRONT layer (windows) pan and zoom. Synced with localStorage.
+export const windowView = writable({ panX: 0, panY: 0, zoom: 1.0 });
+
+// Initialize windowView from localStorage and subscribe to save its changes.
+const initialSettings = get(desktopSettings);
+windowView.set({
+    panX: initialSettings.windowPanX || 0,
+    panY: initialSettings.windowPanY || 0,
+    zoom: initialSettings.windowZoom || 1.0
+});
+windowView.subscribe(value => {
+    desktopSettings.update(settings => ({
+        ...settings,
+        windowPanX: value.panX,
+        windowPanY: value.panY,
+        windowZoom: value.zoom
+    }));
+});
+
 
 // New store for selected desktop items
 export const selectedItems = writable(new Set());
