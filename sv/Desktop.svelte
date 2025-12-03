@@ -216,22 +216,25 @@
         })
     ];
 
-    $: totalContentBounds = (() => {
-        if (allItems.length === 0) {
-            totalContentBounds = { x: 0, y: 0, width: 0, height: 0, defined: false };
-        } else {
-            const minX = Math.min(...allItems.map(i => i.x));
-            const minY = Math.min(...allItems.map(i => i.y));
-            const maxX = Math.max(...allItems.map(i => i.x + i.width));
-            const maxY = Math.max(...allItems.map(i => i.y + i.height));
+    $: minimapItems = (() => {
+        if (viewControlMode === 'back') {
+            return allItems.filter(item => item.type !== 'window');
+        } else if (viewControlMode === 'front') {
+            return allItems.filter(item => item.type === 'window');
+        } else { // 'both' mode
+            return allItems;
+        }
+    })();
 
-            return {
-                x: minX,
-                y: minY,
-                width: maxX - minX,
-                height: maxY - minY,
-                defined: true
-            };
+    $: totalContentBounds = (() => {
+        if (minimapItems.length === 0) {
+            return { x: 0, y: 0, width: 0, height: 0, defined: false };
+        } else {
+            const minX = Math.min(...minimapItems.map(i => i.x));
+            const minY = Math.min(...minimapItems.map(i => i.y));
+            const maxX = Math.max(...minimapItems.map(i => i.x + i.width));
+            const maxY = Math.max(...minimapItems.map(i => i.y + i.height));
+            return { x: minX, y: minY, width: maxX - minX, height: maxY - minY, defined: true };
         }
     })();
 
@@ -398,35 +401,13 @@
         }
     }
 
-    $: fittableItems = (() => {
-        if (viewControlMode === 'back') {
-            return allItems.filter(item => item.type !== 'window');
-        } else if (viewControlMode === 'front') {
-            return allItems.filter(item => item.type === 'window');
-        } else { // 'both' mode
-            return allItems;
-        }
-    })();
-
-    $: fitContentBounds = (() => {
-        if (fittableItems.length === 0) {
-            return { x: 0, y: 0, width: 0, height: 0, defined: false };
-        } else {
-            const minX = Math.min(...fittableItems.map(i => i.x));
-            const minY = Math.min(...fittableItems.map(i => i.y));
-            const maxX = Math.max(...fittableItems.map(i => i.x + i.width));
-            const maxY = Math.max(...fittableItems.map(i => i.y + i.height));
-            return { x: minX, y: minY, width: maxX - minX, height: maxY - minY, defined: true };
-        }
-    })();
-
     $: targetFitView = (() => {
-        if (!fitContentBounds.defined || fittableItems.length === 0) {
+        if (!totalContentBounds.defined || minimapItems.length === 0) {
             return { panX: 0, panY: 0, zoom: 1.0 };
         }
 
         const PADDING = 100; // pixels in world space
-        const bounds = fitContentBounds;
+        const bounds = totalContentBounds;
 
         const contentWidth = bounds.width + PADDING * 2;
         const contentHeight = bounds.height + PADDING * 2;
@@ -1571,7 +1552,7 @@
             {#if totalContentBounds && totalContentBounds.defined && minimapWidth > 0 && minimapHeight > 0}
                 <div class="birdseye-view" style:width="{minimapWidth}px" style:height="{minimapHeight}px" on:mousedown={handleMinimapMouseDown}>
                     <!-- Items -->
-                    {#each allItems as item (`${item.type}-${item.id}`)}
+                    {#each minimapItems as item (`${item.type}-${item.id}`)}
                         <div
                             class="birdseye-item"
                             class:window={item.type === 'window'}
