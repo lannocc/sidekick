@@ -416,11 +416,43 @@
     function fitAndCenterView() {
         showControls();
         const targetView = targetFitView;
-        if (viewControlMode === 'back' || viewControlMode === 'both') {
+
+        if (viewControlMode === 'both') {
+            const currentWindowView = get(windowView);
+            const currentDesktopView = get(desktopView);
+            
+            // We can only preserve the relation if window zoom is not zero.
+            if (currentWindowView.zoom !== 0) {
+                // targetFitView is calculated for the combined view in the front-layer's coordinate space.
+                // We apply it to the front view, then derive the new back view while preserving the relative transform.
+                const relativeZoom = currentDesktopView.zoom / currentWindowView.zoom;
+                const relativePanX = (currentDesktopView.panX - currentWindowView.panX) / currentWindowView.zoom;
+                const relativePanY = (currentDesktopView.panY - currentWindowView.panY) / currentWindowView.zoom;
+
+                windowView.set(targetView);
+
+                const newDesktopZoom = targetView.zoom * relativeZoom;
+                const newDesktopPanX = (relativePanX * targetView.zoom) + targetView.panX;
+                const newDesktopPanY = (relativePanY * targetView.zoom) + targetView.panY;
+                
+                const newDesktopView = {
+                    zoom: newDesktopZoom,
+                    panX: newDesktopPanX,
+                    panY: newDesktopPanY,
+                };
+                desktopView.set(newDesktopView);
+                updateDesktopSettings(newDesktopView);
+
+            } else {
+                // Fallback: Just set both to the same target view.
+                desktopView.set(targetView);
+                updateDesktopSettings(targetView);
+                windowView.set(targetView);
+            }
+        } else if (viewControlMode === 'back') {
             desktopView.set(targetView);
-            updateDesktopSettings(get(desktopView));
-        }
-        if (viewControlMode === 'front' || viewControlMode === 'both') {
+            updateDesktopSettings(targetView);
+        } else if (viewControlMode === 'front') {
             windowView.set(targetView);
         }
     }
@@ -464,7 +496,11 @@
         };
         if (viewControlMode === 'back') return checkFit($desktopView);
         if (viewControlMode === 'front') return checkFit($windowView);
-        if (viewControlMode === 'both') return checkFit($desktopView) && checkFit($windowView);
+        if (viewControlMode === 'both') {
+            // In 'both' mode, 'fit' targets the front view and adjusts the back view
+            // relatively. So, we only need to check if the front view is fit.
+            return checkFit($windowView);
+        }
         return false;
     })();
 
