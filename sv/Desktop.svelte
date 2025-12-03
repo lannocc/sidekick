@@ -718,6 +718,7 @@
         );
 
         // 3. Update Svelte stores for any items that have been part of the drag interaction
+        const itemsToUpdate = new Set([...draggedItemIds, ...pushedItemsOriginalPositions.keys()]);
         updateStoresAfterCollision(updatedFrameItems, itemsToUpdate);
     }
 
