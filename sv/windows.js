@@ -13,7 +13,7 @@ import Ask from './Ask.svelte';
 import IoskWatch from './IoskWatch.svelte';
 import IoskUserInspector from './IoskUserInspector.svelte';
 import NotificationCenter from './NotificationCenter.svelte';
-import { TASKBAR_HEIGHT, desktopSettings, windowSettings, notificationHistory, unreadNoticeCount, desktopView } from './desktop.js';
+import { TASKBAR_HEIGHT, desktopSettings, windowSettings, notificationHistory, unreadNoticeCount, desktopView, windowView } from './desktop.js';
 import { createBackedWindow, deleteBackedWindow } from './local.js';
 
 let windowGroupIdCounter = 0;
@@ -193,9 +193,9 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
 function createWindowManager() {
     const { subscribe, update } = writable([]);
 
-    // Subscribe to desktop view changes to update maximized windows
+    // Subscribe to window view changes to update maximized windows
     if (typeof window !== 'undefined') {
-        desktopView.subscribe(({ panX, panY, zoom }) => {
+        windowView.subscribe(({ panX, panY, zoom }) => {
             update(windows => {
                 const desktopWidth = window.innerWidth;
                 const desktopHeight = window.innerHeight - TASKBAR_HEIGHT;
@@ -458,7 +458,7 @@ function createWindowManager() {
 
     const toggleMaximize = (id) => {
         update(windows => {
-            const { panX, panY, zoom } = get(desktopView);
+            const { panX, panY, zoom } = get(windowView);
             const desktopWidth = window.innerWidth;
             const desktopHeight = window.innerHeight - TASKBAR_HEIGHT;
 

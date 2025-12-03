@@ -398,7 +398,15 @@
         }
     }
 
-    $: fittableItems = allItems.filter(item => item.type !== 'window');
+    $: fittableItems = (() => {
+        if (viewControlMode === 'back') {
+            return allItems.filter(item => item.type !== 'window');
+        } else if (viewControlMode === 'front') {
+            return allItems.filter(item => item.type === 'window');
+        } else { // 'both' mode
+            return allItems;
+        }
+    })();
 
     $: fitContentBounds = (() => {
         if (fittableItems.length === 0) {
@@ -452,6 +460,32 @@
         if (viewControlMode === 'back') return checkFit($desktopView);
         if (viewControlMode === 'front') return checkFit($windowView);
         if (viewControlMode === 'both') return checkFit($desktopView) && checkFit($windowView);
+        return false;
+    })();
+
+    // --- Dynamic Disabled States for View Controls ---
+    $: isZoomResetDisabled = (() => {
+        if (viewControlMode === 'back') return $desktopView.zoom === 1.0;
+        if (viewControlMode === 'front') return $windowView.zoom === 1.0;
+        if (viewControlMode === 'both') return $desktopView.zoom === 1.0 && $windowView.zoom === 1.0;
+        return false;
+    })();
+
+    $: isPanResetDisabled = (() => {
+        const isBackReset = $desktopView.panX === 0 && $desktopView.panY === 0;
+        const isFrontReset = $windowView.panX === 0 && $windowView.panY === 0;
+        if (viewControlMode === 'back') return isBackReset;
+        if (viewControlMode === 'front') return isFrontReset;
+        if (viewControlMode === 'both') return isBackReset && isFrontReset;
+        return false;
+    })();
+
+    $: isViewResetDisabled = (() => {
+        const isBackReset = $desktopView.panX === 0 && $desktopView.panY === 0 && $desktopView.zoom === 1.0;
+        const isFrontReset = $windowView.panX === 0 && $windowView.panY === 0 && $windowView.zoom === 1.0;
+        if (viewControlMode === 'back') return isBackReset;
+        if (viewControlMode === 'front') return isFrontReset;
+        if (viewControlMode === 'both') return isBackReset && isFrontReset;
         return false;
     })();
 
@@ -1570,18 +1604,19 @@
             {/if}
             <div class="zoom-controls">
                 <button on:click={() => zoom(-1)} title="Zoom Out">-</button>
-                <button class="zoom-reset" on:click={resetZoom} title="Reset Zoom" disabled={$desktopView.zoom === 1.0}>1:1</button>
+                <button class="zoom-reset" on:click={resetZoom} title="Reset Zoom" disabled={isZoomResetDisabled}>1:1</button>
                 <button on:click={() => zoom(1)} title="Zoom In">+</button>
             </div>
             <div class="pan-controls">
                 <button class="pan-up" on:click={() => pan(0, panStep)} title="Pan Up">▲</button>
                 <button class="pan-left" on:click={() => pan(panStep, 0)} title="Pan Left">◀</button>
-                <button class="pan-reset" on:click={resetPan} title="Reset Pan" disabled={$desktopView.panX === 0 && $desktopView.panY === 0}>●</button>
+                <button class="pan-reset" on:click={resetPan} title="Reset Pan" disabled={isPanResetDisabled}>●</button>
                 <button class="pan-right" on:click={() => pan(-panStep, 0)} title="Pan Right">▶</button>
                 <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
             </div>
             <div class="action-controls">
-                <button class="zoom-reset" on:click={resetView} title="Reset View" disabled={$desktopView.panX === 0 && $desktopView.panY === 0 && $desktopView.zoom === 1.0}>Reset</button>         <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content" disabled={isBestFit}>Fit</button>
+                <button class="zoom-reset" on:click={resetView} title="Reset View" disabled={isViewResetDisabled}>Reset</button>
+                <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content" disabled={isBestFit}>Fit</button>
             </div>
         </div>
     {/if}
