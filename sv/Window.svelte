@@ -530,6 +530,8 @@
                 <button class="menu-item" on:click={() => { const i = instanceRegistry.get(activeTabId); if (i?.setMode) i.setMode('raw'); showOptionsMenu = false; }}>Raw</button>
             {/if}
             <div class="menu-separator"></div>
+            <button class="menu-item" on:click={() => { windows.backWindow(id); showOptionsMenu = false; }}>Back Window</button>
+            <div class="menu-separator"></div>
             <button class="menu-item" on:click={() => { windows.changeTabZoom(id, activeTabId, 0.1); showOptionsMenu = false; }}>Zoom In</button>
             <button class="menu-item" on:click={() => { windows.changeTabZoom(id, activeTabId, -0.1); showOptionsMenu = false; }}>Zoom Out</button>
             <button class="menu-item" on:click={() => { windows.resetTabZoom(id, activeTabId); showOptionsMenu = false; }}>Reset Zoom</button>

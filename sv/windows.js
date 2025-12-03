@@ -14,6 +14,7 @@ import IoskWatch from './IoskWatch.svelte';
 import IoskUserInspector from './IoskUserInspector.svelte';
 import NotificationCenter from './NotificationCenter.svelte';
 import { TASKBAR_HEIGHT, desktopSettings, windowSettings, notificationHistory, unreadNoticeCount, desktopView } from './desktop.js';
+import { createBackedWindow, deleteBackedWindow } from './local.js';
 
 let windowGroupIdCounter = 0;
 let tabIdCounter = 0;
@@ -275,7 +276,6 @@ function createWindowManager() {
             tabs: [newTab],
             activeTabId: newTab.id,
             notice: null,
-            lockedIn: false,
         };
 
         update(windows => {
@@ -651,7 +651,6 @@ function createWindowManager() {
                 notice: null,
                 tabs: tabs,
                 activeTabId: newActiveTabId,
-                lockedIn: groupData.lockedIn || false,
             };
             return [...updatedWindows, newGroup];
         });
@@ -717,7 +716,6 @@ function createWindowManager() {
                 notice: null,
                 tabs: newTabs,
                 activeTabId: scaledGroupData.activeTabId, // Keep old ID for 2nd pass
-                lockedIn: scaledGroupData.lockedIn || false,
             };
             newGroups.push(newGroup);
         }
@@ -748,6 +746,23 @@ function createWindowManager() {
 
             return [...updatedWindows, ...newGroups];
         });
+    };
+
+    const backWindow = (groupId) => {
+        const group = get(windows).find(g => g.id === groupId);
+        if (!group) return;
+
+        const config = generateBoardConfigFromWindow(group);
+        const configStr = JSON.stringify(config);
+
+        createBackedWindow(configStr, group.x, group.y, group.width, group.height, 1.0);
+        removeWindow(groupId);
+    };
+
+    const unbackWindow = (backedWindow) => {
+        deleteBackedWindow(backedWindow.id);
+        const { x, y, width, height } = backedWindow;
+        restoreWindow({ ...backedWindow.config, x, y, width, height });
     };
 
     // --- Sentinel Implementation ---
@@ -858,6 +873,8 @@ function createWindowManager() {
         restoreWindow,
         restoreLayout, // <<< FIX: Export the new function
         notifyActivity,
+        backWindow,
+        unbackWindow,
     };
 }
 

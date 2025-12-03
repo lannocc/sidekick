@@ -6,7 +6,7 @@
     import { windows, newSettings, dragRequest } from './windows.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive, desktopView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems } from './desktop.js';
-    import { boxes, desktopShortcuts, updateDesktopSettings, updateBoxTransform, updateShortcutTransform } from './local.js';
+    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform } from './local.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import Shortcut from './Shortcut.svelte';
@@ -167,6 +167,17 @@
                 width: boxWidth,
                 height: boxHeight,
                 type: 'box',
+            };
+        }),
+        ...($backedWindows || []).map(bw => {
+            const scale = bw.scale || 1.0;
+            return {
+                ...bw,
+                type: 'backed_window',
+                baseWidth: bw.width,
+                baseHeight: bw.height,
+                width: bw.width * scale,
+                height: bw.height * scale
             };
         })
     ];
@@ -447,6 +458,8 @@
                     updateBoxTransform(item.id, item.x, item.y, item.scale);
                 } else if (item.type === 'shortcut') {
                     updateShortcutTransform(item.id, item.x, item.y, item.scale || 1.0);
+                } else if (item.type === 'backed_window') {
+                    updateBackedWindowTransform(item.id, item.x, item.y, item.scale);
                 }
             });
 
@@ -486,6 +499,9 @@
             const aspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
             sourceItem.width = BASE_WIDTH * newScale;
             sourceItem.height = BASE_WIDTH * aspectRatio * newScale;
+        } else if (type === 'backed_window') {
+            sourceItem.width = sourceItem.baseWidth * newScale;
+            sourceItem.height = sourceItem.baseHeight * newScale;
         }
 
         // 2. Resolve collisions.
@@ -697,6 +713,7 @@
 
         boxes.update(all => all.map(b => newPositions.has(String(b.id)) ? { ...b, ...newPositions.get(String(b.id)) } : b));
         desktopShortcuts.update(all => all.map(s => newPositions.has(String(s.id)) ? { ...s, ...newPositions.get(String(s.id)) } : s));
+        backedWindows.update(all => all.map(bw => newPositions.has(String(bw.id)) ? { ...bw, ...newPositions.get(String(bw.id)) } : bw));
     }
 
     function handleItemDragMove(event) {
@@ -755,6 +772,8 @@
                     updateBoxTransform(item.id, item.x, item.y, item.scale);
                 } else if (item.type === 'shortcut') {
                     updateShortcutTransform(item.id, item.x, item.y, item.scale || 1.0);
+                } else if (item.type === 'backed_window') {
+                    updateBackedWindowTransform(item.id, item.x, item.y, item.scale);
                 }
             });
         }

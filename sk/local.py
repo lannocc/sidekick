@@ -149,6 +149,22 @@ def init_db():
         );
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS backed_window (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            config TEXT NOT NULL, -- JSON blob of window group
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            width REAL NOT NULL,
+            height REAL NOT NULL,
+            scale REAL NOT NULL DEFAULT 1.0
+        );
+    """)
+    cursor.execute("PRAGMA table_info(backed_window)")
+    columns = [row['name'] for row in cursor.fetchall()]
+    if 'z_index' not in columns:
+        cursor.execute("ALTER TABLE backed_window ADD COLUMN z_index INTEGER NOT NULL DEFAULT 0")
+
     # Simple migration for existing databases
     cursor.execute("PRAGMA table_info(panel)")
     columns = [row['name'] for row in cursor.fetchall()]
@@ -195,6 +211,19 @@ async def broadcast_shortcut_list():
     message = json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts})
     if CONNECTED_CLIENTS:
         log.info(f"Broadcasting shortcut_list to {len(CONNECTED_CLIENTS)} clients.")
+        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
+
+async def broadcast_backed_window_list():
+    """Fetches all backed windows and broadcasts them to all connected clients."""
+    if not DB_CONN:
+        log.error("Database not connected, cannot broadcast backed window list.")
+        return
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT id, config, x, y, width, height, scale, z_index FROM backed_window")
+    windows = [dict(row) for row in cursor.fetchall()]
+    message = json.dumps({'type': 'backed_window_list', 'windows': windows})
+    if CONNECTED_CLIENTS:
+        log.info(f"Broadcasting backed_window_list to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
@@ -473,6 +502,11 @@ async def websocket_handler(websocket):
         shortcuts = [dict(row) for row in cursor.fetchall()]
         await websocket.send(json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts}))
 
+        # Send initial backed window list on connect
+        cursor.execute("SELECT id, config, x, y, width, height, scale FROM backed_window")
+        backed_windows = [dict(row) for row in cursor.fetchall()]
+        await websocket.send(json.dumps({'type': 'backed_window_list', 'windows': backed_windows}))
+
 
         async for message in websocket:
             try:
@@ -547,6 +581,36 @@ async def websocket_handler(websocket):
                     cursor.execute("DELETE FROM desktop_shortcut WHERE id = ?", (shortcut_id,))
                     DB_CONN.commit()
                     await broadcast_shortcut_list()
+
+                # --- Backed Window Operations ---
+                elif msg_type == 'create_backed_window':
+                    config, x, y, w, h, scale = msg['config'], msg['x'], msg['y'], msg['width'], msg['height'], msg.get('scale', 1.0)
+                    print_action("Create BackedWin", f"x={int(x)}, y={int(y)}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "INSERT INTO backed_window (config, x, y, width, height, scale) VALUES (?, ?, ?, ?, ?, ?)",
+                        (config, x, y, w, h, scale)
+                    )
+                    DB_CONN.commit()
+                    await broadcast_backed_window_list()
+                elif msg_type == 'update_backed_window_transform':
+                    win_id, x, y, scale = msg['id'], msg['x'], msg['y'], msg.get('scale', 1.0)
+                    print_action("BackedWin Xform", f"id={win_id}, x={int(x)}, y={int(y)}, scale={scale:.2f}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "UPDATE backed_window SET x = ?, y = ?, scale = ? WHERE id = ?",
+                        (x, y, scale, win_id)
+                    )
+                    DB_CONN.commit()
+                    await broadcast_backed_window_list()
+                elif msg_type == 'delete_backed_window':
+                    win_id = msg['id']
+                    print_action("Delete BackedWin", f"id={win_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("DELETE FROM backed_window WHERE id = ?", (win_id,))
+                    DB_CONN.commit()
+                    await broadcast_backed_window_list()
+
 
                 # --- Skybox Box Operations ---
                 elif msg_type == 'list_boxes':

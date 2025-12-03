@@ -21,6 +21,7 @@ export const askError = writable(null);
 export const askExit = writable(null);
 export const askStatsResponse = writable(null);
 export const boxes = writable([]);
+export const backedWindows = writable([]);
 
 // --- Desktop Shortcuts Store ---
 const { subscribe: shortcutsSubscribe, set: shortcutsSet, update: shortcutsUpdate } = writable([]);
@@ -96,6 +97,16 @@ export function updateShortcutTransform(id, x, y, scale) {
     sendMessage({ type: 'update_shortcut_transform', id, x, y, scale });
 }
 
+export function createBackedWindow(config, x, y, width, height, scale = 1.0) {
+    sendMessage({ type: 'create_backed_window', config, x, y, width, height, scale });
+}
+export function updateBackedWindowTransform(id, x, y, scale) {
+    sendMessage({ type: 'update_backed_window_transform', id, x, y, scale });
+}
+export function deleteBackedWindow(id) {
+    sendMessage({ type: 'delete_backed_window', id });
+}
+
 
 function attemptConnection() {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
@@ -151,6 +162,13 @@ function attemptConnection() {
                     break;
                 case 'shortcut_list':
                     shortcutsSet(msg.shortcuts || []);
+                    break;
+                case 'backed_window_list':
+                    const windows = (msg.windows || []).map(w => ({
+                        ...w,
+                        config: JSON.parse(w.config)
+                    }));
+                    backedWindows.set(windows);
                     break;
                 case 'box_list':
                     const newBoxesFromBackend = msg.boxes;
