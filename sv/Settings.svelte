@@ -34,9 +34,9 @@
         activeTransparency = Math.round((1 - (settings.boxes.activeOpacity ?? 1.0)) * 100);
     }
 
-    $: if (settings && settings.windows?.normal) {
-        inactiveNormalWindowTransparency = Math.round((1 - (settings.windows.normal.inactiveOpacity ?? 1.0)) * 100);
-        activeNormalWindowTransparency = Math.round((1 - (settings.windows.normal.activeOpacity ?? 1.0)) * 100);
+    $: if (settings && settings.windows?.normal?.cover) {
+        inactiveNormalWindowTransparency = Math.round((1 - (settings.windows.normal.cover.inactiveOpacity ?? 1.0)) * 100);
+        activeNormalWindowTransparency = Math.round((1 - (settings.windows.normal.cover.activeOpacity ?? 1.0)) * 100);
     }
 
     $: if (settings && settings.windows?.back) {
@@ -87,14 +87,14 @@
     function handleInactiveNormalWindowTransparency(e) {
         const value = Number(e.target.value);
         inactiveNormalWindowTransparency = value;
-        settings.windows.normal.inactiveOpacity = 1 - (value / 100);
+        settings.windows.normal.cover.inactiveOpacity = 1 - (value / 100);
         handleUpdate();
     }
 
     function handleActiveNormalWindowTransparency(e) {
         const value = Number(e.target.value);
         activeNormalWindowTransparency = value;
-        settings.windows.normal.activeOpacity = 1 - (value / 100);
+        settings.windows.normal.cover.activeOpacity = 1 - (value / 100);
         handleUpdate();
     }
 
@@ -414,45 +414,45 @@
             </div>
             {#if activeWindowsSubTab === 'normal'}
                 <h2>Normal Windows Appearance</h2>
-                {#if settings.windows.normal.frame}
+                {#if settings.windows.normal.cover}
                     <fieldset>
-                        <legend>Frame</legend>
+                        <legend>Cover</legend>
                         <div>
-                            <label><input type="radio" bind:group={settings.windows.normal.frame.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
-                            {#if settings.windows.normal.frame.bgType === 'gradient'}
+                            <label><input type="radio" bind:group={settings.windows.normal.cover.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
+                            {#if settings.windows.normal.cover.bgType === 'gradient'}
                             <div class="options-group">
                                 <label class="color-picker-label">
                                     <span>Start Color</span>
-                                    <input type="color" bind:value={settings.windows.normal.frame.bgGradientStart} on:input={handleUpdate}>
+                                    <input type="color" bind:value={settings.windows.normal.cover.bgGradientStart} on:input={handleUpdate}>
                                 </label>
                                 <label class="color-picker-label">
                                     <span>End Color</span>
-                                    <input type="color" bind:value={settings.windows.normal.frame.bgGradientEnd} on:input={handleUpdate}>
+                                    <input type="color" bind:value={settings.windows.normal.cover.bgGradientEnd} on:input={handleUpdate}>
                                 </label>
                             </div>
                             {/if}
                         </div>
                         <div>
-                            <label><input type="radio" bind:group={settings.windows.normal.frame.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
-                            {#if settings.windows.normal.frame.bgType === 'color'}
+                            <label><input type="radio" bind:group={settings.windows.normal.cover.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
+                            {#if settings.windows.normal.cover.bgType === 'color'}
                             <div class="options-group">
                                 <label class="color-picker-label">
                                     <span>Color</span>
-                                    <input type="color" bind:value={settings.windows.normal.frame.bgColor} on:input={handleUpdate}>
+                                    <input type="color" bind:value={settings.windows.normal.cover.bgColor} on:input={handleUpdate}>
                                 </label>
                             </div>
                             {/if}
                         </div>
                         <div>
-                            <label><input type="radio" bind:group={settings.windows.normal.frame.bgType} value="image" on:change={handleUpdate}> Image</label>
-                            {#if settings.windows.normal.frame.bgType === 'image'}
+                            <label><input type="radio" bind:group={settings.windows.normal.cover.bgType} value="image" on:change={handleUpdate}> Image</label>
+                            {#if settings.windows.normal.cover.bgType === 'image'}
                             <div class="options-group">
                                 <label>
-                                    <input class="text-input" type="text" bind:value={settings.windows.normal.frame.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                                    <input class="text-input" type="text" bind:value={settings.windows.normal.cover.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
                                 </label>
                                 <label class="color-picker-label">
                                     <span>Display Mode</span>
-                                    <select class="select-input" bind:value={settings.windows.normal.frame.bgImageDisplayMode} on:change={handleUpdate}>
+                                    <select class="select-input" bind:value={settings.windows.normal.cover.bgImageDisplayMode} on:change={handleUpdate}>
                                         <option value="cover">Cover</option>
                                         <option value="contain">Fit</option>
                                         <option value="stretch">Stretch</option>
@@ -462,46 +462,61 @@
                             </div>
                             {/if}
                         </div>
-                    </fieldset>
-                {/if}
-                <fieldset>
-                    <legend>Scene</legend>
-                    <div>
-                        <label><input type="radio" bind:group={settings.windows.normal.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
-                        {#if settings.windows.normal.bgType === 'gradient'}
-                        <div class="options-group">
+                        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 8px 0;" />
+                        <div>
                             <label class="color-picker-label">
-                                <span>Start Color</span>
-                                <input type="color" bind:value={settings.windows.normal.bgGradientStart} on:input={handleUpdate}>
+                                <span>Inactive Transparency ({inactiveNormalWindowTransparency}%)</span>
+                                <input type="range" min="0" max="100" step="1" value={inactiveNormalWindowTransparency} on:input={handleInactiveNormalWindowTransparency}>
                             </label>
                             <label class="color-picker-label">
-                                <span>End Color</span>
-                                <input type="color" bind:value={settings.windows.normal.bgGradientEnd} on:input={handleUpdate}>
+                                <span>Active Transparency ({activeNormalWindowTransparency}%)</span>
+                                <input type="range" min="0" max="100" step="1" value={activeNormalWindowTransparency} on:input={handleActiveNormalWindowTransparency}>
+
                             </label>
                         </div>
-                        {/if}
-                    </div>
+                    </fieldset>
+                {/if}
+                {#if settings.windows.normal.scene}
+                    <fieldset>
+                        <legend>Scene</legend>
+                        <div>
+                            <label><input type="radio" bind:group={settings.windows.normal.scene.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
+                            {#if settings.windows.normal.scene.bgType === 'gradient'}
+                            <div class="options-group">
+                                <label class="color-picker-label">
+                                    <span>Start Color</span>
+                                    <input type="color" bind:value={settings.windows.normal.scene.bgGradientStart} on:input={handleUpdate}>
+                                </label>
+                                <label class="color-picker-label">
+                                    <span>End Color</span>
+                                    <input type="color" bind:value={settings.windows.normal.scene.bgGradientEnd} on:input={handleUpdate}>
+                                </label>
+                            </div>
+                            {/if}
+                        </div>
                     <div>
                         <label><input type="radio" bind:group={settings.windows.normal.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
-                        {#if settings.windows.normal.bgType === 'color'}
+                        <label><input type="radio" bind:group={settings.windows.normal.scene.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
+                        {#if settings.windows.normal.scene.bgType === 'color'}
+
                         <div class="options-group">
                             <label class="color-picker-label">
                                 <span>Color</span>
-                                <input type="color" bind:value={settings.windows.normal.bgColor} on:input={handleUpdate}>
+                                <input type="color" bind:value={settings.windows.normal.scene.bgColor} on:input={handleUpdate}>
                             </label>
                         </div>
                         {/if}
                     </div>
                     <div>
-                        <label><input type="radio" bind:group={settings.windows.normal.bgType} value="image" on:change={handleUpdate}> Image</label>
-                        {#if settings.windows.normal.bgType === 'image'}
+                        <label><input type="radio" bind:group={settings.windows.normal.scene.bgType} value="image" on:change={handleUpdate}> Image</label>
+                        {#if settings.windows.normal.scene.bgType === 'image'}
                         <div class="options-group">
                             <label>
-                                <input class="text-input" type="text" bind:value={settings.windows.normal.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                                <input class="text-input" type="text" bind:value={settings.windows.normal.scene.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
                             </label>
                             <label class="color-picker-label">
                                 <span>Display Mode</span>
-                                <select class="select-input" bind:value={settings.windows.normal.bgImageDisplayMode} on:change={handleUpdate}>
+                                <select class="select-input" bind:value={settings.windows.normal.scene.bgImageDisplayMode} on:change={handleUpdate}>
                                     <option value="cover">Cover</option>
                                     <option value="contain">Fit</option>
                                     <option value="stretch">Stretch</option>
@@ -511,18 +526,9 @@
                         </div>
                         {/if}
                     </div>
-                </fieldset>
-                <fieldset>
-                    <legend>Transparency</legend>
-                    <label class="color-picker-label">
-                        <span>Inactive ({inactiveNormalWindowTransparency}%)</span>
-                        <input type="range" min="0" max="100" step="1" value={inactiveNormalWindowTransparency} on:input={handleInactiveNormalWindowTransparency}>
-                    </label>
-                    <label class="color-picker-label">
-                        <span>Active ({activeNormalWindowTransparency}%)</span>
-                        <input type="range" min="0" max="100" step="1" value={activeNormalWindowTransparency} on:input={handleActiveNormalWindowTransparency}>
-                    </label>
-                </fieldset>
+                    </fieldset>
+                {/if}
+
             {/if}
             {#if activeWindowsSubTab === 'back'}
                 <h2>Back Windows Appearance</h2>

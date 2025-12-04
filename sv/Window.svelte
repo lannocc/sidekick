@@ -71,11 +71,11 @@
     }
 
     $: windowOpacity = isActive 
-        ? settings?.windows?.normal?.activeOpacity ?? 1.0 
-        : settings?.windows?.normal?.inactiveOpacity ?? 1.0;
+        ? settings?.windows?.normal?.cover?.activeOpacity ?? 1.0 
+        : settings?.windows?.normal?.cover?.inactiveOpacity ?? 1.0;
     
-    $: frameStyle = generateBgStyle(settings?.windows?.normal?.frame);
-    $: normalWindowBgStyle = generateBgStyle(settings?.windows?.normal);
+    $: frameStyle = generateBgStyle(settings?.windows?.normal?.cover);
+    $: normalWindowBgStyle = generateBgStyle(settings?.windows?.normal?.scene);
 
     let isDragging = false;
     let isResizing = false;

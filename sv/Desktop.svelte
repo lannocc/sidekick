@@ -114,7 +114,7 @@
         return null;
     }
 
-    $: normalWindowBgStyle = generateBgStyle($desktopSettings.windows?.normal);
+    $: normalWindowBgStyle = generateBgStyle($desktopSettings.windows?.normal?.scene);
     $: backWindowBgStyle = generateBgStyle($desktopSettings.windows?.back);
     $: backWindowSettings = $desktopSettings.windows?.back;
 
