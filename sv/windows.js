@@ -225,26 +225,11 @@ function createWindowManager() {
         tabIdCounter = 0;
         const idMap = new Map();
 
-        const savedDesktopWidth = layout.desktop?.width || window.innerWidth;
-        const savedDesktopHeight = layout.desktop?.height || (window.innerHeight - 40);
-        const currentDesktopWidth = window.innerWidth;
-        const currentDesktopHeight = window.innerHeight - 40;
-        const scaleX = currentDesktopWidth / savedDesktopWidth;
-        const scaleY = currentDesktopHeight / savedDesktopHeight;
-
         let newGroups = [];
         const sortedGroupsData = [...layout.windowGroups].sort((a,b) => (a.zIndex || 0) - (b.zIndex || 0));
 
         for (const groupData of sortedGroupsData) {
-            const scaledGroupData = { ...groupData };
-            if (!scaledGroupData.maximized) {
-                scaledGroupData.x = Math.round(scaledGroupData.x * scaleX);
-                scaledGroupData.y = Math.round(scaledGroupData.y * scaleY);
-                scaledGroupData.width = Math.round(scaledGroupData.width * scaleX);
-                scaledGroupData.height = Math.round(scaledGroupData.height * scaleY);
-            }
-
-            const newTabs = scaledGroupData.tabs.map(tabData => {
+            const newTabs = groupData.tabs.map(tabData => {
                 const component = componentMap[tabData.componentType];
                 if (!component) return null;
                 const { componentType, originalId, ...props } = tabData;
@@ -260,15 +245,15 @@ function createWindowManager() {
 
             newGroups.push({
                 id: ++windowGroupIdCounter,
-                x: scaledGroupData.x, y: scaledGroupData.y, width: scaledGroupData.width, height: scaledGroupData.height,
+                x: groupData.x, y: groupData.y, width: groupData.width, height: groupData.height,
                 minimized: false,
-                maximized: scaledGroupData.maximized,
+                maximized: groupData.maximized,
                 isActive: false,
-                zIndex: scaledGroupData.zIndex,
-                prevX: scaledGroupData.x, prevY: scaledGroupData.y, prevWidth: scaledGroupData.width, prevHeight: scaledGroupData.height,
+                zIndex: groupData.zIndex,
+                prevX: groupData.x, prevY: groupData.y, prevWidth: groupData.width, prevHeight: groupData.height,
                 notice: null,
                 tabs: newTabs,
-                activeTabId: scaledGroupData.activeTabId,
+                activeTabId: groupData.activeTabId,
             });
         }
 

@@ -1138,6 +1138,7 @@
             }
         }
         isPanning = false;
+        wasPanning = false;
         window.removeEventListener('mousemove', handleDesktopMouseMove);
     }
 

@@ -7,6 +7,8 @@
     import { sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus, createBox } from './local.js';
     import { newAskWindow, windows } from './windows.js';
     import { fileSelection } from './iosk.js';
+    import { get } from 'svelte/store';
+    import { windowView, TASKBAR_HEIGHT } from './desktop.js';
 
     export let id;
     export let groupId;
@@ -36,7 +38,10 @@
 
     function handleRightClick(event, item) {
         event.preventDefault();
-        contextMenu = { visible: true, x: event.clientX, y: event.clientY, item };
+        const { panX, panY, zoom } = get(windowView);
+        const menuX = (event.clientX - panX) / zoom;
+        const menuY = ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom;
+        contextMenu = { visible: true, x: menuX, y: menuY, item };
     }
 
     function closeContextMenu() {
