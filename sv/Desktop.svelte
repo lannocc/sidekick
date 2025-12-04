@@ -1281,6 +1281,11 @@
         const wv = $windowView;
         const dv = $desktopView;
 
+        if (wv.zoom === 0 || dv.zoom === 0) {
+            console.error("Cannot back window with zero zoom level.");
+            return;
+        }
+
         // Calculate the midpoint of the front window in front-layer world coordinates
         const frontWorldMidX = windowToBack.x + windowToBack.width / 2;
         const frontWorldMidY = windowToBack.y + windowToBack.height / 2;
@@ -1289,9 +1294,11 @@
         const backWorldMidX = ((frontWorldMidX * wv.zoom) + wv.panX - dv.panX) / dv.zoom;
         const backWorldMidY = ((frontWorldMidY * wv.zoom) + wv.panY - dv.panY) / dv.zoom;
 
-        // Calculate the new dimensions for the backed window, preserving its visual size across layers
-        const newWidth = windowToBack.width * wv.zoom / dv.zoom;
-        const newHeight = windowToBack.height * wv.zoom / dv.zoom;
+        // Calculate the new dimensions for the backed window. The world-space size is adjusted
+        // by the zoom factor change, which makes it visually larger/smaller as requested.
+        const zoomFactor = dv.zoom / wv.zoom;
+        const newWidth = windowToBack.width * zoomFactor;
+        const newHeight = windowToBack.height * zoomFactor;
 
         // Calculate the new top-left position for the backed window by offsetting from its new midpoint
         const newX = backWorldMidX - newWidth / 2;

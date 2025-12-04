@@ -859,22 +859,15 @@ function createWindowManager() {
         });
     };
 
-    const backWindow = (groupId) => {
-        const allWindows = get(windows);
-        const group = allWindows.find(g => g.id === groupId);
-        if (!group) return;
-
-        const config = generateBoardConfigFromWindow(group, allWindows);
-        const configStr = JSON.stringify(config);
-
-        createBackedWindow(configStr, group.x, group.y, group.width, group.height, 1.0);
-        removeWindow(groupId);
-    };
-
     const unbackWindow = (backedWindow) => {
         // Get current view states for coordinate transformation
         const dv = get(desktopView);
         const wv = get(windowView);
+
+        if (dv.zoom === 0 || wv.zoom === 0) {
+            console.error("Cannot unback window with zero zoom level.");
+            return;
+        }
 
         // Get the visual dimensions of the backed window on the back layer, accounting for scale
         const scale = backedWindow.scale || 1.0;
@@ -886,29 +879,30 @@ function createWindowManager() {
         const backWorldMidY = backedWindow.y + backedVisualHeight / 2;
         
         // Transform this midpoint into front-layer world coordinates
-        // This is the core transformation: from back-world -> screen -> front-world
         const frontWorldMidX = ((backWorldMidX * dv.zoom) + dv.panX - wv.panX) / wv.zoom;
         const frontWorldMidY = ((backWorldMidY * dv.zoom) + dv.panY - wv.panY) / wv.zoom;
         
-        // Get the original, unscaled dimensions of the window to be restored from its config
-        const restoredWindowWidth = backedWindow.config.width;
-        const restoredWindowHeight = backedWindow.config.height;
+        // Calculate the new dimensions for the restored window. The world-space size is adjusted
+        // by the zoom factor change, which makes it visually larger/smaller as requested.
+        const zoomFactor = wv.zoom / dv.zoom;
+        const restoredWindowWidth = backedVisualWidth * zoomFactor;
+        const restoredWindowHeight = backedVisualHeight * zoomFactor;
 
         // Calculate the new top-left (x, y) for the restored window in front-layer world coordinates
         const newX = frontWorldMidX - restoredWindowWidth / 2;
         const newY = frontWorldMidY - restoredWindowHeight / 2;
         
-        // Now, proceed with unbacking
         deleteBackedWindow(backedWindow.id);
         
-        // Call restoreWindow, passing the original config but overriding x, y, width, height
-        // with the newly calculated values that are correct for the front layer.
+        // Update the config with the new, transformed size before restoring.
+        const newConfig = { ...backedWindow.config };
+        newConfig.width = restoredWindowWidth;
+        newConfig.height = restoredWindowHeight;
+        
         restoreWindow({ 
-            ...backedWindow.config, 
+            ...newConfig, 
             x: newX, 
             y: newY, 
-            width: restoredWindowWidth, 
-            height: restoredWindowHeight 
         });
     };
 
@@ -1020,7 +1014,6 @@ function createWindowManager() {
         restoreWindow,
         restoreLayout,
         notifyActivity,
-        backWindow,
         unbackWindow,
     };
 }
