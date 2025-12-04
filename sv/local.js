@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import { desktopView } from './desktop.js';
+import { desktopView, TASKBAR_HEIGHT } from './desktop.js';
 
 const PORT = 4210;
 const URL = `ws://localhost:${PORT}`;
@@ -62,7 +62,12 @@ export function sendMessage(message) {
 }
 
 export function createBox(name, box_type, context, aspectRatio, x, y) {
-    sendMessage({ type: 'create_box', name, box_type, context, aspect_ratio: aspectRatio, x, y });
+    let finalAspectRatio = aspectRatio;
+    if (finalAspectRatio == null) { // Checks for both null and undefined
+        const desktopHeight = window.innerHeight - TASKBAR_HEIGHT;
+        finalAspectRatio = (desktopHeight > 0 && window.innerWidth > 0) ? desktopHeight / window.innerWidth : 0;
+    }
+    sendMessage({ type: 'create_box', name, box_type, context, aspect_ratio: finalAspectRatio, x, y });
 }
 export function updateBox(id, name) {
     sendMessage({ type: 'update_box', id, name });
