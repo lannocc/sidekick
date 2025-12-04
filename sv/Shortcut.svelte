@@ -19,7 +19,7 @@
     export let scale = 1.0;
 
     const dispatch = createEventDispatcher();
-    $: isSelected = $selectedItems.has(String(id));
+    $: isSelected = $selectedItems.has(`shortcut-${id}`);
     let element;
 
     // By using afterUpdate, we ensure the rendered dimensions are always kept up-to-date

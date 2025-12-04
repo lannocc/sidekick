@@ -679,9 +679,10 @@
     function handleKeyUpForScale(event) {
         if ((event.key === 'Control' || event.key === 'Alt') && scalingSession.active) {
             // Persist final positions for both scaled and pushed items.
-            const finalItems = allItems.filter(item =>
-                String(item.id) === scalingSession.targetId || scalingSession.pushedItems.has(String(item.id))
-            );
+            const finalItems = allItems.filter(item => {
+                const uniqueId = `${item.type}-${item.id}`;
+                return uniqueId === scalingSession.targetId || scalingSession.pushedItems.has(uniqueId);
+            });
 
             finalItems.forEach(item => {
                 if (item.type === 'box') {
@@ -701,19 +702,19 @@
 
     function handleItemScaleRequest(event) {
         const { id, type, newScale } = event.detail;
-        const idStr = String(id);
+        const uniqueId = `${type}-${id}`;
 
         // Start a new session if not active or if the target item has changed.
-        if (!scalingSession.active || scalingSession.targetId !== idStr) {
+        if (!scalingSession.active || scalingSession.targetId !== uniqueId) {
             scalingSession.active = true;
-            scalingSession.targetId = idStr;
+            scalingSession.targetId = uniqueId;
             scalingSession.startStates = allItems.map(i => ({ ...i }));
             scalingSession.pushedItems.clear();
         }
 
         // 1. Create a working copy from start states and apply the new scale.
         let frameItems = scalingSession.startStates.map(i => ({ ...i }));
-        const sourceItem = frameItems.find(i => String(i.id) === idStr);
+        const sourceItem = frameItems.find(i => `${i.type}-${i.id}` === uniqueId);
         if (!sourceItem) return;
 
         sourceItem.scale = newScale;
@@ -737,7 +738,7 @@
         }
 
         // 2. Resolve collisions.
-        const activeItemIds = new Set([idStr]);
+        const activeItemIds = new Set([uniqueId]);
         const updatedFrameItems = resolveCollisions(
             frameItems,
             activeItemIds,
@@ -782,7 +783,7 @@
 
 
     function handleGlobalMouseDown(event) {
-        const targetItemEl = event.target.closest('.shortcut, .box');
+        const targetItemEl = event.target.closest('.shortcut, .box, .backed-window');
 
         if (targetItemEl) {
             handleItemMouseDown(event, targetItemEl);
@@ -801,15 +802,17 @@
         event.stopPropagation();
 
         const id = itemEl.dataset.id;
+        const type = itemEl.dataset.type;
+        const uniqueId = `${type}-${id}`;
 
-        // Update selection
+        // Update selection with unique IDs
         if (event.ctrlKey) {
             selectedItems.update(s => {
-                s.has(id) ? s.delete(id) : s.add(id);
+                s.has(uniqueId) ? s.delete(uniqueId) : s.add(uniqueId);
                 return s;
             });
-        } else if (!get(selectedItems).has(id)) {
-            selectedItems.set(new Set([id]));
+        } else if (!get(selectedItems).has(uniqueId)) {
+            selectedItems.set(new Set([uniqueId]));
         }
 
         // Prepare for dragging
@@ -824,11 +827,11 @@
         };
 
         dragStartData.items.clear();
-        get(selectedItems).forEach(selId => {
-            // FIX: Convert item's ID to a string for a correct strict comparison
-            const item = allItems.find(i => String(i.id) === selId);
+        get(selectedItems).forEach(selUniqueId => {
+            const [itemType, itemId] = selUniqueId.split('-');
+            const item = allItems.find(i => i.type === itemType && String(i.id) === itemId);
             if (item) {
-                dragStartData.items.set(selId, { x: item.x, y: item.y, type: item.type, scale: item.scale });
+                dragStartData.items.set(selUniqueId, { x: item.x, y: item.y, type: item.type, scale: item.scale });
             }
         });
 
@@ -861,20 +864,19 @@
 
                     collisionsFound++;
 
-                    const idA = String(itemA.id);
-                    const idB = String(itemB.id);
+                    const uniqueIdA = `${itemA.type}-${itemA.id}`;
+                    const uniqueIdB = `${itemB.type}-${itemB.id}`;
 
-                    const isAActive = activeItemIds.has(idA);
-                    const isBActive = activeItemIds.has(idB);
+                    const isAActive = activeItemIds.has(uniqueIdA);
+                    const isBActive = activeItemIds.has(uniqueIdB);
 
                     // Items in the active set (e.g., dragged together) don't push each other.
                     if (isAActive && isBActive) continue;
 
-                    const originalA = startStates.find(s => String(s.id) === idA);
-                    const originalB = startStates.find(s => String(s.id) === idB);
+                    const originalA = startStates.find(s => `${s.type}-${s.id}` === uniqueIdA);
+                    const originalB = startStates.find(s => `${s.type}-${s.id}` === uniqueIdB);
 
-                    // Safeguard against missing original states. This shouldn't happen in normal operation
-                    // but prevents errors if the item lists were to change during a drag.
+                    // Safeguard against missing original states.
                     if (!originalA || !originalB) {
                         continue;
                     }
@@ -893,8 +895,6 @@
                     } else if (!hasAMoved && hasBMoved) {
                         [pusher, pushed, pusherBox, pushedBox] = [itemB, itemA, boxB, boxA];
                     } else if (hasAMoved && hasBMoved) {
-                        // Both items have been pushed and are now colliding.
-                        // Heuristic: The item that has been displaced further is the "pusher".
                         const displacementA = Math.hypot(itemA.x - originalA.x, itemA.y - originalA.y);
                         const displacementB = Math.hypot(itemB.x - originalB.x, itemB.y - originalB.y);
 
@@ -905,13 +905,12 @@
                         }
                     } else {
                         // The remaining case is !hasAMoved && !hasBMoved (two static, overlapping items).
-                        // We don't resolve this during a drag operation.
                         continue;
                     }
-
-                    const pushedId = String(pushed.id);
-                    if (!pushedItemsMap.has(pushedId)) {
-                        pushedItemsMap.set(pushedId, { x: pushed.x, y: pushed.y });
+                    
+                    const pushedUniqueId = `${pushed.type}-${pushed.id}`;
+                    if (!pushedItemsMap.has(pushedUniqueId)) {
+                        pushedItemsMap.set(pushedUniqueId, { x: pushed.x, y: pushed.y });
                     }
 
                     const overlapX = Math.min(pusherBox.x + pusherBox.width, pushedBox.x + pushedBox.width) - Math.max(pusherBox.x, pushedBox.x);
@@ -933,19 +932,35 @@
     }
 
     function updateStoresAfterCollision(frameItems, itemsToUpdate) {
-        const newPositions = new Map();
+        const newBoxPositions = new Map();
+        const newShortcutPositions = new Map();
+        const newBackedWindowPositions = new Map();
+
         frameItems.forEach(item => {
-            const idStr = String(item.id);
-            if (itemsToUpdate.has(idStr)) {
-                newPositions.set(idStr, { x: Math.round(item.x), y: Math.round(item.y), scale: item.scale });
+            const uniqueId = `${item.type}-${item.id}`;
+            if (itemsToUpdate.has(uniqueId)) {
+                const pos = { x: Math.round(item.x), y: Math.round(item.y), scale: item.scale };
+                const idStr = String(item.id);
+
+                if (item.type === 'box') {
+                    newBoxPositions.set(idStr, pos);
+                } else if (item.type === 'shortcut') {
+                    newShortcutPositions.set(idStr, pos);
+                } else if (item.type === 'backed_window') {
+                    newBackedWindowPositions.set(idStr, pos);
+                }
             }
         });
 
-        if (newPositions.size === 0) return;
-
-        boxes.update(all => all.map(b => newPositions.has(String(b.id)) ? { ...b, ...newPositions.get(String(b.id)) } : b));
-        desktopShortcuts.update(all => all.map(s => newPositions.has(String(s.id)) ? { ...s, ...newPositions.get(String(s.id)) } : s));
-        backedWindows.update(all => all.map(bw => newPositions.has(String(bw.id)) ? { ...bw, ...newPositions.get(String(bw.id)) } : bw));
+        if (newBoxPositions.size > 0) {
+            boxes.update(all => all.map(b => newBoxPositions.has(String(b.id)) ? { ...b, ...newBoxPositions.get(String(b.id)) } : b));
+        }
+        if (newShortcutPositions.size > 0) {
+            desktopShortcuts.update(all => all.map(s => newShortcutPositions.has(String(s.id)) ? { ...s, ...newShortcutPositions.get(String(s.id)) } : s));
+        }
+        if (newBackedWindowPositions.size > 0) {
+            backedWindows.update(all => all.map(bw => newBackedWindowPositions.has(String(bw.id)) ? { ...bw, ...newBackedWindowPositions.get(String(bw.id)) } : bw));
+        }
     }
 
     function handleItemDragMove(event) {
@@ -970,9 +985,9 @@
         const draggedItemIds = new Set(dragStartData.items.keys());
 
         frameItems.forEach(item => {
-            const idStr = String(item.id);
-            if (draggedItemIds.has(idStr)) {
-                const initial = dragStartData.items.get(idStr);
+            const uniqueId = `${item.type}-${item.id}`;
+            if (draggedItemIds.has(uniqueId)) {
+                const initial = dragStartData.items.get(uniqueId);
                 item.x = initial.x + dx;
                 item.y = initial.y + dy;
             }
@@ -995,9 +1010,10 @@
         document.body.classList.remove('is-dragging-item');
         if (get(wasDraggingItems)) {
             // Persist final positions for both dragged and pushed items.
-            const finalItems = allItems.filter(item => 
-                dragStartData.items.has(String(item.id)) || pushedItemsOriginalPositions.has(String(item.id))
-            );
+            const finalItems = allItems.filter(item => {
+                const uniqueId = `${item.type}-${item.id}`;
+                return dragStartData.items.has(uniqueId) || pushedItemsOriginalPositions.has(uniqueId);
+            });
 
             finalItems.forEach(item => {
                 if (item.type === 'box') {
@@ -1057,13 +1073,13 @@
         const newlySelected = new Set(currentlySelected);
 
         allItems.forEach(item => {
-            if (item.type === 'box' || item.type === 'shortcut') {
+            if (item.type === 'box' || item.type === 'shortcut' || item.type === 'backed_window') {
                 const box = getItemBoundingBox(item);
                 const itemRight = box.x + box.width;
                 const itemBottom = box.y + box.height;
                 // Check for intersection
                 if (box.x < x2 && itemRight > x1 && box.y < y2 && itemBottom > y1) {
-                    newlySelected.add(String(item.id));
+                    newlySelected.add(`${item.type}-${item.id}`);
                 }
             }
         });
@@ -1603,6 +1619,8 @@
                             {@const tabProps = { ...activeTabConfig, id: activeTabConfig.originalId, groupId: bw.id, isActive: false, isBacked: true, x: bw.x, y: bw.y, width: bw.width, height: bw.height }}
                             <div
                                 class="tab-content-wrapper backed-window"
+                                data-id={bw.id}
+                                data-type="backed_window"
                                 style:left="{bw.x}px"
                                 style:top="{bw.y}px"
                                 style:width="{bw.width * (bw.scale || 1.0)}px"

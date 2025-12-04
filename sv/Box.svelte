@@ -25,7 +25,7 @@
     $: if (box.scale != null) scale = box.scale;
     $: coverPanelLocation = box.cover_panel_location;
     $: canSetCover = !coverPanelLocation;
-    $: isSelected = $selectedItems.has(String(box.id));
+    $: isSelected = $selectedItems.has(`box-${box.id}`);
     $: maxWindowZ = Math.max(100, ...$windows.map(w => w.zIndex));
 
     // --- Panel Grid Logic ---
