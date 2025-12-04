@@ -1496,6 +1496,11 @@
         border: 1px solid var(--border-color);
         box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         background-color: var(--window-bg);
+        transition: border-color 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
+    }
+    .backed-window.tab-content-wrapper.selected {
+        border-color: rgba(52, 152, 219, 0.7);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3), 0 0 8px rgba(52, 152, 219, 0.6);
     }
     .backed-content-area {
         width: 100%;
@@ -1503,6 +1508,7 @@
         overflow: auto;
         padding: 5px;
         box-sizing: border-box;
+        pointer-events: none; /* Allows dragging from anywhere on the component */
     }
 
     .selection-box {
@@ -1681,12 +1687,14 @@
                 {#each $backedWindows as bw (bw.id)}
                     {@const config = bw.config}
                     {@const activeTabConfig = (config.tabs.find(t => t.originalId === config.activeTabId) || config.tabs[0])}
+                    {@const isSelected = $selectedItems.has(`backed_window-${bw.id}`)}
                     {#if activeTabConfig}
                         {@const Component = componentMap[activeTabConfig.componentType]}
                         {#if Component}
                             {@const tabProps = { ...activeTabConfig, id: activeTabConfig.originalId, groupId: bw.id, isActive: false, isBacked: true, x: bw.x, y: bw.y, width: bw.width, height: bw.height }}
                             <div
                                 class="tab-content-wrapper backed-window"
+                                class:selected={isSelected}
                                 data-id={bw.id}
                                 data-type="backed_window"
                                 style:left="{bw.x}px"
@@ -1695,6 +1703,16 @@
                                 style:height="{bw.height * (bw.scale || 1.0)}px"
                                 style:z-index="{bw.z_index || 1}"
                                 on:contextmenu|preventDefault|stopPropagation={(event) => showBackedWindowContextMenu(event, bw)}
+                                on:wheel={e => {
+                                    if (e.ctrlKey || e.altKey) {
+                                        e.preventDefault();
+                                        const zoomStep = 0.05;
+                                        const delta = e.deltaY < 0 ? zoomStep : -zoomStep;
+                                        const currentScale = bw.scale || 1.0;
+                                        const newScale = Math.max(0.2, currentScale + delta);
+                                        handleItemScaleRequest({ detail: { id: bw.id, newScale, type: 'backed_window' } });
+                                    }
+                                }}
                             >
                                 <div class="backed-content-area" style:zoom={activeTabConfig.zoom || 1.0}>
                                     <svelte:component this={Component} {...tabProps} />
