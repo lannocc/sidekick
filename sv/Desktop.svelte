@@ -825,8 +825,13 @@
         // Update selection with unique IDs
         if (event.ctrlKey) {
             selectedItems.update(s => {
-                s.has(uniqueId) ? s.delete(uniqueId) : s.add(uniqueId);
-                return s;
+                const newSet = new Set(s); // Create a new set to ensure reactivity
+                if (newSet.has(uniqueId)) {
+                    newSet.delete(uniqueId);
+                } else {
+                    newSet.add(uniqueId);
+                }
+                return newSet;
             });
         } else if (!get(selectedItems).has(uniqueId)) {
             selectedItems.set(new Set([uniqueId]));
@@ -1493,6 +1498,7 @@
     }
     /* Styles for the frameless backed window */
     .backed-window.tab-content-wrapper {
+        pointer-events: auto;
         border: 1px solid var(--border-color);
         box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         background-color: var(--window-bg);
@@ -1508,7 +1514,13 @@
         overflow: auto;
         padding: 5px;
         box-sizing: border-box;
-        pointer-events: none; /* Allows dragging from anywhere on the component */
+        /*
+           REMOVED: pointer-events: none;
+           This was preventing mouse events from being captured by the component
+           or this container, causing them to fall through to the desktop.
+           With this removed, the backed window and its content can be properly
+           interacted with, dragged, and selected.
+        */
     }
 
     .selection-box {
