@@ -29,6 +29,9 @@
     let innerWidth, innerHeight;
     let totalContentBounds;
 
+    // --- Backed Window Interaction State ---
+    let interactiveBackedWindowId = null;
+
     $: isDesktopEmpty = $windows.length === 0 && 
                         ($desktopShortcuts || []).length === 0 && 
                         ($boxes || []).length === 0 && 
@@ -790,6 +793,11 @@
 
 
     function handleGlobalMouseDown(event) {
+        const targetIsBackedWindow = event.target.closest('.backed-window');
+        if (!targetIsBackedWindow) {
+            interactiveBackedWindowId = null;
+        }
+
         const targetItemEl = event.target.closest('.shortcut, .box, .backed-window');
 
         if (targetItemEl) {
@@ -1046,6 +1054,13 @@
                     updateBackedWindowTransform(item.id, item.x, item.y, item.scale);
                 }
             });
+        } else {
+            // This was a click, not a drag. Check if the clicked item was a backed window.
+            const selected = [...dragStartData.items.keys()];
+            if (selected.length === 1 && selected[0].startsWith('backed_window-')) {
+                const [_, idStr] = selected[0].split('-');
+                interactiveBackedWindowId = parseInt(idStr, 10);
+            }
         }
 
         isDraggingItems = false;
@@ -1508,19 +1523,20 @@
         border-color: rgba(52, 152, 219, 0.7);
         box-shadow: 0 5px 15px rgba(0,0,0,0.3), 0 0 8px rgba(52, 152, 219, 0.6);
     }
+    .backed-window.tab-content-wrapper.interactive {
+        border-color: #f39c12;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3), 0 0 8px rgba(243, 156, 18, 0.8);
+    }
     .backed-content-area {
         width: 100%;
         height: 100%;
         overflow: auto;
         padding: 5px;
         box-sizing: border-box;
-        /*
-           REMOVED: pointer-events: none;
-           This was preventing mouse events from being captured by the component
-           or this container, causing them to fall through to the desktop.
-           With this removed, the backed window and its content can be properly
-           interacted with, dragged, and selected.
-        */
+        pointer-events: none; /* Make content non-interactive by default */
+    }
+    .backed-window.interactive .backed-content-area {
+        pointer-events: auto; /* Enable interaction only when the parent is interactive */
     }
 
     .selection-box {
@@ -1707,6 +1723,7 @@
                             <div
                                 class="tab-content-wrapper backed-window"
                                 class:selected={isSelected}
+                                class:interactive={bw.id === interactiveBackedWindowId}
                                 data-id={bw.id}
                                 data-type="backed_window"
                                 style:left="{bw.x}px"
