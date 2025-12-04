@@ -14,7 +14,7 @@ import IoskWatch from './IoskWatch.svelte';
 import IoskUserInspector from './IoskUserInspector.svelte';
 import NotificationCenter from './NotificationCenter.svelte';
 import { TASKBAR_HEIGHT, desktopSettings, windowSettings, notificationHistory, unreadNoticeCount, desktopView, windowView } from './desktop.js';
-import { createBackedWindow, deleteBackedWindow } from './local.js';
+import { createBackedWindow, deleteBackedWindow, createBox, boxes, desktopShortcuts, backedWindows } from './local.js';
 
 let windowGroupIdCounter = 0;
 let tabIdCounter = 0;
@@ -1180,4 +1180,87 @@ export function newIoskUserInspector(consoleTabId, targetUser, consoleWs, props 
         height: 700,
         ...props,
     });
+}
+
+export function newBox(props = {}) {
+    const { name, context, sourceEvent } = props;
+
+    // --- Calculate Aspect Ratio ---
+    const desktopHeight = window.innerHeight - TASKBAR_HEIGHT;
+    const desktopWidth = window.innerWidth;
+    const aspectRatio = (desktopHeight > 0 && desktopWidth > 0) ? desktopHeight / desktopWidth : 1.0;
+
+    // --- Find Optimal Position on Back Layer ---
+    const BOX_BASE_WIDTH = 180;
+    const BOX_BASE_HEIGHT = BOX_BASE_WIDTH * aspectRatio;
+
+    // Reconstruct obstacles from stores, similar to `allItems` in Desktop.svelte
+    const obstacles = [
+        ...get(boxes).map(b => {
+            const scale = b.scale ?? 1.0;
+            const ar = b.aspect_ratio ?? aspectRatio;
+            return { x: b.x, y: b.y, width: BOX_BASE_WIDTH * scale, height: BOX_BASE_WIDTH * ar * scale };
+        }),
+        ...get(desktopShortcuts).map(s => {
+            const scale = s.scale || 1.0;
+            const unscaledWidth = s.renderWidth || 90;
+            const unscaledHeight = s.renderHeight || 90;
+            return { x: s.x, y: s.y, width: unscaledWidth * scale, height: unscaledHeight * scale };
+        }),
+        ...get(backedWindows).map(bw => {
+            const scale = bw.scale || 1.0;
+            return { x: bw.x, y: bw.y, width: bw.width * scale, height: bw.height * scale };
+        })
+    ];
+
+    const { panX, panY, zoom } = get(desktopView);
+
+    const checkCollision = (rect) => {
+        for (const obs of obstacles) {
+            if (rect.x < obs.x + obs.width && rect.x + rect.width > obs.x &&
+                rect.y < obs.y + obs.height && rect.y + rect.height > obs.y) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    let startPos;
+    if (sourceEvent) {
+        const worldX = (sourceEvent.clientX - panX) / zoom;
+        const worldY = ((sourceEvent.clientY - TASKBAR_HEIGHT) - panY) / zoom;
+        startPos = { x: worldX - BOX_BASE_WIDTH / 2, y: worldY - BOX_BASE_HEIGHT / 2 };
+    } else {
+        startPos = { x: 100, y: 100 }; // Fallback
+    }
+
+    let candidatePos = startPos;
+    if (checkCollision({ ...candidatePos, width: BOX_BASE_WIDTH, height: BOX_BASE_HEIGHT })) {
+        let x = startPos.x + BOX_BASE_WIDTH / 2;
+        let y = startPos.y + BOX_BASE_HEIGHT / 2;
+        let step = 30, leg = 0, armLength = 1, count = 0;
+        let found = false;
+        for (let i = 0; i < 200; i++) {
+            const testPos = { x: x - BOX_BASE_WIDTH / 2, y: y - BOX_BASE_HEIGHT / 2 };
+            if (!checkCollision({ ...testPos, width: BOX_BASE_WIDTH, height: BOX_BASE_HEIGHT })) {
+                candidatePos = testPos;
+                found = true;
+                break;
+            }
+            switch (leg) {
+                case 0: x += step; break;
+                case 1: y += step; break;
+                case 2: x -= step; break;
+                case 3: y -= step; break;
+            }
+            if (++count >= armLength) {
+                count = 0;
+                leg = (leg + 1) % 4;
+                if (leg % 2 === 0) armLength++;
+            }
+        }
+        if (!found) candidatePos = startPos; // Fallback if no spot is found
+    }
+    
+    createBox(name, 'local', context, aspectRatio, candidatePos.x, candidatePos.y);
 }

@@ -631,11 +631,14 @@ async def websocket_handler(websocket):
                     box_type = msg.get('box_type')
                     context = msg.get('context')
                     aspect_ratio = msg.get('aspect_ratio')
-                    print_action("Create Box", f"name='{name}', type='{box_type}', ratio={aspect_ratio}")
+                    x = msg.get('x')
+                    y = msg.get('y')
+                    pos_str = f"pos=({int(x)},{int(y)})" if x is not None and y is not None else "pos=default"
+                    print_action("Create Box", f"name='{name}', type='{box_type}', ratio={aspect_ratio:.2f}, {pos_str}")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
-                        "INSERT INTO box (name, type, context, aspect_ratio) VALUES (?, ?, ?, ?)",
-                        (name, box_type, context, aspect_ratio)
+                        "INSERT INTO box (name, type, context, aspect_ratio, x, y) VALUES (?, ?, ?, ?, ?, ?)",
+                        (name, box_type, context, aspect_ratio, x, y)
                     )
                     new_id = cursor.lastrowid
 
