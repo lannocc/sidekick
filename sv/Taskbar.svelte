@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter } from './windows.js';
-    import { dashActive, unreadNoticeCount, windowView } from './desktop.js';
+    import { dashActive, unreadNoticeCount, windowView, desktopSettings } from './desktop.js';
     import { createBox, connectionStatus } from './local.js';
     import Clock from './Clock.svelte';
 
@@ -16,6 +16,42 @@
     let windowsButton;
     
     let screenWidth;
+    let backgroundStyle = '';
+    let menuBackgroundStyle = '';
+
+    desktopSettings.subscribe(settings => {
+        if (!settings.taskbar) return;
+        const tb = settings.taskbar;
+
+        if (tb.bgType === 'gradient') {
+            backgroundStyle = `background: linear-gradient(90deg, ${tb.bgGradientStart} 0%, ${tb.bgGradientEnd} 100%);`;
+        } else if (tb.bgType === 'color') {
+            backgroundStyle = `background: ${tb.bgColor};`;
+        } else if (tb.bgType === 'image' && tb.bgImage) {
+            let size = 'cover';
+            let repeat = 'no-repeat';
+            let position = 'center center';
+            switch (tb.bgImageDisplayMode) {
+                case 'contain': size = 'contain'; break;
+                case 'stretch': size = '100% 100%'; break;
+                case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
+                case 'cover': default: break;
+            }
+            backgroundStyle = `background: url('${tb.bgImage}') ${position} / ${size} ${repeat};`;
+        } else {
+            backgroundStyle = ''; // Fallback to CSS
+        }
+        
+        // For menus
+        if (tb.bgType === 'color') {
+            menuBackgroundStyle = `background-color: ${tb.bgColor};`;
+        } else if (tb.bgType === 'gradient') {
+            menuBackgroundStyle = `background-color: ${tb.bgGradientStart};`;
+        } else {
+            // For image, use the solid color as fallback for menus
+            menuBackgroundStyle = `background-color: ${tb.bgColor};`;
+        }
+    });
 
     // Elements for layout calculation
     let leftSectionEl, centerSectionEl, rightSectionEl;
@@ -222,12 +258,12 @@
 
 <svelte:window bind:innerWidth={screenWidth} />
 
-<div class="taskbar">
+<div class="taskbar" style={backgroundStyle}>
     <div class="taskbar-left" bind:this={leftSectionEl}>
         <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">&mdash;</button>
         <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>W~</button>
         {#if showWindowsMenu}
-            <div class="windows-menu">
+            <div class="windows-menu" style={menuBackgroundStyle}>
                 {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
                     <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
                         {getActiveTabTitle(win)}
@@ -289,7 +325,7 @@
         <button class="quick-launch-button" on:click|stopPropagation={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">$+</button>
         <button class="start-button" class:connected={$connectionStatus === 'connected'} bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }}>SKY</button>
         {#if showMenu}
-            <div class="start-menu">
+            <div class="start-menu" style={menuBackgroundStyle}>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchSettings({ sourceEvent: e }); }}>Settings</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }}>IOSK Connection</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebBrowser({ sourceEvent: e }); showMenu = false; }}>Web Browser</button>

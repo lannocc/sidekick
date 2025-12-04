@@ -1378,16 +1378,18 @@
     });
 
     desktopSettings.subscribe(settings => {
-        if (settings.bgType === 'gradient') {
-            backgroundStyle = `linear-gradient(45deg, ${settings.bgGradientStart} 0%, ${settings.bgGradientEnd} 100%)`;
-        } else if (settings.bgType === 'color') {
-            backgroundStyle = settings.bgColor;
-        } else if (settings.bgType === 'image' && settings.bgImage) {
+        if (!settings.background) return;
+        const bg = settings.background;
+        if (bg.bgType === 'gradient') {
+            backgroundStyle = `linear-gradient(45deg, ${bg.bgGradientStart} 0%, ${bg.bgGradientEnd} 100%)`;
+        } else if (bg.bgType === 'color') {
+            backgroundStyle = bg.bgColor;
+        } else if (bg.bgType === 'image' && bg.bgImage) {
             let size = 'cover';
             let repeat = 'no-repeat';
             let position = 'center center';
 
-            switch (settings.bgImageDisplayMode) {
+            switch (bg.bgImageDisplayMode) {
                 case 'contain': // fit
                     size = 'contain';
                     break;
@@ -1404,7 +1406,7 @@
                     // 'cover' is the default case
                     break;
             }
-            backgroundStyle = `url('${settings.bgImage}') ${position} / ${size} ${repeat}`;
+            backgroundStyle = `url('${bg.bgImage}') ${position} / ${size} ${repeat}`;
         } else {
             // Fallback to default gradient
             backgroundStyle = `linear-gradient(45deg, #2c3e50 0%, #46627f 100%)`;

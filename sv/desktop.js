@@ -5,12 +5,22 @@ export const TASKBAR_HEIGHT = 40; // Height of the taskbar in pixels
 // Function to load settings from localStorage, or return defaults
 function loadSettings() {
     const defaults = {
-        bgType: 'gradient', // 'gradient', 'color', 'image'
-        bgColor: '#34495e',
-        bgGradientStart: '#2c3e50',
-        bgGradientEnd: '#46627f',
-        bgImage: '',
-        bgImageDisplayMode: 'cover', // 'cover', 'contain', 'stretch', 'tile'
+        background: {
+            bgType: 'gradient', // 'gradient', 'color', 'image'
+            bgColor: '#34495e',
+            bgGradientStart: '#2c3e50',
+            bgGradientEnd: '#46627f',
+            bgImage: '',
+            bgImageDisplayMode: 'cover', // 'cover', 'contain', 'stretch', 'tile'
+        },
+        taskbar: {
+            bgType: 'color',
+            bgColor: '#2c3e50', // Default solid color based on desktop gradient
+            bgGradientStart: '#2c3e50',
+            bgGradientEnd: '#46627f',
+            bgImage: '',
+            bgImageDisplayMode: 'cover',
+        },
         focusFollowsMouse: false,
         focusDelay: 420,
         ioskUrl: 'ws://localhost:4209',
@@ -44,8 +54,31 @@ function loadSettings() {
             const saved = localStorage.getItem('sidekickDesktopSettings');
             if (saved) {
                 const parsed = JSON.parse(saved);
-                // Merge saved settings with defaults to ensure new properties are added
-                return { ...defaults, ...parsed };
+                
+                // Simple migration for old flat background settings
+                if (parsed.bgType) {
+                    parsed.background = {
+                        bgType: parsed.bgType,
+                        bgColor: parsed.bgColor,
+                        bgGradientStart: parsed.bgGradientStart,
+                        bgGradientEnd: parsed.bgGradientEnd,
+                        bgImage: parsed.bgImage,
+                        bgImageDisplayMode: parsed.bgImageDisplayMode,
+                    };
+                    ['bgType', 'bgColor', 'bgGradientStart', 'bgGradientEnd', 'bgImage', 'bgImageDisplayMode'].forEach(k => delete parsed[k]);
+                }
+
+                // Merge with defaults, handling nested objects
+                const settings = { ...defaults, ...parsed };
+                settings.background = { ...defaults.background, ...(parsed.background || {}) };
+                settings.taskbar = { ...defaults.taskbar, ...(parsed.taskbar || {}) };
+                settings.noticeDefaults = {
+                    ...defaults.noticeDefaults,
+                    ...(parsed.noticeDefaults || {}),
+                    visual: { ...defaults.noticeDefaults.visual, ...(parsed.noticeDefaults?.visual || {}) },
+                    audio: { ...defaults.noticeDefaults.audio, ...(parsed.noticeDefaults?.audio || {}) },
+                };
+                return settings;
             }
         }
     } catch (e) {

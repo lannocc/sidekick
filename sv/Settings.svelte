@@ -7,14 +7,22 @@
     import { desktopSettings, windowSettings } from './desktop.js';
     import { windows } from './windows.js';
     import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
+    import { onDestroy } from 'svelte';
 
     export let id;
     export let groupId;
 
     let settings;
     const unsubscribe = desktopSettings.subscribe(value => {
-        settings = value;
+        // Deep copy to avoid mutating the store directly before handleUpdate
+        settings = JSON.parse(JSON.stringify(value));
     });
+
+    onDestroy(() => {
+        if (unsubscribe) unsubscribe();
+    });
+
+    let activeTab = 'desktop';
 
     const chimeSounds = [
         { value: 'beep.wav', name: 'Beep' },
@@ -85,6 +93,25 @@
         flex-direction: column;
         gap: 20px;
         user-select: none;
+    }
+    .tabs {
+        display: flex;
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 15px;
+    }
+    .tab-button {
+        padding: 8px 16px;
+        cursor: pointer;
+        background: none;
+        border: none;
+        color: var(--taskbar-text);
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px; /* To overlap with container border */
+        font-size: 14px;
+    }
+    .tab-button.active {
+        border-bottom-color: #3498db;
+        color: #3498db;
     }
     h2 {
         margin: 0 0 10px 0;
@@ -181,127 +208,191 @@
 </style>
 
 <div class="settings-container">
-    <h2>Desktop Settings</h2>
-    <fieldset>
-        <legend>Background</legend>
-        <div>
-            <label><input type="radio" bind:group={settings.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
-            {#if settings.bgType === 'gradient'}
-            <div class="options-group">
-                <label class="color-picker-label">
-                    <span>Start Color</span>
-                    <input type="color" bind:value={settings.bgGradientStart} on:input={handleUpdate}>
-                </label>
-                <label class="color-picker-label">
-                    <span>End Color</span>
-                    <input type="color" bind:value={settings.bgGradientEnd} on:input={handleUpdate}>
-                </label>
-            </div>
-            {/if}
-        </div>
-        <div>
-             <label><input type="radio" bind:group={settings.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
-            {#if settings.bgType === 'color'}
-            <div class="options-group">
-                 <label class="color-picker-label">
-                    <span>Color</span>
-                    <input type="color" bind:value={settings.bgColor} on:input={handleUpdate}>
-                </label>
-            </div>
-            {/if}
-        </div>
-         <div>
-            <label><input type="radio" bind:group={settings.bgType} value="image" on:change={handleUpdate}> Image</label>
-            {#if settings.bgType === 'image'}
-            <div class="options-group">
-                <label>
-                    <input class="text-input" type="text" bind:value={settings.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
-                </label>
-                <label class="color-picker-label">
-                    <span>Display Mode</span>
-                    <select class="select-input" bind:value={settings.bgImageDisplayMode} on:change={handleUpdate}>
-                        <option value="cover">Cover</option>
-                        <option value="contain">Fit</option>
-                        <option value="stretch">Stretch</option>
-                        <option value="tile">Tile</option>
-                    </select>
-                </label>
-            </div>
-            {/if}
-        </div>
-    </fieldset>
+    <div class="tabs">
+        <button class="tab-button" class:active={activeTab === 'desktop'} on:click={() => activeTab = 'desktop'}>Desktop</button>
+        <button class="tab-button" class:active={activeTab === 'taskbar'} on:click={() => activeTab = 'taskbar'}>Taskbar</button>
+        <button class="tab-button" class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
+    </div>
 
-     <fieldset>
-        <legend>Sound Effects</legend>
-        <label class="color-picker-label">
-            <span>Chime Sound</span>
-            <div>
-                <select class="select-input" bind:value={settings.chimeType} on:change={handleUpdate}>
-                    {#each chimeSounds as sound}
-                        <option value={sound.value}>{sound.name}</option>
-                    {/each}
-                </select>
-                <button class="test-button" on:click={testChime} title="Test Sound" disabled={settings.chimeType === 'none'}>▶</button>
-            </div>
-        </label>
-        {#if settings.chimeType === 'custom'}
-            <div class="options-group">
-                <label>
-                    <input class="text-input" type="text" bind:value={settings.chimeUrl} on:input={handleUpdate} placeholder="Enter Sound URL...">
-                </label>
-            </div>
-        {/if}
-    </fieldset>
-
-    <fieldset>
-        <legend>Focus</legend>
-        <label>
-            <input type="checkbox" bind:checked={settings.focusFollowsMouse} on:change={handleUpdate}>
-            Focus follows mouse
-        </label>
-        {#if settings.focusFollowsMouse}
-        <div class="options-group">
-            <label class="color-picker-label">
-                <span>Focus Delay (ms)</span>
-                <input class="text-input" type="number" bind:value={settings.focusDelay} on:input={handleUpdate} min="0" step="10" style="width: 80px;">
-            </label>
-        </div>
-        {/if}
-    </fieldset>
-
-    <fieldset>
-        <legend>Activity Notice Defaults</legend>
-        <label>
-            <input type="checkbox" bind:checked={settings.noticeDefaults.enabled} on:change={handleUpdate}>
-            Enable Notices Globally
-        </label>
-        {#if settings.noticeDefaults.enabled}
-        <div class="options-group">
-            <label class="color-picker-label">
-                <span>Flash Color</span>
-                <input type="color" bind:value={settings.noticeDefaults.visual.color} on:input={handleUpdate}>
-            </label>
-            <label class="color-picker-label">
-                <span>Notice Sound</span>
+    {#if settings}
+        {#if activeTab === 'desktop'}
+            <h2>Desktop Appearance</h2>
+            <fieldset>
+                <legend>Background</legend>
                 <div>
-                    <select class="select-input" bind:value={settings.noticeDefaults.audio.sound} on:change={handleUpdate}>
-                        {#each noticeSounds as sound}
-                            <option value={sound.value}>{sound.name}</option>
-                        {/each}
-                    </select>
-                    <button class="test-button" on:click={testNoticeSound} title="Test Sound" disabled={settings.noticeDefaults.audio.sound === 'none'}>▶</button>
+                    <label><input type="radio" bind:group={settings.background.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
+                    {#if settings.background.bgType === 'gradient'}
+                    <div class="options-group">
+                        <label class="color-picker-label">
+                            <span>Start Color</span>
+                            <input type="color" bind:value={settings.background.bgGradientStart} on:input={handleUpdate}>
+                        </label>
+                        <label class="color-picker-label">
+                            <span>End Color</span>
+                            <input type="color" bind:value={settings.background.bgGradientEnd} on:input={handleUpdate}>
+                        </label>
+                    </div>
+                    {/if}
                 </div>
-            </label>
-            {#if settings.noticeDefaults.audio.sound === 'custom'}
+                <div>
+                     <label><input type="radio" bind:group={settings.background.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
+                    {#if settings.background.bgType === 'color'}
+                    <div class="options-group">
+                         <label class="color-picker-label">
+                            <span>Color</span>
+                            <input type="color" bind:value={settings.background.bgColor} on:input={handleUpdate}>
+                        </label>
+                    </div>
+                    {/if}
+                </div>
+                 <div>
+                    <label><input type="radio" bind:group={settings.background.bgType} value="image" on:change={handleUpdate}> Image</label>
+                    {#if settings.background.bgType === 'image'}
+                    <div class="options-group">
+                        <label>
+                            <input class="text-input" type="text" bind:value={settings.background.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                        </label>
+                        <label class="color-picker-label">
+                            <span>Display Mode</span>
+                            <select class="select-input" bind:value={settings.background.bgImageDisplayMode} on:change={handleUpdate}>
+                                <option value="cover">Cover</option>
+                                <option value="contain">Fit</option>
+                                <option value="stretch">Stretch</option>
+                                <option value="tile">Tile</option>
+                            </select>
+                        </label>
+                    </div>
+                    {/if}
+                </div>
+            </fieldset>
+        {/if}
+        {#if activeTab === 'taskbar'}
+            <h2>Taskbar Appearance</h2>
+             <fieldset>
+                <legend>Background</legend>
+                <div>
+                    <label><input type="radio" bind:group={settings.taskbar.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
+                    {#if settings.taskbar.bgType === 'gradient'}
+                    <div class="options-group">
+                        <label class="color-picker-label">
+                            <span>Start Color</span>
+                            <input type="color" bind:value={settings.taskbar.bgGradientStart} on:input={handleUpdate}>
+                        </label>
+                        <label class="color-picker-label">
+                            <span>End Color</span>
+                            <input type="color" bind:value={settings.taskbar.bgGradientEnd} on:input={handleUpdate}>
+                        </label>
+                    </div>
+                    {/if}
+                </div>
+                <div>
+                     <label><input type="radio" bind:group={settings.taskbar.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
+                    {#if settings.taskbar.bgType === 'color'}
+                    <div class="options-group">
+                         <label class="color-picker-label">
+                            <span>Color</span>
+                            <input type="color" bind:value={settings.taskbar.bgColor} on:input={handleUpdate}>
+                        </label>
+                    </div>
+                    {/if}
+                </div>
+                 <div>
+                    <label><input type="radio" bind:group={settings.taskbar.bgType} value="image" on:change={handleUpdate}> Image</label>
+                    {#if settings.taskbar.bgType === 'image'}
+                    <div class="options-group">
+                        <label>
+                            <input class="text-input" type="text" bind:value={settings.taskbar.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                        </label>
+                        <label class="color-picker-label">
+                            <span>Display Mode</span>
+                            <select class="select-input" bind:value={settings.taskbar.bgImageDisplayMode} on:change={handleUpdate}>
+                                <option value="cover">Cover</option>
+                                <option value="contain">Fit</option>
+                                <option value="stretch">Stretch</option>
+                                <option value="tile">Tile</option>
+                            </select>
+                        </label>
+                    </div>
+                    {/if}
+                </div>
+            </fieldset>
+        {/if}
+
+        {#if activeTab === 'general'}
+            <h2>General Settings</h2>
+             <fieldset>
+                <legend>Sound Effects</legend>
+                <label class="color-picker-label">
+                    <span>Chime Sound</span>
+                    <div>
+                        <select class="select-input" bind:value={settings.chimeType} on:change={handleUpdate}>
+                            {#each chimeSounds as sound}
+                                <option value={sound.value}>{sound.name}</option>
+                            {/each}
+                        </select>
+                        <button class="test-button" on:click={testChime} title="Test Sound" disabled={settings.chimeType === 'none'}>▶</button>
+                    </div>
+                </label>
+                {#if settings.chimeType === 'custom'}
+                    <div class="options-group">
+                        <label>
+                            <input class="text-input" type="text" bind:value={settings.chimeUrl} on:input={handleUpdate} placeholder="Enter Sound URL...">
+                        </label>
+                    </div>
+                {/if}
+            </fieldset>
+
+            <fieldset>
+                <legend>Focus</legend>
+                <label>
+                    <input type="checkbox" bind:checked={settings.focusFollowsMouse} on:change={handleUpdate}>
+                    Focus follows mouse
+                </label>
+                {#if settings.focusFollowsMouse}
                 <div class="options-group">
-                    <label>
-                        <input class="text-input" type="text" bind:value={settings.noticeDefaults.audio.url} on:input={handleUpdate} placeholder="Enter Sound URL...">
+                    <label class="color-picker-label">
+                        <span>Focus Delay (ms)</span>
+                        <input class="text-input" type="number" bind:value={settings.focusDelay} on:input={handleUpdate} min="0" step="10" style="width: 80px;">
                     </label>
                 </div>
-            {/if}
-        </div>
+                {/if}
+            </fieldset>
+
+            <fieldset>
+                <legend>Activity Notice Defaults</legend>
+                <label>
+                    <input type="checkbox" bind:checked={settings.noticeDefaults.enabled} on:change={handleUpdate}>
+                    Enable Notices Globally
+                </label>
+                {#if settings.noticeDefaults.enabled}
+                <div class="options-group">
+                    <label class="color-picker-label">
+                        <span>Flash Color</span>
+                        <input type="color" bind:value={settings.noticeDefaults.visual.color} on:input={handleUpdate}>
+                    </label>
+                    <label class="color-picker-label">
+                        <span>Notice Sound</span>
+                        <div>
+                            <select class="select-input" bind:value={settings.noticeDefaults.audio.sound} on:change={handleUpdate}>
+                                {#each noticeSounds as sound}
+                                    <option value={sound.value}>{sound.name}</option>
+                                {/each}
+                            </select>
+                            <button class="test-button" on:click={testNoticeSound} title="Test Sound" disabled={settings.noticeDefaults.audio.sound === 'none'}>▶</button>
+                        </div>
+                    </label>
+                    {#if settings.noticeDefaults.audio.sound === 'custom'}
+                        <div class="options-group">
+                            <label>
+                                <input class="text-input" type="text" bind:value={settings.noticeDefaults.audio.url} on:input={handleUpdate} placeholder="Enter Sound URL...">
+                            </label>
+                        </div>
+                    {/if}
+                </div>
+                {/if}
+            </fieldset>
         {/if}
-    </fieldset>
+    {/if}
 </div>
 
 <WindowSettingsModal
