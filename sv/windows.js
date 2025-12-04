@@ -872,9 +872,44 @@ function createWindowManager() {
     };
 
     const unbackWindow = (backedWindow) => {
+        // Get current view states for coordinate transformation
+        const dv = get(desktopView);
+        const wv = get(windowView);
+
+        // Get the visual dimensions of the backed window on the back layer, accounting for scale
+        const scale = backedWindow.scale || 1.0;
+        const backedVisualWidth = backedWindow.width * scale;
+        const backedVisualHeight = backedWindow.height * scale;
+
+        // Calculate the midpoint of the backed window in back-layer world coordinates
+        const backWorldMidX = backedWindow.x + backedVisualWidth / 2;
+        const backWorldMidY = backedWindow.y + backedVisualHeight / 2;
+        
+        // Transform this midpoint into front-layer world coordinates
+        // This is the core transformation: from back-world -> screen -> front-world
+        const frontWorldMidX = ((backWorldMidX * dv.zoom) + dv.panX - wv.panX) / wv.zoom;
+        const frontWorldMidY = ((backWorldMidY * dv.zoom) + dv.panY - wv.panY) / wv.zoom;
+        
+        // Get the original, unscaled dimensions of the window to be restored from its config
+        const restoredWindowWidth = backedWindow.config.width;
+        const restoredWindowHeight = backedWindow.config.height;
+
+        // Calculate the new top-left (x, y) for the restored window in front-layer world coordinates
+        const newX = frontWorldMidX - restoredWindowWidth / 2;
+        const newY = frontWorldMidY - restoredWindowHeight / 2;
+        
+        // Now, proceed with unbacking
         deleteBackedWindow(backedWindow.id);
-        const { x, y, width, height } = backedWindow;
-        restoreWindow({ ...backedWindow.config, x, y, width, height });
+        
+        // Call restoreWindow, passing the original config but overriding x, y, width, height
+        // with the newly calculated values that are correct for the front layer.
+        restoreWindow({ 
+            ...backedWindow.config, 
+            x: newX, 
+            y: newY, 
+            width: restoredWindowWidth, 
+            height: restoredWindowHeight 
+        });
     };
 
     // --- Sentinel Implementation ---
