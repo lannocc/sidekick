@@ -270,9 +270,10 @@
                 windows.groupWindows(currentDragState.draggingGroupId, currentDragState.dropTargetGroupId);
             } else if (currentDragState.dropTargetBoxPanel) {
                 const { boxId, location } = currentDragState.dropTargetBoxPanel;
-                const sourceGroup = get(windows).find(g => g.id === currentDragState.draggingGroupId);
+                const allWindows = get(windows);
+                const sourceGroup = allWindows.find(g => g.id === currentDragState.draggingGroupId);
                 if (sourceGroup) {
-                    const board_config = generateBoardConfigFromWindow(sourceGroup);
+                    const board_config = generateBoardConfigFromWindow(sourceGroup, allWindows);
                     const board_type = sourceGroup.tabs.length > 1 ? 'tabs' : 'window';
                     savePanelConfig(boxId, location, board_type, board_config);
                     // Move the window to the box by removing it from the desktop

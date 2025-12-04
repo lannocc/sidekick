@@ -64,8 +64,7 @@ function findTabById(groups, tabId) {
     return null;
 }
 
-export function generateBoardConfigFromWindow(group) {
-    const allWindows = get(windows);
+export function generateBoardConfigFromWindow(group, allWindows) {
     const layoutTabs = group.tabs.map(tab => {
         const associatedConsole = findTabById(allWindows, tab.consoleId);
         return {
@@ -194,7 +193,7 @@ function createSerializableLayout(allWindows) {
     if (typeof window === 'undefined') return null;
 
     const windowGroups = allWindows.map(group => {
-        const config = generateBoardConfigFromWindow(group);
+        const config = generateBoardConfigFromWindow(group, allWindows);
         return {
             ...config,
             zIndex: group.zIndex,
@@ -869,10 +868,11 @@ function createWindowManager() {
     };
 
     const backWindow = (groupId) => {
-        const group = get(windows).find(g => g.id === groupId);
+        const allWindows = get(windows);
+        const group = allWindows.find(g => g.id === groupId);
         if (!group) return;
 
-        const config = generateBoardConfigFromWindow(group);
+        const config = generateBoardConfigFromWindow(group, allWindows);
         const configStr = JSON.stringify(config);
 
         createBackedWindow(configStr, group.x, group.y, group.width, group.height, 1.0);
@@ -1007,7 +1007,7 @@ export const activeConsoles = readable(new Map(), set => {
             for (const tab of group.tabs) {
                 if (tab.componentName === 'IoskConsole' && tab.isConsoleConnected && tab.consoleConnection) {
                     const key = `${tab.consoleConnection.user}@${tab.consoleConnection.url}`;
-                    if (!newActiveConsoles.has(key)) {
+                    if (!newActive-consoles.has(key)) {
                         newActiveConsoles.set(key, tab);
                     }
                 }
