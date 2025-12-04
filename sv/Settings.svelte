@@ -495,7 +495,6 @@
                             {/if}
                         </div>
                     <div>
-                        <label><input type="radio" bind:group={settings.windows.normal.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
                         <label><input type="radio" bind:group={settings.windows.normal.scene.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
                         {#if settings.windows.normal.scene.bgType === 'color'}
 

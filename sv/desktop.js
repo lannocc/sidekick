@@ -33,22 +33,24 @@ function loadSettings() {
         },
         windows: {
             normal: {
-                bgType: 'color',
-                bgColor: '#2d3436',
-                bgGradientStart: '#2d3436',
-                bgGradientEnd: '#454e50',
-                bgImage: '',
-                bgImageDisplayMode: 'cover',
-                inactiveOpacity: 1.0,
-                activeOpacity: 1.0,
-                frame: {
+                cover: {
                     bgType: 'color',
                     bgColor: '#2c3e50',
                     bgGradientStart: '#2c3e50',
                     bgGradientEnd: '#46627f',
                     bgImage: '',
                     bgImageDisplayMode: 'cover',
+                    inactiveOpacity: 1.0,
+                    activeOpacity: 1.0,
                 },
+                scene: {
+                    bgType: 'color',
+                    bgColor: '#2d3436',
+                    bgGradientStart: '#2d3436',
+                    bgGradientEnd: '#454e50',
+                    bgImage: '',
+                    bgImageDisplayMode: 'cover',
+                }
             },
             back: {
                 bgType: 'color',
@@ -114,13 +116,11 @@ function loadSettings() {
                 settings.taskbar = { ...defaults.taskbar, ...(parsed.taskbar || {}) };
                 settings.boxes = { ...defaults.boxes, ...(parsed.boxes || {}) };
                 settings.windows = {
-                    ...(defaults.windows),
                     normal: {
-                        ...defaults.windows.normal,
-                        ...(parsed.windows?.normal || {}),
-                        frame: { ...defaults.windows.normal.frame, ...(parsed.windows?.normal?.frame || {}) },
+                        cover: { ...defaults.windows.normal.cover, ...(parsed.windows?.normal?.cover || {}) },
+                        scene: { ...defaults.windows.normal.scene, ...(parsed.windows?.normal?.scene || {}) }
                     },
-                    back: { ...defaults.windows.back, ...(parsed.windows?.back || {}) },
+                    back: { ...defaults.windows.back, ...(parsed.windows?.back || {}) }
                 };
                 settings.noticeDefaults = {
                     ...defaults.noticeDefaults,
