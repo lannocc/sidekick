@@ -3,9 +3,9 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow } from './windows.js';
+    import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems } from './desktop.js';
+    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction } from './desktop.js';
     import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow } from './local.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
@@ -812,6 +812,7 @@
     }
 
     function handleItemMouseDown(event, itemEl) {
+        desktopInteraction.set(true);
         const id = itemEl.dataset.id;
         const type = itemEl.dataset.type;
         const uniqueId = `${type}-${id}`;
@@ -1037,6 +1038,7 @@
     }
 
     function handleItemDragEnd() {
+        desktopInteraction.set(false);
         document.body.classList.remove('is-dragging-item');
         if (get(wasDraggingItems)) {
             // Persist final positions for both dragged and pushed items.
@@ -1071,6 +1073,7 @@
     }
 
     function handleMarqueeSelectStart(event) {
+        desktopInteraction.set(true);
         isSelecting = true;
         wasDraggingItems.set(false);
 
@@ -1098,6 +1101,7 @@
     }
 
     function handleMarqueeSelectEnd() {
+        desktopInteraction.set(false);
         if (!isSelecting) return;
 
         const { panX, panY, zoom } = get(desktopView);
@@ -1153,6 +1157,7 @@
     function handleDesktopPanStart(event) {
         if (isDesktopEmpty) return;
         if (event.target !== event.currentTarget) return;
+        desktopInteraction.set(true);
         isPanning = true;
         wasPanning = false;
         pannedBackLayer = false; // Reset flag
@@ -1184,6 +1189,7 @@
     }
 
     function handleDesktopMouseUp() {
+        desktopInteraction.set(false);
         if (isPanning && wasPanning) {
             // Persist final position if we actually panned
             if (pannedBackLayer) {
@@ -1814,6 +1820,7 @@
                 >
                     <div
                         class="content-area-container"
+                        style:pointer-events={$desktopInteraction || $dragState ? 'none' : null}
                         on:mouseenter={() => handleContentMouseEnter(group)}
                         on:mouseleave={() => handleContentMouseLeave(group)}
                         on:mousedown={e => handleContentMouseDown(e, group)}

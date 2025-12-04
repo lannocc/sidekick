@@ -163,6 +163,10 @@ export const selectedItems = writable(new Set());
 // New store to track dragging state to suppress clicks
 export const wasDraggingItems = writable(false);
 
+// Store to track if a mouse-down-based interaction (drag, pan, select) has been initiated.
+// This is used to immediately disable pointer events on other layers to prevent unintended hover/focus effects.
+export const desktopInteraction = writable(false);
+
 
 // New stores for Notification Center
 export const notificationHistory = writable([]);
