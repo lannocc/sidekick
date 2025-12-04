@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter } from './windows.js';
-    import { dashActive, unreadNoticeCount, desktopView } from './desktop.js';
+    import { dashActive, unreadNoticeCount, windowView } from './desktop.js';
     import { createBox, connectionStatus } from './local.js';
     import Clock from './Clock.svelte';
 
@@ -67,9 +67,9 @@
         if (win.maximized) {
             return screenWidth / 2 - buttonWidth / 2;
         }
-        // Convert window "world" coordinates to "screen" coordinates
-        const screenWinX = win.x * $desktopView.zoom + $desktopView.panX;
-        const screenWinWidth = win.width * $desktopView.zoom;
+        // Convert window "world" coordinates to "screen" coordinates using windowView
+        const screenWinX = win.x * $windowView.zoom + $windowView.panX;
+        const screenWinWidth = win.width * $windowView.zoom;
 
         const windowCenter = screenWinX + screenWinWidth / 2;
         const progress = Math.max(0, Math.min(1, windowCenter / screenWidth));
@@ -82,7 +82,7 @@
         return idealLeft;
     }
 
-    $: if (screenWidth && leftSectionEl && centerSectionEl && rightSectionEl && $windows.length > 0 && $desktopView) {
+    $: if (screenWidth && leftSectionEl && centerSectionEl && rightSectionEl && $windows.length > 0 && $windowView) {
         const allWidthsKnown = $windows.every(win => taskItemWidths.has(win.id));
         if (allWidthsKnown) {
             const leftRect = leftSectionEl.getBoundingClientRect();

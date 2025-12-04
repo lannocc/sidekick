@@ -99,13 +99,7 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
     }
 
     const { width, height, sourceEvent, sourceTabId } = props;
-    const desktopMargin = 10; // Margin from viewport edges.
-    const desktop = {
-        x: desktopMargin,
-        y: TASKBAR_HEIGHT + desktopMargin,
-        width: window.innerWidth - (desktopMargin * 2),
-        height: window.innerHeight - TASKBAR_HEIGHT - (desktopMargin * 2)
-    };
+    const { panX, panY, zoom } = get(windowView);
 
     const obstacles = allWindows.filter(w => !w.minimized).map(w => ({
         x: w.x, y: w.y, width: w.width, height: w.height
@@ -123,17 +117,18 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
         return false;
     };
 
-    const clampToDesktop = (pos) => {
-        // Defines the boundaries for the window's top-left corner
-        const minX = desktop.x;
-        const minY = desktop.y;
-        const maxX = desktop.x + desktop.width - width;
-        const maxY = desktop.y + desktop.height - height;
+    // Calculate the visible area in world coordinates
+    const margin = 10; // screen pixels
+    const view = {
+        x: (-panX / zoom) + (margin / zoom),
+        y: (-panY / zoom) + (margin / zoom),
+        width: (window.innerWidth / zoom) - (2 * margin / zoom),
+        height: ((window.innerHeight - TASKBAR_HEIGHT) / zoom) - (2 * margin / zoom),
+    };
 
-        // Clamp the proposed position within the valid range
-        let newX = Math.max(minX, Math.min(pos.x, maxX));
-        let newY = Math.max(minY, Math.min(pos.y, maxY));
-
+    const clampToView = (pos) => {
+        const newX = Math.max(view.x, Math.min(pos.x, view.x + view.width - width));
+        const newY = Math.max(view.y, Math.min(pos.y, view.y + view.height - height));
         return { x: newX, y: newY };
     };
 
@@ -150,7 +145,7 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
             ];
 
             for (const pos of positions) {
-                const clampedPos = clampToDesktop(pos);
+                const clampedPos = clampToView(pos);
                 if (!checkCollision({ ...clampedPos, width, height })) {
                     return clampedPos;
                 }
@@ -158,20 +153,32 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
         }
     }
 
-    let startPoint = sourceEvent ? { x: sourceEvent.clientX, y: sourceEvent.clientY } : { x: desktop.x + 100, y: desktop.y + 100 };
-
-    let clamped = clampToDesktop({ x: startPoint.x - width / 2, y: startPoint.y - height / 2 });
-    if (!checkCollision({ ...clamped, width, height })) {
-        return clamped;
+    let startPos;
+    if (sourceEvent) {
+        // Convert click event to world coordinates
+        const worldX = (sourceEvent.clientX - panX) / zoom;
+        const worldY = ((sourceEvent.clientY - TASKBAR_HEIGHT) - panY) / zoom;
+        startPos = { x: worldX - width / 2, y: worldY - height / 2 };
+    } else {
+        // Default to center of the current view
+        const worldCenterX = view.x + view.width / 2;
+        const worldCenterY = view.y + view.height / 2;
+        startPos = { x: worldCenterX - width / 2, y: worldCenterY - height / 2 };
     }
 
-    // Spiral search outwards if preferred positions are taken
-    let x = startPoint.x, y = startPoint.y;
+    let candidatePos = clampToView(startPos);
+    if (!checkCollision({ ...candidatePos, width, height })) {
+        return candidatePos;
+    }
+
+    // Spiral search outwards from the start point
+    let x = startPos.x + width / 2;
+    let y = startPos.y + height / 2;
     let step = 30, leg = 0, armLength = 1, count = 0;
     for (let i = 0; i < 200; i++) {
-        clamped = clampToDesktop({ x: x - width / 2, y: y - height / 2 });
-        if (!checkCollision({ ...clamped, width, height })) {
-            return clamped;
+        const testPos = { x: x - width / 2, y: y - height / 2 };
+        if (!checkCollision({ ...testPos, width, height })) {
+            return testPos;
         }
         switch (leg) {
             case 0: x += step; break;
@@ -186,7 +193,7 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
         }
     }
 
-    return clampToDesktop({ x: 50 + (currentWindowId % 10) * 20, y: 50 + (currentWindowId % 10) * 20 });
+    return { x: view.x + (currentWindowId % 10) * 20, y: view.y + (currentWindowId % 10) * 20 };
 }
 
 function createSerializableLayout(allWindows) {
@@ -1007,7 +1014,7 @@ export const activeConsoles = readable(new Map(), set => {
             for (const tab of group.tabs) {
                 if (tab.componentName === 'IoskConsole' && tab.isConsoleConnected && tab.consoleConnection) {
                     const key = `${tab.consoleConnection.user}@${tab.consoleConnection.url}`;
-                    if (!newActive-consoles.has(key)) {
+                    if (!newActiveConsoles.has(key)) {
                         newActiveConsoles.set(key, tab);
                     }
                 }
