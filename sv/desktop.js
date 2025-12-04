@@ -28,6 +28,8 @@ function loadSettings() {
             bgGradientEnd: '#4c566a',
             bgImage: '',
             bgImageDisplayMode: 'cover',
+            inactiveOpacity: 0.8,
+            activeOpacity: 1.0,
         },
         focusFollowsMouse: false,
         focusDelay: 420,

@@ -23,6 +23,12 @@
     });
 
     let activeTab = 'general';
+    let inactiveTransparency, activeTransparency;
+
+    $: if (settings && settings.boxes) {
+        inactiveTransparency = Math.round((1 - (settings.boxes.inactiveOpacity ?? 0.8)) * 100);
+        activeTransparency = Math.round((1 - (settings.boxes.activeOpacity ?? 1.0)) * 100);
+    }
 
     const chimeSounds = [
         { value: 'beep.wav', name: 'Beep' },
@@ -48,6 +54,20 @@
 
     function handleUpdate() {
         desktopSettings.set(settings);
+    }
+
+    function handleInactiveTransparency(e) {
+        const value = Number(e.target.value);
+        inactiveTransparency = value;
+        settings.boxes.inactiveOpacity = 1 - (value / 100);
+        handleUpdate();
+    }
+
+    function handleActiveTransparency(e) {
+        const value = Number(e.target.value);
+        activeTransparency = value;
+        settings.boxes.activeOpacity = 1 - (value / 100);
+        handleUpdate();
     }
 
     function testChime() {
@@ -316,6 +336,17 @@
                     </div>
                     {/if}
                 </div>
+            </fieldset>
+            <fieldset>
+                <legend>Transparency</legend>
+                <label class="color-picker-label">
+                    <span>Inactive ({inactiveTransparency}%)</span>
+                    <input type="range" min="0" max="100" step="1" value={inactiveTransparency} on:input={handleInactiveTransparency}>
+                </label>
+                <label class="color-picker-label">
+                    <span>Active ({activeTransparency}%)</span>
+                    <input type="range" min="0" max="100" step="1" value={activeTransparency} on:input={handleActiveTransparency}>
+                </label>
             </fieldset>
         {/if}
         {#if activeTab === 'taskbar'}

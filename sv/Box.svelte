@@ -557,7 +557,7 @@
         position: absolute;
         cursor: pointer;
         user-select: none;
-        transition: z-index 0s 0.3s, border-color 0.2s ease-in-out; /* Delay z-index change until after animation */
+        transition: z-index 0s 0.3s, border-color 0.2s ease-in-out, opacity 0.3s ease-in-out; /* Delay z-index change until after animation */
         border: 1px solid transparent;
         border-radius: 7px; /* A bit larger than panel's 6px */
     }
@@ -797,6 +797,7 @@
     style:width="{boxWidth}px"
     style:height="{boxHeight}px"
     style:z-index={isExpanded ? maxWindowZ + 1 : 10}
+    style:opacity={isExpanded ? ($desktopSettings.boxes?.activeOpacity ?? 1.0) : ($desktopSettings.boxes?.inactiveOpacity ?? 0.8)}
     on:wheel={handleWheel}
     on:scale
 >
