@@ -48,9 +48,33 @@
     let settings;
     desktopSettings.subscribe(value => settings = value);
 
+    function generateBgStyle(bgSettings) {
+        if (!bgSettings) return null;
+        if (bgSettings.bgType === 'gradient') {
+            return `linear-gradient(45deg, ${bgSettings.bgGradientStart} 0%, ${bgSettings.bgGradientEnd} 100%)`;
+        } else if (bgSettings.bgType === 'color') {
+            return bgSettings.bgColor;
+        } else if (bgSettings.bgType === 'image' && bgSettings.bgImage) {
+            let size = 'cover';
+            let repeat = 'no-repeat';
+            let position = 'center center';
+
+            switch (bgSettings.bgImageDisplayMode) {
+                case 'contain': size = 'contain'; break;
+                case 'stretch': size = '100% 100%'; break;
+                case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
+                case 'cover': default: break;
+            }
+            return `url('${bgSettings.bgImage}') ${position} / ${size} ${repeat}`;
+        }
+        return null;
+    }
+
     $: windowOpacity = isActive 
         ? settings?.windows?.normal?.activeOpacity ?? 1.0 
         : settings?.windows?.normal?.inactiveOpacity ?? 1.0;
+    
+    $: frameStyle = generateBgStyle(settings?.windows?.normal?.frame);
 
     let isDragging = false;
     let isResizing = false;
@@ -422,13 +446,13 @@
     .window-frame.noticing {
         animation: notice-glow 1.2s ease-in-out;
     }
-    .window-frame { position: absolute; border: 1px solid var(--border-color); background-color: transparent; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; min-width: 250px; min-height: 150px; transition: border-color 0.2s ease-in-out, opacity 0.2s ease-in-out; pointer-events: none; box-sizing: border-box; }
+    .window-frame { position: absolute; border: 1px solid var(--border-color); background-color: transparent; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; min-width: 250px; min-height: 150px; transition: border-color 0.2s ease-in-out, opacity 0.2s ease-in-out, background 0.5s ease-in-out; pointer-events: none; box-sizing: border-box; }
     .window-frame:not(.active) { border-color: #7f8c8d; }
     .window-frame.minimized { display: none; }
     .window-frame.maximized { border-radius: 0; }
     .window-frame.maximized .resize-handle { display: none; }
-    .title-bar { height: 30px; background-color: var(--title-bar-bg); color: var(--title-bar-text); display: flex; justify-content: space-between; align-items: center; padding: 0 8px; cursor: move; border-top-left-radius: 5px; border-top-right-radius: 5px; user-select: none; transition: background-color 0.2s ease-in-out; position: relative; pointer-events: auto; }
-    .window-frame:not(.active) .title-bar { background-color: #7f8c8d; }
+    .title-bar { height: 30px; background-color: transparent; color: var(--title-bar-text); display: flex; justify-content: space-between; align-items: center; padding: 0 8px; cursor: move; border-top-left-radius: 5px; border-top-right-radius: 5px; user-select: none; position: relative; pointer-events: auto; }
+    .window-frame:not(.active) .title-bar { /* background-color: #7f8c8d; */ }
     .title-bar.drop-target::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(52, 152, 219, 0.4); border: 2px dashed #3498db; z-index: 1; pointer-events: none; border-radius: 5px; }
     .title-center { flex-grow: 1; text-align: center; overflow: hidden; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
     .title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 30px; }
@@ -490,7 +514,7 @@
     .select-input { background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:--notice-color={notice?.color} style:opacity={windowOpacity} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:--notice-color={notice?.color} style:opacity={windowOpacity} style:background={frameStyle} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
     <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id}>
         <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>

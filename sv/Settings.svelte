@@ -297,7 +297,7 @@
         {#if activeTab === 'sky'}
             <h2>Sky Appearance</h2>
             <fieldset>
-                <legend>Background</legend>
+                <legend>Scene</legend>
                 <div>
                     <label><input type="radio" bind:group={settings.background.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
                     {#if settings.background.bgType === 'gradient'}
@@ -348,7 +348,7 @@
         {#if activeTab === 'boxes'}
             <h2>Boxes Appearance</h2>
              <fieldset>
-                <legend>Background</legend>
+                <legend>Scene</legend>
                 <div>
                     <label><input type="radio" bind:group={settings.boxes.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
                     {#if settings.boxes.bgType === 'gradient'}
@@ -414,8 +414,58 @@
             </div>
             {#if activeWindowsSubTab === 'normal'}
                 <h2>Normal Windows Appearance</h2>
+                {#if settings.windows.normal.frame}
+                    <fieldset>
+                        <legend>Frame</legend>
+                        <div>
+                            <label><input type="radio" bind:group={settings.windows.normal.frame.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
+                            {#if settings.windows.normal.frame.bgType === 'gradient'}
+                            <div class="options-group">
+                                <label class="color-picker-label">
+                                    <span>Start Color</span>
+                                    <input type="color" bind:value={settings.windows.normal.frame.bgGradientStart} on:input={handleUpdate}>
+                                </label>
+                                <label class="color-picker-label">
+                                    <span>End Color</span>
+                                    <input type="color" bind:value={settings.windows.normal.frame.bgGradientEnd} on:input={handleUpdate}>
+                                </label>
+                            </div>
+                            {/if}
+                        </div>
+                        <div>
+                            <label><input type="radio" bind:group={settings.windows.normal.frame.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
+                            {#if settings.windows.normal.frame.bgType === 'color'}
+                            <div class="options-group">
+                                <label class="color-picker-label">
+                                    <span>Color</span>
+                                    <input type="color" bind:value={settings.windows.normal.frame.bgColor} on:input={handleUpdate}>
+                                </label>
+                            </div>
+                            {/if}
+                        </div>
+                        <div>
+                            <label><input type="radio" bind:group={settings.windows.normal.frame.bgType} value="image" on:change={handleUpdate}> Image</label>
+                            {#if settings.windows.normal.frame.bgType === 'image'}
+                            <div class="options-group">
+                                <label>
+                                    <input class="text-input" type="text" bind:value={settings.windows.normal.frame.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                                </label>
+                                <label class="color-picker-label">
+                                    <span>Display Mode</span>
+                                    <select class="select-input" bind:value={settings.windows.normal.frame.bgImageDisplayMode} on:change={handleUpdate}>
+                                        <option value="cover">Cover</option>
+                                        <option value="contain">Fit</option>
+                                        <option value="stretch">Stretch</option>
+                                        <option value="tile">Tile</option>
+                                    </select>
+                                </label>
+                            </div>
+                            {/if}
+                        </div>
+                    </fieldset>
+                {/if}
                 <fieldset>
-                    <legend>Background</legend>
+                    <legend>Scene</legend>
                     <div>
                         <label><input type="radio" bind:group={settings.windows.normal.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
                         {#if settings.windows.normal.bgType === 'gradient'}
@@ -477,7 +527,7 @@
             {#if activeWindowsSubTab === 'back'}
                 <h2>Back Windows Appearance</h2>
                 <fieldset>
-                    <legend>Background</legend>
+                    <legend>Scene</legend>
                     <div>
                         <label><input type="radio" bind:group={settings.windows.back.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
                         {#if settings.windows.back.bgType === 'gradient'}
@@ -540,7 +590,7 @@
         {#if activeTab === 'taskbar'}
             <h2>Taskbar Appearance</h2>
              <fieldset>
-                <legend>Background</legend>
+                <legend>Scene</legend>
                 <div>
                     <label><input type="radio" bind:group={settings.taskbar.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
                     {#if settings.taskbar.bgType === 'gradient'}

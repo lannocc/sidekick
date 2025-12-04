@@ -41,6 +41,14 @@ function loadSettings() {
                 bgImageDisplayMode: 'cover',
                 inactiveOpacity: 1.0,
                 activeOpacity: 1.0,
+                frame: {
+                    bgType: 'color',
+                    bgColor: '#2c3e50',
+                    bgGradientStart: '#2c3e50',
+                    bgGradientEnd: '#46627f',
+                    bgImage: '',
+                    bgImageDisplayMode: 'cover',
+                },
             },
             back: {
                 bgType: 'color',
@@ -107,7 +115,11 @@ function loadSettings() {
                 settings.boxes = { ...defaults.boxes, ...(parsed.boxes || {}) };
                 settings.windows = {
                     ...(defaults.windows),
-                    normal: { ...defaults.windows.normal, ...(parsed.windows?.normal || {}) },
+                    normal: {
+                        ...defaults.windows.normal,
+                        ...(parsed.windows?.normal || {}),
+                        frame: { ...defaults.windows.normal.frame, ...(parsed.windows?.normal?.frame || {}) },
+                    },
                     back: { ...defaults.windows.back, ...(parsed.windows?.back || {}) },
                 };
                 settings.noticeDefaults = {
