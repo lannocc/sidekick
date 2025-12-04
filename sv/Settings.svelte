@@ -209,14 +209,14 @@
 
 <div class="settings-container">
     <div class="tabs">
-        <button class="tab-button" class:active={activeTab === 'wallpaper'} on:click={() => activeTab = 'wallpaper'}>Wallpaper</button>
+        <button class="tab-button" class:active={activeTab === 'sky'} on:click={() => activeTab = 'sky'}>Sky</button>
         <button class="tab-button" class:active={activeTab === 'taskbar'} on:click={() => activeTab = 'taskbar'}>Taskbar</button>
         <button class="tab-button" class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
     </div>
 
     {#if settings}
-        {#if activeTab === 'wallpaper'}
-            <h2>Wallpaper Appearance</h2>
+        {#if activeTab === 'sky'}
+            <h2>Sky Appearance</h2>
             <fieldset>
                 <legend>Background</legend>
                 <div>
