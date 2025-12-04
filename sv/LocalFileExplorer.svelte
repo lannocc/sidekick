@@ -66,7 +66,7 @@
         const boxName = prompt(`Enter a name for the new Box for path "${itemPath}":`, defaultBoxName);
         if (!boxName) return;
 
-        createBox(boxName, 'local', itemPath);
+        createBox(boxName, 'local', itemPath, { screenX: contextMenu.x, screenY: contextMenu.y });
         closeContextMenu();
     }
 

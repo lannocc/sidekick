@@ -61,13 +61,30 @@ export function sendMessage(message) {
     processQueue();
 }
 
-export function createBox(name, box_type, context, aspectRatio, x, y) {
+export function createBox(name, box_type, context, { aspectRatio, screenX, screenY } = {}) {
     let finalAspectRatio = aspectRatio;
     if (finalAspectRatio == null) { // Checks for both null and undefined
         const desktopHeight = window.innerHeight - TASKBAR_HEIGHT;
         finalAspectRatio = (desktopHeight > 0 && window.innerWidth > 0) ? desktopHeight / window.innerWidth : 0;
     }
-    sendMessage({ type: 'create_box', name, box_type, context, aspect_ratio: finalAspectRatio, x, y });
+
+    let worldX, worldY;
+    const { panX, panY, zoom } = get(desktopView);
+    const BASE_BOX_WIDTH = 180;
+    const boxWidth = BASE_BOX_WIDTH;
+    const boxHeight = boxWidth * finalAspectRatio;
+
+    if (screenX != null && screenY != null) {
+        // Convert screen coordinates to world coordinates for top-left of the box
+        worldX = (screenX - panX) / zoom;
+        worldY = (screenY - TASKBAR_HEIGHT - panY) / zoom;
+    } else {
+        // Default to center of the current view
+        worldX = ((window.innerWidth / 2) - panX) / zoom - (boxWidth / 2);
+        worldY = (((window.innerHeight - TASKBAR_HEIGHT) / 2) - panY) / zoom - (boxHeight / 2);
+    }
+
+    sendMessage({ type: 'create_box', name, box_type, context, aspect_ratio: finalAspectRatio, x: worldX, y: worldY });
 }
 export function updateBox(id, name) {
     sendMessage({ type: 'update_box', id, name });
