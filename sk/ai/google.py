@@ -25,6 +25,19 @@ def prompt_for_text(prompt, chatter=False, model=config.GEMINI_MODEL_QUICK_2):
     return resp.text
 
 
+def prompt_for_text_stream(prompt, chatter=False, model=config.GEMINI_MODEL_QUICK_2):
+    if chatter: print(f'  ai >> {prompt}')
+    client = genai.Client(api_key=config.GEMINI_API_KEY,
+                          http_options=HttpOptions(
+                              timeout=config.GEMINI_TIMEOUT_HTTP))
+    resp = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            stream=True)
+    for chunk in resp:
+        if chatter: print(f'  ai << (chunk) {chunk.text}')
+        yield chunk.text
+
 def prompt_for_json(prompt, chatter=False, model=config.GEMINI_MODEL_QUICK_2):
     if chatter: print(f'  ai >> {prompt}')
     client = genai.Client(api_key=config.GEMINI_API_KEY,
@@ -60,6 +73,26 @@ def prompt_with_file_for_text(prompt, file, chatter=False,
     if chatter: print(f'  ai << {resp.text}')
     return resp.text
 
+
+def prompt_with_file_for_text_stream(prompt, file, chatter=False,
+                                     model=config.GEMINI_MODEL_QUICK_2):
+    if chatter: print(f'  ai >> {prompt}')
+    client = genai.Client(api_key=config.GEMINI_API_KEY,
+                          http_options=HttpOptions(
+                              timeout=config.GEMINI_TIMEOUT_HTTP))
+    uploaded_file = client.files.upload(file=file)
+    resp = client.models.generate_content(
+            model=model,
+            contents=[
+                uploaded_file,
+                '\n\n',
+                prompt,
+                ],
+            stream=True)
+
+    for chunk in resp:
+        if chatter: print(f'  ai << (chunk) {chunk.text}')
+        yield chunk.text
 
 def prompt_with_file_for_json(prompt, file, retries=0, quiet=False,
                               chatter=False, model=config.GEMINI_MODEL_QUICK_2):

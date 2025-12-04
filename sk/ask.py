@@ -9,6 +9,7 @@ import tiktoken
 
 import sys
 import time
+import threading
 
 ENCODING = tiktoken.get_encoding('cl100k_base')
 
@@ -71,17 +72,56 @@ def ask_question(prompt=None, file=None, attachment_content="", mdlang=None,
         print(f'TOTAL INPUT Bytes: {total_bytes:,}')
         print(f'TOTAL INPUT Tokens: {total_tokens:,}')
         print()
-        print("...waiting for reply...")
 
     ai_client = AIClient(use_openai=use_openai)
-
     start_time = time.monotonic()
-    if file:
-        answer = ai_client.prompt_with_file_for_text(full_text, file, chatter=chatter,
-                                              model=model)
+    answer = ""
 
+    if quiet:
+        print("...waiting for reply...")
+        if file:
+            answer = ai_client.prompt_with_file_for_text(full_text, file, chatter=chatter, model=model)
+        else:
+            answer = ai_client.prompt_for_text(full_text, chatter=chatter, model=model)
     else:
-        answer = ai_client.prompt_for_text(full_text, chatter=chatter, model=model)
+        # Streaming with timer for non-quiet mode
+        timeout = config.OPENAI_TIMEOUT_HTTP if use_openai else int(config.GEMINI_TIMEOUT_HTTP / 1000)
+        stop_timer_event = threading.Event()
+        timer_thread = threading.Thread(target=_display_timer, args=(stop_timer_event, timeout))
+
+        answer_chunks = []
+        received_first_chunk = False
+
+        try:
+            timer_thread.start()
+            if file:
+                stream = ai_client.prompt_with_file_for_text_stream(full_text, file, chatter=chatter, model=model)
+            else:
+                stream = ai_client.prompt_for_text_stream(full_text, chatter=chatter, model=model)
+
+            for chunk in stream:
+                if not received_first_chunk:
+                    received_first_chunk = True
+                    stop_timer_event.set()
+                    timer_thread.join() # Wait for timer to clear its line
+                    print("...Receiving reply...", end="", flush=True)
+
+                answer_chunks.append(chunk)
+                if not chatter:
+                    print(".", end="", flush=True)
+
+        finally:
+            if not received_first_chunk: # If loop never ran (error or empty response)
+                stop_timer_event.set()
+
+            if timer_thread.is_alive():
+                timer_thread.join()
+
+        if received_first_chunk and not chatter:
+            print() # Newline after the dots
+
+        answer = "".join(answer_chunks)
+
     end_time = time.monotonic()
     turnaround_time = end_time - start_time
 
@@ -147,3 +187,20 @@ def ask_question(prompt=None, file=None, attachment_content="", mdlang=None,
         print(f':: Output Tokens: {output_tokens:,}')
         print(f':: {turnaround_summary_line}')
         print()
+
+
+def _display_timer(stop_event, timeout):
+    """Displays an updating timer on a single line."""
+    start_time = time.monotonic()
+    max_minutes, max_seconds = divmod(timeout, 60)
+    while not stop_event.is_set():
+        elapsed = time.monotonic() - start_time
+        if elapsed >= timeout:
+            break
+        minutes, seconds = divmod(int(elapsed), 60)
+        # Use \r to overwrite the line. Add padding to clear previous longer lines.
+        timer_str = f"...waiting for reply... {minutes:02d}:{seconds:02d} / {int(max_minutes):02d}:{int(max_seconds):02d}"
+        print(f"{timer_str.ljust(80)}\r", end='', flush=True)
+        time.sleep(0.2)
+    print(" " * 80 + "\r", end='', flush=True) # Clear the line when done
+
