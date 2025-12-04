@@ -146,7 +146,8 @@ def init_db():
             type TEXT NOT NULL CHECK(type IN ('file', 'dir')),
             path TEXT NOT NULL UNIQUE,
             x REAL NOT NULL,
-            y REAL NOT NULL
+            y REAL NOT NULL,
+            scale REAL NOT NULL DEFAULT 1.0
         );
     """)
 
@@ -158,32 +159,10 @@ def init_db():
             y REAL NOT NULL,
             width REAL NOT NULL,
             height REAL NOT NULL,
-            scale REAL NOT NULL DEFAULT 1.0
+            scale REAL NOT NULL DEFAULT 1.0,
+            z_index INTEGER NOT NULL DEFAULT 0
         );
     """)
-    cursor.execute("PRAGMA table_info(backed_window)")
-    columns = [row['name'] for row in cursor.fetchall()]
-    if 'z_index' not in columns:
-        cursor.execute("ALTER TABLE backed_window ADD COLUMN z_index INTEGER NOT NULL DEFAULT 0")
-
-    # Simple migration for existing databases
-    cursor.execute("PRAGMA table_info(box)")
-    columns = [row['name'] for row in cursor.fetchall()]
-    if 'aspect_ratio' not in columns:
-        cursor.execute("ALTER TABLE box ADD COLUMN aspect_ratio REAL")
-
-    cursor.execute("PRAGMA table_info(panel)")
-    columns = [row['name'] for row in cursor.fetchall()]
-    if 'parent_loc_x' not in columns:
-        cursor.execute("ALTER TABLE panel ADD COLUMN parent_loc_x INTEGER")
-    if 'parent_loc_y' not in columns:
-        cursor.execute("ALTER TABLE panel ADD COLUMN parent_loc_y INTEGER")
-
-    cursor.execute("PRAGMA table_info(desktop_shortcut)")
-    columns = [row['name'] for row in cursor.fetchall()]
-    if 'scale' not in columns:
-        cursor.execute("ALTER TABLE desktop_shortcut ADD COLUMN scale REAL NOT NULL DEFAULT 1.0")
-
 
     DB_CONN.commit()
     log.info("Skybox database initialized.")
