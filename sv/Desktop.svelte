@@ -207,11 +207,13 @@
             };
         }),
         ...($boxes || []).map(b => {
-            // ... (rest of the mapping function)
             const BASE_WIDTH = 180;
             const scale = b.scale ?? 1.0;
             const desktopHeight = innerHeight - TASKBAR_HEIGHT;
-            const aspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
+
+            // Use stored aspect ratio if available, otherwise calculate dynamically as a fallback.
+            const dynamicAspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
+            const aspectRatio = b.aspect_ratio ?? dynamicAspectRatio;
 
             const boxWidth = BASE_WIDTH * scale;
             const boxHeight = BASE_WIDTH * aspectRatio * scale;
@@ -724,7 +726,9 @@
         } else if (type === 'box') {
             const BASE_WIDTH = 180;
             const desktopHeight = innerHeight - TASKBAR_HEIGHT;
-            const aspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
+            // Use stored aspect ratio from the item being scaled.
+            const dynamicAspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
+            const aspectRatio = sourceItem.aspect_ratio ?? dynamicAspectRatio;
             sourceItem.width = BASE_WIDTH * newScale;
             sourceItem.height = BASE_WIDTH * aspectRatio * newScale;
         } else if (type === 'backed_window') {

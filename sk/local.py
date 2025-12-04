@@ -108,7 +108,8 @@ def init_db():
             x INTEGER DEFAULT 100,
             y INTEGER DEFAULT 100,
             scale REAL DEFAULT 1.0,
-            cover_panel_location TEXT
+            cover_panel_location TEXT,
+            aspect_ratio REAL
         );
     """)
 
@@ -166,6 +167,11 @@ def init_db():
         cursor.execute("ALTER TABLE backed_window ADD COLUMN z_index INTEGER NOT NULL DEFAULT 0")
 
     # Simple migration for existing databases
+    cursor.execute("PRAGMA table_info(box)")
+    columns = [row['name'] for row in cursor.fetchall()]
+    if 'aspect_ratio' not in columns:
+        cursor.execute("ALTER TABLE box ADD COLUMN aspect_ratio REAL")
+
     cursor.execute("PRAGMA table_info(panel)")
     columns = [row['name'] for row in cursor.fetchall()]
     if 'parent_loc_x' not in columns:
@@ -189,7 +195,7 @@ async def broadcast_box_list():
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location FROM box ORDER BY name")
+    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio FROM box ORDER BY name")
     boxes = [dict(row) for row in cursor.fetchall()]
 
     message = json.dumps({'type': 'box_list', 'boxes': boxes})
@@ -503,7 +509,7 @@ async def websocket_handler(websocket):
         await websocket.send(json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts}))
 
         # Send initial backed window list on connect
-        cursor.execute("SELECT id, config, x, y, width, height, scale FROM backed_window")
+        cursor.execute("SELECT id, config, x, y, width, height, scale, z_index FROM backed_window")
         backed_windows = [dict(row) for row in cursor.fetchall()]
         await websocket.send(json.dumps({'type': 'backed_window_list', 'windows': backed_windows}))
 
@@ -616,7 +622,7 @@ async def websocket_handler(websocket):
                 elif msg_type == 'list_boxes':
                     print_action("List Boxes")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location FROM box ORDER BY name")
+                    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio FROM box ORDER BY name")
                     boxes = [dict(row) for row in cursor.fetchall()]
                     await websocket.send(json.dumps({'type': 'box_list', 'boxes': boxes}))
 
@@ -624,11 +630,12 @@ async def websocket_handler(websocket):
                     name = msg.get('name')
                     box_type = msg.get('box_type')
                     context = msg.get('context')
-                    print_action("Create Box", f"name='{name}', type='{box_type}'")
+                    aspect_ratio = msg.get('aspect_ratio')
+                    print_action("Create Box", f"name='{name}', type='{box_type}', ratio={aspect_ratio}")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
-                        "INSERT INTO box (name, type, context) VALUES (?, ?, ?)",
-                        (name, box_type, context)
+                        "INSERT INTO box (name, type, context, aspect_ratio) VALUES (?, ?, ?, ?)",
+                        (name, box_type, context, aspect_ratio)
                     )
                     new_id = cursor.lastrowid
 

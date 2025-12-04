@@ -61,8 +61,8 @@ export function sendMessage(message) {
     processQueue();
 }
 
-export function createBox(name, box_type, context) {
-    sendMessage({ type: 'create_box', name, box_type, context });
+export function createBox(name, box_type, context, aspectRatio) {
+    sendMessage({ type: 'create_box', name, box_type, context, aspect_ratio: aspectRatio });
 }
 export function updateBox(id, name) {
     sendMessage({ type: 'update_box', id, name });

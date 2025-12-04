@@ -147,7 +147,9 @@
 
     let innerWidth, innerHeight;
     const BASE_WIDTH = 180;
-    $: aspectRatio = (innerHeight > 0 && innerWidth > 0) ? (innerHeight - TASKBAR_HEIGHT) / innerWidth : 0;
+    // The dynamic calculation becomes a fallback for older boxes without a stored ratio.
+    $: dynamicAspectRatio = (innerHeight > 0 && innerWidth > 0) ? (innerHeight - TASKBAR_HEIGHT) / innerWidth : 0;
+    $: aspectRatio = box.aspect_ratio ?? dynamicAspectRatio;
 
     $: boxWidth = BASE_WIDTH * scale;
     $: boxHeight = BASE_WIDTH * aspectRatio * scale;
