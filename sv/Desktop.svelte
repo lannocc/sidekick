@@ -872,6 +872,11 @@
             selectedItems.set(new Set([uniqueId]));
         }
 
+        // If the item is an interactive backed window, do not proceed to the dragging logic.
+        if (type === 'backed_window' && parseInt(id, 10) === interactiveBackedWindowId) {
+            return;
+        }
+
         // Prepare for dragging
         isDraggingItems = true;
         dragStartItemStates = allItems.map(i => ({ ...i })); // Capture initial state of all items

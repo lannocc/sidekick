@@ -75,6 +75,7 @@
         : settings?.windows?.normal?.inactiveOpacity ?? 1.0;
     
     $: frameStyle = generateBgStyle(settings?.windows?.normal?.frame);
+    $: normalWindowBgStyle = generateBgStyle(settings?.windows?.normal);
 
     let isDragging = false;
     let isResizing = false;
@@ -581,7 +582,7 @@
             <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>Close</button>
         </div>
     {/if}
-    <div class="content-area">
+    <div class="content-area" style:background={normalWindowBgStyle}>
         <!-- Content is now rendered by Desktop.svelte -->
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
