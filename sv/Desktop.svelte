@@ -1273,20 +1273,37 @@
     }
 
     function handleBackRequest(windowToBack) {
-        // 1. Generate config and create a temporary item for collision detection
+        // 1. Generate config for the new backed window
         const config = generateBoardConfigFromWindow(windowToBack, get(windows));
         const configStr = JSON.stringify(config);
-        const { panX, panY, zoom } = get(desktopView);
+
+        // Get view states for coordinate transformation
+        const wv = $windowView;
+        const dv = $desktopView;
+
+        // Calculate the midpoint of the front window in front-layer world coordinates
+        const frontWorldMidX = windowToBack.x + windowToBack.width / 2;
+        const frontWorldMidY = windowToBack.y + windowToBack.height / 2;
+
+        // Transform this midpoint to back-layer world coordinates
+        const backWorldMidX = ((frontWorldMidX * wv.zoom) + wv.panX - dv.panX) / dv.zoom;
+        const backWorldMidY = ((frontWorldMidY * wv.zoom) + wv.panY - dv.panY) / dv.zoom;
+
+        // Calculate the new dimensions for the backed window, preserving its visual size across layers
+        const newWidth = windowToBack.width * wv.zoom / dv.zoom;
+        const newHeight = windowToBack.height * wv.zoom / dv.zoom;
+
+        // Calculate the new top-left position for the backed window by offsetting from its new midpoint
+        const newX = backWorldMidX - newWidth / 2;
+        const newY = backWorldMidY - newHeight / 2;
 
         const tempNewItem = {
             id: 'new', // Temporary ID
             type: 'backed_window',
-            x: (windowToBack.x * $windowView.zoom + $windowView.panX - panX) / zoom,
-            y: (windowToBack.y * $windowView.zoom + $windowView.panY - panY) / zoom,
-            width: windowToBack.width * $windowView.zoom / zoom,
-            height: windowToBack.height * $windowView.zoom / zoom,
-            baseWidth: windowToBack.width * $windowView.zoom / zoom,
-            baseHeight: windowToBack.height * $windowView.zoom / zoom,
+            x: newX, y: newY,
+            width: newWidth, height: newHeight,
+            baseWidth: newWidth, // The initial width before any user scaling on the back layer
+            baseHeight: newHeight,
             scale: 1.0,
             config: configStr,
         };
@@ -1294,7 +1311,7 @@
         // 2. Prepare for collision resolution
         let frameItems = [...allItems.filter(i => i.type !== 'window'), tempNewItem];
         const activeItemIds = new Set(['backed_window-new']);
-        const startStates = frameItems.map(i => ({ ...i }));
+        const startStates = frameItems.map(i => ({ ...i, config: i.config ? JSON.parse(JSON.stringify(i.config)) : undefined }));
         const pushedItemsMap = new Map();
 
         // 3. Resolve collisions
