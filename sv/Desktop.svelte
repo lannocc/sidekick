@@ -92,6 +92,32 @@
         closeBackedWindowContextMenu();
     }
 
+    function generateBgStyle(bgSettings) {
+        if (!bgSettings) return null;
+        if (bgSettings.bgType === 'gradient') {
+            return `linear-gradient(45deg, ${bgSettings.bgGradientStart} 0%, ${bgSettings.bgGradientEnd} 100%)`;
+        } else if (bgSettings.bgType === 'color') {
+            return bgSettings.bgColor;
+        } else if (bgSettings.bgType === 'image' && bgSettings.bgImage) {
+            let size = 'cover';
+            let repeat = 'no-repeat';
+            let position = 'center center';
+
+            switch (bgSettings.bgImageDisplayMode) {
+                case 'contain': size = 'contain'; break;
+                case 'stretch': size = '100% 100%'; break;
+                case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
+                case 'cover': default: break;
+            }
+            return `url('${bgSettings.bgImage}') ${position} / ${size} ${repeat}`;
+        }
+        return null;
+    }
+
+    $: normalWindowBgStyle = generateBgStyle($desktopSettings.windows?.normal);
+    $: backWindowBgStyle = generateBgStyle($desktopSettings.windows?.back);
+    $: backWindowSettings = $desktopSettings.windows?.back;
+
     // --- Focus Follows Mouse Logic ---
     let focusTimeoutDesktop = {};
 
@@ -1549,7 +1575,7 @@
         border: 1px solid var(--border-color);
         box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         background-color: var(--window-bg);
-        transition: border-color 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
+        transition: border-color 0.1s ease-in-out, box-shadow 0.1s ease-in-out, opacity 0.2s ease-in-out;
     }
     .backed-window.tab-content-wrapper.selected {
         border-color: rgba(52, 152, 219, 0.7);
@@ -1763,6 +1789,8 @@
                                 style:width="{bw.width * (bw.scale || 1.0)}px"
                                 style:height="{bw.height * (bw.scale || 1.0)}px"
                                 style:z-index="{bw.z_index || 1}"
+                                style:background={backWindowBgStyle}
+                                style:opacity={bw.id === interactiveBackedWindowId ? backWindowSettings?.activeOpacity : backWindowSettings?.inactiveOpacity}
                                 on:contextmenu|preventDefault|stopPropagation={(event) => showBackedWindowContextMenu(event, bw)}
                                 on:wheel={e => {
                                     if (e.ctrlKey || e.altKey) {
@@ -1823,6 +1851,7 @@
                     <div
                         class="content-area-container"
                         style:pointer-events={$desktopInteraction || $dragState ? 'none' : null}
+                        style:background={normalWindowBgStyle}
                         on:mouseenter={() => handleContentMouseEnter(group)}
                         on:mouseleave={() => handleContentMouseLeave(group)}
                         on:mousedown={e => handleContentMouseDown(e, group)}

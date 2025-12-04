@@ -31,6 +31,28 @@ function loadSettings() {
             inactiveOpacity: 0.8,
             activeOpacity: 1.0,
         },
+        windows: {
+            normal: {
+                bgType: 'color',
+                bgColor: '#2d3436',
+                bgGradientStart: '#2d3436',
+                bgGradientEnd: '#454e50',
+                bgImage: '',
+                bgImageDisplayMode: 'cover',
+                inactiveOpacity: 1.0,
+                activeOpacity: 1.0,
+            },
+            back: {
+                bgType: 'color',
+                bgColor: '#3b4252',
+                bgGradientStart: '#3b4252',
+                bgGradientEnd: '#4c566a',
+                bgImage: '',
+                bgImageDisplayMode: 'cover',
+                inactiveOpacity: 0.8,
+                activeOpacity: 1.0,
+            }
+        },
         focusFollowsMouse: false,
         focusDelay: 420,
         ioskUrl: 'ws://localhost:4209',
@@ -83,6 +105,11 @@ function loadSettings() {
                 settings.background = { ...defaults.background, ...(parsed.background || {}) };
                 settings.taskbar = { ...defaults.taskbar, ...(parsed.taskbar || {}) };
                 settings.boxes = { ...defaults.boxes, ...(parsed.boxes || {}) };
+                settings.windows = {
+                    ...(defaults.windows),
+                    normal: { ...defaults.windows.normal, ...(parsed.windows?.normal || {}) },
+                    back: { ...defaults.windows.back, ...(parsed.windows?.back || {}) },
+                };
                 settings.noticeDefaults = {
                     ...defaults.noticeDefaults,
                     ...(parsed.noticeDefaults || {}),

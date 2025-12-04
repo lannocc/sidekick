@@ -48,6 +48,10 @@
     let settings;
     desktopSettings.subscribe(value => settings = value);
 
+    $: windowOpacity = isActive 
+        ? settings?.windows?.normal?.activeOpacity ?? 1.0 
+        : settings?.windows?.normal?.inactiveOpacity ?? 1.0;
+
     let isDragging = false;
     let isResizing = false;
     let dragOffsetX, dragOffsetY;
@@ -418,7 +422,7 @@
     .window-frame.noticing {
         animation: notice-glow 1.2s ease-in-out;
     }
-    .window-frame { position: absolute; border: 1px solid var(--border-color); background-color: transparent; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; min-width: 250px; min-height: 150px; transition: border-color 0.2s ease-in-out; pointer-events: none; box-sizing: border-box; }
+    .window-frame { position: absolute; border: 1px solid var(--border-color); background-color: transparent; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; min-width: 250px; min-height: 150px; transition: border-color 0.2s ease-in-out, opacity 0.2s ease-in-out; pointer-events: none; box-sizing: border-box; }
     .window-frame:not(.active) { border-color: #7f8c8d; }
     .window-frame.minimized { display: none; }
     .window-frame.maximized { border-radius: 0; }
@@ -486,7 +490,7 @@
     .select-input { background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:--notice-color={notice?.color} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:--notice-color={notice?.color} style:opacity={windowOpacity} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
     <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id}>
         <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
