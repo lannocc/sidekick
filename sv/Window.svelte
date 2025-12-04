@@ -354,6 +354,12 @@
 
     function handleFrameMouseDown(event) {
         clearTimeout(focusTimeout);
+        if (event.ctrlKey && event.button === 1) { // Ctrl + Middle Click
+            event.preventDefault();
+            event.stopPropagation();
+            dispatch('backrequest');
+            return;
+        }
         if ((event.altKey || event.metaKey) && !maximized) {
             event.preventDefault();
             if (event.button === 0) onDragStart(event);
@@ -367,6 +373,12 @@
         // Prevent action if clicking on controls, tabs, etc.
         if (event.target.closest('button') || event.target.closest('.window-control') || event.target.closest('.tab')) {
             if (!isActive) windows.focusWindow(id);
+            return;
+        }
+        if (event.ctrlKey && event.button === 1) { // Ctrl + Middle Click
+            event.preventDefault();
+            event.stopPropagation();
+            dispatch('backrequest');
             return;
         }
         if (maximized) {

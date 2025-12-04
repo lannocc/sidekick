@@ -3,10 +3,10 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { windows, newSettings, dragRequest, componentMap } from './windows.js';
+    import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow } from './windows.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems } from './desktop.js';
-    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform } from './local.js';
+    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow } from './local.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import Shortcut from './Shortcut.svelte';
@@ -109,6 +109,13 @@
     }
 
     function handleContentMouseDown(event, group) {
+        if (event.ctrlKey && event.button === 1) { // Ctrl + Middle click
+            event.preventDefault();
+            event.stopPropagation();
+            handleBackRequest(group);
+            return;
+        }
+
         if ((event.altKey || event.metaKey) && !group.maximized) {
             event.preventDefault();
 
@@ -797,13 +804,23 @@
     }
 
     function handleItemMouseDown(event, itemEl) {
-        if (event.button !== 0) return;
-        event.preventDefault(); // Prevent text selection, etc.
-        event.stopPropagation();
-
         const id = itemEl.dataset.id;
         const type = itemEl.dataset.type;
         const uniqueId = `${type}-${id}`;
+
+        if (type === 'backed_window' && event.shiftKey && event.button === 1) { // Shift + Middle click
+            event.preventDefault();
+            event.stopPropagation();
+            const backedWindow = $backedWindows.find(bw => String(bw.id) === id);
+            if (backedWindow) {
+                windows.unbackWindow(backedWindow);
+            }
+            return;
+        }
+
+        if (event.button !== 0) return;
+        event.preventDefault(); // Prevent text selection, etc.
+        event.stopPropagation();
 
         // Update selection with unique IDs
         if (event.ctrlKey) {
@@ -1235,6 +1252,57 @@
         }
     }
 
+    function handleBackRequest(windowToBack) {
+        // 1. Generate config and create a temporary item for collision detection
+        const config = generateBoardConfigFromWindow(windowToBack, get(windows));
+        const configStr = JSON.stringify(config);
+        const { panX, panY, zoom } = get(desktopView);
+
+        const tempNewItem = {
+            id: 'new', // Temporary ID
+            type: 'backed_window',
+            x: (windowToBack.x * $windowView.zoom + $windowView.panX - panX) / zoom,
+            y: (windowToBack.y * $windowView.zoom + $windowView.panY - panY) / zoom,
+            width: windowToBack.width * $windowView.zoom / zoom,
+            height: windowToBack.height * $windowView.zoom / zoom,
+            baseWidth: windowToBack.width * $windowView.zoom / zoom,
+            baseHeight: windowToBack.height * $windowView.zoom / zoom,
+            scale: 1.0,
+            config: configStr,
+        };
+
+        // 2. Prepare for collision resolution
+        let frameItems = [...allItems.filter(i => i.type !== 'window'), tempNewItem];
+        const activeItemIds = new Set(['backed_window-new']);
+        const startStates = frameItems.map(i => ({ ...i }));
+        const pushedItemsMap = new Map();
+
+        // 3. Resolve collisions
+        const updatedFrameItems = resolveCollisions(frameItems, activeItemIds, startStates, pushedItemsMap);
+
+        // 4. Persist changes
+        const itemsToUpdate = new Set([...activeItemIds, ...pushedItemsMap.keys()]);
+        updatedFrameItems.forEach(item => {
+            const uniqueId = `${item.type}-${item.id}`;
+            if (!itemsToUpdate.has(uniqueId)) return;
+
+            if (item.id === 'new') {
+                createBackedWindow(item.config, item.x, item.y, item.width, item.height, item.scale);
+            } else {
+                if (item.type === 'box') {
+                    updateBoxTransform(item.id, item.x, item.y, item.scale);
+                } else if (item.type === 'shortcut') {
+                    updateShortcutTransform(item.id, item.x, item.y, item.scale || 1.0);
+                } else if (item.type === 'backed_window') {
+                    updateBackedWindowTransform(item.id, item.x, item.y, item.scale);
+                }
+            }
+        });
+
+        // 5. Remove original window
+        windows.removeWindow(windowToBack.id);
+    }
+
 
     onMount(() => {
         // The WebSocket connection is now established in SideKick.svelte
@@ -1654,7 +1722,7 @@
     <div class="desktop-content front-layer" style:transform="translate({$windowView.panX}px, {$windowView.panY}px) scale({$windowView.zoom})">
         <div class="windows-layer">
             {#each $windows as win (win.id)}
-                <Window {...win} />
+                <Window {...win} on:backrequest={() => handleBackRequest(win)} />
             {/each}
         </div>
 
