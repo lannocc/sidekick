@@ -210,6 +210,7 @@
 <div class="settings-container">
     <div class="tabs">
         <button class="tab-button" class:active={activeTab === 'sky'} on:click={() => activeTab = 'sky'}>Sky</button>
+        <button class="tab-button" class:active={activeTab === 'boxes'} on:click={() => activeTab = 'boxes'}>Boxes</button>
         <button class="tab-button" class:active={activeTab === 'taskbar'} on:click={() => activeTab = 'taskbar'}>Taskbar</button>
         <button class="tab-button" class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
     </div>
@@ -255,6 +256,57 @@
                         <label class="color-picker-label">
                             <span>Display Mode</span>
                             <select class="select-input" bind:value={settings.background.bgImageDisplayMode} on:change={handleUpdate}>
+                                <option value="cover">Cover</option>
+                                <option value="contain">Fit</option>
+                                <option value="stretch">Stretch</option>
+                                <option value="tile">Tile</option>
+                            </select>
+                        </label>
+                    </div>
+                    {/if}
+                </div>
+            </fieldset>
+        {/if}
+        {#if activeTab === 'boxes'}
+            <h2>Boxes Appearance</h2>
+             <fieldset>
+                <legend>Background</legend>
+                <div>
+                    <label><input type="radio" bind:group={settings.boxes.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
+                    {#if settings.boxes.bgType === 'gradient'}
+                    <div class="options-group">
+                        <label class="color-picker-label">
+                            <span>Start Color</span>
+                            <input type="color" bind:value={settings.boxes.bgGradientStart} on:input={handleUpdate}>
+                        </label>
+                        <label class="color-picker-label">
+                            <span>End Color</span>
+                            <input type="color" bind:value={settings.boxes.bgGradientEnd} on:input={handleUpdate}>
+                        </label>
+                    </div>
+                    {/if}
+                </div>
+                <div>
+                     <label><input type="radio" bind:group={settings.boxes.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
+                    {#if settings.boxes.bgType === 'color'}
+                    <div class="options-group">
+                         <label class="color-picker-label">
+                            <span>Color</span>
+                            <input type="color" bind:value={settings.boxes.bgColor} on:input={handleUpdate}>
+                        </label>
+                    </div>
+                    {/if}
+                </div>
+                 <div>
+                    <label><input type="radio" bind:group={settings.boxes.bgType} value="image" on:change={handleUpdate}> Image</label>
+                    {#if settings.boxes.bgType === 'image'}
+                    <div class="options-group">
+                        <label>
+                            <input class="text-input" type="text" bind:value={settings.boxes.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                        </label>
+                        <label class="color-picker-label">
+                            <span>Display Mode</span>
+                            <select class="select-input" bind:value={settings.boxes.bgImageDisplayMode} on:change={handleUpdate}>
                                 <option value="cover">Cover</option>
                                 <option value="contain">Fit</option>
                                 <option value="stretch">Stretch</option>

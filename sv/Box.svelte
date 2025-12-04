@@ -7,7 +7,7 @@
     import { get } from 'svelte/store';
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
     import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover } from './local.js';
-    import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT } from './desktop.js';
+    import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings } from './desktop.js';
     import Board from './Board.svelte';
 
     export let box;
@@ -27,6 +27,32 @@
     $: canSetCover = !coverPanelLocation;
     $: isSelected = $selectedItems.has(`box-${box.id}`);
     $: maxWindowZ = Math.max(100, ...$windows.map(w => w.zIndex));
+
+    let backgroundStyle = '';
+    $: {
+        let style = 'var(--window-bg)'; // Default fallback
+        if ($desktopSettings && $desktopSettings.boxes) {
+            const bg = $desktopSettings.boxes;
+            if (bg.bgType === 'gradient') {
+                style = `linear-gradient(45deg, ${bg.bgGradientStart} 0%, ${bg.bgGradientEnd} 100%)`;
+            } else if (bg.bgType === 'color') {
+                style = bg.bgColor;
+            } else if (bg.bgType === 'image' && bg.bgImage) {
+                let size = 'cover';
+                let repeat = 'no-repeat';
+                let position = 'center center';
+
+                switch (bg.bgImageDisplayMode) {
+                    case 'contain': size = 'contain'; break;
+                    case 'stretch': size = '100% 100%'; break;
+                    case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
+                    case 'cover': default: break;
+                }
+                style = `url('${bg.bgImage}') ${position} / ${size} ${repeat}`;
+            }
+        }
+        backgroundStyle = style;
+    }
 
     // --- Panel Grid Logic ---
     $: panels = box.panels || {};
@@ -579,6 +605,8 @@
         width: 100%;
         height: 100%;
         background-color: var(--window-bg);
+        background-position: center;
+        background-size: cover;
         border: 1px solid var(--border-color);
         border-radius: 6px;
         box-shadow: 0 3px 10px rgba(0,0,0,0.2);
@@ -784,7 +812,7 @@
         {@const parent = {x: panel.parent_loc_x, y: panel.parent_loc_y}}
         <div
             class="panel"
-            style="--pos-transform: translateX({panel.loc_x * 105}%) translateY({panel.loc_y * 105}%); --unfold-delay: {(panel.distance - 1) * 75}ms;"
+            style={`--pos-transform: translateX(${panel.loc_x * 105}%) translateY(${panel.loc_y * 105}%); --unfold-delay: ${(panel.distance - 1) * 75}ms; background: ${backgroundStyle};`}
             on:click={e => handlePanelClick(e, panel.loc_x, panel.loc_y)}
             on:contextmenu={e => handlePanelRightClick(e, panel.loc_x, panel.loc_y)}
             class:drop-target={isDropTarget(panel.loc_x, panel.loc_y)}
@@ -803,7 +831,7 @@
         <div
             class="panel is-empty from-{slot.from}"
             class:is-visible={hoveredPanelKey === parentKey}
-            style="--pos-transform: translateX({slot.x * 105}%) translateY({slot.y * 105}%); --unfold-delay: {(slot.distance - 1) * 75}ms;"
+            style={`--pos-transform: translateX(${slot.x * 105}%) translateY(${slot.y * 105}%); --unfold-delay: ${(slot.distance - 1) * 75}ms; background: ${backgroundStyle};`}
             on:click={e => handlePanelClick(e, slot.x, slot.y, true, slot.parent)}
             on:contextmenu|preventDefault|stopPropagation
             class:drop-target={isDropTarget(slot.x, slot.y)}
@@ -815,7 +843,7 @@
     {/each}
 
     <!-- Center Panel with Content -->
-    <div class="panel center" on:click={e => handlePanelClick(e, 0, 0, false, null)} on:contextmenu={e => handlePanelRightClick(e, 0, 0)} class:drop-target={isDropTarget(0, 0)} on:mouseenter={() => handlePanelMouseEnter(0, 0)} on:mouseleave={() => handlePanelMouseLeave(0, 0)} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 0, 0, null)}>
+    <div class="panel center" style:background={backgroundStyle} on:click={e => handlePanelClick(e, 0, 0, false, null)} on:contextmenu={e => handlePanelRightClick(e, 0, 0)} class:drop-target={isDropTarget(0, 0)} on:mouseenter={() => handlePanelMouseEnter(0, 0)} on:mouseleave={() => handlePanelMouseLeave(0, 0)} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 0, 0, null)}>
         {#if centerPanel}
             <Board board_type={centerPanel.board_type} board_config={centerPanel.board_config} />
         {:else}

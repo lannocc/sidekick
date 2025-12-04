@@ -21,6 +21,14 @@ function loadSettings() {
             bgImage: '',
             bgImageDisplayMode: 'cover',
         },
+        boxes: {
+            bgType: 'color',
+            bgColor: '#3b4252',
+            bgGradientStart: '#3b4252',
+            bgGradientEnd: '#4c566a',
+            bgImage: '',
+            bgImageDisplayMode: 'cover',
+        },
         focusFollowsMouse: false,
         focusDelay: 420,
         ioskUrl: 'ws://localhost:4209',
@@ -72,6 +80,7 @@ function loadSettings() {
                 const settings = { ...defaults, ...parsed };
                 settings.background = { ...defaults.background, ...(parsed.background || {}) };
                 settings.taskbar = { ...defaults.taskbar, ...(parsed.taskbar || {}) };
+                settings.boxes = { ...defaults.boxes, ...(parsed.boxes || {}) };
                 settings.noticeDefaults = {
                     ...defaults.noticeDefaults,
                     ...(parsed.noticeDefaults || {}),

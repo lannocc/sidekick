@@ -27,7 +27,7 @@
 </script>
 
 <style>
-    .board-container { width: 100%; height: 100%; overflow: hidden; background-color: rgba(0,0,0,0.15); border-radius: 5px; }
+    .board-container { width: 100%; height: 100%; overflow: hidden; border-radius: 5px; }
     .panel-image { width: 100%; height: 100%; object-fit: cover; }
 
     /* Mini Window/Tabs Styles */
