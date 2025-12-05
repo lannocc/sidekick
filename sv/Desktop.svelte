@@ -1753,13 +1753,20 @@
         {/if}
     </div>
 
-    <!-- FRONT LAYER -->
+    <!-- FRONT LAYER for non-maximized windows -->
     <div class="desktop-content front-layer" style:transform="translate({$windowView.panX}px, {$windowView.panY}px) scale({$windowView.zoom})">
         <div class="windows-layer">
-            {#each $windows as win (win.id)}
+            {#each $windows.filter(win => !win.maximized) as win (win.id)}
                 <Window {...win} on:backrequest={() => handleBackRequest(win)} />
             {/each}
         </div>
+    </div>
+
+    <!-- Layer for maximized windows, not transformed -->
+    <div class="windows-layer">
+        {#each $windows.filter(win => win.maximized) as win (win.id)}
+            <Window {...win} on:backrequest={() => handleBackRequest(win)} />
+        {/each}
     </div>
 
 
