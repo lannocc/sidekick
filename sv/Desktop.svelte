@@ -24,7 +24,6 @@
     });
     // windowView is initialized in desktop.js
 
-    let backgroundStyle = '';
     let componentInstances = {};
     let innerWidth, innerHeight;
     let totalContentBounds;
@@ -114,6 +113,7 @@
         return null;
     }
 
+    $: backgroundStyle = generateBgStyle($desktopSettings.sky?.scene);
     $: normalWindowBgStyle = generateBgStyle($desktopSettings.windows?.normal?.scene);
     $: backWindowBgStyle = generateBgStyle($desktopSettings.windows?.back);
     $: backWindowSettings = $desktopSettings.windows?.back;
@@ -1414,42 +1414,6 @@
         window.removeEventListener('mouseup', handleItemDragEnd);
         window.removeEventListener('mousemove', handleMarqueeSelectMove);
         window.removeEventListener('mouseup', handleMarqueeSelectEnd);
-    });
-
-    desktopSettings.subscribe(settings => {
-        if (!settings.background) return;
-        const bg = settings.background;
-        if (bg.bgType === 'gradient') {
-            backgroundStyle = `linear-gradient(45deg, ${bg.bgGradientStart} 0%, ${bg.bgGradientEnd} 100%)`;
-        } else if (bg.bgType === 'color') {
-            backgroundStyle = bg.bgColor;
-        } else if (bg.bgType === 'image' && bg.bgImage) {
-            let size = 'cover';
-            let repeat = 'no-repeat';
-            let position = 'center center';
-
-            switch (bg.bgImageDisplayMode) {
-                case 'contain': // fit
-                    size = 'contain';
-                    break;
-                case 'stretch':
-                    size = '100% 100%';
-                    break;
-                case 'tile':
-                    size = 'auto';
-                    repeat = 'repeat';
-                    position = '0 0'; // Tiling starts from top-left
-                    break;
-                case 'cover':
-                default:
-                    // 'cover' is the default case
-                    break;
-            }
-            backgroundStyle = `url('${bg.bgImage}') ${position} / ${size} ${repeat}`;
-        } else {
-            // Fallback to default gradient
-            backgroundStyle = `linear-gradient(45deg, #2c3e50 0%, #46627f 100%)`;
-        }
     });
 
     $: normalizedSelectionRect = {

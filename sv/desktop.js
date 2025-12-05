@@ -5,21 +5,32 @@ export const TASKBAR_HEIGHT = 40; // Height of the taskbar in pixels
 // Function to load settings from localStorage, or return defaults
 function loadSettings() {
     const defaults = {
-        background: {
-            bgType: 'gradient', // 'gradient', 'color', 'image'
-            bgColor: '#34495e',
-            bgGradientStart: '#2c3e50',
-            bgGradientEnd: '#46627f',
-            bgImage: '',
-            bgImageDisplayMode: 'cover', // 'cover', 'contain', 'stretch', 'tile'
-        },
-        taskbar: {
-            bgType: 'color',
-            bgColor: '#2c3e50', // Default solid color based on desktop gradient
-            bgGradientStart: '#2c3e50',
-            bgGradientEnd: '#46627f',
-            bgImage: '',
-            bgImageDisplayMode: 'cover',
+        sky: {
+            scene: {
+                bgType: 'gradient', // 'gradient', 'color', 'image'
+                bgColor: '#34495e',
+                bgGradientStart: '#2c3e50',
+                bgGradientEnd: '#46627f',
+                bgImage: '',
+                bgImageDisplayMode: 'cover', // 'cover', 'contain', 'stretch', 'tile'
+            },
+            frame: {
+                bgType: 'color',
+                bgColor: '#2c3e50',
+                bgGradientStart: '#2c3e50',
+                bgGradientEnd: '#46627f',
+                bgImage: '',
+                bgImageDisplayMode: 'cover',
+            },
+            cloak: {
+                bgType: 'color',
+                bgColor: '#000000',
+                bgGradientStart: '#000000',
+                bgGradientEnd: '#222222',
+                bgImage: '',
+                bgImageDisplayMode: 'cover',
+                opacity: 0.0,
+            }
         },
         boxes: {
             bgType: 'color',
@@ -96,24 +107,39 @@ function loadSettings() {
             const saved = localStorage.getItem('sidekickDesktopSettings');
             if (saved) {
                 const parsed = JSON.parse(saved);
-                
-                // Simple migration for old flat background settings
-                if (parsed.bgType) {
-                    parsed.background = {
-                        bgType: parsed.bgType,
-                        bgColor: parsed.bgColor,
-                        bgGradientStart: parsed.bgGradientStart,
-                        bgGradientEnd: parsed.bgGradientEnd,
-                        bgImage: parsed.bgImage,
-                        bgImageDisplayMode: parsed.bgImageDisplayMode,
-                    };
+
+                // Migration for old background/taskbar settings into new sky object
+                if (parsed.background || parsed.taskbar || parsed.bgType) {
+                    if (!parsed.sky) parsed.sky = {};
+                    if (!parsed.sky.scene) {
+                        if (parsed.background) {
+                            parsed.sky.scene = parsed.background;
+                        } else if (parsed.bgType) { // Handle very old flat structure
+                            parsed.sky.scene = {
+                                bgType: parsed.bgType,
+                                bgColor: parsed.bgColor,
+                                bgGradientStart: parsed.bgGradientStart,
+                                bgGradientEnd: parsed.bgGradientEnd,
+                                bgImage: parsed.bgImage,
+                                bgImageDisplayMode: parsed.bgImageDisplayMode,
+                            };
+                        }
+                    }
+                    if (!parsed.sky.frame && parsed.taskbar) {
+                        parsed.sky.frame = parsed.taskbar;
+                    }
+                    delete parsed.background;
+                    delete parsed.taskbar;
                     ['bgType', 'bgColor', 'bgGradientStart', 'bgGradientEnd', 'bgImage', 'bgImageDisplayMode'].forEach(k => delete parsed[k]);
                 }
 
                 // Merge with defaults, handling nested objects
                 const settings = { ...defaults, ...parsed };
-                settings.background = { ...defaults.background, ...(parsed.background || {}) };
-                settings.taskbar = { ...defaults.taskbar, ...(parsed.taskbar || {}) };
+                settings.sky = {
+                    scene: { ...defaults.sky.scene, ...(parsed.sky?.scene || {}) },
+                    frame: { ...defaults.sky.frame, ...(parsed.sky?.frame || {}) },
+                    cloak: { ...defaults.sky.cloak, ...(parsed.sky?.cloak || {}) },
+                };
                 settings.boxes = { ...defaults.boxes, ...(parsed.boxes || {}) };
                 settings.windows = {
                     normal: {

@@ -7,9 +7,35 @@
     import Desktop from './Desktop.svelte';
     import Taskbar from './Taskbar.svelte';
     import { windows } from './windows.js';
-    import { dashActive, dashLayouts, dashCycleIndex } from './desktop.js';
+    import { dashActive, dashLayouts, dashCycleIndex, desktopSettings } from './desktop.js';
     import { get } from 'svelte/store';
     import { initializeLocalConnection } from './local.js';
+
+    function generateBgStyle(bgSettings) {
+        if (!bgSettings) return '';
+        if (bgSettings.bgType === 'gradient') {
+            return `linear-gradient(45deg, ${bgSettings.bgGradientStart} 0%, ${bgSettings.bgGradientEnd} 100%)`;
+        } else if (bgSettings.bgType === 'color') {
+            return bgSettings.bgColor;
+        } else if (bgSettings.bgType === 'image' && bgSettings.bgImage) {
+            let size = 'cover';
+            let repeat = 'no-repeat';
+            let position = 'center center';
+            switch (bgSettings.bgImageDisplayMode) {
+                case 'contain': size = 'contain'; break;
+                case 'stretch': size = '100% 100%'; break;
+                case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
+                case 'cover': default: break;
+            }
+            return `url('${bgSettings.bgImage}') ${position} / ${size} ${repeat}`;
+        }
+        return '';
+    }
+
+    $: cloakSettings = $desktopSettings.sky?.cloak;
+    $: cloakStyle = cloakSettings ? generateBgStyle(cloakSettings) : '';
+    $: cloakOpacity = cloakSettings?.opacity ?? 0;
+    $: cloakVisible = cloakOpacity > 0;
 
     function handleKeyDown(e) {
         // Tab switching with Alt/Ctrl + Number
@@ -109,8 +135,20 @@
         height: 100vh;
         width: 100vw;
     }
+    .sky-cloak {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 30000;
+        pointer-events: none;
+    }
 </style>
 
+{#if cloakVisible}
+    <div class="sky-cloak" style="opacity: {cloakOpacity}; background: {cloakStyle};"></div>
+{/if}
 <div class="sk-container" on:contextmenu|preventDefault>
     <Taskbar />
     <Desktop />

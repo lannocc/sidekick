@@ -20,8 +20,8 @@
     let menuBackgroundStyle = '';
 
     desktopSettings.subscribe(settings => {
-        if (!settings.taskbar) return;
-        const tb = settings.taskbar;
+        if (!settings.sky?.frame) return;
+        const tb = settings.sky.frame;
 
         if (tb.bgType === 'gradient') {
             backgroundStyle = `background: linear-gradient(90deg, ${tb.bgGradientStart} 0%, ${tb.bgGradientEnd} 100%);`;

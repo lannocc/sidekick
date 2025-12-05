@@ -29,6 +29,7 @@
     let inactiveTransparency, activeTransparency;
     let normalWindowPresence = {};
     let inactiveBackWindowTransparency, activeBackWindowTransparency;
+    let skyCloakPresence;
 
 
     $: if (settings && settings.boxes) {
@@ -42,6 +43,7 @@
         for (const part of ['scene', 'frame', 'cloak']) {
             if (typeof sky[part] !== 'object' || sky[part] === null) sky[part] = {};
         }
+        skyCloakPresence = Math.round((settings.sky.cloak.opacity ?? 0.0) * 100);
     }
 
     // Ensure the settings object has the required structure for normal windows
@@ -114,6 +116,13 @@
         const value = Number(e.target.value);
         activeTransparency = value;
         settings.boxes.activeOpacity = 1 - (value / 100);
+        handleUpdate();
+    }
+
+    function handleSkyCloakPresence(e) {
+        const value = Number(e.target.value);
+        skyCloakPresence = value;
+        settings.sky.cloak.opacity = value / 100;
         handleUpdate();
     }
 
@@ -459,7 +468,14 @@
             {/if}
             {#if activeSkySubTab === 'cloak'}
                 <h2>Sky Cloak Appearance</h2>
-                 <fieldset>
+                <fieldset>
+                    <legend>Presence</legend>
+                    <label class="color-picker-label">
+                        <span>Presence ({skyCloakPresence}%)</span>
+                        <input type="range" min="0" max="100" step="1" value={skyCloakPresence} on:input={handleSkyCloakPresence}>
+                    </label>
+                </fieldset>
+                 <fieldset disabled={skyCloakPresence === 0}>
                     <legend>Background</legend>
                     <div>
                         <label><input type="radio" bind:group={settings.sky.cloak.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
@@ -765,7 +781,7 @@
                     {#if settings.noticeDefaults.audio.sound === 'custom'}
                         <div class="options-group">
                             <label>
-                                <input class="text-input" type="text" bind:value={settings.noticeDeflts.audio.url} on:input={handleUpdate} placeholder="Enter Sound URL...">
+                                <input class="text-input" type="text" bind:value={settings.noticeDefaults.audio.url} on:input={handleUpdate} placeholder="Enter Sound URL...">
                             </label>
                         </div>
                     {/if}
