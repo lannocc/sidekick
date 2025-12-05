@@ -473,8 +473,6 @@
             // If mouseup happens before timeout, it's just a click, do nothing.
             const cancelDragOnMouseUp = (upEvent) => {
                 if (upEvent.button === 1) {
-                    clearTimeout(middleClickTimeout);
-                    middleClickTimeout = null;
                     pendingDragEvent = null;
                 }
                 window.removeEventListener('mouseup', cancelDragOnMouseUp);

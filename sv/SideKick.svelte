@@ -191,7 +191,9 @@
     class="sky-cloak"
     style="opacity: {cloakOpacity}; background: {cloakStyle}; pointer-events: {cloakOpacity > 0 ? 'auto' : 'none'}"
     on:click={disableSkyCloak}
+    on:mousedown={(e) => { if (e.button === 1) { e.preventDefault(); disableSkyCloak(); }}}
     on:contextmenu|preventDefault={disableSkyCloak}
+    on:wheel|preventDefault={disableSkyCloak}
 ></div>
 
 <div class="sk-container" on:contextmenu|preventDefault>

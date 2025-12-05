@@ -766,8 +766,6 @@
 
             const cancelPan = (upEvent) => {
                 if (upEvent.button === 1) {
-                    clearTimeout(desktopMiddleClickTimeout);
-                    desktopMiddleClickTimeout = null;
                     pendingPanEvent = null;
                 }
                 window.removeEventListener('mouseup', cancelPan);
