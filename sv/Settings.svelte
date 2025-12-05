@@ -441,6 +441,10 @@
                     <input type="range" min="0" max="100" step="1" value={skyFramePresence} on:input={handleSkyFramePresence}>
                 </label>
                 <label class="color-picker-label">
+                    <span>Height (px)</span>
+                    <input class="text-input" type="number" bind:value={settings.sky.frame.height} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
+                </label>
+                <label class="color-picker-label">
                     <span>Width (px)</span>
                     <input class="text-input" type="number" bind:value={settings.sky.frame.width} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
                 </label>
@@ -635,6 +639,10 @@
                                     </label>
 
                                     {#if part === 'frame'}
+                                        <label class="color-picker-label">
+                                            <span>Height (px)</span>
+                                            <input class="text-input" type="number" bind:value={settings.windows.normal[part][state].height} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
+                                        </label>
                                         <label class="color-picker-label">
                                             <span>Width (px)</span>
                                             <input class="text-input" type="number" bind:value={settings.windows.normal[part][state].width} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
