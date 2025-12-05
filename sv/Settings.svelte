@@ -29,7 +29,7 @@
     let inactiveTransparency, activeTransparency;
     let normalWindowPresence = {};
     let inactiveBackWindowTransparency, activeBackWindowTransparency;
-    let skyCloakPresence;
+    let skyScenePresence, skyFramePresence, skyCloakPresence;
 
 
     $: if (settings && settings.boxes) {
@@ -43,6 +43,8 @@
         for (const part of ['scene', 'frame', 'cloak']) {
             if (typeof sky[part] !== 'object' || sky[part] === null) sky[part] = {};
         }
+        skyScenePresence = Math.round((settings.sky.scene.opacity ?? 1.0) * 100);
+        skyFramePresence = Math.round((settings.sky.frame.opacity ?? 1.0) * 100);
         skyCloakPresence = Math.round((settings.sky.cloak.opacity ?? 0.0) * 100);
     }
 
@@ -116,6 +118,20 @@
         const value = Number(e.target.value);
         activeTransparency = value;
         settings.boxes.activeOpacity = 1 - (value / 100);
+        handleUpdate();
+    }
+
+    function handleSkyScenePresence(e) {
+        const value = Number(e.target.value);
+        skyScenePresence = value;
+        settings.sky.scene.opacity = value / 100;
+        handleUpdate();
+    }
+
+    function handleSkyFramePresence(e) {
+        const value = Number(e.target.value);
+        skyFramePresence = value;
+        settings.sky.frame.opacity = value / 100;
         handleUpdate();
     }
 
@@ -366,8 +382,11 @@
 
             {#if activeSkySubTab === 'scene'}
                 <h2>Sky Scene Appearance</h2>
-                <fieldset>
-                    <legend>Background</legend>
+                <label class="color-picker-label">
+                    <span>Presence ({skyScenePresence}%)</span>
+                    <input type="range" min="0" max="100" step="1" value={skyScenePresence} on:input={handleSkyScenePresence}>
+                </label>
+                <fieldset class="borderless-fieldset" disabled={skyScenePresence === 0}>
                     <div>
                         <label><input type="radio" bind:group={settings.sky.scene.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
                         {#if settings.sky.scene.bgType === 'gradient'}
@@ -417,8 +436,15 @@
             {/if}
             {#if activeSkySubTab === 'frame'}
                 <h2>Sky Frame Appearance</h2>
-                 <fieldset>
-                    <legend>Background</legend>
+                <label class="color-picker-label">
+                    <span>Presence ({skyFramePresence}%)</span>
+                    <input type="range" min="0" max="100" step="1" value={skyFramePresence} on:input={handleSkyFramePresence}>
+                </label>
+                <label class="color-picker-label">
+                    <span>Width (px)</span>
+                    <input class="text-input" type="number" bind:value={settings.sky.frame.width} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
+                </label>
+                 <fieldset class="borderless-fieldset" disabled={skyFramePresence === 0}>
                     <div>
                         <label><input type="radio" bind:group={settings.sky.frame.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
                         {#if settings.sky.frame.bgType === 'gradient'}
@@ -468,15 +494,11 @@
             {/if}
             {#if activeSkySubTab === 'cloak'}
                 <h2>Sky Cloak Appearance</h2>
-                <fieldset>
-                    <legend>Presence</legend>
-                    <label class="color-picker-label">
-                        <span>Presence ({skyCloakPresence}%)</span>
-                        <input type="range" min="0" max="100" step="1" value={skyCloakPresence} on:input={handleSkyCloakPresence}>
-                    </label>
-                </fieldset>
-                 <fieldset disabled={skyCloakPresence === 0}>
-                    <legend>Background</legend>
+                <label class="color-picker-label">
+                    <span>Presence ({skyCloakPresence}%)</span>
+                    <input type="range" min="0" max="100" step="1" value={skyCloakPresence} on:input={handleSkyCloakPresence}>
+                </label>
+                 <fieldset class="borderless-fieldset" disabled={skyCloakPresence === 0}>
                     <div>
                         <label><input type="radio" bind:group={settings.sky.cloak.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
                         {#if settings.sky.cloak.bgType === 'gradient'}
@@ -611,6 +633,13 @@
                                         <span>Presence ({normalWindowPresence[part]?.[state] ?? 100}%)</span>
                                         <input type="range" min="0" max="100" step="1" value={normalWindowPresence[part]?.[state] ?? 100} on:input={(e) => handleNormalWindowPresence(e, part, state)}>
                                     </label>
+
+                                    {#if part === 'frame'}
+                                        <label class="color-picker-label">
+                                            <span>Width (px)</span>
+                                            <input class="text-input" type="number" bind:value={settings.windows.normal[part][state].width} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
+                                        </label>
+                                    {/if}
 
                                     <fieldset class="borderless-fieldset" disabled={normalWindowPresence[part]?.[state] === 0}>
                                         <div>
