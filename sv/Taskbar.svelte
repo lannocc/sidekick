@@ -133,8 +133,10 @@
 
         let idealLeft = leftAlignedPos * (1 - progress) + rightAlignedPos * progress;
         
-        // Clamp to screen edges minus button width. The collision logic will handle the rest.
-        idealLeft = Math.max(0, Math.min(idealLeft, screenWidth - buttonWidth));
+        // Clamp the ideal position to be above the desktop area, respecting side frames.
+        // This provides a much better starting point for the collision logic.
+        const desktopScreenRight = screenWidth - frameWidth;
+        idealLeft = Math.max(frameWidth, Math.min(idealLeft, desktopScreenRight - buttonWidth));
         
         return idealLeft;
     }
