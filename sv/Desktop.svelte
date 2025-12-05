@@ -12,7 +12,6 @@
     import Shortcut from './Shortcut.svelte';
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import InstanceRegistrar from './InstanceRegistrar.svelte';
     import { connectionStatus } from './local.js';
     import { fade } from 'svelte/transition';
 
@@ -24,7 +23,6 @@
     });
     // windowView is initialized in desktop.js
 
-    let componentInstances = {};
     let innerWidth, innerHeight;
     let totalContentBounds;
 
@@ -122,84 +120,6 @@
     $: backWindowBgStyle = generateBgStyle($desktopSettings.windows?.back);
     $: backWindowSettings = $desktopSettings.windows?.back;
 
-    // --- Focus Follows Mouse Logic ---
-    let focusTimeoutDesktop = {};
-
-    function handleContentMouseEnter(group) {
-        const settings = get(desktopSettings);
-        if (settings?.focusFollowsMouse && !group.isActive) {
-            focusTimeoutDesktop[group.id] = setTimeout(() => {
-                windows.setActiveWindow(group.id);
-            }, settings.focusDelay);
-        }
-    }
-
-    function handleContentMouseLeave(group) {
-        if (focusTimeoutDesktop[group.id]) {
-            clearTimeout(focusTimeoutDesktop[group.id]);
-            delete focusTimeoutDesktop[group.id];
-        }
-    }
-
-    function handleContentMouseDown(event, group) {
-        if (event.ctrlKey && event.button === 1) { // Ctrl + Middle click
-            event.preventDefault();
-            event.stopPropagation();
-            handleBackRequest(group);
-            return;
-        }
-
-        if ((event.altKey || event.metaKey) && !group.maximized) {
-            // event.preventDefault(); // This can interfere with right-click context menus in some components
-
-            if (event.button === 0) { // Left click for move
-                dragRequest.set({
-                    id: group.id,
-                    type: 'move',
-                    direction: null,
-                    clientX: event.clientX,
-                    clientY: event.clientY,
-                });
-            } else if (event.button === 2) { // Right click for resize
-                const relX = event.clientX - group.x;
-                const relY = event.clientY - group.y;
-
-                let yDir = '';
-                if (relY < group.height / 3) yDir = 'n';
-                else if (relY > (group.height * 2) / 3) yDir = 's';
-
-                let xDir = '';
-                if (relX < group.width / 3) xDir = 'w';
-                else if (relX > (group.width * 2) / 3) xDir = 'e';
-
-                const direction = yDir + xDir;
-
-                if (direction) { // Only trigger resize if not in the center
-                    dragRequest.set({
-                        id: group.id,
-                        type: 'resize',
-                        direction: direction,
-                        clientX: event.clientX,
-                        clientY: event.clientY,
-                    });
-                }
-            }
-
-        } else if (!group.isActive) {
-            windows.focusWindow(group.id);
-        }
-    }
-
-    function handleContentWheel(event, tab) {
-        if (event.ctrlKey || event.altKey) {
-            event.preventDefault();
-            const zoomStep = 0.1;
-            const delta = event.deltaY < 0 ? zoomStep : -zoomStep;
-            windows.changeTabZoom(tab.group.id, tab.id, delta);
-        }
-    }
-
-
     function handleRightClick(event) {
         // Prevent context menu if panning
         if (isPanning) return;
@@ -221,13 +141,6 @@
     function openSettingsMenu() {
         closeContextMenu();
         newSettings({ sourceEvent: contextMenu.sourceEvent });
-    }
-
-    function handleFocusOut(event, tab) {
-        const contentAreaEl = event.currentTarget;
-        if (contentAreaEl && !contentAreaEl.contains(event.relatedTarget)) {
-            windows.updateTabProps(tab.group.id, tab.id, { lastFocusedElement: event.target });
-        }
     }
 
     // --- Bird's Eye View & Fit/Center Logic ---
@@ -1405,7 +1318,6 @@
         window.removeEventListener('click', closeContextMenu);
         window.removeEventListener('click', closeBackedWindowContextMenu);
         window.removeEventListener('keyup', handleKeyUpForScale);
-        Object.values(focusTimeoutDesktop).forEach(clearTimeout);
         if (saveViewTimeout) clearTimeout(saveViewTimeout);
         if (controlsTimeout) clearTimeout(controlsTimeout);
         window.removeEventListener('mousemove', handleDesktopMouseMove);
@@ -1524,47 +1436,32 @@
         pointer-events: auto; /* Children (boxes, shortcuts) are interactive */
     }
 
-    .windows-layer, .tab-contents-layer {
+    .windows-layer {
         position: absolute;
         top: 0; left: 0;
         width: 100%; height: 100%;
         pointer-events: none;
     }
 
-    .tab-content-wrapper {
-        position: absolute;
-        pointer-events: none;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        border: 1px solid transparent; /* To align with window-frame border */
-        border-radius: 6px;
-        box-sizing: border-box;
-    }
-    .tab-content-wrapper.maximized {
-        border-radius: 0;
-    }
-    .content-area-container {
-        margin-top: 30px; /* title bar height */
-        flex-grow: 1;
-        overflow: auto;
-        padding: 5px;
-        pointer-events: auto;
-        background-color: var(--window-bg);
-    }
     /* Styles for the frameless backed window */
-    .backed-window.tab-content-wrapper {
+    .backed-window {
         pointer-events: auto;
         border: 1px solid var(--border-color);
         box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         background-color: var(--window-bg);
         transition: border-color 0.1s ease-in-out, box-shadow 0.1s ease-in-out, opacity 0.2s ease-in-out;
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border-radius: 6px;
+        box-sizing: border-box;
     }
-    .backed-window.tab-content-wrapper.selected {
+    .backed-window.selected {
         border-color: rgba(52, 152, 219, 0.7);
         box-shadow: 0 5px 15px rgba(0,0,0,0.3), 0 0 8px rgba(52, 152, 219, 0.6);
     }
-    .backed-window.tab-content-wrapper.interactive {
+    .backed-window.interactive {
         border-color: #f39c12;
         box-shadow: 0 5px 15px rgba(0,0,0,0.3), 0 0 8px rgba(243, 156, 18, 0.8);
     }
@@ -1762,7 +1659,7 @@
                         {#if Component}
                             {@const tabProps = { ...activeTabConfig, id: activeTabConfig.originalId, groupId: bw.id, isActive: false, isBacked: true, x: bw.x, y: bw.y, width: bw.width, height: bw.height }}
                             <div
-                                class="tab-content-wrapper backed-window"
+                                class="backed-window"
                                 class:selected={isSelected}
                                 class:interactive={bw.id === interactiveBackedWindowId}
                                 data-id={bw.id}
@@ -1813,53 +1710,6 @@
         <div class="windows-layer">
             {#each $windows as win (win.id)}
                 <Window {...win} on:backrequest={() => handleBackRequest(win)} />
-            {/each}
-        </div>
-
-        <div class="tab-contents-layer">
-            {#each $windows.flatMap(w => w.tabs.map(t => ({...t, group: w}))) as tab (tab.id)}
-                {@const group = tab.group}
-                {@const state = group.isActive ? 'active' : 'inactive'}
-                {@const sceneSettings = $desktopSettings.windows?.normal?.scene?.[state]}
-                <div
-                    class="tab-content-wrapper"
-                    class:maximized={group.maximized}
-                    style:display={(tab.id === group.activeTabId && !group.minimized) ? 'flex' : 'none'}
-                    style:left="{group.x}px"
-                    style:top="{group.y}px"
-                    style:width="{group.width}px"
-                    style:height="{group.height}px"
-                    style:z-index="{tab.isSettingsModalOpen ? group.zIndex + 1 : group.zIndex - 1}"
-                    on:focusout={e => handleFocusOut(e, tab)}
-                    on:contextmenu|preventDefault|stopPropagation
-                >
-                    <div
-                        class="content-area-container"
-                        style:pointer-events={$desktopInteraction || $dragState || group.cloaked ? 'none' : null}
-                        style:background={generateBgStyle(sceneSettings)}
-                        style:opacity={sceneSettings?.opacity ?? 1.0}
-                        on:mouseenter={() => handleContentMouseEnter(group)}
-                        on:mouseleave={() => handleContentMouseLeave(group)}
-                        on:mousedown={e => handleContentMouseDown(e, group)}
-                        on:wheel={e => handleContentWheel(e, tab)}
-                    >
-                        <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
-                            <svelte:component
-                                bind:this={componentInstances[tab.id]}
-                                this={tab.component}
-                                {...tab}
-                                groupId={group.id}
-                                id={tab.id}
-                                isActive={group.isActive && tab.id === group.activeTabId}
-                                x={group.x} y={group.y} width={group.width} height={group.height}
-                                maximized={group.maximized}
-                            />
-                            {#if componentInstances[tab.id]}
-                                <InstanceRegistrar tabId={tab.id} instance={componentInstances[tab.id]} />
-                            {/if}
-                        </div>
-                    </div>
-                </div>
             {/each}
         </div>
     </div>
