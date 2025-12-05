@@ -32,6 +32,28 @@
         }
     }
 
+    function generateBgStyle(bgSettings) {
+        if (!bgSettings) return null;
+        if (bgSettings.bgType === 'gradient') {
+            return `linear-gradient(45deg, ${bgSettings.bgGradientStart} 0%, ${bgSettings.bgGradientEnd} 100%)`;
+        } else if (bgSettings.bgType === 'color') {
+            return bgSettings.bgColor;
+        } else if (bgSettings.bgType === 'image' && bgSettings.bgImage) {
+            let size = 'cover';
+            let repeat = 'no-repeat';
+            let position = 'center center';
+
+            switch (bgSettings.bgImageDisplayMode) {
+                case 'contain': size = 'contain'; break;
+                case 'stretch': size = '100% 100%'; break;
+                case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
+                case 'cover': default: break;
+            }
+            return `url('${bgSettings.bgImage}') ${position} / ${size} ${repeat}`;
+        }
+        return null;
+    }
+
     // Elements for layout calculation
     let leftSectionEl, centerSectionEl, rightSectionEl;
 
@@ -282,18 +304,12 @@
             const newX = dragInfo.initialWinX + dx / view.zoom;
             const newY = dragInfo.initialWinY + dy / view.zoom;
 
-            windows.update(wins => wins.map(w => {
-                if (w.id === dragInfo.win.id) {
-                    return {
-                        ...w,
-                        x: newX,
-                        y: newY,
-                        maximized: false,
-                        minimized: false // Fix #1: Ensure window is not minimized when dragged
-                    };
-                }
-                return w;
-            }));
+            windows.updateWindowProps(dragInfo.win.id, {
+                x: newX,
+                y: newY,
+                maximized: false,
+                minimized: false // Ensure window is not minimized when dragged
+            });
         }
     }
 
@@ -396,7 +412,7 @@
     .taskbar { height: var(--tb-height, 40px); display: flex; align-items: center; justify-content: space-between; padding: 0 10px; flex-shrink: 0; position: relative; }
     .taskbar-left, .taskbar-right { display: flex; align-items: center; gap: 8px; position: relative; z-index: 10; }
     .taskbar-center { position: absolute; left: 50%; transform: translateX(-50%); z-index: 10; }
-    .task-item { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; cursor: pointer; max-width: 250px; position: absolute; transition: left 0.3s ease-out, top 0.3s ease-out, border-color 0.2s ease-in-out; z-index: 1; display: flex; align-items: center; justify-content: center; }
+    .task-item { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; cursor: pointer; max-width: 250px; position: absolute; transition: left 0.3s ease-out, top 0.3s ease-out, border-color 0.2s ease-in-out, box-shadow 0.4s ease-in-out; z-index: 1; display: flex; align-items: center; justify-content: center; }
     .task-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .task-item.minimized { font-style: italic; opacity: 0.7; }
     .task-item.active { border-bottom: 2px solid #27c93f; padding-bottom: 1px; z-index: 2; }
@@ -483,6 +499,14 @@
         {@const activeIndex = win.tabs.indexOf(activeTab)}
         {@const beforeTabs = win.tabs.slice(0, activeIndex)}
         {@const afterTabs = win.tabs.slice(activeIndex + 1)}
+        {@const state = win.isActive ? 'active' : 'inactive'}
+        {@const frameSettings = $desktopSettings?.windows?.normal?.frame?.[state]}
+        {@const frameStyle = frameSettings ? generateBgStyle(frameSettings) : null}
+        {@const frameOpacity = frameSettings?.opacity ?? 1.0}
+        {@const frameHeight = frameSettings?.height ?? 30}
+        {@const boxShadowStyle = win.cloaked ? 'none' : (frameSettings?.shadowEnabled
+            ? `${frameSettings.shadowInset ? 'inset ' : ''}${frameSettings.shadowX}px ${frameSettings.shadowY}px ${frameSettings.shadowBlur}px ${frameSettings.shadowSpread}px ${frameSettings.shadowColor}`
+            : 'none')}
         <button
             class="task-item"
             class:minimized={win.minimized}
@@ -496,7 +520,7 @@
             }}
             on:dblclick={() => windows.toggleMaximize(win.id)}
             use:measure={win.id}
-            style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'}; top: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].top + 'px' : '-9999px'}; --notice-color: {win.notice?.color};"
+            style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'}; top: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].top + 'px' : '-9999px'}; --notice-color: {win.notice?.color}; background: {frameStyle}; opacity: {frameOpacity}; box-shadow: {boxShadowStyle}; min-height: {frameHeight}px;"
         >
             {#if win.tabs.length > 1}
                 <div class="task-item-layout">
