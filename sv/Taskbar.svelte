@@ -412,7 +412,7 @@
     .taskbar { height: var(--tb-height, 40px); display: flex; align-items: center; justify-content: space-between; padding: 0 10px; flex-shrink: 0; position: relative; }
     .taskbar-left, .taskbar-right { display: flex; align-items: center; gap: 8px; position: relative; z-index: 10; }
     .taskbar-center { position: absolute; left: 50%; transform: translateX(-50%); z-index: 10; }
-    .task-item { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; cursor: pointer; max-width: 250px; position: absolute; transition: left 0.3s ease-out, top 0.3s ease-out, border-color 0.2s ease-in-out, box-shadow 0.4s ease-in-out; z-index: 1; display: flex; align-items: center; justify-content: center; }
+    .task-item { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); border: 1px solid var(--frame-border-color, var(--border-color)); border-radius: 4px; padding: 2px 5px; cursor: pointer; max-width: 250px; position: absolute; transition: left 0.3s ease-out, top 0.3s ease-out, border-color 0.2s ease-in-out; z-index: 1; display: flex; align-items: center; justify-content: center; }
     .task-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .task-item.minimized { font-style: italic; opacity: 0.7; }
     .task-item.active { border-bottom: 2px solid #27c93f; padding-bottom: 1px; z-index: 2; }
@@ -502,11 +502,7 @@
         {@const state = win.isActive ? 'active' : 'inactive'}
         {@const frameSettings = $desktopSettings?.windows?.normal?.frame?.[state]}
         {@const frameStyle = frameSettings ? generateBgStyle(frameSettings) : null}
-        {@const frameOpacity = frameSettings?.opacity ?? 1.0}
-        {@const frameHeight = frameSettings?.height ?? 30}
-        {@const boxShadowStyle = win.cloaked ? 'none' : (frameSettings?.shadowEnabled
-            ? `${frameSettings.shadowInset ? 'inset ' : ''}${frameSettings.shadowX}px ${frameSettings.shadowY}px ${frameSettings.shadowBlur}px ${frameSettings.shadowSpread}px ${frameSettings.shadowColor}`
-            : 'none')}
+        {@const borderColor = !win.cloaked && frameSettings?.shadowEnabled ? frameSettings.shadowColor : null}
         <button
             class="task-item"
             class:minimized={win.minimized}
@@ -520,7 +516,7 @@
             }}
             on:dblclick={() => windows.toggleMaximize(win.id)}
             use:measure={win.id}
-            style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'}; top: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].top + 'px' : '-9999px'}; --notice-color: {win.notice?.color}; background: {frameStyle}; opacity: {frameOpacity}; box-shadow: {boxShadowStyle}; min-height: {frameHeight}px;"
+            style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'}; top: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].top + 'px' : '-9999px'}; --notice-color: {win.notice?.color}; background: {frameStyle}; {borderColor ? `--frame-border-color: ${borderColor};` : ''}"
         >
             {#if win.tabs.length > 1}
                 <div class="task-item-layout">
