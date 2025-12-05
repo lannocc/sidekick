@@ -83,9 +83,6 @@
     }
 
     function getIdealButtonLeft(win, buttonWidth) {
-        if (win.maximized) {
-            return screenWidth / 2 - buttonWidth / 2;
-        }
         // Convert window "world" coordinates to "screen" coordinates using windowView
         const screenWinX = win.x * $windowView.zoom + $windowView.panX;
         const screenWinWidth = win.width * $windowView.zoom;
@@ -102,9 +99,11 @@
     }
 
     function getIdealButtonTop(win, buttonHeight) {
-        const th = get(desktopSettings).sky.frame.height || 40;
+        const frameSettings = get(desktopSettings).sky?.frame;
+        const th = frameSettings?.height ?? 40;
+        const bottomFrameHeight = frameSettings?.width ?? 0;
         const screenWinY = win.y * $windowView.zoom + $windowView.panY;
-        const screenDesktopHeight = window.innerHeight - th;
+        const screenDesktopHeight = window.innerHeight - th - bottomFrameHeight;
         
         const progress = Math.max(0, Math.min(1, screenWinY / screenDesktopHeight));
         const availableSpace = th - buttonHeight;
@@ -253,17 +252,17 @@
             const newX = dragInfo.initialWinX + dx / view.zoom;
             const newY = dragInfo.initialWinY + dy / view.zoom;
 
-            windows.update(wins => {
-                const targetWin = wins.find(w => w.id === dragInfo.win.id);
-                if (targetWin) {
-                    targetWin.x = newX;
-                    targetWin.y = newY;
-                    if (targetWin.maximized) {
-                        targetWin.maximized = false;
-                    }
+            windows.update(wins => wins.map(w => {
+                if (w.id === dragInfo.win.id) {
+                    return {
+                        ...w,
+                        x: newX,
+                        y: newY,
+                        maximized: false
+                    };
                 }
-                return wins;
-            });
+                return w;
+            }));
         }
     }
 
