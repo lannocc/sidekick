@@ -105,6 +105,7 @@
     function handleContentMouseDown(event) {
         if (event.button === 1 && !maximized) {
             handleMiddleClick(event);
+            event.stopPropagation();
             return;
         }
 
@@ -488,6 +489,7 @@
                 return;
             }
             handleMiddleClick(event);
+            event.stopPropagation();
             return;
         }
         
@@ -520,6 +522,7 @@
                 return;
             }
             handleMiddleClick(event);
+            event.stopPropagation();
             return;
         }
 
