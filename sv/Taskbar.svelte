@@ -3,11 +3,12 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { onMount, onDestroy } from 'svelte';
+    import { onMount, onDestroy, getContext } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter } from './windows.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings } from './desktop.js';
     import { createBox, connectionStatus } from './local.js';
     import Clock from './Clock.svelte';
+    import { get } from 'svelte/store';
 
     let showMenu = false; // For Start menu
     let startButton;
@@ -16,42 +17,18 @@
     let windowsButton;
     
     let screenWidth;
-    let backgroundStyle = '';
     let menuBackgroundStyle = '';
-
-    desktopSettings.subscribe(settings => {
-        if (!settings.sky?.frame) return;
-        const tb = settings.sky.frame;
-
-        if (tb.bgType === 'gradient') {
-            backgroundStyle = `background: linear-gradient(90deg, ${tb.bgGradientStart} 0%, ${tb.bgGradientEnd} 100%);`;
-        } else if (tb.bgType === 'color') {
-            backgroundStyle = `background: ${tb.bgColor};`;
-        } else if (tb.bgType === 'image' && tb.bgImage) {
-            let size = 'cover';
-            let repeat = 'no-repeat';
-            let position = 'center center';
-            switch (tb.bgImageDisplayMode) {
-                case 'contain': size = 'contain'; break;
-                case 'stretch': size = '100% 100%'; break;
-                case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
-                case 'cover': default: break;
-            }
-            backgroundStyle = `background: url('${tb.bgImage}') ${position} / ${size} ${repeat};`;
+    
+    $: tbSettings = $desktopSettings.sky?.frame;
+    $: if (tbSettings) {
+        if (tbSettings.bgType === 'color') {
+            menuBackgroundStyle = `background-color: ${tbSettings.bgColor};`;
+        } else if (tbSettings.bgType === 'gradient') {
+            menuBackgroundStyle = `background-color: ${tbSettings.bgGradientStart};`;
         } else {
-            backgroundStyle = ''; // Fallback to CSS
+            menuBackgroundStyle = `background-color: ${tbSettings.bgColor};`;
         }
-        
-        // For menus
-        if (tb.bgType === 'color') {
-            menuBackgroundStyle = `background-color: ${tb.bgColor};`;
-        } else if (tb.bgType === 'gradient') {
-            menuBackgroundStyle = `background-color: ${tb.bgGradientStart};`;
-        } else {
-            // For image, use the solid color as fallback for menus
-            menuBackgroundStyle = `background-color: ${tb.bgColor};`;
-        }
-    });
+    }
 
     // Elements for layout calculation
     let leftSectionEl, centerSectionEl, rightSectionEl;
@@ -195,6 +172,26 @@
         createBox(name, 'local', context);
     }
 
+    let lastCloakPresence = 100; // Default to 100% if toggled on from 0
+    function toggleCloak(event) {
+        if (event.target !== event.currentTarget) return; // Only trigger on empty space
+        const currentSettings = get(desktopSettings);
+        const cloak = currentSettings.sky.cloak;
+        if (cloak.opacity > 0) {
+            lastCloakPresence = Math.round(cloak.opacity * 100);
+            desktopSettings.update(s => {
+                s.sky.cloak.opacity = 0;
+                return s;
+            });
+        } else {
+            const presenceToRestore = lastCloakPresence > 0 ? lastCloakPresence : 100;
+            desktopSettings.update(s => {
+                s.sky.cloak.opacity = presenceToRestore / 100;
+                return s;
+            });
+        }
+    }
+
     onMount(() => window.addEventListener('click', handleWindowClick));
     onDestroy(() => window.removeEventListener('click', handleWindowClick));
 </script>
@@ -206,7 +203,7 @@
     .task-item.noticing {
         animation: notice-glow 1.2s ease-in-out;
     }
-    .taskbar { height: 40px; background-color: var(--taskbar-bg); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 10px; flex-shrink: 0; position: relative; z-index: 20000; }
+    .taskbar { height: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; flex-shrink: 0; position: relative; }
     .taskbar-left, .taskbar-right { display: flex; align-items: center; gap: 8px; position: relative; z-index: 10; }
     .taskbar-center { position: absolute; left: 50%; transform: translateX(-50%); z-index: 10; }
     .task-item { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; cursor: pointer; max-width: 250px; position: absolute; top: 50%; transform: translateY(-50%); transition: left 0.3s ease-out, border-color 0.2s ease-in-out; z-index: 1; display: flex; align-items: center; justify-content: center; }
@@ -258,7 +255,7 @@
 
 <svelte:window bind:innerWidth={screenWidth} />
 
-<div class="taskbar" style={backgroundStyle}>
+<div class="taskbar" on:dblclick={toggleCloak}>
     <div class="taskbar-left" bind:this={leftSectionEl}>
         <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">&mdash;</button>
         <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>W~</button>

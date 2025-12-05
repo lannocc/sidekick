@@ -37,6 +37,13 @@
     $: cloakOpacity = cloakSettings?.opacity ?? 0;
     $: cloakVisible = cloakOpacity > 0;
 
+    // Frame settings
+    $: frameSettings = $desktopSettings.sky?.frame;
+    $: frameStyle = frameSettings ? generateBgStyle(frameSettings) : '';
+    $: frameOpacity = frameSettings?.opacity ?? 1;
+    $: frameHeight = frameSettings?.height ?? 40;
+    $: frameWidth = frameSettings?.width ?? 0;
+
     function handleKeyDown(e) {
         // Tab switching with Alt/Ctrl + Number
         const numericKey = parseInt(e.key, 10);
@@ -135,6 +142,23 @@
         height: 100vh;
         width: 100vw;
     }
+    .top-frame {
+        position: relative;
+        z-index: 20000;
+        flex-shrink: 0;
+    }
+    .desktop-wrapper {
+        flex-grow: 1;
+        display: flex;
+        overflow: hidden;
+    }
+    .desktop-area {
+        flex-grow: 1;
+        position: relative;
+    }
+    .side-frame, .bottom-frame {
+        flex-shrink: 0;
+    }
     .sky-cloak {
         position: fixed;
         top: 0;
@@ -149,7 +173,17 @@
 {#if cloakVisible}
     <div class="sky-cloak" style="opacity: {cloakOpacity}; background: {cloakStyle};"></div>
 {/if}
+
 <div class="sk-container" on:contextmenu|preventDefault>
-    <Taskbar />
-    <Desktop />
+    <div class="top-frame" style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity};">
+        <Taskbar />
+    </div>
+    <div class="desktop-wrapper">
+        <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+        <div class="desktop-area">
+            <Desktop />
+        </div>
+        <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+    </div>
+    <div class="bottom-frame" style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
 </div>

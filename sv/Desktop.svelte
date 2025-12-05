@@ -28,6 +28,9 @@
     let innerWidth, innerHeight;
     let totalContentBounds;
 
+    let taskbarHeight;
+    $: taskbarHeight = $desktopSettings.sky?.frame?.height ?? TASKBAR_HEIGHT;
+
     // --- Backed Window Interaction State ---
     let interactiveBackedWindowId = null;
 
@@ -113,7 +116,9 @@
         return null;
     }
 
-    $: backgroundStyle = generateBgStyle($desktopSettings.sky?.scene);
+    $: sceneSettings = $desktopSettings.sky?.scene;
+    $: backgroundStyle = generateBgStyle(sceneSettings);
+    $: sceneOpacity = sceneSettings?.opacity ?? 1.0;
     $: normalWindowBgStyle = generateBgStyle($desktopSettings.windows?.normal?.scene);
     $: backWindowBgStyle = generateBgStyle($desktopSettings.windows?.back);
     $: backWindowSettings = $desktopSettings.windows?.back;
@@ -245,7 +250,7 @@
         ...($boxes || []).map(b => {
             const BASE_WIDTH = 180;
             const scale = b.scale ?? 1.0;
-            const desktopHeight = innerHeight - TASKBAR_HEIGHT;
+            const desktopHeight = innerHeight - taskbarHeight;
 
             // Use stored aspect ratio if available, otherwise calculate dynamically as a fallback.
             const dynamicAspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
@@ -762,7 +767,7 @@
             sourceItem.height = unscaledHeight * newScale;
         } else if (type === 'box') {
             const BASE_WIDTH = 180;
-            const desktopHeight = innerHeight - TASKBAR_HEIGHT;
+            const desktopHeight = innerHeight - taskbarHeight;
             // Use stored aspect ratio from the item being scaled.
             const dynamicAspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
             const aspectRatio = sourceItem.aspect_ratio ?? dynamicAspectRatio;
@@ -893,7 +898,7 @@
         const { panX, panY, zoom } = get(desktopView);
         dragStartData.mouse = {
             x: (event.clientX - panX) / zoom,
-            y: ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom
+            y: ((event.clientY - taskbarHeight) - panY) / zoom
         };
 
         dragStartData.items.clear();
@@ -1045,7 +1050,7 @@
         const { panX, panY, zoom } = get(desktopView);
         const mouseNow = {
             x: (event.clientX - panX) / zoom,
-            y: ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom
+            y: ((event.clientY - taskbarHeight) - panY) / zoom
         };
         const dx = mouseNow.x - dragStartData.mouse.x;
         const dy = mouseNow.y - dragStartData.mouse.y;
@@ -1145,9 +1150,9 @@
 
         const { panX, panY, zoom } = get(desktopView);
         const x1 = (Math.min(selectionRect.x1, selectionRect.x2) - panX) / zoom;
-        const y1 = ((Math.min(selectionRect.y1, selectionRect.y2) - TASKBAR_HEIGHT) - panY) / zoom;
+        const y1 = ((Math.min(selectionRect.y1, selectionRect.y2) - taskbarHeight) - panY) / zoom;
         const x2 = (Math.max(selectionRect.x1, selectionRect.x2) - panX) / zoom;
-        const y2 = ((Math.max(selectionRect.y1, selectionRect.y2) - TASKBAR_HEIGHT) - panY) / zoom;
+        const y2 = ((Math.max(selectionRect.y1, selectionRect.y2) - taskbarHeight) - panY) / zoom;
 
         const currentlySelected = get(selectedItems);
         const newlySelected = new Set(currentlySelected);
@@ -1292,7 +1297,7 @@
         const iconWidth = 80 / 2;
         const iconHeight = 64 / 2;
         const worldX = ((event.clientX - panX) / zoom) - iconWidth;
-        const worldY = (((event.clientY - TASKBAR_HEIGHT) - panY) / zoom) - iconHeight;
+        const worldY = (((event.clientY - taskbarHeight) - panY) / zoom) - iconHeight;
 
         if (shortcutMoveData) {
             try {
@@ -1433,11 +1438,14 @@
         position: relative;
         width: 100%;
         overflow: hidden;
-        /* Default background color */
         background-color: var(--background-color);
-        /* Dynamic background is applied via style attribute */
+    }
+    .desktop-background {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
         background-position: center;
-        transition: background 0.5s ease-in-out;
+        transition: background 0.5s ease-in-out, opacity 0.5s ease-in-out;
+        z-index: -1;
     }
     .desktop.dash-active .desktop-content {
         /* Hide windows without unmounting components, preserving their state */
@@ -1741,8 +1749,8 @@
     }}
 />
 
-<div class="desktop" class:dash-active={$dashActive} style:background={backgroundStyle} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
-
+<div class="desktop" class:dash-active={$dashActive} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
+    <div class="desktop-background" style:background={backgroundStyle} style:opacity={sceneOpacity}></div>
     <!-- BACK LAYER -->
     <div class="desktop-content back-layer" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
         {#if $connectionStatus === 'connected'}

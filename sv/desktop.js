@@ -13,6 +13,7 @@ function loadSettings() {
                 bgGradientEnd: '#46627f',
                 bgImage: '',
                 bgImageDisplayMode: 'cover', // 'cover', 'contain', 'stretch', 'tile'
+                opacity: 1.0,
             },
             frame: {
                 bgType: 'color',
@@ -21,6 +22,9 @@ function loadSettings() {
                 bgGradientEnd: '#46627f',
                 bgImage: '',
                 bgImageDisplayMode: 'cover',
+                opacity: 1.0,
+                height: 40,
+                width: 0,
             },
             cloak: {
                 bgType: 'color',
