@@ -838,11 +838,12 @@
     }
 
     function handleItemMouseDown(event, itemEl) {
-        desktopInteraction.set(true);
         const id = itemEl.dataset.id;
         const type = itemEl.dataset.type;
         const uniqueId = `${type}-${id}`;
+        const isInteractive = type === 'backed_window' && parseInt(id, 10) === interactiveBackedWindowId;
 
+        // This action should work regardless of interactive state
         if (type === 'backed_window' && event.shiftKey && event.button === 1) { // Shift + Middle click
             event.preventDefault();
             event.stopPropagation();
@@ -853,7 +854,19 @@
             return;
         }
 
-        if (event.button !== 0) return;
+        // If the window is already interactive, let its content handle the event.
+        if (isInteractive) {
+            return;
+        }
+
+        // --- From here, we know it's a desktop-level interaction ---
+        desktopInteraction.set(true);
+
+        if (event.button !== 0) {
+            desktopInteraction.set(false); // Reset and exit, as mouseup handler won't be attached.
+            return;
+        }
+
         event.preventDefault(); // Prevent text selection, etc.
         event.stopPropagation();
 
@@ -870,11 +883,6 @@
             });
         } else if (!get(selectedItems).has(uniqueId)) {
             selectedItems.set(new Set([uniqueId]));
-        }
-
-        // If the item is an interactive backed window, do not proceed to the dragging logic.
-        if (type === 'backed_window' && parseInt(id, 10) === interactiveBackedWindowId) {
-            return;
         }
 
         // Prepare for dragging
