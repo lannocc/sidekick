@@ -103,7 +103,7 @@
     // --- Content Area Logic (Moved from Desktop.svelte) ---
     let componentInstances = {};
     function handleContentMouseDown(event) {
-        if (event.button === 1 && !maximized) {
+        if (event.button === 1) {
             handleMiddleClick(event);
             event.stopPropagation();
             return;
@@ -465,6 +465,7 @@
         const onMove = () => {
             clearTimeout(middleClickTimeout);
             middleClickTimeout = null;
+            if (maximized) return;
             if (event.target.closest('.content-area-container')) {
                 dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY });
             } else {
@@ -481,7 +482,7 @@
     }
 
     function handleFrameMouseDown(event) {
-        if (event.button === 1 && !maximized) {
+        if (event.button === 1) {
             if (event.ctrlKey) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -514,7 +515,7 @@
             return;
         }
         
-        if (event.button === 1 && !maximized) {
+        if (event.button === 1) {
             if (event.ctrlKey) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -598,6 +599,7 @@
         height: 100% !important;
     }
     .window-frame.maximized .resize-handle { display: none; }
+    .window-frame.maximized .title-bar { cursor: default; }
     .title-bar {
         flex-shrink: 0;
         color: var(--title-bar-text);
