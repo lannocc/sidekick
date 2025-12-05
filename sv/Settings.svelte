@@ -367,8 +367,8 @@
 <div class="settings-container">
     <div class="tabs">
         <button class="tab-button" class:active={activeTab === 'sky'} on:click={() => activeTab = 'sky'}>Sky</button>
-        <button class="tab-button" class:active={activeTab === 'boxes'} on:click={() => activeTab = 'boxes'}>Boxes</button>
-        <button class="tab-button" class:active={activeTab === 'windows'} on:click={() => activeTab = 'windows'}>Windows</button>
+        <button class="tab-button" class:active={activeTab === 'boxes'} on:click={() => activeTab = 'boxes'}>Box</button>
+        <button class="tab-button" class:active={activeTab === 'windows'} on:click={() => activeTab = 'windows'}>Board</button>
         <button class="tab-button" class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
     </div>
 
