@@ -151,7 +151,7 @@
         }
 
         if ((event.altKey || event.metaKey) && !group.maximized) {
-            event.preventDefault();
+            // event.preventDefault(); // This can interfere with right-click context menus in some components
 
             if (event.button === 0) { // Left click for move
                 dragRequest.set({
@@ -629,21 +629,19 @@
 
     function handleMinimapMouseMove(event) {
         if (!isMinimapDragging) return;
-        wasMinimapDragging = true; // Any move is a drag
         showControls(); // Keep controls visible while dragging
+        wasMinimapDragging = true; // Any move is a drag
 
         const dx = event.clientX - minimapLastPos.x;
         const dy = event.clientY - minimapLastPos.y;
 
         if (minimapScale > 0) {
+            const frontZoom = get(windowView).zoom;
+            const backZoom = get(desktopView).zoom;
+
             if (displayViewControlMode === 'back' || displayViewControlMode === 'both') {
-                // When in 'both' mode, the minimap is normalized to the front view's coordinate space.
-                // To maintain relative positioning while panning, the pan delta for the back layer must
-                // be calculated using the front layer's zoom as the reference.
-                // When in 'back' only mode, we use its own zoom.
-                const zoomForBackPan = displayViewControlMode === 'both' ? $windowView.zoom : $desktopView.zoom;
-                const panDx = -(dx / minimapScale) * zoomForBackPan;
-                const panDy = -(dy / minimapScale) * zoomForBackPan;
+                const panDx = -(dx / minimapScale) * frontZoom;
+                const panDy = -(dy / minimapScale) * frontZoom;
 
                 desktopView.update(view => ({ ...view, panX: view.panX + panDx, panY: view.panY + panDy }));
             }
@@ -833,7 +831,7 @@
 
         if (targetItemEl) {
             handleItemMouseDown(event, targetItemEl);
-        } else if (event.target.classList.contains('desktop')) {
+        } else if (event.target.classList.contains('desktop-background')) {
             if (event.button === 1) { // Middle mouse for panning
                 handleDesktopPanStart(event);
             } else if (event.button === 0) { // Left mouse for selection
@@ -1200,7 +1198,7 @@
 
     function handleDesktopPanStart(event) {
         if (isDesktopEmpty) return;
-        if (event.target !== event.currentTarget) return;
+        // The check for the correct target is now in handleGlobalMouseDown
         desktopInteraction.set(true);
         isPanning = true;
         wasPanning = false;
@@ -1213,8 +1211,8 @@
 
     function handleDesktopMouseMove(event) {
         if (!isPanning) return;
-        wasPanning = true; // If we move, it's a pan
         showControls();
+        wasPanning = true; // If we move, it's a pan
 
         const dx = event.clientX - lastMousePos.x;
         const dy = event.clientY - lastMousePos.y;
@@ -1247,8 +1245,8 @@
 
     function handleDesktopWheel(event) {
         if (isDesktopEmpty) return;
-        // Only zoom if scrolling on the desktop background itself
-        if (event.target !== event.currentTarget) return;
+        // Only zoom if scrolling on the desktop background itself, not on window content etc.
+        if (!event.target.classList.contains('desktop-background')) return;
 
         event.preventDefault();
         showControls();
@@ -1439,7 +1437,6 @@
         width: 100%;
         height: 100%;
         overflow: hidden;
-        background-color: var(--background-color);
     }
     .desktop-background {
         position: absolute;
@@ -1447,6 +1444,8 @@
         background-position: center;
         transition: background 0.5s ease-in-out, opacity 0.5s ease-in-out;
         z-index: -1;
+        /* Fallback background color */
+        background-color: var(--background-color);
     }
     .desktop.dash-active .desktop-content {
         /* Hide windows without unmounting components, preserving their state */
@@ -1751,7 +1750,7 @@
 />
 
 <div class="desktop" class:dash-active={$dashActive} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
-    <div class="desktop-background" style:background={backgroundStyle} style:opacity={sceneOpacity}></div>
+    <div class="desktop-background" style:background={backgroundStyle || ''} style:opacity={sceneOpacity}></div>
     <!-- BACK LAYER -->
     <div class="desktop-content back-layer" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
         {#if $connectionStatus === 'connected'}

@@ -167,6 +167,7 @@
         height: 100vh;
         z-index: 30000;
         pointer-events: none;
+        transition: opacity 0.3s ease-in-out;
     }
 </style>
 
