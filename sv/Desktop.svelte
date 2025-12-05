@@ -23,8 +23,9 @@
     });
     // windowView is initialized in desktop.js
 
-    let innerWidth, innerHeight;
+    let innerWidth, innerHeight, desktopWidth, desktopHeight;
     let totalContentBounds;
+    let desktopEl;
 
     let taskbarHeight;
     $: taskbarHeight = $desktopSettings.sky?.frame?.height ?? TASKBAR_HEIGHT;
@@ -162,10 +163,9 @@
         ...($boxes || []).map(b => {
             const BASE_WIDTH = 180;
             const scale = b.scale ?? 1.0;
-            const desktopHeight = innerHeight - taskbarHeight;
 
             // Use stored aspect ratio if available, otherwise calculate dynamically as a fallback.
-            const dynamicAspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
+            const dynamicAspectRatio = (desktopHeight > 0 && desktopWidth > 0) ? desktopHeight / desktopWidth : 0;
             const aspectRatio = b.aspect_ratio ?? dynamicAspectRatio;
 
             const boxWidth = BASE_WIDTH * scale;
@@ -248,15 +248,15 @@
             (-$windowView.panY / $windowView.zoom) :
             (-$desktopView.panY / $desktopView.zoom)
         ) - totalContentBounds.y) * minimapScale,
-        width: ((displayViewControlMode === 'both' && $windowView.zoom > 0 ? innerWidth / $windowView.zoom : innerWidth / $desktopView.zoom)) * minimapScale,
-        height: ((displayViewControlMode === 'both' && $windowView.zoom > 0 ? innerHeight / $windowView.zoom : innerHeight / $desktopView.zoom)) * minimapScale
+        width: ((displayViewControlMode === 'both' && $windowView.zoom > 0 ? desktopWidth / $windowView.zoom : desktopWidth / $desktopView.zoom)) * minimapScale,
+        height: ((displayViewControlMode === 'both' && $windowView.zoom > 0 ? desktopHeight / $windowView.zoom : desktopHeight / $desktopView.zoom)) * minimapScale
     } : { x: 0, y: 0, width: 0, height: 0 };
 
     $: frontViewportRect = totalContentBounds && totalContentBounds.defined && $windowView.zoom > 0 ? {
         x: ((-$windowView.panX / $windowView.zoom) - totalContentBounds.x) * minimapScale,
         y: ((-$windowView.panY / $windowView.zoom) - totalContentBounds.y) * minimapScale,
-        width: (innerWidth / $windowView.zoom) * minimapScale,
-        height: (innerHeight / $windowView.zoom) * minimapScale
+        width: (desktopWidth / $windowView.zoom) * minimapScale,
+        height: (desktopHeight / $windowView.zoom) * minimapScale
     } : { x: 0, y: 0, width: 0, height: 0 };
 
 
@@ -321,8 +321,8 @@
             if (newZoom === view.zoom) return view;
 
             // Zoom towards center of the screen
-            const centerX = window.innerWidth / 2;
-            const centerY = window.innerHeight / 2;
+            const centerX = desktopWidth / 2;
+            const centerY = desktopHeight / 2;
 
             const mouseWorldX = (centerX - view.panX) / view.zoom;
             const mouseWorldY = (centerY - view.panY) / view.zoom;
@@ -361,8 +361,8 @@
             if (view.zoom === 1.0) return view;
             const newZoom = 1.0;
 
-            const centerX = window.innerWidth / 2;
-            const centerY = window.innerHeight / 2;
+            const centerX = desktopWidth / 2;
+            const centerY = desktopHeight / 2;
 
             const mouseWorldX = (centerX - view.panX) / view.zoom;
             const mouseWorldY = (centerY - view.panY) / view.zoom;
@@ -439,7 +439,7 @@
     }
 
     $: targetFitView = (() => {
-        if (!totalContentBounds.defined || minimapItems.length === 0) {
+        if (!totalContentBounds.defined || minimapItems.length === 0 || !desktopWidth) {
             return { panX: 0, panY: 0, zoom: 1.0 };
         }
 
@@ -453,8 +453,8 @@
             return { panX: 0, panY: 0, zoom: 1.0 };
         }
 
-        const zoomX = innerWidth / contentWidth;
-        const zoomY = innerHeight / contentHeight;
+        const zoomX = desktopWidth / contentWidth;
+        const zoomY = desktopHeight / contentHeight;
         let newZoom = Math.min(zoomX, zoomY);
 
         newZoom = Math.max(minZoom, Math.min(maxZoom, newZoom)); // Clamp zoom
@@ -462,8 +462,8 @@
         const contentCenterX = bounds.x + bounds.width / 2;
         const contentCenterY = bounds.y + bounds.height / 2;
 
-        const newPanX = (innerWidth / 2) - (contentCenterX * newZoom);
-        const newPanY = (innerHeight / 2) - (contentCenterY * newZoom);
+        const newPanX = (desktopWidth / 2) - (contentCenterX * newZoom);
+        const newPanY = (desktopHeight / 2) - (contentCenterY * newZoom);
 
         return { zoom: newZoom, panX: newPanX, panY: newPanY };
     })();
@@ -600,15 +600,15 @@
                     }
 
                     const view = get(desktopView);
-                    const newPanX = (innerWidth / 2) - (backWorldX * view.zoom);
-                    const newPanY = (innerHeight / 2) - (backWorldY * view.zoom);
+                    const newPanX = (desktopWidth / 2) - (backWorldX * view.zoom);
+                    const newPanY = (desktopHeight / 2) - (backWorldY * view.zoom);
                     desktopView.set({ zoom: view.zoom, panX: newPanX, panY: newPanY });
                     updateDesktopSettings(get(desktopView));
                 }
                 if (displayViewControlMode === 'front' || displayViewControlMode === 'both') {
                     const view = get(windowView);
-                    const newPanX = (innerWidth / 2) - (clickedWorldX * view.zoom);
-                    const newPanY = (innerHeight / 2) - (clickedWorldY * view.zoom);
+                    const newPanX = (desktopWidth / 2) - (clickedWorldX * view.zoom);
+                    const newPanY = (desktopHeight / 2) - (clickedWorldY * view.zoom);
                     windowView.set({ zoom: view.zoom, panX: newPanX, panY: newPanY });
                 }
             }
@@ -677,9 +677,8 @@
             sourceItem.height = unscaledHeight * newScale;
         } else if (type === 'box') {
             const BASE_WIDTH = 180;
-            const desktopHeight = innerHeight - taskbarHeight;
             // Use stored aspect ratio from the item being scaled.
-            const dynamicAspectRatio = (desktopHeight > 0 && innerWidth > 0) ? desktopHeight / innerWidth : 0;
+            const dynamicAspectRatio = (desktopHeight > 0 && desktopWidth > 0) ? desktopHeight / desktopWidth : 0;
             const aspectRatio = sourceItem.aspect_ratio ?? dynamicAspectRatio;
             sourceItem.width = BASE_WIDTH * newScale;
             sourceItem.height = BASE_WIDTH * aspectRatio * newScale;
@@ -1217,8 +1216,8 @@
             const newZoom = Math.max(minZoom, Math.min(maxZoom, currentView.zoom - event.deltaY * zoomFactor));
             if (newZoom === currentView.zoom) return currentView;
 
-            const mouseX = event.clientX;
-            const mouseY = event.clientY;
+            const mouseX = event.offsetX;
+            const mouseY = event.offsetY;
             const mouseWorldX = (mouseX - currentView.panX) / currentView.zoom;
             const mouseWorldY = (mouseY - currentView.panY) / currentView.zoom;
             const newPanX = mouseX - mouseWorldX * newZoom;
@@ -1692,7 +1691,7 @@
     }}
 />
 
-<div class="desktop" class:dash-active={$dashActive} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
+<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
     <div class="desktop-background" style:background={backgroundStyle || ''} style:opacity={sceneOpacity}></div>
     <!-- BACK LAYER -->
     <div class="desktop-content back-layer" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
