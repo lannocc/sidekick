@@ -498,7 +498,21 @@
     .window-frame.noticing {
         animation: notice-glow 1.2s ease-in-out;
     }
-    .window-frame { position: absolute; border: 1px solid var(--border-color); background-color: transparent; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; min-width: 250px; min-height: 150px; transition: border-color 0.2s ease-in-out; pointer-events: auto; box-sizing: border-box; }
+    .window-frame {
+        position: absolute;
+        border: 1px solid var(--border-color);
+        background-color: transparent;
+        border-radius: 6px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        display: flex;
+        flex-direction: column;
+        min-width: 250px;
+        min-height: 150px;
+        pointer-events: auto;
+        box-sizing: border-box;
+        /* --- ANIMATIONS --- */
+        transition: border-color 0.3s ease-in-out, border-radius 0.3s ease-in-out, box-shadow 0.4s ease-in-out;
+    }
     .window-frame.has-custom-frame {
         border: none;
     }
@@ -506,13 +520,28 @@
     .window-frame.minimized { display: none; }
     .window-frame.maximized { border-radius: 0; }
     .window-frame.maximized .resize-handle { display: none; }
-    .title-bar { flex-shrink: 0; color: var(--title-bar-text); display: flex; justify-content: space-between; align-items: center; padding: 0 8px; cursor: move; border-top-left-radius: 5px; border-top-right-radius: 5px; user-select: none; position: relative; pointer-events: auto; transition: background 0.5s ease-in-out, opacity 0.2s ease-in-out; }
+    .title-bar {
+        flex-shrink: 0;
+        color: var(--title-bar-text);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 8px;
+        cursor: move;
+        border-top-left-radius: 5px;
+        border-top-right-radius: 5px;
+        user-select: none;
+        position: relative;
+        pointer-events: auto;
+        /* --- ANIMATIONS --- */
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out, height 0.3s ease-in-out;
+    }
     .window-frame:not(.active) .title-bar { /* background-color: #7f8c8d; */ }
     .title-bar.drop-target::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(52, 152, 219, 0.4); border: 2px dashed #3498db; z-index: 1; pointer-events: none; border-radius: 5px; }
     .title-center { flex-grow: 1; text-align: center; overflow: hidden; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
     .title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 30px; }
     .tabs-container { position: relative; display: flex; }
-    .tab { display: flex; align-items: center; background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; padding: 0 5px; margin-right: 2px; height: 26px; margin-top: auto; max-width: 150px; transition: opacity 0.2s; }
+    .tab { display: flex; align-items: center; background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; padding: 0 5px; margin-right: 2px; height: 26px; margin-top: auto; max-width: 150px; transition: opacity 0.2s, background-color 0.3s; }
     .tab.active {
         background-color: var(--window-bg);
         z-index: 1; /* Bring active tab forward */
@@ -567,11 +596,14 @@
         padding: 5px;
         pointer-events: auto;
         box-sizing: border-box;
+        /* --- ANIMATIONS --- */
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
     }
     .side-frame, .bottom-frame {
         flex-shrink: 0;
         pointer-events: auto;
-        transition: background 0.5s ease-in-out, opacity 0.2s ease-in-out;
+        /* --- ANIMATIONS --- */
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out, width 0.3s ease-in-out, height 0.3s ease-in-out;
     }
     .cloak {
         position: absolute;
@@ -581,8 +613,9 @@
         bottom: 0;
         z-index: 5; /* Above content, below options menu */
         pointer-events: none;
-        transition: opacity 0.3s ease-in-out;
         border-radius: 5px;
+        /* --- ANIMATIONS --- */
+        transition: opacity 0.3s ease-in-out, background 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .resize-handle { position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; cursor: se-resize; pointer-events: auto; }
     .options-menu { position: absolute; top: 35px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 1000; display: flex; flex-direction: column; min-width: 150px; padding: 4px 0; user-select: none; pointer-events: auto; }
