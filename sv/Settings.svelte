@@ -23,6 +23,7 @@
     });
 
     let activeTab = 'general';
+    let activeSkySubTab = 'scene';
     let activeWindowsSubTab = 'normal';
     let activeNormalWindowDetailTab = 'scene';
     let inactiveTransparency, activeTransparency;
@@ -33,6 +34,14 @@
     $: if (settings && settings.boxes) {
         inactiveTransparency = Math.round((1 - (settings.boxes.inactiveOpacity ?? 0.8)) * 100);
         activeTransparency = Math.round((1 - (settings.boxes.activeOpacity ?? 1.0)) * 100);
+    }
+
+    // Ensure the settings object has the required structure for sky
+    $: if (settings && settings.sky) {
+        const sky = settings.sky;
+        for (const part of ['scene', 'frame', 'cloak']) {
+            if (typeof sky[part] !== 'object' || sky[part] === null) sky[part] = {};
+        }
     }
 
     // Ensure the settings object has the required structure for normal windows
@@ -335,61 +344,170 @@
         <button class="tab-button" class:active={activeTab === 'sky'} on:click={() => activeTab = 'sky'}>Sky</button>
         <button class="tab-button" class:active={activeTab === 'boxes'} on:click={() => activeTab = 'boxes'}>Boxes</button>
         <button class="tab-button" class:active={activeTab === 'windows'} on:click={() => activeTab = 'windows'}>Windows</button>
-        <button class="tab-button" class:active={activeTab === 'taskbar'} on:click={() => activeTab = 'taskbar'}>Taskbar</button>
         <button class="tab-button" class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
     </div>
 
     {#if settings}
-        {#if activeTab === 'sky'}
-            <h2>Sky Appearance</h2>
-            <fieldset>
-                <legend>Scene</legend>
-                <div>
-                    <label><input type="radio" bind:group={settings.background.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
-                    {#if settings.background.bgType === 'gradient'}
-                    <div class="options-group">
-                        <label class="color-picker-label">
-                            <span>Start Color</span>
-                            <input type="color" bind:value={settings.background.bgGradientStart} on:input={handleUpdate}>
-                        </label>
-                        <label class="color-picker-label">
-                            <span>End Color</span>
-                            <input type="color" bind:value={settings.background.bgGradientEnd} on:input={handleUpdate}>
-                        </label>
+        {#if activeTab === 'sky' && settings.sky}
+            <div class="sub-tabs">
+                <button class="sub-tab-button" class:active={activeSkySubTab === 'scene'} on:click={() => activeSkySubTab = 'scene'}>Scene</button>
+                <button class="sub-tab-button" class:active={activeSkySubTab === 'frame'} on:click={() => activeSkySubTab = 'frame'}>Frame</button>
+                <button class="sub-tab-button" class:active={activeSkySubTab === 'cloak'} on:click={() => activeSkySubTab = 'cloak'}>Cloak</button>
+            </div>
+
+            {#if activeSkySubTab === 'scene'}
+                <h2>Sky Scene Appearance</h2>
+                <fieldset>
+                    <legend>Background</legend>
+                    <div>
+                        <label><input type="radio" bind:group={settings.sky.scene.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
+                        {#if settings.sky.scene.bgType === 'gradient'}
+                        <div class="options-group">
+                            <label class="color-picker-label">
+                                <span>Start Color</span>
+                                <input type="color" bind:value={settings.sky.scene.bgGradientStart} on:input={handleUpdate}>
+                            </label>
+                            <label class="color-picker-label">
+                                <span>End Color</span>
+                                <input type="color" bind:value={settings.sky.scene.bgGradientEnd} on:input={handleUpdate}>
+                            </label>
+                        </div>
+                        {/if}
                     </div>
-                    {/if}
-                </div>
-                <div>
-                     <label><input type="radio" bind:group={settings.background.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
-                    {#if settings.background.bgType === 'color'}
-                    <div class="options-group">
-                         <label class="color-picker-label">
-                            <span>Color</span>
-                            <input type="color" bind:value={settings.background.bgColor} on:input={handleUpdate}>
-                        </label>
+                    <div>
+                         <label><input type="radio" bind:group={settings.sky.scene.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
+                        {#if settings.sky.scene.bgType === 'color'}
+                        <div class="options-group">
+                             <label class="color-picker-label">
+                                <span>Color</span>
+                                <input type="color" bind:value={settings.sky.scene.bgColor} on:input={handleUpdate}>
+                            </label>
+                        </div>
+                        {/if}
                     </div>
-                    {/if}
-                </div>
-                 <div>
-                    <label><input type="radio" bind:group={settings.background.bgType} value="image" on:change={handleUpdate}> Image</label>
-                    {#if settings.background.bgType === 'image'}
-                    <div class="options-group">
-                        <label>
-                            <input class="text-input" type="text" bind:value={settings.background.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
-                        </label>
-                        <label class="color-picker-label">
-                            <span>Display Mode</span>
-                            <select class="select-input" bind:value={settings.background.bgImageDisplayMode} on:change={handleUpdate}>
-                                <option value="cover">Cover</option>
-                                <option value="contain">Fit</option>
-                                <option value="stretch">Stretch</option>
-                                <option value="tile">Tile</option>
-                            </select>
-                        </label>
+                     <div>
+                        <label><input type="radio" bind:group={settings.sky.scene.bgType} value="image" on:change={handleUpdate}> Image</label>
+                        {#if settings.sky.scene.bgType === 'image'}
+                        <div class="options-group">
+                            <label>
+                                <input class="text-input" type="text" bind:value={settings.sky.scene.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                            </label>
+                            <label class="color-picker-label">
+                                <span>Display Mode</span>
+                                <select class="select-input" bind:value={settings.sky.scene.bgImageDisplayMode} on:change={handleUpdate}>
+                                    <option value="cover">Cover</option>
+                                    <option value="contain">Fit</option>
+                                    <option value="stretch">Stretch</option>
+                                    <option value="tile">Tile</option>
+                                </select>
+                            </label>
+                        </div>
+                        {/if}
                     </div>
-                    {/if}
-                </div>
-            </fieldset>
+                </fieldset>
+            {/if}
+            {#if activeSkySubTab === 'frame'}
+                <h2>Sky Frame Appearance</h2>
+                 <fieldset>
+                    <legend>Background</legend>
+                    <div>
+                        <label><input type="radio" bind:group={settings.sky.frame.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
+                        {#if settings.sky.frame.bgType === 'gradient'}
+                        <div class="options-group">
+                            <label class="color-picker-label">
+                                <span>Start Color</span>
+                                <input type="color" bind:value={settings.sky.frame.bgGradientStart} on:input={handleUpdate}>
+                            </label>
+                            <label class="color-picker-label">
+                                <span>End Color</span>
+                                <input type="color" bind:value={settings.sky.frame.bgGradientEnd} on:input={handleUpdate}>
+                            </label>
+                        </div>
+                        {/if}
+                    </div>
+                    <div>
+                         <label><input type="radio" bind:group={settings.sky.frame.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
+                        {#if settings.sky.frame.bgType === 'color'}
+                        <div class="options-group">
+                             <label class="color-picker-label">
+                                <span>Color</span>
+                                <input type="color" bind:value={settings.sky.frame.bgColor} on:input={handleUpdate}>
+                            </label>
+                        </div>
+                        {/if}
+                    </div>
+                     <div>
+                        <label><input type="radio" bind:group={settings.sky.frame.bgType} value="image" on:change={handleUpdate}> Image</label>
+                        {#if settings.sky.frame.bgType === 'image'}
+                        <div class="options-group">
+                            <label>
+                                <input class="text-input" type="text" bind:value={settings.sky.frame.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                            </label>
+                            <label class="color-picker-label">
+                                <span>Display Mode</span>
+                                <select class="select-input" bind:value={settings.sky.frame.bgImageDisplayMode} on:change={handleUpdate}>
+                                    <option value="cover">Cover</option>
+                                    <option value="contain">Fit</option>
+                                    <option value="stretch">Stretch</option>
+                                    <option value="tile">Tile</option>
+                                </select>
+                            </label>
+                        </div>
+                        {/if}
+                    </div>
+                </fieldset>
+            {/if}
+            {#if activeSkySubTab === 'cloak'}
+                <h2>Sky Cloak Appearance</h2>
+                 <fieldset>
+                    <legend>Background</legend>
+                    <div>
+                        <label><input type="radio" bind:group={settings.sky.cloak.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
+                        {#if settings.sky.cloak.bgType === 'gradient'}
+                        <div class="options-group">
+                            <label class="color-picker-label">
+                                <span>Start Color</span>
+                                <input type="color" bind:value={settings.sky.cloak.bgGradientStart} on:input={handleUpdate}>
+                            </label>
+                            <label class="color-picker-label">
+                                <span>End Color</span>
+                                <input type="color" bind:value={settings.sky.cloak.bgGradientEnd} on:input={handleUpdate}>
+                            </label>
+                        </div>
+                        {/if}
+                    </div>
+                    <div>
+                         <label><input type="radio" bind:group={settings.sky.cloak.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
+                        {#if settings.sky.cloak.bgType === 'color'}
+                        <div class="options-group">
+                             <label class="color-picker-label">
+                                <span>Color</span>
+                                <input type="color" bind:value={settings.sky.cloak.bgColor} on:input={handleUpdate}>
+                            </label>
+                        </div>
+                        {/if}
+                    </div>
+                     <div>
+                        <label><input type="radio" bind:group={settings.sky.cloak.bgType} value="image" on:change={handleUpdate}> Image</label>
+                        {#if settings.sky.cloak.bgType === 'image'}
+                        <div class="options-group">
+                            <label>
+                                <input class="text-input" type="text" bind:value={settings.sky.cloak.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                            </label>
+                            <label class="color-picker-label">
+                                <span>Display Mode</span>
+                                <select class="select-input" bind:value={settings.sky.cloak.bgImageDisplayMode} on:change={handleUpdate}>
+                                    <option value="cover">Cover</option>
+                                    <option value="contain">Fit</option>
+                                    <option value="stretch">Stretch</option>
+                                    <option value="tile">Tile</option>
+                                </select>
+                            </label>
+                        </div>
+                        {/if}
+                    </div>
+                </fieldset>
+            {/if}
         {/if}
         {#if activeTab === 'boxes'}
             <h2>Boxes Appearance</h2>
@@ -580,57 +698,6 @@
                 </fieldset>
             {/if}
         {/if}
-        {#if activeTab === 'taskbar'}
-            <h2>Taskbar Appearance</h2>
-             <fieldset>
-                <legend>Scene</legend>
-                <div>
-                    <label><input type="radio" bind:group={settings.taskbar.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
-                    {#if settings.taskbar.bgType === 'gradient'}
-                    <div class="options-group">
-                        <label class="color-picker-label">
-                            <span>Start Color</span>
-                            <input type="color" bind:value={settings.taskbar.bgGradientStart} on:input={handleUpdate}>
-                        </label>
-                        <label class="color-picker-label">
-                            <span>End Color</span>
-                            <input type="color" bind:value={settings.taskbar.bgGradientEnd} on:input={handleUpdate}>
-                        </label>
-                    </div>
-                    {/if}
-                </div>
-                <div>
-                     <label><input type="radio" bind:group={settings.taskbar.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
-                    {#if settings.taskbar.bgType === 'color'}
-                    <div class="options-group">
-                         <label class="color-picker-label">
-                            <span>Color</span>
-                            <input type="color" bind:value={settings.taskbar.bgColor} on:input={handleUpdate}>
-                        </label>
-                    </div>
-                    {/if}
-                </div>
-                 <div>
-                    <label><input type="radio" bind:group={settings.taskbar.bgType} value="image" on:change={handleUpdate}> Image</label>
-                    {#if settings.taskbar.bgType === 'image'}
-                    <div class="options-group">
-                        <label>
-                            <input class="text-input" type="text" bind:value={settings.taskbar.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
-                        </label>
-                        <label class="color-picker-label">
-                            <span>Display Mode</span>
-                            <select class="select-input" bind:value={settings.taskbar.bgImageDisplayMode} on:change={handleUpdate}>
-                                <option value="cover">Cover</option>
-                                <option value="contain">Fit</option>
-                                <option value="stretch">Stretch</option>
-                                <option value="tile">Tile</option>
-                            </select>
-                        </label>
-                    </div>
-                    {/if}
-                </div>
-            </fieldset>
-        {/if}
 
         {#if activeTab === 'general'}
             <h2>General Settings</h2>
@@ -650,7 +717,7 @@
                 {#if settings.chimeType === 'custom'}
                     <div class="options-group">
                         <label>
-                            <input class="text-input" type="text" bind:value={settings.chimeUrl} on:input={handleUpdate} placeholder="Enter Sound URL...">
+                            <input class="text-input"ype="text" bind:value={settings.chimeUrl} on:input={handleUpdate} placeholder="Enter Sound URL...">
                         </label>
                     </div>
                 {/if}
@@ -695,10 +762,10 @@
                             <button class="test-button" on:click={testNoticeSound} title="Test Sound" disabled={settings.noticeDefaults.audio.sound === 'none'}>▶</button>
                         </div>
                     </label>
-                    {#if settings.noticeDefaults.audio.sound === 'cusm'}
+                    {#if settings.noticeDefaults.audio.sound === 'custom'}
                         <div class="options-group">
                             <label>
-                                <input class="text-input" type="text" bind:value={settings.noticeDefaults.audio.url} on:input={handleUpdate} placeholder="Enter Sound URL...">
+                                <input class="text-input" type="text" bind:value={settings.noticeDeflts.audio.url} on:input={handleUpdate} placeholder="Enter Sound URL...">
                             </label>
                         </div>
                     {/if}
@@ -715,4 +782,3 @@
     {componentName}
     {x} {y} {width} {height}
 />
-
