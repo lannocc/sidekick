@@ -98,7 +98,7 @@
     let optionsButton;
     let tabsContainerEl;
     let titleBarEl;
-    let middleClickTimeout, pendingDragEvent;
+    let middleClickTimeout;
 
     // --- Content Area Logic (Moved from Desktop.svelte) ---
     let componentInstances = {};
@@ -443,43 +443,40 @@
     }
 
     function handleMiddleClick(event) {
-        if (event.button !== 1) return false;
-
+        if (event.button !== 1) return;
         event.preventDefault();
 
+        // Double-click detection
         if (middleClickTimeout) {
-            // Double click mousedown
             clearTimeout(middleClickTimeout);
             middleClickTimeout = null;
-            pendingDragEvent = null; // cancel pending drag
             windows.toggleCloak(id);
-            event.stopPropagation();
-        } else {
-            // First click mousedown
-            pendingDragEvent = event;
-            middleClickTimeout = setTimeout(() => {
-                if (pendingDragEvent) {
-                    // It's a drag
-                    if (pendingDragEvent.target.closest('.content-area-container')) {
-                        dragRequest.set({ id, type: 'move', direction: null, clientX: pendingDragEvent.clientX, clientY: pendingDragEvent.clientY });
-                    } else {
-                        onDragStart(pendingDragEvent);
-                    }
-                }
-                middleClickTimeout = null;
-                pendingDragEvent = null;
-            }, 250);
-
-            // If mouseup happens before timeout, it's just a click, do nothing.
-            const cancelDragOnMouseUp = (upEvent) => {
-                if (upEvent.button === 1) {
-                    pendingDragEvent = null;
-                }
-                window.removeEventListener('mouseup', cancelDragOnMouseUp);
-            };
-            window.addEventListener('mouseup', cancelDragOnMouseUp, { once: true });
+            return;
         }
-        return true; // We handled it.
+        
+        // Set a timeout to clear the double-click state. If another click
+        // arrives before this, it's a double-click.
+        middleClickTimeout = setTimeout(() => {
+            middleClickTimeout = null;
+        }, 250);
+
+        // Drag detection: if the mouse moves, cancel the double-click timer and start dragging.
+        const onMove = () => {
+            clearTimeout(middleClickTimeout);
+            middleClickTimeout = null;
+            if (event.target.closest('.content-area-container')) {
+                dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY });
+            } else {
+                onDragStart(event);
+            }
+        };
+
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+        };
+
+        window.addEventListener('mousemove', onMove, { once: true });
+        window.addEventListener('mouseup', onUp, { once: true });
     }
 
     function handleFrameMouseDown(event) {
