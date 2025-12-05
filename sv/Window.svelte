@@ -78,9 +78,9 @@
     $: frameHeight = frameSettings?.height ?? 30;
     $: frameWidth = frameSettings?.width ?? 0;
     $: frameOpacity = frameSettings?.opacity ?? 1.0;
-    $: boxShadowStyle = frameSettings?.shadowEnabled
+    $: boxShadowStyle = cloaked ? 'none' : (frameSettings?.shadowEnabled
         ? `${frameSettings.shadowInset ? 'inset ' : ''}${frameSettings.shadowX}px ${frameSettings.shadowY}px ${frameSettings.shadowBlur}px ${frameSettings.shadowSpread}px ${frameSettings.shadowColor}`
-        : 'none';
+        : 'none');
 
     $: sceneSettings = settings?.windows?.normal?.scene?.[state];
 
@@ -122,6 +122,9 @@
                     dragRequest.set({ id, type: 'resize', direction: direction, clientX: event.clientX, clientY: event.clientY });
                 }
             }
+        } else if (event.button === 1 && !maximized) { // Middle-click to move
+            event.preventDefault();
+            dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY });
         } else if (!isActive) {
             windows.focusWindow(id);
         }
@@ -447,6 +450,9 @@
             event.preventDefault();
             if (event.button === 0) onDragStart(event);
             else if (event.button === 2) onResizeStart(event, 'se');
+        } else if (event.button === 1 && !maximized) { // Middle-click to move
+            event.preventDefault();
+            onDragStart(event);
         } else {
             windows.focusWindow(id);
         }
@@ -479,8 +485,9 @@
             } else if (event.button === 2) { // Right click: Resize
                 onResizeStart(event, 'se');
             }
-        } else {
-            // Standard left click: Move
+        } else if (event.button === 0 || event.button === 1) {
+            // Standard left or middle click: Move
+            if (event.button === 1) event.preventDefault();
             onDragStart(event);
         }
     }
@@ -518,6 +525,13 @@
     }
     .window-frame.has-custom-frame {
         border: none;
+    }
+    .window-frame.cloaked {
+        border-color: transparent !important;
+        background-color: transparent;
+    }
+    .window-frame.cloaked > *:not(.cloak) {
+        visibility: hidden;
     }
     .window-frame:not(.active) { border-color: #7f8c8d; }
     .window-frame.minimized { display: none; }
@@ -573,7 +587,7 @@
         font-weight: bold;
     }
     .window-controls { display: flex; gap: 5px; z-index: 2; }
-    .window-control { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: rgba(0,0,0,0.6); font-weight: bold; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.2); line-height: 18px; }
+    .window-control { --button-size: calc(var(--frame-height, 30px) * 0.45); width: var(--button-size); height: var(--button-size); display: flex; align-items: center; justify-content: center; font-size: var(--button-size); color: rgba(0,0,0,0.6); font-weight: bold; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.2); line-height: 1; }
     .close { background-color: #ff5f56; }
     .minimize { background-color: #ffbd2e; }
     .maximize { background-color: #27c93f; }
@@ -642,8 +656,8 @@
     .select-input { background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:box-shadow={boxShadowStyle} style:--box-shadow={boxShadowStyle} style:--notice-color={notice?.color} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
-    <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleCloak(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity};">
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} class:cloaked style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:box-shadow={boxShadowStyle} style:--box-shadow={boxShadowStyle} style:--notice-color={notice?.color} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
+    <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleCloak(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity}; --frame-height: {frameHeight}px;">
         <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
             <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>_</div>
@@ -747,7 +761,7 @@
             <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>Close</button>
         </div>
     {/if}
-    <div class="cloak" style:background={cloakStyle} style:opacity={cloakOpacity}></div>
+    <div class="cloak" style:background={cloakStyle} style:opacity={cloakOpacity} style:pointer-events={cloaked ? 'auto' : 'none'} on:dblclick|stopPropagation={() => windows.toggleCloak(id)} on:mousedown={handleFrameMouseDown}></div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
 
     <WindowSettingsModal
