@@ -48,24 +48,30 @@ function loadSettings() {
         },
         windows: {
             normal: {
-                cover: {
-                    bgType: 'color',
-                    bgColor: '#2c3e50',
-                    bgGradientStart: '#2c3e50',
-                    bgGradientEnd: '#46627f',
-                    bgImage: '',
-                    bgImageDisplayMode: 'cover',
-                    inactiveOpacity: 1.0,
-                    activeOpacity: 1.0,
-                },
                 scene: {
-                    bgType: 'color',
-                    bgColor: '#2d3436',
-                    bgGradientStart: '#2d3436',
-                    bgGradientEnd: '#454e50',
-                    bgImage: '',
-                    bgImageDisplayMode: 'cover',
-                }
+                    active: {
+                        bgType: 'color', bgColor: '#2d3436', bgGradientStart: '#2d3436', bgGradientEnd: '#454e50', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
+                    },
+                    inactive: {
+                        bgType: 'color', bgColor: '#2d3436', bgGradientStart: '#2d3436', bgGradientEnd: '#454e50', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
+                    },
+                },
+                frame: {
+                    active: {
+                        bgType: 'color', bgColor: '#2c3e50', bgGradientStart: '#2c3e50', bgGradientEnd: '#46627f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 30, width: 0,
+                    },
+                    inactive: {
+                        bgType: 'color', bgColor: '#2c3e50', bgGradientStart: '#2c3e50', bgGradientEnd: '#46627f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 30, width: 0,
+                    },
+                },
+                cloak: {
+                    active: {
+                        bgType: 'color', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
+                    },
+                    inactive: {
+                        bgType: 'color', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
+                    },
+                },
             },
             back: {
                 bgType: 'color',
@@ -137,6 +143,27 @@ function loadSettings() {
                     ['bgType', 'bgColor', 'bgGradientStart', 'bgGradientEnd', 'bgImage', 'bgImageDisplayMode'].forEach(k => delete parsed[k]);
                 }
 
+                // Migration for windows.normal settings
+                if (parsed.windows?.normal?.cover) {
+                    if (!parsed.windows.normal.frame) parsed.windows.normal.frame = {};
+                    const coverSettings = { ...parsed.windows.normal.cover };
+                    parsed.windows.normal.frame.active = { ...coverSettings, opacity: coverSettings.activeOpacity ?? 1.0 };
+                    parsed.windows.normal.frame.inactive = { ...coverSettings, opacity: coverSettings.inactiveOpacity ?? 1.0 };
+                    delete parsed.windows.normal.frame.active.activeOpacity;
+                    delete parsed.windows.normal.frame.active.inactiveOpacity;
+                    delete parsed.windows.normal.frame.inactive.activeOpacity;
+                    delete parsed.windows.normal.frame.inactive.inactiveOpacity;
+                    delete parsed.windows.normal.cover;
+                }
+                if (parsed.windows?.normal?.scene && !parsed.windows.normal.scene.active) {
+                    const oldScene = parsed.windows.normal.scene;
+                    parsed.windows.normal.scene = {
+                        active: { ...oldScene, opacity: 1.0 },
+                        inactive: { ...oldScene, opacity: 1.0 }
+                    };
+                }
+
+
                 // Merge with defaults, handling nested objects
                 const settings = { ...defaults, ...parsed };
                 settings.sky = {
@@ -147,8 +174,18 @@ function loadSettings() {
                 settings.boxes = { ...defaults.boxes, ...(parsed.boxes || {}) };
                 settings.windows = {
                     normal: {
-                        cover: { ...defaults.windows.normal.cover, ...(parsed.windows?.normal?.cover || {}) },
-                        scene: { ...defaults.windows.normal.scene, ...(parsed.windows?.normal?.scene || {}) }
+                        scene: {
+                            active: { ...defaults.windows.normal.scene.active, ...(parsed.windows?.normal?.scene?.active || {}) },
+                            inactive: { ...defaults.windows.normal.scene.inactive, ...(parsed.windows?.normal?.scene?.inactive || {}) }
+                        },
+                        frame: {
+                            active: { ...defaults.windows.normal.frame.active, ...(parsed.windows?.normal?.frame?.active || {}) },
+                            inactive: { ...defaults.windows.normal.frame.inactive, ...(parsed.windows?.normal?.frame?.inactive || {}) }
+                        },
+                        cloak: {
+                            active: { ...defaults.windows.normal.cloak.active, ...(parsed.windows?.normal?.cloak?.active || {}) },
+                            inactive: { ...defaults.windows.normal.cloak.inactive, ...(parsed.windows?.normal?.cloak?.inactive || {}) }
+                        },
                     },
                     back: { ...defaults.windows.back, ...(parsed.windows?.back || {}) }
                 };

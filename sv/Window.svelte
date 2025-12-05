@@ -36,6 +36,7 @@
     export let notice;
     export let tabs;
     export let activeTabId;
+    export let cloaked;
 
     $: activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || {};
     $: component = activeTab.component;
@@ -70,12 +71,14 @@
         return null;
     }
 
-    $: windowOpacity = isActive 
-        ? settings?.windows?.normal?.cover?.activeOpacity ?? 1.0 
-        : settings?.windows?.normal?.cover?.inactiveOpacity ?? 1.0;
-    
-    $: frameStyle = generateBgStyle(settings?.windows?.normal?.cover);
-    $: normalWindowBgStyle = generateBgStyle(settings?.windows?.normal?.scene);
+    $: state = isActive ? 'active' : 'inactive';
+    $: frameSettings = settings?.windows?.normal?.frame?.[state];
+    $: frameStyle = generateBgStyle(frameSettings);
+    $: frameOpacity = frameSettings?.opacity ?? 1.0;
+
+    $: cloakSettings = settings?.windows?.normal?.cloak?.[state];
+    $: cloakStyle = generateBgStyle(cloakSettings);
+    $: cloakOpacity = cloaked ? (cloakSettings?.opacity ?? 0.8) : 0;
 
     let isDragging = false;
     let isResizing = false;
@@ -493,6 +496,18 @@
     .maximize { background-color: #27c93f; }
     .options-menu-button { background-color: #3498db; color: white; line-height: 0.8; }
     .content-area { flex-grow: 1; overflow: auto; padding: 5px; pointer-events: none; }
+    .cloak {
+        position: absolute;
+        top: 30px; /* title bar height */
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 5; /* Above content, below options menu */
+        pointer-events: none;
+        transition: opacity 0.3s ease-in-out;
+        border-bottom-left-radius: 5px;
+        border-bottom-right-radius: 5px;
+    }
     .resize-handle { position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; cursor: se-resize; pointer-events: auto; }
     .options-menu { position: absolute; top: 35px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 1000; display: flex; flex-direction: column; min-width: 150px; padding: 4px 0; user-select: none; pointer-events: auto; }
     .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; font-size: 14px; }
@@ -515,8 +530,8 @@
     .select-input { background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:--notice-color={notice?.color} style:opacity={windowOpacity} style:background={frameStyle} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
-    <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id}>
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:--notice-color={notice?.color} style:opacity={frameOpacity} style:background={frameStyle} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
+    <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleCloak(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id}>
         <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
             <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>_</div>
@@ -582,7 +597,8 @@
             <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>Close</button>
         </div>
     {/if}
-    <div class="content-area" style:background={normalWindowBgStyle}>
+    <div class="cloak" style:background={cloakStyle} style:opacity={cloakOpacity}></div>
+    <div class="content-area">
         <!-- Content is now rendered by Desktop.svelte -->
     </div>
     <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>

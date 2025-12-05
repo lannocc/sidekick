@@ -88,6 +88,7 @@ export function generateBoardConfigFromWindow(group, allWindows) {
     return {
         x: group.x, y: group.y, width: group.width, height: group.height,
         maximized: group.maximized,
+        cloaked: group.cloaked,
         activeTabId: group.activeTabId,
         tabs: layoutTabs
     };
@@ -248,6 +249,7 @@ function createWindowManager() {
                 x: groupData.x, y: groupData.y, width: groupData.width, height: groupData.height,
                 minimized: false,
                 maximized: groupData.maximized,
+                cloaked: groupData.cloaked ?? false,
                 isActive: false,
                 zIndex: groupData.zIndex,
                 prevX: groupData.x, prevY: groupData.y, prevWidth: groupData.width, prevHeight: groupData.height,
@@ -383,6 +385,7 @@ function createWindowManager() {
             zIndex: 100,
             minimized: false,
             maximized: false,
+            cloaked: false,
             isActive: true,
             prevX: 0, prevY: 0, prevWidth: 0, prevHeight: 0,
             tabs: [newTab],
@@ -592,6 +595,10 @@ function createWindowManager() {
                 return { ...w, isActive: false };
             });
         });
+    };
+
+    const toggleCloak = (id) => {
+        update(windows => windows.map(w => w.id === id ? { ...w, cloaked: !w.cloaked } : w));
     };
 
     const closeAllWindows = () => {
@@ -1004,6 +1011,7 @@ function createWindowManager() {
         resetTabZoom,
         toggleMinimize,
         toggleMaximize,
+        toggleCloak,
         closeAllWindows,
         minimizeAllWindows,
         restoreAllWindows,

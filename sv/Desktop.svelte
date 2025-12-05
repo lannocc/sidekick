@@ -119,7 +119,6 @@
     $: sceneSettings = $desktopSettings.sky?.scene;
     $: backgroundStyle = generateBgStyle(sceneSettings);
     $: sceneOpacity = sceneSettings?.opacity ?? 1.0;
-    $: normalWindowBgStyle = generateBgStyle($desktopSettings.windows?.normal?.scene);
     $: backWindowBgStyle = generateBgStyle($desktopSettings.windows?.back);
     $: backWindowSettings = $desktopSettings.windows?.back;
 
@@ -1820,6 +1819,8 @@
         <div class="tab-contents-layer">
             {#each $windows.flatMap(w => w.tabs.map(t => ({...t, group: w}))) as tab (tab.id)}
                 {@const group = tab.group}
+                {@const state = group.isActive ? 'active' : 'inactive'}
+                {@const sceneSettings = $desktopSettings.windows?.normal?.scene?.[state]}
                 <div
                     class="tab-content-wrapper"
                     class:maximized={group.maximized}
@@ -1834,8 +1835,9 @@
                 >
                     <div
                         class="content-area-container"
-                        style:pointer-events={$desktopInteraction || $dragState ? 'none' : null}
-                        style:background={normalWindowBgStyle}
+                        style:pointer-events={$desktopInteraction || $dragState || group.cloaked ? 'none' : null}
+                        style:background={generateBgStyle(sceneSettings)}
+                        style:opacity={sceneSettings?.opacity ?? 1.0}
                         on:mouseenter={() => handleContentMouseEnter(group)}
                         on:mouseleave={() => handleContentMouseLeave(group)}
                         on:mousedown={e => handleContentMouseDown(e, group)}
