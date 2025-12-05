@@ -185,5 +185,5 @@
         </div>
         <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
     </div>
-    <div class="bottom-frame" style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+    <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
 </div>
