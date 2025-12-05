@@ -3,7 +3,7 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { onMount, onDestroy, getContext } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter } from './windows.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings } from './desktop.js';
     import { createBox, connectionStatus } from './local.js';
@@ -20,6 +20,8 @@
     let menuBackgroundStyle = '';
     
     $: tbSettings = $desktopSettings.sky?.frame;
+    $: tbHeight = tbSettings?.height || 40;
+
     $: if (tbSettings) {
         if (tbSettings.bgType === 'color') {
             menuBackgroundStyle = `background-color: ${tbSettings.bgColor};`;
@@ -33,27 +35,31 @@
     // Elements for layout calculation
     let leftSectionEl, centerSectionEl, rightSectionEl;
 
-    // Map to store measured widths of task items
-    let taskItemWidths = new Map();
+    // Map to store measured sizes of task items
+    let taskItemSizes = new Map();
 
     // Object to store final calculated layouts
     let taskItemLayouts = {};
 
     const GAP = 5; // px gap between items
 
-    // Svelte action to measure an element's width using ResizeObserver
+    // Svelte action to measure an element's size using ResizeObserver
     function measure(node, id) {
         const ro = new ResizeObserver((entries) => {
             for (const entry of entries) {
-                let newWidth;
+                let newWidth, newHeight;
                 if (entry.borderBoxSize && entry.borderBoxSize.length > 0) {
                     newWidth = entry.borderBoxSize[0].inlineSize;
+                    newHeight = entry.borderBoxSize[0].blockSize;
                 } else {
-                    newWidth = entry.target.getBoundingClientRect().width;
+                    const rect = entry.target.getBoundingClientRect();
+                    newWidth = rect.width;
+                    newHeight = rect.height;
                 }
-                if (taskItemWidths.get(id) !== newWidth) {
-                    taskItemWidths.set(id, newWidth);
-                    taskItemWidths = taskItemWidths;
+                const currentSize = taskItemSizes.get(id);
+                if (currentSize?.width !== newWidth || currentSize?.height !== newHeight) {
+                    taskItemSizes.set(id, { width: newWidth, height: newHeight });
+                    taskItemSizes = taskItemSizes;
                 }
             }
         });
@@ -62,9 +68,9 @@
         return {
             destroy() {
                 ro.disconnect();
-                if (taskItemWidths.has(id)) {
-                    taskItemWidths.delete(id);
-                    taskItemWidths = taskItemWidths;
+                if (taskItemSizes.has(id)) {
+                    taskItemSizes.delete(id);
+                    taskItemSizes = taskItemSizes;
                 }
             }
         };
@@ -95,39 +101,76 @@
         return idealLeft;
     }
 
+    function getIdealButtonTop(win, buttonHeight) {
+        const th = get(desktopSettings).sky.frame.height || 40;
+        if (win.minimized) {
+            return (th - buttonHeight) / 2; // Center minimized windows vertically
+        }
+        const screenWinY = win.y * $windowView.zoom + $windowView.panY;
+        const screenDesktopHeight = window.innerHeight - th;
+        
+        const progress = Math.max(0, Math.min(1, screenWinY / screenDesktopHeight));
+        const availableSpace = th - buttonHeight;
+        const idealTop = progress * availableSpace;
+        
+        return Math.max(0, Math.min(idealTop, th - buttonHeight));
+    }
+
+
     $: if (screenWidth && leftSectionEl && centerSectionEl && rightSectionEl && $windows.length > 0 && $windowView) {
-        const allWidthsKnown = $windows.every(win => taskItemWidths.has(win.id));
-        if (allWidthsKnown) {
+        const allSizesKnown = $windows.every(win => taskItemSizes.has(win.id));
+        if (allSizesKnown) {
             const leftRect = leftSectionEl.getBoundingClientRect();
             const centerRect = centerSectionEl.getBoundingClientRect();
             const rightRect = rightSectionEl.getBoundingClientRect();
 
             const items = $windows
-                .map(win => ({ id: win.id, idealLeft: getIdealButtonLeft(win, taskItemWidths.get(win.id) || 100), width: taskItemWidths.get(win.id) || 100 }))
+                .map(win => {
+                    const size = taskItemSizes.get(win.id) || { width: 100, height: 28 };
+                    return {
+                        id: win.id,
+                        width: size.width,
+                        height: size.height,
+                        idealLeft: getIdealButtonLeft(win, size.width),
+                        idealTop: getIdealButtonTop(win, size.height),
+                    };
+                })
                 .sort((a, b) => a.idealLeft - b.idealLeft);
 
             const newLayouts = {};
-            let lastItemRightEdge = leftRect.right + GAP;
+            const placedRects = [
+                { left: 0, top: 0, right: leftRect.right + GAP, bottom: tbHeight },
+                { left: centerRect.left - GAP, top: 0, right: centerRect.right + GAP, bottom: tbHeight },
+                { left: rightRect.left - GAP, top: 0, right: screenWidth, bottom: tbHeight }
+            ];
+
+            function intersects(r1, r2) {
+                return !(r2.left >= r1.right || r2.right <= r1.left || r2.top >= r1.bottom || r2.bottom <= r1.top);
+            }
 
             for (const item of items) {
-                let left = Math.max(item.idealLeft, lastItemRightEdge);
-                if ((left + item.width + GAP) > centerRect.left && left < (centerRect.right + GAP)) {
-                    left = Math.max(lastItemRightEdge, centerRect.right + GAP);
-                }
-                newLayouts[item.id] = { left };
-                lastItemRightEdge = left + item.width + GAP;
-            }
+                let left = item.idealLeft;
+                let top = item.idealTop;
 
-            let overflow = lastItemRightEdge - (rightRect.left - GAP);
-            if (overflow > 0) {
-                let requiredRightEdge = rightRect.left - GAP;
-                for (let i = items.length - 1; i >= 0; i--) {
-                    const item = items[i];
-                    const finalLeft = Math.min(newLayouts[item.id].left, requiredRightEdge - item.width);
-                    newLayouts[item.id].left = finalLeft;
-                    requiredRightEdge = finalLeft - GAP;
+                for (let i = 0; i < 50; i++) { // Failsafe iteration limit
+                    top = Math.max(0, Math.min(top, tbHeight - item.height)); // Clamp top
+                    const currentRect = { left, top, right: left + item.width, bottom: top + item.height };
+                    const collision = placedRects.find(r => intersects(currentRect, r));
+                    
+                    if (!collision) break; // Found a spot
+
+                    if (currentRect.left < collision.right) {
+                        left = collision.right; // Note: GAP is baked into fixed rects
+                        top = item.idealTop; // Reset vertical position when pushed horizontally
+                    } else {
+                        top = collision.bottom + GAP; // Vertically blocked, move down to stack
+                    }
                 }
+                
+                newLayouts[item.id] = { left, top };
+                placedRects.push({ left, top, right: left + item.width, bottom: top + item.height });
             }
+            
             taskItemLayouts = newLayouts;
         }
     } else if ($windows.length === 0) {
@@ -203,10 +246,10 @@
     .task-item.noticing {
         animation: notice-glow 1.2s ease-in-out;
     }
-    .taskbar { height: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; flex-shrink: 0; position: relative; }
+    .taskbar { height: var(--tb-height, 40px); display: flex; align-items: center; justify-content: space-between; padding: 0 10px; flex-shrink: 0; position: relative; }
     .taskbar-left, .taskbar-right { display: flex; align-items: center; gap: 8px; position: relative; z-index: 10; }
     .taskbar-center { position: absolute; left: 50%; transform: translateX(-50%); z-index: 10; }
-    .task-item { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; cursor: pointer; max-width: 250px; position: absolute; top: 50%; transform: translateY(-50%); transition: left 0.3s ease-out, border-color 0.2s ease-in-out; z-index: 1; display: flex; align-items: center; justify-content: center; }
+    .task-item { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; cursor: pointer; max-width: 250px; position: absolute; transition: left 0.3s ease-out, top 0.3s ease-out, border-color 0.2s ease-in-out; z-index: 1; display: flex; align-items: center; justify-content: center; }
     .task-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .task-item.minimized { font-style: italic; opacity: 0.7; }
     .task-item.active { border-bottom: 2px solid #27c93f; padding-bottom: 1px; z-index: 2; }
@@ -214,7 +257,7 @@
     .taskbar-left > .windows-button:first-child:hover { background-color: #e0443e; }
     .taskbar-left > .windows-button:nth-child(2) { background-color: #ffbd2e; border-color: #e0a320; color: white; }
     .taskbar-left > .windows-button:nth-child(2):hover { background-color: #e0a320; }
-    .start-button { background-color: #3498db; border: 1px solid #2980b9; color: white; font-weight: bold; border-radius: 4px; padding: 5px 10px; cursor: pointer; transition: box-shadow 0.3s ease-in-out; }
+    .start-button { background-color: #3498db; border: 1px solid #2980b9; color: white; transition: box-shadow 0.3s ease-in-out; }
     .start-button:hover { background-color: #2980b9; }
     @keyframes sky-glow {
         50% { border-color: #5dade2; box-shadow: 0 0 12px 3px #5dade2; }
@@ -222,12 +265,24 @@
     .start-button.connected {
         animation: sky-glow 2s infinite ease-in-out;
     }
-    .quick-launch-button { background-color: #27c93f; border: 1px solid #1a9c2a; color: white; font-weight: bold; border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+    .quick-launch-button { background-color: #27c93f; border: 1px solid #1a9c2a; color: white; }
     .quick-launch-button:hover { background-color: #1a9c2a; }
-    .windows-button { background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--taskbar-text); font-weight: bold; border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+
+    /* Scalable main buttons */
+    .windows-button, .quick-launch-button, .start-button {
+        font-weight: bold;
+        cursor: pointer;
+        height: calc(var(--tb-height, 40px) * 0.7);
+        padding: 0 calc(var(--tb-height, 40px) * 0.25);
+        font-size: calc(var(--tb-height, 40px) * 0.35);
+        border-radius: calc(var(--tb-height, 40px) * 0.1);
+        border: 1px solid var(--border-color);
+    }
+    .windows-button { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); }
     .windows-button:hover { background-color: var(--taskbar-button-hover-bg); }
     .windows-button.active { background-color: var(--taskbar-button-hover-bg); }
-    .start-menu, .windows-menu { position: absolute; top: 45px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 10000; display: flex; flex-direction: column; width: 200px; }
+
+    .start-menu, .windows-menu { position: absolute; top: calc(var(--tb-height, 40px) + 5px); background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 10000; display: flex; flex-direction: column; width: 200px; }
     .start-menu { right: 10px; }
     .windows-menu { left: 10px; max-height: 300px; overflow-y: auto; }
     .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 10px 15px; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border-color); }
@@ -242,8 +297,11 @@
     .start-button::after, .windows-list-button::after { content: ''; position: absolute; bottom: 0px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
     .start-button::after { right: 5px; }
     .windows-list-button::after { left: 5px; }
-    .clock-button { background: none; border: none; color: inherit; padding: 0 10px; cursor: pointer; position: relative; border-radius: 4px; height: 30px; display: flex; align-items: center; }
+    
+    /* Scalable clock */
+    .clock-button { background: none; border: none; color: inherit; padding: 0; cursor: pointer; position: relative; border-radius: 4px; display: flex; align-items: center; justify-content: center; width: calc(var(--tb-height, 40px) - 6px); height: calc(var(--tb-height, 40px) - 6px); }
     .clock-button:hover { background-color: var(--taskbar-button-hover-bg); }
+    
     .notice-badge { position: absolute; top: 0px; right: 0px; background-color: #e74c3c; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; font-weight: bold; display: flex; align-items: center; justify-content: center; line-height: 1; border: 1px solid var(--taskbar-bg); }
 
     /* New styles for tab representation */
@@ -255,7 +313,7 @@
 
 <svelte:window bind:innerWidth={screenWidth} />
 
-<div class="taskbar" on:dblclick={toggleCloak}>
+<div class="taskbar" on:dblclick={toggleCloak} style="--tb-height: {tbHeight}px">
     <div class="taskbar-left" bind:this={leftSectionEl}>
         <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">&mdash;</button>
         <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>W~</button>
@@ -286,7 +344,7 @@
             title={activeTab?.title}
             on:click={() => { if ($dashActive) dashActive.set(false); handleTaskClick(win); }}
             use:measure={win.id}
-            style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'}; --notice-color: {win.notice?.color};"
+            style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'}; top: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].top + 'px' : '-9999px'}; --notice-color: {win.notice?.color};"
         >
             {#if win.tabs.length > 1}
                 <div class="task-item-layout">
