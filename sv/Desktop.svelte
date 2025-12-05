@@ -733,7 +733,7 @@
     };
 
 
-    let desktopMiddleClickTimeout, pendingPanEvent;
+    let desktopMiddleClickTimeout;
 
     function toggleSkyCloak() {
         desktopSettings.update(s => {
@@ -749,29 +749,34 @@
 
     function handleDesktopMiddleClick(event) {
         event.preventDefault();
+
+        // Double-click detection
         if (desktopMiddleClickTimeout) {
             clearTimeout(desktopMiddleClickTimeout);
             desktopMiddleClickTimeout = null;
-            pendingPanEvent = null;
             toggleSkyCloak();
-        } else {
-            pendingPanEvent = event;
-            desktopMiddleClickTimeout = setTimeout(() => {
-                if (pendingPanEvent) {
-                    handleDesktopPanStart(pendingPanEvent);
-                }
-                desktopMiddleClickTimeout = null;
-                pendingPanEvent = null;
-            }, 250);
-
-            const cancelPan = (upEvent) => {
-                if (upEvent.button === 1) {
-                    pendingPanEvent = null;
-                }
-                window.removeEventListener('mouseup', cancelPan);
-            };
-            window.addEventListener('mouseup', cancelPan, { once: true });
+            return;
         }
+        
+        // Set a timeout to clear the double-click state. If another click
+        // arrives before this, it's a double-click.
+        desktopMiddleClickTimeout = setTimeout(() => {
+            desktopMiddleClickTimeout = null;
+        }, 250);
+
+        // Drag detection: if the mouse moves, cancel the double-click timer and start panning.
+        const onMove = () => {
+            clearTimeout(desktopMiddleClickTimeout);
+            desktopMiddleClickTimeout = null;
+            handleDesktopPanStart(event);
+        };
+
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+        };
+
+        window.addEventListener('mousemove', onMove, { once: true });
+        window.addEventListener('mouseup', onUp, { once: true });
     }
 
 

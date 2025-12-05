@@ -590,7 +590,13 @@
     }
     .window-frame:not(.active) { border-color: #7f8c8d; }
     .window-frame.minimized { display: none; }
-    .window-frame.maximized { border-radius: 0; }
+    .window-frame.maximized { 
+        border-radius: 0; 
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+    }
     .window-frame.maximized .resize-handle { display: none; }
     .title-bar {
         flex-shrink: 0;
