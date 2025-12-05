@@ -33,8 +33,8 @@ def run(args=sys.argv[1:]):
     # --- END FIX ---
 
     # 1. Argument Parsing
-    if len(args) != 1 or args[0].startswith('-'):
-        print("Usage: iosk <workspace_directory>")
+    if not (1 <= len(args) <= 2) or args[0].startswith('-'):
+        print("Usage: iosk <workspace_directory> [<mount_point>]")
         sys.exit(1)
 
     # Set the logging level for the google-genai library to WARNING to suppress INFO messages
@@ -43,10 +43,11 @@ def run(args=sys.argv[1:]):
     logging.disable(logging.INFO) # all INFO and less are disabled
 
     workspace_directory = args[0]
+    mount_point = args[1] if len(args) > 1 else None
 
     # 2. System Initialization
     print(f'Preparing iosk UNIX at workspace: {workspace_directory}')
-    kernel = UNIX(workspace_root=workspace_directory)
+    kernel = UNIX(workspace_root=workspace_directory, mount_point=mount_point)
     print('System loaded.')
 
     # 3. Asynchronous Main Loop

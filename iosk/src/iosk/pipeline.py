@@ -1,3 +1,4 @@
+# src/iosk/pipeline.py
 import shlex
 import asyncio
 import os
@@ -80,7 +81,7 @@ class CommandPipelineExecutor:
                 # Configure stdout for the current command
                 if is_last_cmd and redirect_out_path:
                     mode = 'a' if redirect_append else 'w'
-                    host_path = self.os.box(redirect_out_path, io_context=io)
+                    host_path = self.os.fs.box_for_write(redirect_out_path, io_context=io)
                     parent_dir = os.path.dirname(host_path)
 
                     if not os.path.exists(parent_dir):

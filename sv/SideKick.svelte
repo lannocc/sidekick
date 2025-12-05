@@ -7,10 +7,60 @@
     import Desktop from './Desktop.svelte';
     import Taskbar from './Taskbar.svelte';
     import { windows } from './windows.js';
-    import { dashActive, dashLayouts, dashCycleIndex } from './desktop.js';
+    import { dashActive, dashLayouts, dashCycleIndex, desktopSettings } from './desktop.js';
     import { get } from 'svelte/store';
+    import { initializeLocalConnection } from './local.js';
+
+    function generateBgStyle(bgSettings) {
+        if (!bgSettings) return '';
+        if (bgSettings.bgType === 'gradient') {
+            return `linear-gradient(45deg, ${bgSettings.bgGradientStart} 0%, ${bgSettings.bgGradientEnd} 100%)`;
+        } else if (bgSettings.bgType === 'color') {
+            return bgSettings.bgColor;
+        } else if (bgSettings.bgType === 'image' && bgSettings.bgImage) {
+            let size = 'cover';
+            let repeat = 'no-repeat';
+            let position = 'center center';
+            switch (bgSettings.bgImageDisplayMode) {
+                case 'contain': size = 'contain'; break;
+                case 'stretch': size = '100% 100%'; break;
+                case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
+                case 'cover': default: break;
+            }
+            return `url('${bgSettings.bgImage}') ${position} / ${size} ${repeat}`;
+        }
+        return '';
+    }
+
+    $: cloakSettings = $desktopSettings.sky?.cloak;
+    $: cloakStyle = cloakSettings ? generateBgStyle(cloakSettings) : '';
+    $: cloakOpacity = cloakSettings?.opacity ?? 0;
+
+    // Frame settings
+    $: frameSettings = $desktopSettings.sky?.frame;
+    $: frameStyle = frameSettings ? generateBgStyle(frameSettings) : '';
+    $: frameOpacity = frameSettings?.opacity ?? 1;
+    $: frameHeight = frameSettings?.height ?? 40;
+    $: frameWidth = frameSettings?.width ?? 0;
+
+    function disableSkyCloak() {
+        desktopSettings.update(s => {
+            if (s.sky.cloak.opacity > 0) {
+                s.sky.cloak.lastOpacity = s.sky.cloak.opacity;
+                s.sky.cloak.opacity = 0;
+            }
+            return s;
+        });
+    }
 
     function handleKeyDown(e) {
+        if ($desktopSettings.sky?.cloak?.opacity > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            disableSkyCloak();
+            return;
+        }
+
         // Tab switching with Alt/Ctrl + Number
         const numericKey = parseInt(e.key, 10);
         if ((e.altKey || e.ctrlKey) && !e.metaKey && !isNaN(numericKey) && numericKey >= 1 && numericKey <= 9) {
@@ -92,6 +142,7 @@
     }
 
     onMount(() => {
+        initializeLocalConnection();
         window.addEventListener('keydown', handleKeyDown);
     });
 
@@ -107,9 +158,54 @@
         height: 100vh;
         width: 100vw;
     }
+    .top-frame {
+        position: relative;
+        z-index: 20000;
+        flex-shrink: 0;
+    }
+    .desktop-wrapper {
+        flex-grow: 1;
+        display: flex;
+        overflow: hidden;
+    }
+    .desktop-area {
+        flex-grow: 1;
+        position: relative;
+    }
+    .side-frame, .bottom-frame {
+        flex-shrink: 0;
+    }
+    .sky-cloak {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 30000;
+        pointer-events: none;
+        transition: opacity 0.3s ease-in-out;
+    }
 </style>
 
+<div
+    class="sky-cloak"
+    style="opacity: {cloakOpacity}; background: {cloakStyle}; pointer-events: {cloakOpacity > 0 ? 'auto' : 'none'}"
+    on:click={disableSkyCloak}
+    on:mousedown={(e) => { if (e.button === 1) { e.preventDefault(); disableSkyCloak(); }}}
+    on:contextmenu|preventDefault={disableSkyCloak}
+    on:wheel|preventDefault={disableSkyCloak}
+></div>
+
 <div class="sk-container" on:contextmenu|preventDefault>
-    <Taskbar />
-    <Desktop />
+    <div class="top-frame" style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity};">
+        <Taskbar />
+    </div>
+    <div class="desktop-wrapper">
+        <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+        <div class="desktop-area">
+            <Desktop />
+        </div>
+        <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+    </div>
+    <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
 </div>

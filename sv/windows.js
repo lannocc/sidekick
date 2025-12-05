@@ -8,22 +8,28 @@ import WebBrowser from './WebBrowser.svelte';
 import IoskPrivateChat from './IoskPrivateChat.svelte';
 import LocalTerminal from './LocalTerminal.svelte';
 import LocalFileExplorer from './LocalFileExplorer.svelte';
+import LocalFileViewer from './LocalFileViewer.svelte';
 import Ask from './Ask.svelte';
 import IoskWatch from './IoskWatch.svelte';
 import IoskUserInspector from './IoskUserInspector.svelte';
 import NotificationCenter from './NotificationCenter.svelte';
-import { desktopSettings, windowSettings, notificationHistory, unreadNoticeCount } from './desktop.js';
+import { TASKBAR_HEIGHT, desktopSettings, windowSettings, notificationHistory, unreadNoticeCount, desktopView, windowView } from './desktop.js';
+import { createBackedWindow, deleteBackedWindow, createBox, boxes, desktopShortcuts, backedWindows } from './local.js';
 
 let windowGroupIdCounter = 0;
 let tabIdCounter = 0;
 
 // Store for managing drag-and-drop grouping state
+// Shape can be:
+// null
+// { draggingGroupId: number, dropTargetGroupId: number | null }
+// { draggingGroupId: number, dropTargetBoxPanel: { boxId: number, location: string } | null }
 export const dragState = writable(null);
 // Store for requesting a drag/resize action from another component
 export const dragRequest = writable(null);
 
 // Map component type strings to actual components for restoring layouts
-const componentMap = {
+export const componentMap = {
     'IoskConsole': IoskConsole,
     'Calculator': Calculator,
     'Settings': Settings,
@@ -33,11 +39,60 @@ const componentMap = {
     'IoskPrivateChat': IoskPrivateChat,
     'LocalTerminal': LocalTerminal,
     'LocalFileExplorer': LocalFileExplorer,
+    'LocalFileViewer': LocalFileViewer,
     'Ask': Ask,
     'IoskWatch': IoskWatch,
     'IoskUserInspector': IoskUserInspector,
     'NotificationCenter': NotificationCenter,
 };
+
+export function getComponentType(component) {
+    for (const [name, comp] of Object.entries(componentMap)) {
+        if (comp === component) {
+            return name;
+        }
+    }
+    return 'Unknown';
+}
+
+function findTabById(groups, tabId) {
+    if (!tabId) return null;
+    for (const group of groups) {
+        const tab = group.tabs.find(t => t.id === tabId);
+        if (tab) return tab;
+    }
+    return null;
+}
+
+export function generateBoardConfigFromWindow(group, allWindows) {
+    const layoutTabs = group.tabs.map(tab => {
+        const associatedConsole = findTabById(allWindows, tab.consoleId);
+        return {
+            originalId: tab.id,
+            componentType: getComponentType(tab.component),
+            title: tab.title,
+            maximized: group.maximized,
+            wsUrl: tab.wsUrl, username: tab.username,
+            localUser: tab.localUser, remoteUser: tab.remoteUser,
+            consoleConnection: tab.consoleConnection || (associatedConsole ? associatedConsole.consoleConnection : null),
+            initialPath: tab.currentPath, path: tab.path,
+            mode: tab.mode, initialUrl: tab.currentUrl,
+            zoom: tab.zoom,
+            initialCommand: tab.initialCommand,
+            initialPwd: tab.initialPwd,
+            initialInterval: tab.initialInterval,
+            initialState: tab.initialState,
+            consoleId: tab.consoleId, // Keep for remapping
+        };
+    });
+    return {
+        x: group.x, y: group.y, width: group.width, height: group.height,
+        maximized: group.maximized,
+        cloaked: group.cloaked,
+        activeTabId: group.activeTabId,
+        tabs: layoutTabs
+    };
+}
 
 function findOptimalPosition(props, allWindows, currentWindowId) {
     if (typeof window === 'undefined') {
@@ -45,14 +100,7 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
     }
 
     const { width, height, sourceEvent, sourceTabId } = props;
-    const taskbarHeight = 40; // Assume taskbar is 40px at the top.
-    const desktopMargin = 10; // Margin from viewport edges.
-    const desktop = {
-        x: desktopMargin,
-        y: taskbarHeight + desktopMargin,
-        width: window.innerWidth - (desktopMargin * 2),
-        height: window.innerHeight - taskbarHeight - (desktopMargin * 2)
-    };
+    const { panX, panY, zoom } = get(windowView);
 
     const obstacles = allWindows.filter(w => !w.minimized).map(w => ({
         x: w.x, y: w.y, width: w.width, height: w.height
@@ -70,17 +118,18 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
         return false;
     };
 
-    const clampToDesktop = (pos) => {
-        // Defines the boundaries for the window's top-left corner
-        const minX = desktop.x;
-        const minY = desktop.y;
-        const maxX = desktop.x + desktop.width - width;
-        const maxY = desktop.y + desktop.height - height;
+    // Calculate the visible area in world coordinates
+    const margin = 10; // screen pixels
+    const view = {
+        x: (-panX / zoom) + (margin / zoom),
+        y: (-panY / zoom) + (margin / zoom),
+        width: (window.innerWidth / zoom) - (2 * margin / zoom),
+        height: ((window.innerHeight - TASKBAR_HEIGHT) / zoom) - (2 * margin / zoom),
+    };
 
-        // Clamp the proposed position within the valid range
-        let newX = Math.max(minX, Math.min(pos.x, maxX));
-        let newY = Math.max(minY, Math.min(pos.y, maxY));
-
+    const clampToView = (pos) => {
+        const newX = Math.max(view.x, Math.min(pos.x, view.x + view.width - width));
+        const newY = Math.max(view.y, Math.min(pos.y, view.y + view.height - height));
         return { x: newX, y: newY };
     };
 
@@ -97,7 +146,7 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
             ];
 
             for (const pos of positions) {
-                const clampedPos = clampToDesktop(pos);
+                const clampedPos = clampToView(pos);
                 if (!checkCollision({ ...clampedPos, width, height })) {
                     return clampedPos;
                 }
@@ -105,20 +154,32 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
         }
     }
 
-    let startPoint = sourceEvent ? { x: sourceEvent.clientX, y: sourceEvent.clientY } : { x: desktop.x + 100, y: desktop.y + 100 };
-
-    let clamped = clampToDesktop({ x: startPoint.x - width / 2, y: startPoint.y - height / 2 });
-    if (!checkCollision({ ...clamped, width, height })) {
-        return clamped;
+    let startPos;
+    if (sourceEvent) {
+        // Convert click event to world coordinates
+        const worldX = (sourceEvent.clientX - panX) / zoom;
+        const worldY = ((sourceEvent.clientY - TASKBAR_HEIGHT) - panY) / zoom;
+        startPos = { x: worldX - width / 2, y: worldY - height / 2 };
+    } else {
+        // Default to center of the current view
+        const worldCenterX = view.x + view.width / 2;
+        const worldCenterY = view.y + view.height / 2;
+        startPos = { x: worldCenterX - width / 2, y: worldCenterY - height / 2 };
     }
 
-    // Spiral search outwards if preferred positions are taken
-    let x = startPoint.x, y = startPoint.y;
+    let candidatePos = clampToView(startPos);
+    if (!checkCollision({ ...candidatePos, width, height })) {
+        return candidatePos;
+    }
+
+    // Spiral search outwards from the start point
+    let x = startPos.x + width / 2;
+    let y = startPos.y + height / 2;
     let step = 30, leg = 0, armLength = 1, count = 0;
     for (let i = 0; i < 200; i++) {
-        clamped = clampToDesktop({ x: x - width / 2, y: y - height / 2 });
-        if (!checkCollision({ ...clamped, width, height })) {
-            return clamped;
+        const testPos = { x: x - width / 2, y: y - height / 2 };
+        if (!checkCollision({ ...testPos, width, height })) {
+            return testPos;
         }
         switch (leg) {
             case 0: x += step; break;
@@ -133,12 +194,144 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
         }
     }
 
-    return clampToDesktop({ x: 50 + (currentWindowId % 10) * 20, y: 50 + (currentWindowId % 10) * 20 });
+    return { x: view.x + (currentWindowId % 10) * 20, y: view.y + (currentWindowId % 10) * 20 };
+}
+
+function createSerializableLayout(allWindows) {
+    if (typeof window === 'undefined') return null;
+
+    const windowGroups = allWindows.map(group => {
+        const config = generateBoardConfigFromWindow(group, allWindows);
+        return {
+            ...config,
+            zIndex: group.zIndex,
+        };
+    });
+
+    return {
+        desktop: {
+            width: window.innerWidth,
+            height: window.innerHeight - TASKBAR_HEIGHT,
+        },
+        windowGroups,
+    };
 }
 
 
 function createWindowManager() {
-    const { subscribe, update } = writable([]);
+    const rehydrateLayout = (layout) => {
+        if (!layout || !layout.windowGroups) return [];
+        
+        windowGroupIdCounter = 0;
+        tabIdCounter = 0;
+        const idMap = new Map();
+
+        let newGroups = [];
+        const sortedGroupsData = [...layout.windowGroups].sort((a,b) => (a.zIndex || 0) - (b.zIndex || 0));
+
+        for (const groupData of sortedGroupsData) {
+            const newTabs = groupData.tabs.map(tabData => {
+                const component = componentMap[tabData.componentType];
+                if (!component) return null;
+                const { componentType, originalId, ...props } = tabData;
+                const allWindowSettings = get(windowSettings);
+                const componentSettings = allWindowSettings[tabData.componentType];
+                const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
+                const newTabId = ++tabIdCounter;
+                idMap.set(originalId, newTabId);
+                return { id: newTabId, component, componentName: tabData.componentType, ...props, zoom: props.zoom ?? defaultZoom, originalId };
+            }).filter(Boolean);
+
+            if (newTabs.length === 0) continue;
+
+            newGroups.push({
+                id: ++windowGroupIdCounter,
+                x: groupData.x, y: groupData.y, width: groupData.width, height: groupData.height,
+                minimized: false,
+                maximized: groupData.maximized,
+                cloaked: groupData.cloaked ?? false,
+                isActive: false,
+                zIndex: groupData.zIndex,
+                prevX: groupData.x, prevY: groupData.y, prevWidth: groupData.width, prevHeight: groupData.height,
+                notice: null,
+                tabs: newTabs,
+                activeTabId: groupData.activeTabId,
+            });
+        }
+
+        let topZ = -1;
+        let topWindowId = -1;
+        for (const group of newGroups) {
+            group.activeTabId = idMap.get(group.activeTabId) || (group.tabs.length > 0 ? group.tabs[0].id : null);
+            for (const tab of group.tabs) {
+                if (tab.consoleId) {
+                    tab.consoleId = idMap.get(tab.consoleId) || tab.consoleId;
+                }
+                delete tab.originalId;
+            }
+            if (group.zIndex > topZ) {
+                topZ = group.zIndex;
+                topWindowId = group.id;
+            }
+        }
+        if (topWindowId !== -1) {
+            const topWindow = newGroups.find(g => g.id === topWindowId);
+            if (topWindow) topWindow.isActive = true;
+        }
+        
+        return newGroups;
+    };
+
+    let initialWindows = [];
+    if (typeof window !== 'undefined') {
+        try {
+            const savedLayoutJson = localStorage.getItem('sidekickWindowLayout');
+            if (savedLayoutJson) {
+                const savedLayout = JSON.parse(savedLayoutJson);
+                initialWindows = rehydrateLayout(savedLayout);
+            }
+        } catch (e) {
+            console.error("Failed to load and restore window layout:", e);
+            localStorage.removeItem('sidekickWindowLayout');
+        }
+    }
+    
+    const { subscribe, update } = writable(initialWindows);
+
+    subscribe(allWindows => {
+        if (typeof window !== 'undefined') {
+            const layoutToSave = createSerializableLayout(allWindows);
+            if (layoutToSave) {
+                localStorage.setItem('sidekickWindowLayout', JSON.stringify(layoutToSave));
+            }
+        }
+    });
+
+    // Subscribe to window view changes to update maximized windows
+    if (typeof window !== 'undefined') {
+        windowView.subscribe(({ panX, panY, zoom }) => {
+            update(windows => {
+                const desktopWidth = window.innerWidth;
+                const desktopHeight = window.innerHeight - TASKBAR_HEIGHT;
+                let changed = false;
+
+                const newWindows = windows.map(w => {
+                    if (w.maximized) {
+                        changed = true;
+                        return {
+                            ...w,
+                            x: -panX / zoom,
+                            y: -panY / zoom,
+                            width: desktopWidth / zoom,
+                            height: desktopHeight / zoom,
+                        };
+                    }
+                    return w;
+                });
+                return changed ? newWindows : windows;
+            });
+        });
+    }
 
     const addWindow = (component, props = {}) => {
         const groupProps = { x: props.x, y: props.y, width: props.width, height: props.height };
@@ -192,6 +385,7 @@ function createWindowManager() {
             zIndex: 100,
             minimized: false,
             maximized: false,
+            cloaked: false,
             isActive: true,
             prevX: 0, prevY: 0, prevWidth: 0, prevHeight: 0,
             tabs: [newTab],
@@ -246,10 +440,22 @@ function createWindowManager() {
     };
 
     const removeWindow = (groupId) => {
-        const group = get(windows).find(g => g.id === groupId);
-        if (group) {
-            removeTab(groupId, group.activeTabId);
-        }
+        update(currentWindows => {
+            const group = currentWindows.find(g => g.id === groupId);
+            if (!group) return currentWindows;
+
+            // Check if any tab requires confirmation
+            for (const tab of group.tabs) {
+                 if (tab.component === IoskConsole && tab.isConsoleConnected) {
+                    if (!confirm(`Console "${tab.title}" has an active connection. Are you sure you want to close it?`)) {
+                        return currentWindows;
+                    }
+                    // Only need to confirm once for the whole group
+                    break;
+                }
+            }
+            return currentWindows.filter(g => g.id !== groupId);
+        });
     };
 
     const setActiveTab = (groupId, tabId) => {
@@ -337,11 +543,11 @@ function createWindowManager() {
         if (!group) return;
         const tab = group.tabs.find(t => t.id === tabId);
         if (!tab) return;
-    
+
         const allWindowSettings = get(windowSettings);
         const componentSettings = allWindowSettings[tab.componentName];
         const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
-    
+
         updateTabProps(groupId, tabId, { zoom: defaultZoom });
     };
 
@@ -367,17 +573,32 @@ function createWindowManager() {
 
     const toggleMaximize = (id) => {
         update(windows => {
+            const { panX, panY, zoom } = get(windowView);
+            const desktopWidth = window.innerWidth;
+            const desktopHeight = window.innerHeight - TASKBAR_HEIGHT;
+
             const maxZ = windows.reduce((max, w) => Math.max(max, w.zIndex), 99);
             return windows.map(w => {
                 if (w.id === id) {
                     const newProps = w.maximized
                         ? { maximized: false, x: w.prevX, y: w.prevY, width: w.prevWidth, height: w.prevHeight }
-                        : { maximized: true, prevX: w.x, prevY: w.y, prevWidth: w.width, prevHeight: w.height, x: 0, y: 0 };
+                        : {
+                            maximized: true,
+                            prevX: w.x, prevY: w.y, prevWidth: w.width, prevHeight: w.height,
+                            x: -panX / zoom,
+                            y: -panY / zoom,
+                            width: desktopWidth / zoom,
+                            height: desktopHeight / zoom,
+                          };
                     return { ...w, ...newProps, zIndex: maxZ + 1, isActive: true };
                 }
                 return { ...w, isActive: false };
             });
         });
+    };
+
+    const toggleCloak = (id) => {
+        update(windows => windows.map(w => w.id === id ? { ...w, cloaked: !w.cloaked } : w));
     };
 
     const closeAllWindows = () => {
@@ -415,7 +636,7 @@ function createWindowManager() {
             return updatedWindows;
         });
     };
-    
+
     const cycleWindow = (forward) => {
         update(currentWindows => {
             const openWindows = currentWindows.filter(w => !w.minimized).sort((a, b) => b.zIndex - a.zIndex);
@@ -424,7 +645,7 @@ function createWindowManager() {
             let newOrder = [...openWindows];
             if (forward) newOrder.push(newOrder.shift());
             else newOrder.unshift(newOrder.pop());
-            
+
             const newProps = {};
             const activeId = newOrder[0].id;
             newOrder.forEach((win, index) => {
@@ -439,15 +660,15 @@ function createWindowManager() {
         update(windows => {
             const groupIndex = windows.findIndex(g => g.id === groupId);
             if (groupIndex === -1) return windows;
-    
+
             const group = windows[groupIndex];
             const tabs = [...group.tabs];
-            
+
             const draggedIndex = tabs.findIndex(t => t.id == draggedTabId);
             if (draggedIndex === -1) return windows;
-    
+
             const [draggedTab] = tabs.splice(draggedIndex, 1);
-            
+
             if (targetTabId === null) {
                 tabs.push(draggedTab);
             } else {
@@ -458,7 +679,7 @@ function createWindowManager() {
                     tabs.push(draggedTab);
                 }
             }
-    
+
             const newGroup = { ...group, tabs };
             const newWindows = [...windows];
             newWindows[groupIndex] = newGroup;
@@ -478,13 +699,13 @@ function createWindowManager() {
             // 1. Modify source group
             const newSourceTabs = sourceGroup.tabs.filter(t => t.id !== tabId);
             let newWindows = [...windows];
-            
+
             let newActiveTabId = sourceGroup.activeTabId;
             if (newActiveTabId === tabId) {
                 newActiveTabId = newSourceTabs[0].id;
             }
             newWindows[sourceGroupIndex] = { ...sourceGroup, tabs: newSourceTabs, activeTabId: newActiveTabId };
-            
+
             // 2. Create new group for detached tab
             const newWindowGroup = {
                 id: ++windowGroupIdCounter,
@@ -496,12 +717,12 @@ function createWindowManager() {
                 activeTabId: tabToDetach.id,
                 notice: null,
             };
-            
+
             // 3. Add new group and update z-indices/active state
             newWindows = newWindows.map(w => ({ ...w, isActive: w.id === newWindowGroup.id, zIndex: w.id === sourceGroupId ? w.zIndex : w.zIndex - 1 }));
             newWindowGroup.zIndex = newWindows.reduce((max, w) => Math.max(max, w.zIndex), 99) + 1;
             newWindows.push(newWindowGroup);
-            
+
             return newWindows;
         });
     };
@@ -510,9 +731,9 @@ function createWindowManager() {
         const tabs = groupData.tabs.map(tabData => {
             const component = componentMap[tabData.componentType];
             if (!component) return null;
-            
+
             const { componentType, ...props } = tabData;
-    
+
             const allWindowSettings = get(windowSettings);
             const componentSettings = allWindowSettings[tabData.componentType];
             const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
@@ -525,19 +746,19 @@ function createWindowManager() {
                 zoom: props.zoom ?? defaultZoom,
             };
         }).filter(Boolean);
-    
+
         if (tabs.length === 0) return;
-    
+
         const activeTabInNewGroup = tabs.find(t => t.originalId === groupData.activeTabId);
         const newActiveTabId = activeTabInNewGroup ? activeTabInNewGroup.id : (tabs[0] ? tabs[0].id : null);
-    
+
         // Clean up originalId from tabs
         tabs.forEach(t => delete t.originalId);
-    
+
         update(windows => {
             const updatedWindows = windows.map(w => ({ ...w, isActive: false }));
             const maxZ = updatedWindows.reduce((max, w) => Math.max(max, w.zIndex), 99);
-    
+
             const newGroup = {
                 id: ++windowGroupIdCounter,
                 x: groupData.x, y: groupData.y, width: groupData.width, height: groupData.height,
@@ -551,6 +772,144 @@ function createWindowManager() {
                 activeTabId: newActiveTabId,
             };
             return [...updatedWindows, newGroup];
+        });
+    };
+
+    const restoreLayout = (layout) => {
+        if (!layout || !layout.windowGroups) return;
+
+        const idMap = new Map(); // Map<originalId, newId>
+
+        // --- Scaling Logic ---
+        const savedDesktopWidth = layout.desktop?.width || window.innerWidth;
+        const savedDesktopHeight = layout.desktop?.height || (window.innerHeight - 40);
+        const currentDesktopWidth = window.innerWidth;
+        const currentDesktopHeight = window.innerHeight - 40;
+        const scaleX = currentDesktopWidth / savedDesktopWidth;
+        const scaleY = currentDesktopHeight / savedDesktopHeight;
+
+        const newGroups = [];
+
+        // --- 1st Pass: Create new objects, generate new IDs, and populate map ---
+        for (const groupData of layout.windowGroups) {
+            const scaledGroupData = { ...groupData };
+            if (!scaledGroupData.maximized) {
+                scaledGroupData.x = Math.round(scaledGroupData.x * scaleX);
+                scaledGroupData.y = Math.round(scaledGroupData.y * scaleY);
+                scaledGroupData.width = Math.round(scaledGroupData.width * scaleX);
+                scaledGroupData.height = Math.round(scaledGroupData.height * scaleY);
+            }
+
+            const newTabs = scaledGroupData.tabs.map(tabData => {
+                const component = componentMap[tabData.componentType];
+                if (!component) return null;
+
+                const { componentType, originalId, ...props } = tabData;
+                const allWindowSettings = get(windowSettings);
+                const componentSettings = allWindowSettings[tabData.componentType];
+                const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
+                const newTabId = ++tabIdCounter;
+                idMap.set(originalId, newTabId);
+
+                return {
+                    id: newTabId,
+                    component,
+                    componentName: tabData.componentType,
+                    ...props,
+                    zoom: props.zoom ?? defaultZoom,
+                    originalId: originalId // Keep for 2nd pass
+                };
+            }).filter(Boolean);
+
+            if (newTabs.length === 0) continue;
+
+            const newGroup = {
+                id: ++windowGroupIdCounter,
+                x: scaledGroupData.x, y: scaledGroupData.y, width: scaledGroupData.width, height: scaledGroupData.height,
+                minimized: false,
+                maximized: scaledGroupData.maximized,
+                isActive: false, // Set later
+                zIndex: 0,       // Set later
+                prevX: scaledGroupData.x, prevY: scaledGroupData.y, prevWidth: scaledGroupData.width, prevHeight: scaledGroupData.height,
+                notice: null,
+                tabs: newTabs,
+                activeTabId: scaledGroupData.activeTabId, // Keep old ID for 2nd pass
+            };
+            newGroups.push(newGroup);
+        }
+
+        // --- 2nd Pass: Remap all ID-based references ---
+        for (const group of newGroups) {
+            group.activeTabId = idMap.get(group.activeTabId) || (group.tabs.length > 0 ? group.tabs[0].id : null);
+            for (const tab of group.tabs) {
+                if (tab.consoleId) {
+                    tab.consoleId = idMap.get(tab.consoleId) || tab.consoleId;
+                }
+                delete tab.originalId;
+            }
+        }
+
+        // --- Final Step: Update the Svelte store once with all new windows ---
+        update(windows => {
+            const updatedWindows = windows.map(w => ({ ...w, isActive: false }));
+            let maxZ = updatedWindows.reduce((max, w) => Math.max(max, w.zIndex), 99);
+
+            newGroups.forEach(g => {
+                g.zIndex = ++maxZ;
+            });
+
+            if (newGroups.length > 0) {
+                newGroups[newGroups.length - 1].isActive = true;
+            }
+
+            return [...updatedWindows, ...newGroups];
+        });
+    };
+
+    const unbackWindow = (backedWindow) => {
+        // Get current view states for coordinate transformation
+        const dv = get(desktopView);
+        const wv = get(windowView);
+
+        if (dv.zoom === 0 || wv.zoom === 0) {
+            console.error("Cannot unback window with zero zoom level.");
+            return;
+        }
+
+        // Get the visual dimensions of the backed window on the back layer, accounting for scale
+        const scale = backedWindow.scale || 1.0;
+        const backedVisualWidth = backedWindow.width * scale;
+        const backedVisualHeight = backedWindow.height * scale;
+
+        // Calculate the midpoint of the backed window in back-layer world coordinates
+        const backWorldMidX = backedWindow.x + backedVisualWidth / 2;
+        const backWorldMidY = backedWindow.y + backedVisualHeight / 2;
+        
+        // Transform this midpoint into front-layer world coordinates
+        const frontWorldMidX = ((backWorldMidX * dv.zoom) + dv.panX - wv.panX) / wv.zoom;
+        const frontWorldMidY = ((backWorldMidY * dv.zoom) + dv.panY - wv.panY) / wv.zoom;
+        
+        // Calculate the new dimensions for the restored window. The world-space size is adjusted
+        // by the zoom factor change, which makes it visually larger/smaller as requested.
+        const zoomFactor = wv.zoom / dv.zoom;
+        const restoredWindowWidth = backedVisualWidth * zoomFactor;
+        const restoredWindowHeight = backedVisualHeight * zoomFactor;
+
+        // Calculate the new top-left (x, y) for the restored window in front-layer world coordinates
+        const newX = frontWorldMidX - restoredWindowWidth / 2;
+        const newY = frontWorldMidY - restoredWindowHeight / 2;
+        
+        deleteBackedWindow(backedWindow.id);
+        
+        // Update the config with the new, transformed size before restoring.
+        const newConfig = { ...backedWindow.config };
+        newConfig.width = restoredWindowWidth;
+        newConfig.height = restoredWindowHeight;
+        
+        restoreWindow({ 
+            ...newConfig, 
+            x: newX, 
+            y: newY, 
         });
     };
 
@@ -591,7 +950,7 @@ function createWindowManager() {
             console.error("Could not play notice audio.", e);
         }
     };
-    
+
     const logToNotificationCenter = (group, tab, payload) => {
         const newNotification = {
             id: Date.now(),
@@ -612,28 +971,28 @@ function createWindowManager() {
             if (!group || (group.isActive && !force)) {
                 return windows; // Don't notify for active windows unless forced
             }
-    
+
             const tab = group.tabs.find(t => t.id === tabId);
             if (!tab) return windows;
-    
+
             const settings = resolveNoticeSettings(tab.componentName);
             if (!settings.enabled) return windows;
-    
+
             const noticeId = Date.now();
             const updatedGroup = { ...group, notice: { id: noticeId, color: settings.visual.color } };
-    
+
             if (settings.audio.enabled && settings.audio.sound && settings.audio.sound !== 'none') {
                 playNoticeSound(settings.audio);
             }
-    
+
             logToNotificationCenter(group, tab, payload);
-    
+
             setTimeout(() => {
                 update(currentWindows => currentWindows.map(w =>
                     (w.id === groupId && w.notice?.id === noticeId) ? { ...w, notice: null } : w
                 ));
             }, settings.visual.duration);
-    
+
             return windows.map(w => w.id === groupId ? updatedGroup : w);
         });
     };
@@ -652,6 +1011,7 @@ function createWindowManager() {
         resetTabZoom,
         toggleMinimize,
         toggleMaximize,
+        toggleCloak,
         closeAllWindows,
         minimizeAllWindows,
         restoreAllWindows,
@@ -660,7 +1020,9 @@ function createWindowManager() {
         reorderTab,
         detachTabToNewWindow,
         restoreWindow,
+        restoreLayout,
         notifyActivity,
+        unbackWindow,
     };
 }
 
@@ -776,6 +1138,11 @@ export function newLocalFileExplorer(props = {}) {
     windows.addWindow(LocalFileExplorer, { ...defaultProps, ...props });
 }
 
+export function newLocalFileViewer(props = {}) {
+    const title = (props.path || '').split('/').pop() || props.path;
+    windows.addWindow(LocalFileViewer, { title: `View - ${title}`, width: 700, height: 500, ...props });
+}
+
 export function newAskWindow(initialFiles = [], props = {}) {
     windows.addWindow(Ask, { title: 'Ask', initialFiles, width: 900, height: 600, ...props });
 }
@@ -834,4 +1201,87 @@ export function newIoskUserInspector(consoleTabId, targetUser, consoleWs, props 
         height: 700,
         ...props,
     });
+}
+
+export function newBox(props = {}) {
+    const { name, context, sourceEvent } = props;
+
+    // --- Calculate Aspect Ratio ---
+    const desktopHeight = window.innerHeight - TASKBAR_HEIGHT;
+    const desktopWidth = window.innerWidth;
+    const aspectRatio = (desktopHeight > 0 && desktopWidth > 0) ? desktopHeight / desktopWidth : 1.0;
+
+    // --- Find Optimal Position on Back Layer ---
+    const BOX_BASE_WIDTH = 180;
+    const BOX_BASE_HEIGHT = BOX_BASE_WIDTH * aspectRatio;
+
+    // Reconstruct obstacles from stores, similar to `allItems` in Desktop.svelte
+    const obstacles = [
+        ...get(boxes).map(b => {
+            const scale = b.scale ?? 1.0;
+            const ar = b.aspect_ratio ?? aspectRatio;
+            return { x: b.x, y: b.y, width: BOX_BASE_WIDTH * scale, height: BOX_BASE_WIDTH * ar * scale };
+        }),
+        ...get(desktopShortcuts).map(s => {
+            const scale = s.scale || 1.0;
+            const unscaledWidth = s.renderWidth || 90;
+            const unscaledHeight = s.renderHeight || 90;
+            return { x: s.x, y: s.y, width: unscaledWidth * scale, height: unscaledHeight * scale };
+        }),
+        ...get(backedWindows).map(bw => {
+            const scale = bw.scale || 1.0;
+            return { x: bw.x, y: bw.y, width: bw.width * scale, height: bw.height * scale };
+        })
+    ];
+
+    const { panX, panY, zoom } = get(desktopView);
+
+    const checkCollision = (rect) => {
+        for (const obs of obstacles) {
+            if (rect.x < obs.x + obs.width && rect.x + rect.width > obs.x &&
+                rect.y < obs.y + obs.height && rect.y + rect.height > obs.y) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    let startPos;
+    if (sourceEvent) {
+        const worldX = (sourceEvent.clientX - panX) / zoom;
+        const worldY = ((sourceEvent.clientY - TASKBAR_HEIGHT) - panY) / zoom;
+        startPos = { x: worldX - BOX_BASE_WIDTH / 2, y: worldY - BOX_BASE_HEIGHT / 2 };
+    } else {
+        startPos = { x: 100, y: 100 }; // Fallback
+    }
+
+    let candidatePos = startPos;
+    if (checkCollision({ ...candidatePos, width: BOX_BASE_WIDTH, height: BOX_BASE_HEIGHT })) {
+        let x = startPos.x + BOX_BASE_WIDTH / 2;
+        let y = startPos.y + BOX_BASE_HEIGHT / 2;
+        let step = 30, leg = 0, armLength = 1, count = 0;
+        let found = false;
+        for (let i = 0; i < 200; i++) {
+            const testPos = { x: x - BOX_BASE_WIDTH / 2, y: y - BOX_BASE_HEIGHT / 2 };
+            if (!checkCollision({ ...testPos, width: BOX_BASE_WIDTH, height: BOX_BASE_HEIGHT })) {
+                candidatePos = testPos;
+                found = true;
+                break;
+            }
+            switch (leg) {
+                case 0: x += step; break;
+                case 1: y += step; break;
+                case 2: x -= step; break;
+                case 3: y -= step; break;
+            }
+            if (++count >= armLength) {
+                count = 0;
+                leg = (leg + 1) % 4;
+                if (leg % 2 === 0) armLength++;
+            }
+        }
+        if (!found) candidatePos = startPos; // Fallback if no spot is found
+    }
+    
+    createBox(name, 'local', context, aspectRatio, candidatePos.x, candidatePos.y);
 }

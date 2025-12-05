@@ -22,6 +22,10 @@ class AIClient:
         """Wraps the provider's prompt_for_text function."""
         return self.provider.prompt_for_text(*args, **kwargs)
 
+    def prompt_for_text_stream(self, *args, **kwargs):
+        """Wraps the provider's prompt_for_text_stream generator."""
+        return self.provider.prompt_for_text_stream(*args, **kwargs)
+
     def prompt_for_json(self, *args, **kwargs):
         """Wraps the provider's prompt_for_json function."""
         return self.provider.prompt_for_json(*args, **kwargs)
@@ -29,6 +33,10 @@ class AIClient:
     def prompt_with_file_for_text(self, *args, **kwargs):
         """Wraps the provider's prompt_with_file_for_text function."""
         return self.provider.prompt_with_file_for_text(*args, **kwargs)
+
+    def prompt_with_file_for_text_stream(self, *args, **kwargs):
+        """Wraps the provider's prompt_with_file_for_text_stream generator."""
+        return self.provider.prompt_with_file_for_text_stream(*args, **kwargs)
 
     def prompt_with_file_for_json(self, *args, **kwargs):
         """Wraps the provider's prompt_with_file_for_json function."""

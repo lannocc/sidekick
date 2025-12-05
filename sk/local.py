@@ -8,6 +8,9 @@ import logging
 import platform
 import sys
 import tiktoken
+import sqlite3
+from datetime import datetime
+from . import config
 from .util import get_directory_tree_as_text, get_directory_contents_as_text
 from binaryornot.check import is_binary
 
@@ -26,11 +29,229 @@ from websockets.exceptions import ConnectionClosed
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
+
+# --- Stylized Console Output ---
+
+# ANSI color codes for stylized console output
+class Colors:
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    CYAN = '\033[36m'
+    YELLOW = '\033[33m'
+    MAGENTA = '\033[35m'
+    GREEN = '\033[32m'
+    RED = '\033[31m'
+
+def print_action(action, details=""):
+    """Prints a formatted and stylized action line to the console."""
+    if not sys.stdout.isatty(): # Don't use colors if not a TTY
+        print(f"[SK-LOCAL] {action}: {details}")
+        return
+
+    timestamp = datetime.now().strftime('%H:%M:%S')
+    # Using f-string for clear, colored output.
+    print(f"{Colors.CYAN}[SK-LOCAL {timestamp}]{Colors.RESET} {Colors.BOLD}{Colors.MAGENTA}{action.ljust(14)}{Colors.RESET} {Colors.YELLOW}{details}{Colors.RESET}")
+
+def print_startup_banner():
+    """Prints a colorful startup banner."""
+    if not sys.stdout.isatty():
+        log.info(f"Starting Skybox Local Server on ws://{HOST}:{PORT}")
+        return
+    print(f"\n{Colors.BOLD}{Colors.GREEN}--- Skybox Local Server ---{Colors.RESET}")
+    print(f"{Colors.CYAN}  Listening on: ws://{HOST}:{PORT}{Colors.RESET}")
+    print(f"{Colors.YELLOW}  Press Ctrl+C to stop the server.{Colors.RESET}\n")
+
+def print_shutdown_message():
+    """Prints a colorful shutdown message."""
+    if not sys.stdout.isatty():
+        log.info("Server shutting down.")
+        return
+    print(f"\n{Colors.BOLD}{Colors.YELLOW}Shutting down server...{Colors.RESET}")
+
+def print_stopped_message():
+    """Prints a colorful server stopped message."""
+    if not sys.stdout.isatty():
+        log.info("Server stopped.")
+        return
+    print(f"{Colors.BOLD}{Colors.RED}Server stopped.{Colors.RESET}")
+
+# --- End Stylized Console Output ---
+
+
 PORT = 4210
 HOST = '127.0.0.1'
 
 ENCODING = tiktoken.get_encoding('cl100k_base')
 running_asks = {}
+
+# --- Skybox Globals ---
+DB_CONN = None
+CONNECTED_CLIENTS = set()
+# --------------------
+
+def init_db():
+    """Initializes the SQLite database for Skybox."""
+    global DB_CONN
+    db_path = os.path.join(config.DIRS.user_data_dir, 'skybox.db')
+    log.info(f"Using Skybox database at {db_path}")
+    DB_CONN = sqlite3.connect(db_path)
+    DB_CONN.row_factory = sqlite3.Row  # Makes rows dict-like
+    DB_CONN.execute("PRAGMA foreign_keys = ON;") # Enforce foreign key constraints
+    cursor = DB_CONN.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS box (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('local', 'iosk')),
+            context TEXT NOT NULL,
+            x INTEGER DEFAULT 100,
+            y INTEGER DEFAULT 100,
+            scale REAL DEFAULT 1.0,
+            cover_panel_location TEXT,
+            aspect_ratio REAL
+        );
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS panel (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            box_id INTEGER NOT NULL,
+            loc_x INTEGER NOT NULL,
+            loc_y INTEGER NOT NULL,
+            parent_loc_x INTEGER,
+            parent_loc_y INTEGER,
+            board_type TEXT NOT NULL CHECK(board_type IN ('empty', 'window', 'tabs', 'dash', 'image')),
+            board_config TEXT, -- JSON blob for the BOARD configuration
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
+            UNIQUE(box_id, loc_x, loc_y)
+        );
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS desktop_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+    """)
+    # Set default values if they don't exist
+    cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('panX', json.dumps(0)))
+    cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('panY', json.dumps(0)))
+    cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('zoom', json.dumps(1.0)))
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS desktop_shortcut (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('file', 'dir')),
+            path TEXT NOT NULL UNIQUE,
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            scale REAL NOT NULL DEFAULT 1.0
+        );
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS backed_window (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            config TEXT NOT NULL, -- JSON blob of window group
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            width REAL NOT NULL,
+            height REAL NOT NULL,
+            scale REAL NOT NULL DEFAULT 1.0,
+            z_index INTEGER NOT NULL DEFAULT 0
+        );
+    """)
+
+    DB_CONN.commit()
+    log.info("Skybox database initialized.")
+
+async def broadcast_box_list():
+    """Fetches all boxes and broadcasts them to all connected clients."""
+    if not DB_CONN:
+        log.error("Database not connected, cannot broadcast box list.")
+        return
+
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio FROM box ORDER BY name")
+    boxes = [dict(row) for row in cursor.fetchall()]
+
+    message = json.dumps({'type': 'box_list', 'boxes': boxes})
+
+    if CONNECTED_CLIENTS:
+        log.info(f"Broadcasting box_list to {len(CONNECTED_CLIENTS)} clients.")
+        # Concurrently send the message to all clients.
+        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
+
+
+async def broadcast_shortcut_list():
+    """Fetches all shortcuts and broadcasts them to all connected clients."""
+    if not DB_CONN:
+        log.error("Database not connected, cannot broadcast shortcut list.")
+        return
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT id, name, type, path, x, y, scale FROM desktop_shortcut")
+    shortcuts = [dict(row) for row in cursor.fetchall()]
+    message = json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts})
+    if CONNECTED_CLIENTS:
+        log.info(f"Broadcasting shortcut_list to {len(CONNECTED_CLIENTS)} clients.")
+        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
+
+async def broadcast_backed_window_list():
+    """Fetches all backed windows and broadcasts them to all connected clients."""
+    if not DB_CONN:
+        log.error("Database not connected, cannot broadcast backed window list.")
+        return
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT id, config, x, y, width, height, scale, z_index FROM backed_window")
+    windows = [dict(row) for row in cursor.fetchall()]
+    message = json.dumps({'type': 'backed_window_list', 'windows': windows})
+    if CONNECTED_CLIENTS:
+        log.info(f"Broadcasting backed_window_list to {len(CONNECTED_CLIENTS)} clients.")
+        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
+
+
+async def broadcast_box_config(box_id):
+    """Fetches the panel config for a box and broadcasts it to all clients."""
+    if not DB_CONN:
+        log.error("Database not connected, cannot broadcast box config.")
+        return
+
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT id, box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
+    panels = []
+    for row in cursor.fetchall():
+        panel = dict(row)
+        try:
+            if panel['board_config']:
+                panel['board_config'] = json.loads(panel['board_config'])
+        except json.JSONDecodeError:
+            log.warning(f"Could not decode board_config for panel at ({panel['loc_x']},{panel['loc_y']}) in box {box_id}")
+            panel['board_config'] = None
+        panels.append(panel)
+
+    message = json.dumps({'type': 'box_config_response', 'box_id': box_id, 'panels': panels})
+
+    if CONNECTED_CLIENTS:
+        log.info(f"Broadcasting box_config for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
+        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
+
+async def broadcast_desktop_settings():
+    """Fetches desktop settings and broadcasts them to all connected clients."""
+    if not DB_CONN:
+        log.error("Database not connected, cannot broadcast desktop settings.")
+        return
+
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT key, value FROM desktop_settings")
+    settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
+
+    message = json.dumps({'type': 'desktop_settings', 'settings': settings})
+
+    if CONNECTED_CLIENTS:
+        log.info(f"Broadcasting desktop_settings to {len(CONNECTED_CLIENTS)} clients.")
+        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
 async def read_stream(stream, websocket, ask_id, stream_name):
@@ -217,79 +438,397 @@ async def handle_ask_stats(msg):
         return {'type': 'fs_error', 'error': 'Failed to calculate stats.', 'nonce': msg.get('nonce')}
 
 
-async def pty_reader(pty_master_fd, websocket):
+async def pty_reader(pty_master_fd, websocket, term_id):
     """Reads from the pty and sends data to the websocket."""
     try:
         while websocket.open:
             try:
                 data = os.read(pty_master_fd, 1024)
                 if data:
-                    await websocket.send(json.dumps({'type': 'term_data', 'data': data.decode('utf-8', errors='ignore')}))
+                    await websocket.send(json.dumps({'type': 'term_data', 'term_id': term_id, 'data': data.decode('utf-8', errors='ignore')}))
                 else:
-                    log.info("PTY child process exited.")
+                    log.info(f"PTY child process for term_id {term_id} exited.")
                     break  # EOF
             except BlockingIOError:
                 await asyncio.sleep(0.01)
                 continue
+            except OSError as e:
+                # This is expected when the child process exits.
+                log.info(f"PTY child process for term_id {term_id} exited (OSError: {e}).")
+                break
     except (ConnectionClosed, BrokenPipeError):
-        log.info("PTY reader: Connection closed.")
+        log.info(f"PTY reader for term_id {term_id}: Connection closed.")
     except Exception as e:
-        log.error(f"Error in pty_reader: {e}")
+        log.error(f"Error in pty_reader for term_id {term_id}: {e}")
     finally:
-        log.info("PTY reader task finished.")
+        log.info(f"PTY reader task for term_id {term_id} finished, notifying client of exit.")
         if websocket.open:
-            await websocket.close(reason='PTY process exited')
+            try:
+                await websocket.send(json.dumps({'type': 'term_exit', 'term_id': term_id}))
+            except ConnectionClosed:
+                pass # Client may have disconnected in the meantime.
 
 
 async def websocket_handler(websocket):
     """Main handler for each WebSocket connection."""
     log.info(f"Client connected from {websocket.remote_address}")
-    pty_master_fd = None
-    pty_child_pid = None
-    reader_task = None
+    CONNECTED_CLIENTS.add(websocket)
+    active_terminals = {} # term_id -> {'pid': pid, 'fd': fd, 'task': task}
 
     try:
+        # Send initial desktop settings on connect
+        cursor = DB_CONN.cursor()
+        cursor.execute("SELECT key, value FROM desktop_settings")
+        settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
+        await websocket.send(json.dumps({'type': 'desktop_settings', 'settings': settings}))
+
+        # Send initial shortcut list on connect
+        cursor.execute("SELECT id, name, type, path, x, y, scale FROM desktop_shortcut")
+        shortcuts = [dict(row) for row in cursor.fetchall()]
+        await websocket.send(json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts}))
+
+        # Send initial backed window list on connect
+        cursor.execute("SELECT id, config, x, y, width, height, scale, z_index FROM backed_window")
+        backed_windows = [dict(row) for row in cursor.fetchall()]
+        await websocket.send(json.dumps({'type': 'backed_window_list', 'windows': backed_windows}))
+
+
         async for message in websocket:
             try:
                 msg = json.loads(message)
                 msg_type = msg.get('type')
 
+                # --- Filesystem Operations ---
                 if msg_type == 'fs_list':
-                    response = await handle_fs_list(msg.get('path', '.'))
+                    path = msg.get('path', '.')
+                    print_action("FS List", f"path='{path}'")
+                    response = await handle_fs_list(path)
                     await websocket.send(json.dumps(response))
                 elif msg_type == 'fs_read':
-                    response = await handle_fs_read(msg.get('path'))
+                    path = msg.get('path')
+                    print_action("FS Read", f"path='{path}'")
+                    response = await handle_fs_read(path)
                     await websocket.send(json.dumps(response))
+
+                # --- Ask Operations ---
                 elif msg_type == 'sk_ask':
+                    print_action("SK Ask", f"prompt_len={len(msg.get('prompt', ''))}, files={len(msg.get('files', []))}")
                     asyncio.create_task(handle_sk_ask(websocket, msg))
                 elif msg_type == 'ask_stats':
+                    print_action("Ask Stats", f"prompt_len={len(msg.get('prompt', ''))}, files={len(msg.get('files', []))}")
                     response = await handle_ask_stats(msg)
                     await websocket.send(json.dumps(response))
 
+                # --- Desktop Settings ---
+                elif msg_type == 'update_desktop_settings':
+                    settings_to_update = msg.get('settings', {})
+                    print_action("Update Dsk Cfg", f"{settings_to_update}")
+                    cursor = DB_CONN.cursor()
+                    for key, value in settings_to_update.items():
+                        cursor.execute(
+                            "INSERT OR REPLACE INTO desktop_settings (key, value) VALUES (?, ?)",
+                            (key, json.dumps(value))
+                        )
+                    DB_CONN.commit()
+                    await broadcast_desktop_settings()
+
+                # --- Desktop Shortcut Operations ---
+                elif msg_type == 'create_shortcut':
+                    # FIX: Use 'shortcut_type' to avoid collision with the message 'type'
+                    name, shortcut_type, path, x, y = msg['name'], msg['shortcut_type'], msg['path'], msg['x'], msg['y']
+                    print_action("Create Shortcut", f"path='{path}'")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("""
+                        INSERT INTO desktop_shortcut (name, type, path, x, y)
+                        VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(path) DO UPDATE SET
+                            x = excluded.x,
+                            y = excluded.y;
+                    """, (name, shortcut_type, path, x, y))
+                    DB_CONN.commit()
+                    await broadcast_shortcut_list()
+
+                elif msg_type == 'update_shortcut_transform':
+                    shortcut_id, x, y, scale = msg['id'], msg['x'], msg['y'], msg.get('scale', 1.0)
+                    print_action("Shortcut Xform", f"id={shortcut_id}, x={int(x)}, y={int(y)}, scale={scale:.2f}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "UPDATE desktop_shortcut SET x = ?, y = ?, scale = ? WHERE id = ?",
+                        (x, y, scale, shortcut_id)
+                    )
+                    DB_CONN.commit()
+                    await broadcast_shortcut_list()
+
+                elif msg_type == 'delete_shortcut':
+                    shortcut_id = msg['id']
+                    print_action("Delete Shortcut", f"id={shortcut_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("DELETE FROM desktop_shortcut WHERE id = ?", (shortcut_id,))
+                    DB_CONN.commit()
+                    await broadcast_shortcut_list()
+
+                # --- Backed Window Operations ---
+                elif msg_type == 'create_backed_window':
+                    config, x, y, w, h, scale = msg['config'], msg['x'], msg['y'], msg['width'], msg['height'], msg.get('scale', 1.0)
+                    print_action("Create BackedWin", f"x={int(x)}, y={int(y)}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "INSERT INTO backed_window (config, x, y, width, height, scale) VALUES (?, ?, ?, ?, ?, ?)",
+                        (config, x, y, w, h, scale)
+                    )
+                    DB_CONN.commit()
+                    await broadcast_backed_window_list()
+                elif msg_type == 'update_backed_window_transform':
+                    win_id, x, y, scale = msg['id'], msg['x'], msg['y'], msg.get('scale', 1.0)
+                    print_action("BackedWin Xform", f"id={win_id}, x={int(x)}, y={int(y)}, scale={scale:.2f}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "UPDATE backed_window SET x = ?, y = ?, scale = ? WHERE id = ?",
+                        (x, y, scale, win_id)
+                    )
+                    DB_CONN.commit()
+                    await broadcast_backed_window_list()
+                elif msg_type == 'delete_backed_window':
+                    win_id = msg['id']
+                    print_action("Delete BackedWin", f"id={win_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("DELETE FROM backed_window WHERE id = ?", (win_id,))
+                    DB_CONN.commit()
+                    await broadcast_backed_window_list()
+
+
+                # --- Skybox Box Operations ---
+                elif msg_type == 'list_boxes':
+                    print_action("List Boxes")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio FROM box ORDER BY name")
+                    boxes = [dict(row) for row in cursor.fetchall()]
+                    await websocket.send(json.dumps({'type': 'box_list', 'boxes': boxes}))
+
+                elif msg_type == 'create_box':
+                    name = msg.get('name')
+                    box_type = msg.get('box_type')
+                    context = msg.get('context')
+                    aspect_ratio = msg.get('aspect_ratio')
+                    x = msg.get('x')
+                    y = msg.get('y')
+                    pos_str = f"pos=({int(x)},{int(y)})" if x is not None and y is not None else "pos=default"
+                    print_action("Create Box", f"name='{name}', type='{box_type}', ratio={aspect_ratio:.2f}, {pos_str}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "INSERT INTO box (name, type, context, aspect_ratio, x, y) VALUES (?, ?, ?, ?, ?, ?)",
+                        (name, box_type, context, aspect_ratio, x, y)
+                    )
+                    new_id = cursor.lastrowid
+
+                    # Create default panels for the new box
+                    # Left Panel: Files (-1, 0)
+                    files_board_config = {
+                        "x": 100, "y": 100,
+                        "width": 500, "height": 600,
+                        "maximized": False,
+                        "activeTabId": 1,
+                        "tabs": [
+                            {
+                                "originalId": 1,
+                                "componentType": "LocalFileExplorer",
+                                "title": f"Files - {name}",
+                                "initialPath": context
+                            }
+                        ]
+                    }
+                    cursor.execute(
+                        "INSERT INTO panel (box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (new_id, -1, 0, 0, 0, 'window', json.dumps(files_board_config))
+                    )
+
+                    # Right Panel: Terminal (1, 0)
+                    terminal_board_config = {
+                        "x": 150, "y": 150,
+                        "width": 800, "height": 500,
+                        "maximized": False,
+                        "activeTabId": 1,
+                        "tabs": [
+                            {
+                                "originalId": 1,
+                                "componentType": "LocalTerminal",
+                                "title": f"Terminal - {name}",
+                                "initialPath": context
+                            }
+                        ]
+                    }
+                    cursor.execute(
+                        "INSERT INTO panel (box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (new_id, 1, 0, 0, 0, 'window', json.dumps(terminal_board_config))
+                    )
+
+                    DB_CONN.commit()
+                    await broadcast_box_list()
+                    await broadcast_box_config(new_id)
+
+                elif msg_type == 'update_box':
+                    box_id = msg.get('id')
+                    name = msg.get('name')
+                    print_action("Update Box", f"id={box_id}, name='{name}'")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "UPDATE box SET name = ? WHERE id = ?",
+                        (msg.get('name'), msg.get('id'))
+                    )
+                    DB_CONN.commit()
+                    await broadcast_box_list()
+
+                elif msg_type == 'update_box_transform':
+                    box_id = msg.get('id')
+                    x, y, scale = msg.get('x'), msg.get('y'), msg.get('scale')
+                    print_action("Box Transform", f"id={box_id}, x={int(x)}, y={int(y)}, scale={scale:.2f}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "UPDATE box SET x = ?, y = ?, scale = ? WHERE id = ?",
+                        (x, y, scale, box_id)
+                    )
+                    DB_CONN.commit()
+                    await broadcast_box_list()
+
+                elif msg_type == 'set_box_cover':
+                    box_id = msg.get('box_id')
+                    location = msg.get('location') # can be a coordinate string 'x_y' or None
+                    print_action("Set Box Cover", f"id={box_id}, loc='{location}'")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute(
+                        "UPDATE box SET cover_panel_location = ? WHERE id = ?",
+                        (location, box_id)
+                    )
+                    DB_CONN.commit()
+                    await broadcast_box_list()
+
+                elif msg_type == 'delete_box':
+                    box_id = msg.get('id')
+                    print_action("Delete Box", f"id={box_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("DELETE FROM box WHERE id = ?", (msg.get('id'),))
+                    DB_CONN.commit()
+                    await broadcast_box_list()
+
+                # --- Skybox Panel/Board Operations ---
+                elif msg_type == 'get_box_config':
+                    box_id = msg.get('id')
+                    print_action("Get Box Cfg", f"id={box_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("SELECT id, box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config FROM panel WHERE box_id = ?", (box_id,))
+                    panels = []
+                    for row in cursor.fetchall():
+                        panel = dict(row)
+                        try:
+                            if panel['board_config']:
+                                panel['board_config'] = json.loads(panel['board_config'])
+                        except json.JSONDecodeError:
+                            log.warning(f"Could not decode board_config for panel at ({panel['loc_x']},{panel['loc_y']}) in box {box_id}")
+                            panel['board_config'] = None
+                        panels.append(panel)
+
+                    await websocket.send(json.dumps({
+                        'type': 'box_config_response',
+                        'box_id': box_id,
+                        'panels': panels
+                    }))
+
+                elif msg_type == 'set_panel_config':
+                    box_id = msg.get('box_id')
+                    loc_x = msg.get('loc_x')
+                    loc_y = msg.get('loc_y')
+                    parent_loc_x = msg.get('parent_loc_x')
+                    parent_loc_y = msg.get('parent_loc_y')
+                    board_type = msg.get('board_type')
+                    print_action("Set Panel", f"box_id={box_id}, loc=({loc_x},{loc_y}), parent=({parent_loc_x},{parent_loc_y}), type='{board_type}'")
+                    board_config = msg.get('board_config') # This is a dict from client
+
+                    cursor = DB_CONN.cursor()
+                    if board_type == 'empty':
+                        cursor.execute(
+                            "DELETE FROM panel WHERE box_id = ? AND loc_x = ? AND loc_y = ?",
+                            (box_id, loc_x, loc_y)
+                        )
+                    else:
+                        # Serialize the board_config dict to a JSON string for storage
+                        board_config_json = json.dumps(board_config) if board_config else None
+
+                        # Use UPSERT (INSERT ... ON CONFLICT)
+                        cursor.execute("""
+                            INSERT INTO panel (box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(box_id, loc_x, loc_y) DO UPDATE SET
+                                parent_loc_x = excluded.parent_loc_x,
+                                parent_loc_y = excluded.parent_loc_y,
+                                board_type = excluded.board_type,
+                                board_config = excluded.board_config;
+                        """, (box_id, loc_x, loc_y, parent_loc_x, parent_loc_y, board_type, board_config_json))
+
+                    DB_CONN.commit()
+                    # After successful update, broadcast the new state to all clients
+                    await broadcast_box_config(box_id)
+
+                # --- Terminal Operations ---
                 elif pty and msg_type == 'term_open':
-                    if pty_child_pid:
-                        log.warning("Terminal already open for this connection.")
+                    term_id = msg.get('term_id')
+                    if not term_id:
+                        log.error("term_open message missing term_id")
                         continue
 
+                    if term_id in active_terminals:
+                        log.warning(f"Terminal with term_id {term_id} already open for this connection.")
+                        continue
+
+                    path = msg.get('path')
+                    print_action("Term Open", f"id='{term_id}', path='{path}'" if path else f"id='{term_id}'")
                     (pid, fd) = pty.fork()
-                    pty_master_fd, pty_child_pid = fd, pid
 
                     if pid == 0:  # Child process
+                        if path and os.path.isdir(path):
+                            try:
+                                os.chdir(path)
+                                log.info(f"Child process for term_id {term_id} changed directory to: {path}")
+                            except Exception as e:
+                                log.error(f"Could not change directory to {path} for term_id {term_id}: {e}")
+
                         shell = os.environ.get('SHELL', 'sh')
-                        log.info(f"Child process launching shell: {shell}")
+                        log.info(f"Child process for term_id {term_id} launching shell: {shell}")
                         os.execvpe(shell, [shell], os.environ)
                     else:  # Parent process
-                        log.info(f"PTY forked with child PID: {pid}")
-                        fl = fcntl.fcntl(pty_master_fd, fcntl.F_GETFL)
-                        fcntl.fcntl(pty_master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-                        reader_task = asyncio.create_task(pty_reader(pty_master_fd, websocket))
+                        log.info(f"PTY forked for term_id {term_id} with child PID: {pid}")
+                        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+                        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+                        reader_task = asyncio.create_task(pty_reader(fd, websocket, term_id))
+                        active_terminals[term_id] = {'pid': pid, 'fd': fd, 'task': reader_task}
 
-                elif pty and msg_type == 'term_data' and pty_master_fd is not None:
-                    os.write(pty_master_fd, msg.get('data', '').encode('utf-8'))
+                elif pty and msg_type == 'term_data':
+                    term_id = msg.get('term_id')
+                    term_session = active_terminals.get(term_id)
+                    if term_session:
+                        os.write(term_session['fd'], msg.get('data', '').encode('utf-8'))
 
-                elif pty and msg_type == 'term_resize' and pty_master_fd is not None:
-                    winsize = struct.pack('HHHH', msg.get('rows', 24), msg.get('cols', 80), 0, 0)
-                    fcntl.ioctl(pty_master_fd, termios.TIOCSWINSZ, winsize)
+                elif pty and msg_type == 'term_resize':
+                    term_id = msg.get('term_id')
+                    term_session = active_terminals.get(term_id)
+                    if term_session:
+                        rows, cols = msg.get('rows', 24), msg.get('cols', 80)
+                        print_action("Term Resize", f"id='{term_id}', rows={rows}, cols={cols}")
+                        winsize = struct.pack('HHHH', rows, cols, 0, 0)
+                        fcntl.ioctl(term_session['fd'], termios.TIOCSWINSZ, winsize)
+
+                elif pty and msg_type == 'term_close':
+                    term_id = msg.get('term_id')
+                    if term_id in active_terminals:
+                        print_action("Term Close", f"id='{term_id}'")
+                        term_session = active_terminals.pop(term_id)
+                        term_session['task'].cancel()
+                        os.close(term_session['fd'])
+                        try:
+                            os.kill(term_session['pid'], 15)  # SIGTERM
+                        except ProcessLookupError:
+                            pass # Process may have already exited
+                    else:
+                        log.warning(f"Received term_close for non-existent term_id: {term_id}")
 
                 else:
                     if msg_type and msg_type.startswith('term_') and not pty:
@@ -305,34 +844,41 @@ async def websocket_handler(websocket):
     except ConnectionClosed:
         log.info("Client disconnected.")
     finally:
-        if pty_child_pid:
-            log.info(f"Cleaning up PTY resources for PID {pty_child_pid}.")
-            if reader_task:
-                reader_task.cancel()
-            if pty_master_fd:
-                os.close(pty_master_fd)
-            try:
-                os.kill(pty_child_pid, 15)  # SIGTERM
-            except ProcessLookupError:
-                pass  # Process may have already exited
+        CONNECTED_CLIENTS.remove(websocket)
+        if active_terminals:
+            log.info(f"Cleaning up {len(active_terminals)} PTY resources for disconnected client.")
+            for term_id, term_session in active_terminals.items():
+                log.info(f"  - Cleaning up term_id {term_id} (PID: {term_session['pid']})")
+                term_session['task'].cancel()
+                os.close(term_session['fd'])
+                try:
+                    os.kill(term_session['pid'], 15)  # SIGTERM
+                except ProcessLookupError:
+                    pass
 
 
 async def start_server():
     """Starts the WebSocket server."""
-    log.info(f"Starting sk-local server on ws://{HOST}:{PORT}")
     async with serve(websocket_handler, HOST, PORT):
         await asyncio.Future()  # run forever
 
 
 def main(args):
     """Entry point for `sk local` command."""
+    print_startup_banner()
+    init_db()  # Initialize the database on startup
     try:
         asyncio.run(start_server())
     except KeyboardInterrupt:
-        log.info("Server stopped by user.")
+        print_shutdown_message()
     except OSError as e:
         if e.errno == 98:  # Address already in use
             log.error(f"Error: Port {PORT} is already in use.")
             log.error("Another instance of sk-local might be running, or another service is using that port.")
         else:
             raise e
+    finally:
+        if DB_CONN:
+            DB_CONN.close()
+            log.info("Database connection closed.")
+        print_stopped_message()

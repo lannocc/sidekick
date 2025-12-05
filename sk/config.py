@@ -33,7 +33,7 @@ GEMINI_MODEL_QUICK_1 = 'gemini-2.0-flash'
 GEMINI_MODEL_QUICK_2 = 'gemini-2.5-flash'
 GEMINI_MODEL_SMART_1 = 'gemini-2.5-pro'
 GEMINI_MODEL_SMART_2 = 'gemini-3-pro-preview'
-GEMINI_TIMEOUT_HTTP = 11 * 60 * 1000 # wait up to 11 minutes (file uploads, etc.)
+GEMINI_TIMEOUT_HTTP = (11 * 60 + 11) * 1000 # wait up to 11 mins 11 secs (file uploads, etc.)
 
 
 OPENAI_API_KEY = getenv('OPENAI_API_KEY')
@@ -43,7 +43,7 @@ OPENAI_MODEL_QUICK_1 = 'gpt-4o-mini' # or 'gpt-3.5-turbo' for a potentially chea
 OPENAI_MODEL_QUICK_2 = 'gpt-5-mini'
 OPENAI_MODEL_SMART_1 = 'gpt-5'
 OPENAI_MODEL_SMART_2 = 'gpt-5.1'
-OPENAI_TIMEOUT_HTTP = 11 * 60 # wait up to 11 minutes (file uploads, etc.) - OpenAI timeout is in seconds
+OPENAI_TIMEOUT_HTTP = 11 * 60 + 11 # wait up to 11 mins 11 secs (file uploads, etc.) - OpenAI timeout is in seconds
 
 
 CHROME_PROFILE = 'Default'

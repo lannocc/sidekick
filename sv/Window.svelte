@@ -5,8 +5,9 @@
 <script>
     import { createEventDispatcher, tick, onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, dragState, instanceRegistry, dragRequest } from './windows.js';
-    import { desktopSettings, windowSettings } from './desktop.js';
+    import { windows, dragState, instanceRegistry, dragRequest, generateBoardConfigFromWindow } from './windows.js';
+    import { desktopSettings, windowSettings, windowView, TASKBAR_HEIGHT, desktopInteraction } from './desktop.js';
+    import { savePanelConfig } from './local.js';
     import IoskConsole from './IoskConsole.svelte';
     import IoskFileExplorer from './IoskFileExplorer.svelte';
     import IoskFileViewer from './IoskFileViewer.svelte';
@@ -14,7 +15,14 @@
     import Settings from './Settings.svelte';
     import Calculator from './Calculator.svelte';
     import IoskPrivateChat from './IoskPrivateChat.svelte';
+    import LocalTerminal from './LocalTerminal.svelte';
+    import LocalFileExplorer from './LocalFileExplorer.svelte';
+    import Ask from './Ask.svelte';
+    import IoskWatch from './IoskWatch.svelte';
+    import IoskUserInspector from './IoskUserInspector.svelte';
+    import NotificationCenter from './NotificationCenter.svelte';
     import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
+    import InstanceRegistrar from './InstanceRegistrar.svelte';
 
     // Group properties
     export let id;
@@ -29,6 +37,7 @@
     export let notice;
     export let tabs;
     export let activeTabId;
+    export let cloaked;
 
     $: activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || {};
     $: component = activeTab.component;
@@ -41,16 +50,103 @@
     let settings;
     desktopSettings.subscribe(value => settings = value);
 
+    function generateBgStyle(bgSettings) {
+        if (!bgSettings) return null;
+        if (bgSettings.bgType === 'gradient') {
+            return `linear-gradient(45deg, ${bgSettings.bgGradientStart} 0%, ${bgSettings.bgGradientEnd} 100%)`;
+        } else if (bgSettings.bgType === 'color') {
+            return bgSettings.bgColor;
+        } else if (bgSettings.bgType === 'image' && bgSettings.bgImage) {
+            let size = 'cover';
+            let repeat = 'no-repeat';
+            let position = 'center center';
+
+            switch (bgSettings.bgImageDisplayMode) {
+                case 'contain': size = 'contain'; break;
+                case 'stretch': size = '100% 100%'; break;
+                case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
+                case 'cover': default: break;
+            }
+            return `url('${bgSettings.bgImage}') ${position} / ${size} ${repeat}`;
+        }
+        return null;
+    }
+
+    $: state = isActive ? 'active' : 'inactive';
+    $: frameSettings = settings?.windows?.normal?.frame?.[state];
+    $: frameStyle = generateBgStyle(frameSettings);
+    $: frameHeight = frameSettings?.height ?? 30;
+    $: frameWidth = frameSettings?.width ?? 0;
+    $: frameOpacity = frameSettings?.opacity ?? 1.0;
+    $: boxShadowStyle = cloaked ? 'none' : (frameSettings?.shadowEnabled
+        ? `${frameSettings.shadowInset ? 'inset ' : ''}${frameSettings.shadowX}px ${frameSettings.shadowY}px ${frameSettings.shadowBlur}px ${frameSettings.shadowSpread}px ${frameSettings.shadowColor}`
+        : 'none');
+
+    $: sceneSettings = settings?.windows?.normal?.scene?.[state];
+
+    $: cloakSettings = settings?.windows?.normal?.cloak?.[state];
+    $: cloakStyle = generateBgStyle(cloakSettings);
+    $: cloakOpacity = cloaked ? (cloakSettings?.opacity ?? 0.8) : 0;
+
     let isDragging = false;
     let isResizing = false;
     let dragOffsetX, dragOffsetY;
     let resizeDirection = '';
     let initialResizeState = {};
-    let focusTimeout = null;
+    let focusFollowsMouseTimeout = null;
     let showOptionsMenu = false;
     let optionsButton;
     let tabsContainerEl;
     let titleBarEl;
+    let middleClickTimeout;
+
+    // --- Content Area Logic (Moved from Desktop.svelte) ---
+    let componentInstances = {};
+    function handleContentMouseDown(event) {
+        if (event.button === 1) {
+            handleMiddleClick(event);
+            event.stopPropagation();
+            return;
+        }
+
+        if (event.ctrlKey && event.button === 1) { // Ctrl + Middle click
+            event.preventDefault();
+            event.stopPropagation();
+            dispatch('backrequest');
+            return;
+        }
+
+        if ((event.altKey || event.metaKey) && !maximized) {
+            if (event.button === 0) { // Left click for move
+                dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY });
+            } else if (event.button === 2) { // Right click for resize
+                const relX = event.clientX - x;
+                const relY = event.clientY - y;
+                let yDir = relY < height / 3 ? 'n' : (relY > (height * 2) / 3 ? 's' : '');
+                let xDir = relX < width / 3 ? 'w' : (relX > (width * 2) / 3 ? 'e' : '');
+                const direction = yDir + xDir;
+                if (direction) {
+                    dragRequest.set({ id, type: 'resize', direction: direction, clientX: event.clientX, clientY: event.clientY });
+                }
+            }
+        } else if (!isActive) {
+            windows.focusWindow(id);
+        }
+    }
+    function handleContentWheel(event, tab) {
+        if (event.ctrlKey || event.altKey) {
+            event.preventDefault();
+            const zoomStep = 0.1;
+            const delta = event.deltaY < 0 ? zoomStep : -zoomStep;
+            windows.changeTabZoom(id, tab.id, delta);
+        }
+    }
+    function handleFocusOut(event, tab) {
+        const contentAreaEl = event.currentTarget;
+        if (contentAreaEl && !contentAreaEl.contains(event.relatedTarget)) {
+            windows.updateTabProps(id, tab.id, { lastFocusedElement: event.target });
+        }
+    }
 
     // React to drag/resize requests from other components (like Desktop's content area)
     $: if ($dragRequest && $dragRequest.id === id) {
@@ -98,6 +194,8 @@
 
     onDestroy(() => {
         window.removeEventListener('click', handleWindowClick);
+        if (focusFollowsMouseTimeout) clearTimeout(focusFollowsMouseTimeout);
+        if (middleClickTimeout) clearTimeout(middleClickTimeout);
     });
 
     function handleConnect() {
@@ -210,9 +308,15 @@
 
     function onDragStart(event) {
         isDragging = true;
-        dragState.set({ draggingGroupId: id, dropTargetGroupId: null });
-        dragOffsetX = event.clientX - x;
-        dragOffsetY = event.clientY - y;
+        dragState.set({ draggingGroupId: id, dropTargetGroupId: null, dropTargetBoxPanel: null });
+
+        const { panX, panY, zoom } = get(windowView);
+        const worldMouseX = (event.clientX - panX) / zoom;
+        const worldMouseY = ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom;
+
+        dragOffsetX = worldMouseX - x;
+        dragOffsetY = worldMouseY - y;
+        
         window.addEventListener('mousemove', onDrag);
         window.addEventListener('mouseup', onDragEnd, { once: true });
         windows.focusWindow(id);
@@ -221,9 +325,15 @@
 
     function onDrag(event) {
         if (!isDragging) return;
-        x = event.clientX - dragOffsetX;
-        y = event.clientY - dragOffsetY;
-        windows.updateWindowProps(id, { x, y });
+        
+        const { panX, panY, zoom } = get(windowView);
+        const worldMouseX = (event.clientX - panX) / zoom;
+        const worldMouseY = ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom;
+
+        const newX = worldMouseX - dragOffsetX;
+        const newY = worldMouseY - dragOffsetY;
+
+        windows.updateWindowProps(id, { x: newX, y: newY });
 
         // Drop target detection logic
         titleBarEl.style.pointerEvents = 'none';
@@ -232,16 +342,12 @@
 
         const targetTitleBar = elementUnder?.closest('.title-bar');
         const targetId = targetTitleBar ? parseInt(targetTitleBar.dataset.groupId, 10) : null;
-        const currentDragState = get(dragState);
-
+        
         if (targetId && targetId !== id) {
-            if (currentDragState.dropTargetGroupId !== targetId) {
-                dragState.update(s => ({ ...s, dropTargetGroupId: targetId }));
-            }
+            dragState.update(s => ({ ...s, dropTargetGroupId: targetId, dropTargetBoxPanel: null }));
         } else {
-            if (currentDragState.dropTargetGroupId !== null) {
-                dragState.update(s => ({ ...s, dropTargetGroupId: null }));
-            }
+             // Let Box.svelte handle setting dropTargetBoxPanel via its mouseenter events
+            dragState.update(s => ({ ...s, dropTargetGroupId: null }));
         }
     }
 
@@ -250,8 +356,21 @@
         document.body.style.cursor = 'auto';
         window.removeEventListener('mousemove', onDrag);
         const currentDragState = get(dragState);
-        if (currentDragState && currentDragState.dropTargetGroupId) {
-            windows.groupWindows(currentDragState.draggingGroupId, currentDragState.dropTargetGroupId);
+        if (currentDragState) {
+            if (currentDragState.dropTargetGroupId) {
+                windows.groupWindows(currentDragState.draggingGroupId, currentDragState.dropTargetGroupId);
+            } else if (currentDragState.dropTargetBoxPanel) {
+                const { boxId, location } = currentDragState.dropTargetBoxPanel;
+                const allWindows = get(windows);
+                const sourceGroup = allWindows.find(g => g.id === currentDragState.draggingGroupId);
+                if (sourceGroup) {
+                    const board_config = generateBoardConfigFromWindow(sourceGroup, allWindows);
+                    const board_type = sourceGroup.tabs.length > 1 ? 'tabs' : 'window';
+                    savePanelConfig(boxId, location, board_type, board_config);
+                    // Move the window to the box by removing it from the desktop
+                    windows.removeWindow(currentDragState.draggingGroupId);
+                }
+            }
         }
         dragState.set(null);
         restoreFocus();
@@ -273,8 +392,10 @@
     function onResize(event) {
         if (!isResizing) return;
         const { x: ix, y: iy, width: iw, height: ih, mouseX: startX, mouseY: startY } = initialResizeState;
-        const dx = event.clientX - startX;
-        const dy = event.clientY - startY;
+
+        const { zoom } = get(windowView);
+        const dx = (event.clientX - startX) / zoom;
+        const dy = (event.clientY - startY) / zoom;
         const minWidth = 250, minHeight = 150;
 
         let newX = ix;
@@ -322,12 +443,66 @@
         restoreFocus();
     }
 
+    function handleMiddleClick(event) {
+        if (event.button !== 1) return;
+        event.preventDefault();
+
+        // Double-click detection
+        if (middleClickTimeout) {
+            clearTimeout(middleClickTimeout);
+            middleClickTimeout = null;
+            windows.toggleCloak(id);
+            return;
+        }
+        
+        // Set a timeout to clear the double-click state. If another click
+        // arrives before this, it's a double-click.
+        middleClickTimeout = setTimeout(() => {
+            middleClickTimeout = null;
+        }, 250);
+
+        // Drag detection: if the mouse moves, cancel the double-click timer and start dragging.
+        const onMove = () => {
+            clearTimeout(middleClickTimeout);
+            middleClickTimeout = null;
+            if (maximized) return;
+            if (event.target.closest('.content-area-container')) {
+                dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY });
+            } else {
+                onDragStart(event);
+            }
+        };
+
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+        };
+
+        window.addEventListener('mousemove', onMove, { once: true });
+        window.addEventListener('mouseup', onUp, { once: true });
+    }
+
     function handleFrameMouseDown(event) {
-        clearTimeout(focusTimeout);
+        if (event.button === 1) {
+            if (event.ctrlKey) {
+                event.preventDefault();
+                event.stopPropagation();
+                dispatch('backrequest');
+                return;
+            }
+            handleMiddleClick(event);
+            event.stopPropagation();
+            return;
+        }
+        
+        clearTimeout(focusFollowsMouseTimeout);
+
         if ((event.altKey || event.metaKey) && !maximized) {
             event.preventDefault();
             if (event.button === 0) onDragStart(event);
             else if (event.button === 2) onResizeStart(event, 'se');
+        } else if (event.button === 0 && cloaked && !maximized) { // Left-click to move when cloaked
+            event.preventDefault();
+            onDragStart(event);
         } else {
             windows.focusWindow(id);
         }
@@ -339,12 +514,25 @@
             if (!isActive) windows.focusWindow(id);
             return;
         }
+        
+        if (event.button === 1) {
+            if (event.ctrlKey) {
+                event.preventDefault();
+                event.stopPropagation();
+                dispatch('backrequest');
+                return;
+            }
+            handleMiddleClick(event);
+            event.stopPropagation();
+            return;
+        }
+
         if (maximized) {
              if (!isActive) windows.focusWindow(id);
             return;
         }
 
-        clearTimeout(focusTimeout);
+        clearTimeout(focusFollowsMouseTimeout);
 
         // Alt/Meta key combinations for move/resize
         if (event.altKey || event.metaKey) {
@@ -354,7 +542,7 @@
             } else if (event.button === 2) { // Right click: Resize
                 onResizeStart(event, 'se');
             }
-        } else {
+        } else if (event.button === 0) {
             // Standard left click: Move
             onDragStart(event);
         }
@@ -362,32 +550,78 @@
 
     function handleMouseEnter() {
         if (settings?.focusFollowsMouse && !isActive) {
-            focusTimeout = setTimeout(() => windows.setActiveWindow(id), settings.focusDelay);
+            focusFollowsMouseTimeout = setTimeout(() => windows.setActiveWindow(id), settings.focusDelay);
         }
     }
 
-    function handleMouseLeave() { clearTimeout(focusTimeout); }
+    function handleMouseLeave() { clearTimeout(focusFollowsMouseTimeout); }
 </script>
 
 <style>
     @keyframes notice-glow {
-        50% { border-color: var(--notice-color); box-shadow: 0 0 20px 5px var(--notice-color); }
+        50% { border-color: var(--notice-color); box-shadow: 0 0 20px 5px var(--notice-color), var(--original-shadow, 0 5px 15px rgba(0,0,0,0.3)); }
     }
     .window-frame.noticing {
         animation: notice-glow 1.2s ease-in-out;
+        --original-shadow: var(--box-shadow);
     }
-    .window-frame { position: absolute; border: 1px solid var(--border-color); background-color: transparent; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; min-width: 250px; min-height: 150px; transition: border-color 0.2s ease-in-out; pointer-events: none; }
+    .window-frame {
+        position: absolute;
+        border: 1px solid var(--border-color);
+        background-color: transparent;
+        border-radius: 6px;
+        display: flex;
+        flex-direction: column;
+        min-width: 250px;
+        min-height: 150px;
+        pointer-events: auto;
+        box-sizing: border-box;
+        /* --- ANIMATIONS --- */
+        transition: border-color 0.3s ease-in-out, border-radius 0.3s ease-in-out, box-shadow 0.4s ease-in-out;
+    }
+    .window-frame.has-custom-frame {
+        border: none;
+    }
+    .window-frame.cloaked {
+        border-color: transparent !important;
+        background-color: transparent;
+    }
+    .window-frame.cloaked > *:not(.cloak):not(.resize-handle) {
+        visibility: hidden;
+    }
     .window-frame:not(.active) { border-color: #7f8c8d; }
     .window-frame.minimized { display: none; }
-    .window-frame.maximized { border-radius: 0; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; }
+    .window-frame.maximized { 
+        border-radius: 0; 
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+    }
     .window-frame.maximized .resize-handle { display: none; }
-    .title-bar { height: 30px; background-color: var(--title-bar-bg); color: var(--title-bar-text); display: flex; justify-content: space-between; align-items: center; padding: 0 8px; cursor: move; border-top-left-radius: 5px; border-top-right-radius: 5px; user-select: none; transition: background-color 0.2s ease-in-out; position: relative; pointer-events: auto; }
-    .window-frame:not(.active) .title-bar { background-color: #7f8c8d; }
+    .window-frame.maximized .title-bar { cursor: default; }
+    .title-bar {
+        flex-shrink: 0;
+        color: var(--title-bar-text);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 8px;
+        cursor: move;
+        border-top-left-radius: 5px;
+        border-top-right-radius: 5px;
+        user-select: none;
+        position: relative;
+        pointer-events: auto;
+        /* --- ANIMATIONS --- */
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out, height 0.3s ease-in-out;
+    }
+    .window-frame:not(.active) .title-bar { /* background-color: #7f8c8d; */ }
     .title-bar.drop-target::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(52, 152, 219, 0.4); border: 2px dashed #3498db; z-index: 1; pointer-events: none; border-radius: 5px; }
     .title-center { flex-grow: 1; text-align: center; overflow: hidden; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
     .title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 30px; }
     .tabs-container { position: relative; display: flex; }
-    .tab { display: flex; align-items: center; background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; padding: 0 5px; margin-right: 2px; height: 26px; margin-top: auto; max-width: 150px; transition: opacity 0.2s; }
+    .tab { display: flex; align-items: center; background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; padding: 0 5px; margin-right: 2px; height: 26px; margin-top: auto; max-width: 150px; transition: opacity 0.2s, background-color 0.3s; }
     .tab.active {
         background-color: var(--window-bg);
         z-index: 1; /* Bring active tab forward */
@@ -416,13 +650,66 @@
         font-weight: bold;
     }
     .window-controls { display: flex; gap: 5px; z-index: 2; }
-    .window-control { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: rgba(0,0,0,0.6); font-weight: bold; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.2); line-height: 18px; }
+    .window-control { --button-size: calc(var(--frame-height, 30px) * 0.45); width: var(--button-size); height: var(--button-size); display: flex; align-items: center; justify-content: center; font-size: var(--button-size); color: rgba(0,0,0,0.6); font-weight: bold; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.2); line-height: 1; }
     .close { background-color: #ff5f56; }
     .minimize { background-color: #ffbd2e; }
     .maximize { background-color: #27c93f; }
     .options-menu-button { background-color: #3498db; color: white; line-height: 0.8; }
-    .content-area { flex-grow: 1; overflow: auto; padding: 5px; pointer-events: none; }
-    .resize-handle { position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; cursor: se-resize; pointer-events: auto; }
+    .middle-row {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: row;
+        overflow: hidden; /* Prevent content from breaking out */
+    }
+    .content-area-wrapper {
+        flex-grow: 1;
+        position: relative;
+        overflow: hidden;
+    }
+    .content-area-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        padding: 5px;
+        pointer-events: auto;
+        box-sizing: border-box;
+        /* --- ANIMATIONS --- */
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
+    }
+    .side-frame, .bottom-frame {
+        flex-shrink: 0;
+        pointer-events: auto;
+        /* --- ANIMATIONS --- */
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out, width 0.3s ease-in-out, height 0.3s ease-in-out;
+    }
+    .cloak {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 5; /* Above content, below options menu */
+        pointer-events: none;
+        border-radius: 5px;
+        /* --- ANIMATIONS --- */
+        transition: opacity 0.3s ease-in-out, background 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .resize-handle {
+        position: absolute;
+        pointer-events: auto;
+        z-index: 6;
+    }
+    .resize-handle.n { top: -4px; left: 8px; right: 8px; height: 8px; cursor: n-resize; }
+    .resize-handle.s { bottom: -4px; left: 8px; right: 8px; height: 8px; cursor: s-resize; }
+    .resize-handle.w { top: 8px; bottom: 8px; left: -4px; width: 8px; cursor: w-resize; }
+    .resize-handle.e { top: 8px; bottom: 8px; right: -4px; width: 8px; cursor: e-resize; }
+    .resize-handle.nw { top: -4px; left: -4px; width: 12px; height: 12px; cursor: nw-resize; }
+    .resize-handle.ne { top: -4px; right: -4px; width: 12px; height: 12px; cursor: ne-resize; }
+    .resize-handle.sw { bottom: -4px; left: -4px; width: 12px; height: 12px; cursor: sw-resize; }
+    .resize-handle.se { bottom: -4px; right: -4px; width: 12px; height: 12px; cursor: se-resize; }
     .options-menu { position: absolute; top: 35px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 1000; display: flex; flex-direction: column; min-width: 150px; padding: 4px 0; user-select: none; pointer-events: auto; }
     .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; font-size: 14px; }
     .menu-item:hover:not(:disabled) { background-color: var(--taskbar-button-hover-bg); }
@@ -444,9 +731,9 @@
     .select-input { background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} style:left="{x}px" style:top="{y}px" style:width="{maximized ? null : width + 'px'}" style:height="{maximized ? null : height + 'px'}" style:z-index="{zIndex}" style:--notice-color={notice?.color} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
-    <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id}>
-        <div class="window-controls" on:dblclick|stopPropagation>
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} class:cloaked style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:box-shadow={boxShadowStyle} style:--box-shadow={boxShadowStyle} style:--notice-color={notice?.color} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
+    <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity}; --frame-height: {frameHeight}px;">
+        <div class="window-controls" on:dblclick|stopPropagation on:mouseup|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
             <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>_</div>
         </div>
@@ -475,13 +762,51 @@
             {/if}
         </div>
 
-        <div class="window-controls" on:dblclick|stopPropagation>
+        <div class="window-controls" on:dblclick|stopPropagation on:mouseup|stopPropagation>
             <div class="window-control maximize" title={maximized ? 'Restore' : 'Maximize'} on:click={() => windows.toggleMaximize(id)} on:mousedown|stopPropagation>
                 {@html maximized ? '&#128470;' : '&#9632;'}
             </div>
             <div class="window-control options-menu-button" title="Options" bind:this={optionsButton} on:click|stopPropagation={() => showOptionsMenu = !showOptionsMenu}>≡</div>
         </div>
     </div>
+    <div class="middle-row">
+        <div class="side-frame left" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
+        <div class="content-area-wrapper">
+             {#each tabs as tab (tab.id)}
+                <div
+                    class="content-area-container"
+                    style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'}
+                    style:pointer-events={$desktopInteraction || $dragState || cloaked ? 'none' : null}
+                    style:background={generateBgStyle(sceneSettings)}
+                    style:opacity={sceneSettings?.opacity ?? 1.0}
+                    on:mouseenter={handleMouseEnter}
+                    on:mouseleave={handleMouseLeave}
+                    on:mousedown={handleContentMouseDown}
+                    on:wheel={e => handleContentWheel(e, tab)}
+                    on:focusout={e => handleFocusOut(e, tab)}
+                    on:contextmenu|preventDefault|stopPropagation
+                >
+                    <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
+                        <svelte:component
+                            bind:this={componentInstances[tab.id]}
+                            this={tab.component}
+                            {...tab}
+                            groupId={id}
+                            id={tab.id}
+                            isActive={isActive && tab.id === activeTabId}
+                            {x} {y} {width} {height}
+                            {maximized}
+                        />
+                        {#if componentInstances[tab.id]}
+                            <InstanceRegistrar tabId={tab.id} instance={componentInstances[tab.id]} />
+                        {/if}
+                    </div>
+                </div>
+            {/each}
+        </div>
+        <div class="side-frame right" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
+    </div>
+    <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
     {#if showOptionsMenu}
         <div class="options-menu">
             <button class="menu-item" on:click={() => { windows.toggleMaximize(id); showOptionsMenu = false; }}>{maximized ? 'Restore' : 'Maximize'}</button>
@@ -501,6 +826,8 @@
                 <button class="menu-item" on:click={() => { const i = instanceRegistry.get(activeTabId); if (i?.setMode) i.setMode('raw'); showOptionsMenu = false; }}>Raw</button>
             {/if}
             <div class="menu-separator"></div>
+            <button class="menu-item" on:click={() => { dispatch('backrequest'); showOptionsMenu = false; }}>Back Window</button>
+            <div class="menu-separator"></div>
             <button class="menu-item" on:click={() => { windows.changeTabZoom(id, activeTabId, 0.1); showOptionsMenu = false; }}>Zoom In</button>
             <button class="menu-item" on:click={() => { windows.changeTabZoom(id, activeTabId, -0.1); showOptionsMenu = false; }}>Zoom Out</button>
             <button class="menu-item" on:click={() => { windows.resetTabZoom(id, activeTabId); showOptionsMenu = false; }}>Reset Zoom</button>
@@ -509,10 +836,16 @@
             <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>Close</button>
         </div>
     {/if}
-    <div class="content-area">
-        <!-- Content is now rendered by Desktop.svelte -->
-    </div>
-    <div class="resize-handle" on:mousedown|stopPropagation={onResizeStart}></div>
+    <div class="cloak" style:background={cloakStyle} style:opacity={cloakOpacity} style:pointer-events={cloaked ? 'auto' : 'none'} on:dblclick|stopPropagation={() => windows.toggleCloak(id)} on:mousedown={handleFrameMouseDown}></div>
+    
+    <div class="resize-handle n" on:mousedown|stopPropagation={e => onResizeStart(e, 'n')}></div>
+    <div class="resize-handle s" on:mousedown|stopPropagation={e => onResizeStart(e, 's')}></div>
+    <div class="resize-handle w" on:mousedown|stopPropagation={e => onResizeStart(e, 'w')}></div>
+    <div class="resize-handle e" on:mousedown|stopPropagation={e => onResizeStart(e, 'e')}></div>
+    <div class="resize-handle nw" on:mousedown|stopPropagation={e => onResizeStart(e, 'nw')}></div>
+    <div class="resize-handle ne" on:mousedown|stopPropagation={e => onResizeStart(e, 'ne')}></div>
+    <div class="resize-handle sw" on:mousedown|stopPropagation={e => onResizeStart(e, 'sw')}></div>
+    <div class="resize-handle se" on:mousedown|stopPropagation={e => onResizeStart(e, 'se')}></div>
 
     <WindowSettingsModal
         bind:show={showGenericSettingsModal}

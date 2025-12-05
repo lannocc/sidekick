@@ -132,7 +132,7 @@
     // Whenever the current path changes, update the central window store
     // so its state can be saved by the Dash.
     $: if (id !== undefined && groupId !== undefined) {
-        windows.updateTabProps(groupId, id, { currentPath, consoleId, consoleConnection, isSettingsModalOpen: showSettings });
+        windows.updateTabProps(groupId, id, { currentPath, isSettingsModalOpen: showSettings });
     }
 
     $: if (consoleConnection && $windows) {
@@ -146,12 +146,14 @@
 
             if (compatibleConsole) {
                 // We found a valid, running console to reconnect to.
-                consoleId = compatibleConsole.id;
-                errorMessage = '';
-                requestPath(currentPath);
+                if (consoleId !== compatibleConsole.id) {
+                    windows.updateTabProps(groupId, id, { consoleId: compatibleConsole.id });
+                }
             } else {
                 // No console available for our connection details.
-                consoleId = null;
+                if (consoleId !== null) {
+                    windows.updateTabProps(groupId, id, { consoleId: null });
+                }
                 errorMessage = 'No active IOSK connection available. Waiting for connection...';
                 items = [];
             }

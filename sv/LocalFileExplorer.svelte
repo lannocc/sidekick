@@ -4,13 +4,16 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { connect, sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus } from './local.js';
+    import { sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus, createBox } from './local.js';
     import { newAskWindow, windows } from './windows.js';
     import { fileSelection } from './iosk.js';
+    import { get } from 'svelte/store';
+    import { windowView, TASKBAR_HEIGHT } from './desktop.js';
 
     export let id;
     export let groupId;
     export let pickerTargetId = null;
+    export let initialPath = '.';
 
     let currentPath = '/'; // A reasonable default
     let items = [];
@@ -35,7 +38,10 @@
 
     function handleRightClick(event, item) {
         event.preventDefault();
-        contextMenu = { visible: true, x: event.clientX, y: event.clientY, item };
+        const { panX, panY, zoom } = get(windowView);
+        const menuX = (event.clientX - panX) / zoom;
+        const menuY = ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom;
+        contextMenu = { visible: true, x: menuX, y: menuY, item };
     }
 
     function closeContextMenu() {
@@ -49,6 +55,23 @@
             : (currentPath === '/' ? `/${contextMenu.item.name}` : `${currentPath}/${contextMenu.item.name}`);
         
         newAskWindow([itemPath]);
+        closeContextMenu();
+    }
+
+    function onBoxThis() {
+        if (!contextMenu.item || contextMenu.item.type !== 'dir') return;
+
+        const itemName = contextMenu.item.name;
+        const itemPath = itemName === '..'
+            ? (currentPath.substring(0, currentPath.lastIndexOf('/')) || '/')
+            : (currentPath === '/' ? `/${itemName}` : `${currentPath}/${itemName}`);
+        
+        const defaultBoxName = itemPath.split('/').pop() || (itemPath === '/' ? 'root' : 'New Box');
+
+        const boxName = prompt(`Enter a name for the new Box for path "${itemPath}":`, defaultBoxName);
+        if (!boxName) return;
+
+        createBox(boxName, 'local', itemPath, { screenX: contextMenu.x, screenY: contextMenu.y });
         closeContextMenu();
     }
 
@@ -86,14 +109,28 @@
         }
     }
 
+    function handleDragStart(event, item) {
+        if (!item || item.name === '..') {
+            event.preventDefault();
+            return;
+        }
+        const itemPath = currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`;
+        const data = {
+            type: item.type, // 'file' or 'dir'
+            path: itemPath,
+            name: item.name
+        };
+        event.dataTransfer.setData('application/sidekick-fs-item', JSON.stringify(data));
+        event.dataTransfer.effectAllowed = 'copy';
+    }
+
     onMount(() => {
-        connect();
         window.addEventListener('click', closeContextMenu);
 
         unsubscribeStatus = connectionStatus.subscribe(s => {
             status = s;
             if (s === 'connected') {
-                requestPath('.');
+                requestPath(initialPath);
             } else if (s === 'disconnected' || s === 'error') {
                 errorMessage = "Not connected to local backend. Run 'sk local'.";
                 items = [];
@@ -180,7 +217,14 @@
     {/if}
     <div class="item-list">
         {#each items as item (item.name)}
-            <div class="item" on:click={() => handleItemClick(item)} on:contextmenu={e => handleRightClick(e, item)} title={item.name}>
+            <div 
+                class="item" 
+                on:click={() => handleItemClick(item)} 
+                on:contextmenu={e => handleRightClick(e, item)} 
+                title={item.name}
+                draggable="true"
+                on:dragstart={e => handleDragStart(e, item)}
+            >
                 <span class="item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
                 <span class="item-name">{item.name}</span>
                 <span class="item-size">
@@ -213,6 +257,9 @@
     {#if contextMenu.visible}
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
             <button on:click={onAsk}>Ask...</button>
+            {#if contextMenu.item && contextMenu.item.type === 'dir'}
+                <button on:click={onBoxThis}>Box this</button>
+            {/if}
         </div>
     {/if}
 </div>

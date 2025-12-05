@@ -35,6 +35,21 @@ def prompt_for_text(prompt, chatter=False, model=config.OPENAI_MODEL_QUICK_2):
     return result_text
 
 
+def prompt_for_text_stream(prompt, chatter=False, model=config.OPENAI_MODEL_QUICK_2):
+    if chatter: print(f'  ai >> {prompt}')
+    client = openai.OpenAI(api_key=config.OPENAI_API_KEY,
+                           timeout=config.OPENAI_TIMEOUT_HTTP)
+    stream = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            stream=True,
+            )
+    for chunk in stream:
+        content = chunk.choices[0].delta.content or ""
+        if chatter: print(f'  ai << (chunk) {content}')
+        yield content
+
+
 def prompt_for_json(prompt, chatter=False, model=config.OPENAI_MODEL_QUICK_2):
     if chatter: print(f'  ai >> {prompt}')
     client = openai.OpenAI(api_key=config.OPENAI_API_KEY,
@@ -83,6 +98,39 @@ def prompt_with_file_for_text(prompt, file, chatter=False,
     if chatter: print(f'  ai << {result_text}')
     return result_text
 
+
+def prompt_with_file_for_text_stream(prompt, file, chatter=False,
+                                     model=config.OPENAI_MODEL_SMART_1):
+    if chatter: print(f'  ai >> {prompt}')
+    client = openai.OpenAI(api_key=config.OPENAI_API_KEY,
+                           timeout=config.OPENAI_TIMEOUT_HTTP)
+
+    mime_type = _get_mime_type(file)
+    messages = []
+
+    if mime_type and mime_type.startswith('image/'):
+        base64_image = _encode_image(file)
+        messages.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url",
+                 "image_url": {"url": f"data:{mime_type};base64,{base64_image}"}},
+            ]
+        })
+    else:  # Assume text file
+        with open(file, 'r', encoding='utf-8') as f:
+            file_content = f.read()
+        full_prompt = f"File content:\n\n---\n{file_content}\n---\n\nPrompt:\n{prompt}"
+        messages.append({"role": "user", "content": full_prompt})
+
+    stream = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True)
+
+    for chunk in stream:
+        yield chunk.choices[0].delta.content or ""
 
 def prompt_with_file_for_json(prompt, file, retries=0, quiet=False,
                               chatter=False, model=config.OPENAI_MODEL_SMART_1):

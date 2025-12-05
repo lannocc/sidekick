@@ -332,7 +332,7 @@ class AIMessenger:
             await self.os.create_dir(io, room_dir, parents=True)
             await self.os.create(io, owner_file)
             # This is a bit awkward. create+write would be better.
-            with open(self.os.box(owner_file), 'w') as f:
+            with open(self.os.fs.box_for_write(owner_file), 'w') as f:
                 f.write(io.session.user)
 
         self.room_topic = await self.os.get(io, topic_file)
@@ -729,7 +729,7 @@ class Engagement:
         filename_stem = f'{self.io.session.user}-{self.io.os.BOOT}-{self.io.cid}-{self.CODE}'
         filename = f'{filename_stem}{ext}'
         virtual_path = join(self.io.CODE, filename)
-        host_path = self.io.os.box(virtual_path)
+        host_path = self.io.os.fs.box_for_write(virtual_path)
 
         # Save the code block to the host file system
         with open(host_path, 'w') as file:
