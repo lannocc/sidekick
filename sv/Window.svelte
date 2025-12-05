@@ -98,11 +98,15 @@
     let optionsButton;
     let tabsContainerEl;
     let titleBarEl;
+    let middleClickTimeout, pendingDragEvent;
 
     // --- Content Area Logic (Moved from Desktop.svelte) ---
     let componentInstances = {};
     function handleContentMouseDown(event) {
-        if (handleMiddleClick(event, true)) return;
+        if (event.button === 1 && !maximized) {
+            handleMiddleClick(event);
+            return;
+        }
 
         if (event.ctrlKey && event.button === 1) { // Ctrl + Middle click
             event.preventDefault();
@@ -124,9 +128,6 @@
                     dragRequest.set({ id, type: 'resize', direction: direction, clientX: event.clientX, clientY: event.clientY });
                 }
             }
-        } else if (event.button === 1 && !maximized) { // Middle-click to move
-            event.preventDefault();
-            dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY });
         } else if (!isActive) {
             windows.focusWindow(id);
         }
@@ -193,6 +194,7 @@
     onDestroy(() => {
         window.removeEventListener('click', handleWindowClick);
         if (focusFollowsMouseTimeout) clearTimeout(focusFollowsMouseTimeout);
+        if (middleClickTimeout) clearTimeout(middleClickTimeout);
     });
 
     function handleConnect() {
@@ -440,41 +442,66 @@
         restoreFocus();
     }
 
-    let middleClickTimeout;
-    function handleMiddleClick(event, isMouseDown = false) {
-        if (event.button !== 1 || (isMouseDown ? false : (isDragging || isResizing))) return false;
+    function handleMiddleClick(event) {
+        if (event.button !== 1) return false;
+
+        event.preventDefault();
 
         if (middleClickTimeout) {
+            // Double click mousedown
             clearTimeout(middleClickTimeout);
             middleClickTimeout = null;
+            pendingDragEvent = null; // cancel pending drag
             windows.toggleCloak(id);
-            event.preventDefault();
             event.stopPropagation();
-            return true;
         } else {
+            // First click mousedown
+            pendingDragEvent = event;
             middleClickTimeout = setTimeout(() => {
+                if (pendingDragEvent) {
+                    // It's a drag
+                    if (pendingDragEvent.target.closest('.content-area-container')) {
+                        dragRequest.set({ id, type: 'move', direction: null, clientX: pendingDragEvent.clientX, clientY: pendingDragEvent.clientY });
+                    } else {
+                        onDragStart(pendingDragEvent);
+                    }
+                }
                 middleClickTimeout = null;
-            }, 300);
+                pendingDragEvent = null;
+            }, 250);
+
+            // If mouseup happens before timeout, it's just a click, do nothing.
+            const cancelDragOnMouseUp = (upEvent) => {
+                if (upEvent.button === 1) {
+                    clearTimeout(middleClickTimeout);
+                    middleClickTimeout = null;
+                    pendingDragEvent = null;
+                }
+                window.removeEventListener('mouseup', cancelDragOnMouseUp);
+            };
+            window.addEventListener('mouseup', cancelDragOnMouseUp, { once: true });
         }
-        return false;
+        return true; // We handled it.
     }
 
     function handleFrameMouseDown(event) {
-        if (handleMiddleClick(event, true)) return;
-        clearTimeout(focusFollowsMouseTimeout);
-        if (event.ctrlKey && event.button === 1) { // Ctrl + Middle Click
-            event.preventDefault();
-            event.stopPropagation();
-            dispatch('backrequest');
+        if (event.button === 1 && !maximized) {
+            if (event.ctrlKey) {
+                event.preventDefault();
+                event.stopPropagation();
+                dispatch('backrequest');
+                return;
+            }
+            handleMiddleClick(event);
             return;
         }
+        
+        clearTimeout(focusFollowsMouseTimeout);
+
         if ((event.altKey || event.metaKey) && !maximized) {
             event.preventDefault();
             if (event.button === 0) onDragStart(event);
             else if (event.button === 2) onResizeStart(event, 'se');
-        } else if (event.button === 1 && !maximized) { // Middle-click to move
-            event.preventDefault();
-            onDragStart(event);
         } else if (event.button === 0 && cloaked && !maximized) { // Left-click to move when cloaked
             event.preventDefault();
             onDragStart(event);
@@ -489,14 +516,18 @@
             if (!isActive) windows.focusWindow(id);
             return;
         }
-        if (handleMiddleClick(event, true)) return;
-
-        if (event.ctrlKey && event.button === 1) { // Ctrl + Middle Click
-            event.preventDefault();
-            event.stopPropagation();
-            dispatch('backrequest');
+        
+        if (event.button === 1 && !maximized) {
+            if (event.ctrlKey) {
+                event.preventDefault();
+                event.stopPropagation();
+                dispatch('backrequest');
+                return;
+            }
+            handleMiddleClick(event);
             return;
         }
+
         if (maximized) {
              if (!isActive) windows.focusWindow(id);
             return;
@@ -512,9 +543,8 @@
             } else if (event.button === 2) { // Right click: Resize
                 onResizeStart(event, 'se');
             }
-        } else if (event.button === 0 || event.button === 1) {
-            // Standard left or middle click: Move
-            if (event.button === 1) event.preventDefault();
+        } else if (event.button === 0) {
+            // Standard left click: Move
             onDragStart(event);
         }
     }
@@ -695,8 +725,8 @@
     .select-input { background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} class:cloaked style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:box-shadow={boxShadowStyle} style:--box-shadow={boxShadowStyle} style:--notice-color={notice?.color} on:mousedown={handleFrameMouseDown} on:mouseup={handleMiddleClick} on:contextmenu|preventDefault|stopPropagation>
-    <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleMaximize(id)} on:mouseup={handleMiddleClick} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity}; --frame-height: {frameHeight}px;">
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} class:cloaked style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:box-shadow={boxShadowStyle} style:--box-shadow={boxShadowStyle} style:--notice-color={notice?.color} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
+    <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity}; --frame-height: {frameHeight}px;">
         <div class="window-controls" on:dblclick|stopPropagation on:mouseup|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
             <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>_</div>
@@ -734,7 +764,7 @@
         </div>
     </div>
     <div class="middle-row">
-        <div class="side-frame left" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown} on:mouseup={handleMiddleClick}></div>
+        <div class="side-frame left" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
         <div class="content-area-wrapper">
              {#each tabs as tab (tab.id)}
                 <div
@@ -746,7 +776,6 @@
                     on:mouseenter={handleMouseEnter}
                     on:mouseleave={handleMouseLeave}
                     on:mousedown={handleContentMouseDown}
-                    on:mouseup={handleMiddleClick}
                     on:wheel={e => handleContentWheel(e, tab)}
                     on:focusout={e => handleFocusOut(e, tab)}
                     on:contextmenu|preventDefault|stopPropagation
@@ -769,9 +798,9 @@
                 </div>
             {/each}
         </div>
-        <div class="side-frame right" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown} on:mouseup={handleMiddleClick}></div>
+        <div class="side-frame right" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
     </div>
-    <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown} on:mouseup={handleMiddleClick}></div>
+    <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
     {#if showOptionsMenu}
         <div class="options-menu">
             <button class="menu-item" on:click={() => { windows.toggleMaximize(id); showOptionsMenu = false; }}>{maximized ? 'Restore' : 'Maximize'}</button>
@@ -801,7 +830,7 @@
             <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>Close</button>
         </div>
     {/if}
-    <div class="cloak" style:background={cloakStyle} style:opacity={cloakOpacity} style:pointer-events={cloaked ? 'auto' : 'none'} on:dblclick|stopPropagation={() => windows.toggleCloak(id)} on:mousedown={handleFrameMouseDown} on:mouseup={handleMiddleClick}></div>
+    <div class="cloak" style:background={cloakStyle} style:opacity={cloakOpacity} style:pointer-events={cloaked ? 'auto' : 'none'} on:dblclick|stopPropagation={() => windows.toggleCloak(id)} on:mousedown={handleFrameMouseDown}></div>
     
     <div class="resize-handle n" on:mousedown|stopPropagation={e => onResizeStart(e, 'n')}></div>
     <div class="resize-handle s" on:mousedown|stopPropagation={e => onResizeStart(e, 's')}></div>

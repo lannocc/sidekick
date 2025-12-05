@@ -733,6 +733,50 @@
     };
 
 
+    let desktopMiddleClickTimeout, pendingPanEvent;
+
+    function toggleSkyCloak() {
+        desktopSettings.update(s => {
+            if (s.sky.cloak.opacity > 0) {
+                s.sky.cloak.lastOpacity = s.sky.cloak.opacity;
+                s.sky.cloak.opacity = 0;
+            } else {
+                s.sky.cloak.opacity = s.sky.cloak.lastOpacity || 0.8;
+            }
+            return s;
+        });
+    }
+
+    function handleDesktopMiddleClick(event) {
+        event.preventDefault();
+        if (desktopMiddleClickTimeout) {
+            clearTimeout(desktopMiddleClickTimeout);
+            desktopMiddleClickTimeout = null;
+            pendingPanEvent = null;
+            toggleSkyCloak();
+        } else {
+            pendingPanEvent = event;
+            desktopMiddleClickTimeout = setTimeout(() => {
+                if (pendingPanEvent) {
+                    handleDesktopPanStart(pendingPanEvent);
+                }
+                desktopMiddleClickTimeout = null;
+                pendingPanEvent = null;
+            }, 250);
+
+            const cancelPan = (upEvent) => {
+                if (upEvent.button === 1) {
+                    clearTimeout(desktopMiddleClickTimeout);
+                    desktopMiddleClickTimeout = null;
+                    pendingPanEvent = null;
+                }
+                window.removeEventListener('mouseup', cancelPan);
+            };
+            window.addEventListener('mouseup', cancelPan, { once: true });
+        }
+    }
+
+
     function handleGlobalMouseDown(event) {
         const targetIsBackedWindow = event.target.closest('.backed-window');
         if (!targetIsBackedWindow) {
@@ -745,7 +789,7 @@
             handleItemMouseDown(event, targetItemEl);
         } else if (event.target.classList.contains('desktop-background')) {
             if (event.button === 1) { // Middle mouse for panning
-                handleDesktopPanStart(event);
+                handleDesktopMiddleClick(event);
             } else if (event.button === 0) { // Left mouse for selection
                 handleMarqueeSelectStart(event);
             }
@@ -1320,6 +1364,7 @@
         window.removeEventListener('keyup', handleKeyUpForScale);
         if (saveViewTimeout) clearTimeout(saveViewTimeout);
         if (controlsTimeout) clearTimeout(controlsTimeout);
+        if (desktopMiddleClickTimeout) clearTimeout(desktopMiddleClickTimeout);
         window.removeEventListener('mousemove', handleDesktopMouseMove);
         window.removeEventListener('mouseup', handleDesktopMouseUp);
         window.removeEventListener('mousemove', handleMinimapMouseMove);

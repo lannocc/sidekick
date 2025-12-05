@@ -43,7 +43,24 @@
     $: frameHeight = frameSettings?.height ?? 40;
     $: frameWidth = frameSettings?.width ?? 0;
 
+    function disableSkyCloak() {
+        desktopSettings.update(s => {
+            if (s.sky.cloak.opacity > 0) {
+                s.sky.cloak.lastOpacity = s.sky.cloak.opacity;
+                s.sky.cloak.opacity = 0;
+            }
+            return s;
+        });
+    }
+
     function handleKeyDown(e) {
+        if ($desktopSettings.sky?.cloak?.opacity > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            disableSkyCloak();
+            return;
+        }
+
         // Tab switching with Alt/Ctrl + Number
         const numericKey = parseInt(e.key, 10);
         if ((e.altKey || e.ctrlKey) && !e.metaKey && !isNaN(numericKey) && numericKey >= 1 && numericKey <= 9) {
@@ -170,7 +187,12 @@
     }
 </style>
 
-<div class="sky-cloak" style="opacity: {cloakOpacity}; background: {cloakStyle};"></div>
+<div
+    class="sky-cloak"
+    style="opacity: {cloakOpacity}; background: {cloakStyle}; pointer-events: {cloakOpacity > 0 ? 'auto' : 'none'}"
+    on:click={disableSkyCloak}
+    on:contextmenu|preventDefault={disableSkyCloak}
+></div>
 
 <div class="sk-container" on:contextmenu|preventDefault>
     <div class="top-frame" style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity};">
@@ -185,4 +207,3 @@
     </div>
     <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
 </div>
-

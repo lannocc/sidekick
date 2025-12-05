@@ -279,28 +279,41 @@
         createBox(name, 'local', context);
     }
 
-    let lastCloakPresence = 100; // Default to 100% if toggled on from 0
-    function toggleCloak(event) {
-        if (event.target !== event.currentTarget) return; // Only trigger on empty space
-        const currentSettings = get(desktopSettings);
-        const cloak = currentSettings.sky.cloak;
-        if (cloak.opacity > 0) {
-            lastCloakPresence = Math.round(cloak.opacity * 100);
-            desktopSettings.update(s => {
+    function toggleSkyCloak() {
+        desktopSettings.update(s => {
+            if (s.sky.cloak.opacity > 0) {
+                s.sky.cloak.lastOpacity = s.sky.cloak.opacity;
                 s.sky.cloak.opacity = 0;
-                return s;
-            });
+            } else {
+                s.sky.cloak.opacity = s.sky.cloak.lastOpacity || 0.8;
+            }
+            return s;
+        });
+    }
+
+    let middleClickTimeout;
+    function handleTaskbarMouseDown(event) {
+        if (event.button !== 1 || event.target !== event.currentTarget) return;
+        event.preventDefault();
+
+        if (middleClickTimeout) {
+            clearTimeout(middleClickTimeout);
+            middleClickTimeout = null;
+            toggleSkyCloak();
         } else {
-            const presenceToRestore = lastCloakPresence > 0 ? lastCloakPresence : 100;
-            desktopSettings.update(s => {
-                s.sky.cloak.opacity = presenceToRestore / 100;
-                return s;
-            });
+            middleClickTimeout = setTimeout(() => {
+                middleClickTimeout = null;
+            }, 300);
         }
     }
 
-    onMount(() => window.addEventListener('click', handleWindowClick));
-    onDestroy(() => window.removeEventListener('click', handleWindowClick));
+    onMount(() => {
+        window.addEventListener('click', handleWindowClick);
+    });
+    onDestroy(() => {
+        window.removeEventListener('click', handleWindowClick);
+        if (middleClickTimeout) clearTimeout(middleClickTimeout);
+    });
 </script>
 
 <style>
@@ -377,7 +390,7 @@
 
 <svelte:window bind:innerWidth={screenWidth} />
 
-<div class="taskbar" on:dblclick={toggleCloak} style="--tb-height: {tbHeight}px">
+<div class="taskbar" on:mousedown={handleTaskbarMouseDown} style="--tb-height: {tbHeight}px">
     <div class="taskbar-left" bind:this={leftSectionEl}>
         <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">&mdash;</button>
         <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>W~</button>

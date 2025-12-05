@@ -34,6 +34,7 @@ function loadSettings() {
                 bgImage: '',
                 bgImageDisplayMode: 'cover',
                 opacity: 0.0,
+                lastOpacity: 0.8, // ADD THIS LINE to store the last active opacity
             }
         },
         boxes: {
