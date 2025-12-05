@@ -83,9 +83,13 @@
     }
 
     function getIdealButtonLeft(win, buttonWidth) {
+        // Fix #2: Use restored geometry for maximized windows
+        const winX = win.maximized && typeof win.restoreX === 'number' ? win.restoreX : win.x;
+        const winWidth = win.maximized && typeof win.restoreWidth === 'number' ? win.restoreWidth : win.width;
+
         // Convert window "world" coordinates to "screen" coordinates using windowView
-        const screenWinX = win.x * $windowView.zoom + $windowView.panX;
-        const screenWinWidth = win.width * $windowView.zoom;
+        const screenWinX = winX * $windowView.zoom + $windowView.panX;
+        const screenWinWidth = winWidth * $windowView.zoom;
 
         const windowCenter = screenWinX + screenWinWidth / 2;
         const progress = Math.max(0, Math.min(1, windowCenter / screenWidth));
@@ -99,10 +103,13 @@
     }
 
     function getIdealButtonTop(win, buttonHeight) {
+        // Fix #2: Use restored geometry for maximized windows
+        const winY = win.maximized && typeof win.restoreY === 'number' ? win.restoreY : win.y;
+
         const frameSettings = get(desktopSettings).sky?.frame;
         const th = frameSettings?.height ?? 40;
         const bottomFrameHeight = frameSettings?.width ?? 0;
-        const screenWinY = win.y * $windowView.zoom + $windowView.panY;
+        const screenWinY = winY * $windowView.zoom + $windowView.panY;
         const screenDesktopHeight = window.innerHeight - th - bottomFrameHeight;
         
         const progress = Math.max(0, Math.min(1, screenWinY / screenDesktopHeight));
@@ -151,12 +158,18 @@
                 for (let i = 0; i < 50; i++) { // Failsafe iteration limit
                     top = Math.max(0, Math.min(top, tbHeight - item.height)); // Clamp top
                     const currentRect = { left, top, right: left + item.width, bottom: top + item.height };
-                    const collision = placedRects.find(r => intersects(currentRect, r));
                     
-                    if (!collision) break; // Found a spot
+                    const collisionIndex = placedRects.findIndex(r => intersects(currentRect, r));
+                    if (collisionIndex === -1) break; // Found a spot
 
-                    if (currentRect.left < collision.right) {
-                        left = collision.right; // Note: GAP is baked into fixed rects
+                    const collision = placedRects[collisionIndex];
+                    
+                    // Fix #3: Handle collision with right-side controls
+                    if (collisionIndex === 2) { // 0: left, 1: center, 2: right
+                        left = collision.left - item.width; // Push left of the boundary
+                        top = item.idealTop; // Reset vertical position to try again
+                    } else if (currentRect.left < collision.right) {
+                        left = collision.right; // Push right from other items/controls
                         top = item.idealTop; // Reset vertical position when pushed horizontally
                     } else {
                         top = collision.bottom + GAP; // Vertically blocked, move down to stack
@@ -217,7 +230,7 @@
                     };
 
                     window.addEventListener('mousemove', handleDragMove);
-                    window.addEventListener('mouseup', handleDragEnd);
+                    window.addEventListener('mouseup', handleDragEnd, { once: true });
                     
                     handleDragMove(moveEvent);
                 }
@@ -225,11 +238,11 @@
 
             const onUp = () => {
                 window.removeEventListener('mousemove', onMove);
-                window.removeEventListener('mouseup', onUp);
             };
             
             window.addEventListener('mousemove', onMove);
-            window.addEventListener('mouseup', onUp);
+            // Fix #1: Make onUp listener self-removing for robustness
+            window.addEventListener('mouseup', onUp, { once: true });
         }
     }
 
@@ -258,7 +271,8 @@
                         ...w,
                         x: newX,
                         y: newY,
-                        maximized: false
+                        maximized: false,
+                        minimized: false // Fix #1: Ensure window is not minimized when dragged
                     };
                 }
                 return w;
