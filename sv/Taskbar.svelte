@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter } from './windows.js';
-    import { dashActive, unreadNoticeCount, windowView, desktopSettings } from './desktop.js';
+    import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems } from './desktop.js';
     import { createBox, connectionStatus } from './local.js';
     import Clock from './Clock.svelte';
     import { get } from 'svelte/store';
@@ -174,6 +174,71 @@
         taskItemLayouts = {};
     }
 
+    // --- Window Dragging from Taskbar Logic ---
+    let dragInfo = null; // { win, startX, startY, initialWinX, initialWinY, isDragging }
+
+    function handleDragStart(event, win) {
+        if (event.button !== 0) return; // Only drag with left mouse button
+
+        event.preventDefault(); // Prevent text selection on the button
+
+        dragInfo = {
+            win,
+            startX: event.clientX,
+            startY: event.clientY,
+            initialWinX: win.x,
+            initialWinY: win.y,
+            isDragging: false
+        };
+
+        window.addEventListener('mousemove', handleDragMove);
+        window.addEventListener('mouseup', handleDragEnd);
+    }
+
+    function handleDragMove(event) {
+        if (!dragInfo) return;
+        event.preventDefault();
+
+        const dx = event.clientX - dragInfo.startX;
+        const dy = event.clientY - dragInfo.startY;
+
+        if (!dragInfo.isDragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+            dragInfo.isDragging = true;
+            wasDraggingItems.set(true);
+            windows.focusWindow(dragInfo.win.id);
+        }
+
+        if (dragInfo.isDragging) {
+            const view = get(windowView);
+            const newX = dragInfo.initialWinX + dx / view.zoom;
+            const newY = dragInfo.initialWinY + dy / view.zoom;
+
+            windows.update(wins => {
+                const targetWin = wins.find(w => w.id === dragInfo.win.id);
+                if (targetWin) {
+                    targetWin.x = newX;
+                    targetWin.y = newY;
+                    if (targetWin.maximized) {
+                        targetWin.maximized = false;
+                    }
+                }
+                return wins;
+            });
+        }
+    }
+
+    function handleDragEnd() {
+        if (dragInfo && dragInfo.isDragging) {
+            setTimeout(() => {
+                wasDraggingItems.set(false);
+            }, 0);
+        }
+
+        dragInfo = null;
+        window.removeEventListener('mousemove', handleDragMove);
+        window.removeEventListener('mouseup', handleDragEnd);
+    }
+
     function handleTaskClick(win) {
         if (win.minimized) windows.toggleMinimize(win.id);
         else if (win.isActive) windows.toggleMinimize(win.id);
@@ -339,7 +404,11 @@
             class:active={win.isActive}
             class:noticing={!!win.notice}
             title={activeTab?.title}
-            on:click={() => { if ($dashActive) dashActive.set(false); handleTaskClick(win); }}
+            on:mousedown={(e) => handleDragStart(e, win)}
+            on:click={() => {
+                if (get(wasDraggingItems)) return;
+                if ($dashActive) dashActive.set(false); handleTaskClick(win);
+            }}
             use:measure={win.id}
             style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'}; top: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].top + 'px' : '-9999px'}; --notice-color: {win.notice?.color};"
         >
