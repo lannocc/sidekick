@@ -59,9 +59,11 @@ function loadSettings() {
                 frame: {
                     active: {
                         bgType: 'color', bgColor: '#2c3e50', bgGradientStart: '#2c3e50', bgGradientEnd: '#46627f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 30, width: 0,
+                        shadowEnabled: true, shadowX: 0, shadowY: 5, shadowBlur: 15, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.3)', shadowInset: false,
                     },
                     inactive: {
                         bgType: 'color', bgColor: '#2c3e50', bgGradientStart: '#2c3e50', bgGradientEnd: '#46627f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 30, width: 0,
+                        shadowEnabled: true, shadowX: 0, shadowY: 2, shadowBlur: 8, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.2)', shadowInset: false,
                     },
                 },
                 cloak: {

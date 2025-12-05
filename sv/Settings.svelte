@@ -682,6 +682,42 @@
                                             {/if}
                                         </div>
                                     </fieldset>
+                                    
+                                    {#if part === 'frame'}
+                                        <fieldset>
+                                            <legend>Shadow / Glow</legend>
+                                            <label>
+                                                <input type="checkbox" bind:checked={settings.windows.normal.frame[state].shadowEnabled} on:change={handleUpdate}>
+                                                Enable Shadow
+                                            </label>
+                                            <fieldset class="borderless-fieldset" disabled={!settings.windows.normal.frame[state].shadowEnabled}>
+                                                <label class="color-picker-label">
+                                                    <span>Color</span>
+                                                    <input type="color" bind:value={settings.windows.normal.frame[state].shadowColor} on:input={handleUpdate}>
+                                                </label>
+                                                <label class="color-picker-label">
+                                                    <span>X Offset (px)</span>
+                                                    <input class="text-input" type="number" bind:value={settings.windows.normal.frame[state].shadowX} on:input={handleUpdate} step="1" style="width: 80px;">
+                                                </label>
+                                                <label class="color-picker-label">
+                                                    <span>Y Offset (px)</span>
+                                                    <input class="text-input" type="number" bind:value={settings.windows.normal.frame[state].shadowY} on:input={handleUpdate} step="1" style="width: 80px;">
+                                                </label>
+                                                <label class="color-picker-label">
+                                                    <span>Blur (px)</span>
+                                                    <input class="text-input" type="number" bind:value={settings.windows.normal.frame[state].shadowBlur} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
+                                                </label>
+                                                <label class="color-picker-label">
+                                                    <span>Spread (px)</span>
+                                                    <input class="text-input" type="number" bind:value={settings.windows.normal.frame[state].shadowSpread} on:input={handleUpdate} step="1" style="width: 80px;">
+                                                </label>
+                                                <label>
+                                                    <input type="checkbox" bind:checked={settings.windows.normal.frame[state].shadowInset} on:change={handleUpdate}>
+                                                    Inset Shadow
+                                                </label>
+                                            </fieldset>
+                                        </fieldset>
+                                    {/if}
                                 </div>
                             {/each}
                         </div>

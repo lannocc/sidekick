@@ -78,6 +78,9 @@
     $: frameHeight = frameSettings?.height ?? 30;
     $: frameWidth = frameSettings?.width ?? 0;
     $: frameOpacity = frameSettings?.opacity ?? 1.0;
+    $: boxShadowStyle = frameSettings?.shadowEnabled
+        ? `${frameSettings.shadowInset ? 'inset ' : ''}${frameSettings.shadowX}px ${frameSettings.shadowY}px ${frameSettings.shadowBlur}px ${frameSettings.shadowSpread}px ${frameSettings.shadowColor}`
+        : 'none';
 
     $: sceneSettings = settings?.windows?.normal?.scene?.[state];
 
@@ -493,17 +496,17 @@
 
 <style>
     @keyframes notice-glow {
-        50% { border-color: var(--notice-color); box-shadow: 0 0 20px 5px var(--notice-color); }
+        50% { border-color: var(--notice-color); box-shadow: 0 0 20px 5px var(--notice-color), var(--original-shadow, 0 5px 15px rgba(0,0,0,0.3)); }
     }
     .window-frame.noticing {
         animation: notice-glow 1.2s ease-in-out;
+        --original-shadow: var(--box-shadow);
     }
     .window-frame {
         position: absolute;
         border: 1px solid var(--border-color);
         background-color: transparent;
         border-radius: 6px;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         display: flex;
         flex-direction: column;
         min-width: 250px;
@@ -639,7 +642,7 @@
     .select-input { background-color: var(--console-bg); border: 1px solid var(--border-color); color: var(--title-bar-text); padding: 5px; border-radius: 3px; }
 </style>
 
-<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:--notice-color={notice?.color} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
+<div class="window-frame" class:minimized class:maximized class:active={isActive} class:noticing={!!notice} style:left="{x}px" style:top="{y}px" style:width="{width}px" style:height="{height}px" style:z-index="{zIndex}" style:box-shadow={boxShadowStyle} style:--box-shadow={boxShadowStyle} style:--notice-color={notice?.color} on:mousedown={handleFrameMouseDown} on:contextmenu|preventDefault|stopPropagation>
     <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleCloak(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity};">
         <div class="window-controls" on:dblclick|stopPropagation>
             <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
