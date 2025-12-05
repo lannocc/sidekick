@@ -180,7 +180,7 @@
     function handleDragStart(event, win) {
         if (event.button !== 0) return; // Only drag with left mouse button
 
-        event.preventDefault(); // Prevent text selection on the button
+        // event.preventDefault(); // This is moved to handleDragMove
 
         dragInfo = {
             win,
@@ -197,7 +197,6 @@
 
     function handleDragMove(event) {
         if (!dragInfo) return;
-        event.preventDefault();
 
         const dx = event.clientX - dragInfo.startX;
         const dy = event.clientY - dragInfo.startY;
@@ -206,9 +205,11 @@
             dragInfo.isDragging = true;
             wasDraggingItems.set(true);
             windows.focusWindow(dragInfo.win.id);
+            document.body.style.cursor = 'move'; // Change cursor on drag start
         }
 
         if (dragInfo.isDragging) {
+            event.preventDefault(); // Prevent text selection etc. only when dragging
             const view = get(windowView);
             const newX = dragInfo.initialWinX + dx / view.zoom;
             const newY = dragInfo.initialWinY + dy / view.zoom;
@@ -229,6 +230,7 @@
 
     function handleDragEnd() {
         if (dragInfo && dragInfo.isDragging) {
+            document.body.style.cursor = ''; // Reset cursor
             setTimeout(() => {
                 wasDraggingItems.set(false);
             }, 0);
