@@ -35,7 +35,6 @@
     $: cloakSettings = $desktopSettings.sky?.cloak;
     $: cloakStyle = cloakSettings ? generateBgStyle(cloakSettings) : '';
     $: cloakOpacity = cloakSettings?.opacity ?? 0;
-    $: cloakVisible = cloakOpacity > 0;
 
     // Frame settings
     $: frameSettings = $desktopSettings.sky?.frame;
@@ -171,9 +170,7 @@
     }
 </style>
 
-{#if cloakVisible}
-    <div class="sky-cloak" style="opacity: {cloakOpacity}; background: {cloakStyle};"></div>
-{/if}
+<div class="sky-cloak" style="opacity: {cloakOpacity}; background: {cloakStyle};"></div>
 
 <div class="sk-container" on:contextmenu|preventDefault>
     <div class="top-frame" style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity};">
@@ -188,3 +185,4 @@
     </div>
     <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
 </div>
+
