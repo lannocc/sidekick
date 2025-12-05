@@ -176,23 +176,62 @@
 
     // --- Window Dragging from Taskbar Logic ---
     let dragInfo = null; // { win, startX, startY, initialWinX, initialWinY, isDragging }
+    let middleClickTimeouts = new Map();
 
-    function handleDragStart(event, win) {
-        if (event.button !== 0) return; // Only drag with left mouse button
+    function onTaskItemMouseDown(event, win) {
+        if (event.button === 1) { // Middle click
+            event.preventDefault();
 
-        // event.preventDefault(); // This is moved to handleDragMove
+            // Double-click detection
+            if (middleClickTimeouts.has(win.id)) {
+                clearTimeout(middleClickTimeouts.get(win.id));
+                middleClickTimeouts.delete(win.id);
+                windows.toggleCloak(win.id);
+                return;
+            }
+            
+            const timeout = setTimeout(() => {
+                middleClickTimeouts.delete(win.id);
+            }, 250);
+            middleClickTimeouts.set(win.id, timeout);
 
-        dragInfo = {
-            win,
-            startX: event.clientX,
-            startY: event.clientY,
-            initialWinX: win.x,
-            initialWinY: win.y,
-            isDragging: false
-        };
+            // Drag detection: if the mouse moves, cancel the double-click timer and start dragging.
+            const onMove = (moveEvent) => {
+                const dx = moveEvent.clientX - event.clientX;
+                const dy = moveEvent.clientY - event.clientY;
 
-        window.addEventListener('mousemove', handleDragMove);
-        window.addEventListener('mouseup', handleDragEnd);
+                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) { // Drag threshold
+                    clearTimeout(middleClickTimeouts.get(win.id));
+                    middleClickTimeouts.delete(win.id);
+                    
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+
+                    // Start the drag
+                    dragInfo = {
+                        win,
+                        startX: event.clientX,
+                        startY: event.clientY,
+                        initialWinX: win.x,
+                        initialWinY: win.y,
+                        isDragging: false
+                    };
+
+                    window.addEventListener('mousemove', handleDragMove);
+                    window.addEventListener('mouseup', handleDragEnd);
+                    
+                    handleDragMove(moveEvent);
+                }
+            };
+
+            const onUp = () => {
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onUp);
+            };
+            
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+        }
     }
 
     function handleDragMove(event) {
@@ -313,6 +352,7 @@
     onDestroy(() => {
         window.removeEventListener('click', handleWindowClick);
         if (middleClickTimeout) clearTimeout(middleClickTimeout);
+        middleClickTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
     });
 </script>
 
@@ -419,11 +459,12 @@
             class:active={win.isActive}
             class:noticing={!!win.notice}
             title={activeTab?.title}
-            on:mousedown={(e) => handleDragStart(e, win)}
+            on:mousedown={(e) => onTaskItemMouseDown(e, win)}
             on:click={() => {
                 if (get(wasDraggingItems)) return;
                 if ($dashActive) dashActive.set(false); handleTaskClick(win);
             }}
+            on:dblclick={() => windows.toggleMaximize(win.id)}
             use:measure={win.id}
             style="left: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].left + 'px' : '-9999px'}; top: {taskItemLayouts[win.id] ? taskItemLayouts[win.id].top + 'px' : '-9999px'}; --notice-color: {win.notice?.color};"
         >
