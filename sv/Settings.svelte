@@ -26,7 +26,7 @@
     let activeWindowsSubTab = 'normal';
     let activeNormalWindowDetailTab = 'scene';
     let inactiveTransparency, activeTransparency;
-    let normalWindowTransparency = {};
+    let normalWindowPresence = {};
     let inactiveBackWindowTransparency, activeBackWindowTransparency;
 
 
@@ -38,27 +38,27 @@
     // Ensure the settings object has the required structure for normal windows
     $: if (settings && settings.windows?.normal) {
         const normal = settings.windows.normal;
-        for (const part of ['scene', 'frame', 'cover']) {
+        for (const part of ['scene', 'frame', 'cloak']) {
             if (typeof normal[part] !== 'object' || normal[part] === null) normal[part] = {};
             if (typeof normal[part].active !== 'object' || normal[part].active === null) normal[part].active = {};
             if (typeof normal[part].inactive !== 'object' || normal[part].inactive === null) normal[part].inactive = {};
         }
     }
-    
+
     $: if (settings && settings.windows?.normal) {
         const normal = settings.windows.normal;
-        normalWindowTransparency = {
+        normalWindowPresence = {
             scene: {
-                inactive: Math.round((1 - (normal.scene?.inactive?.opacity ?? 1.0)) * 100),
-                active: Math.round((1 - (normal.scene?.active?.opacity ?? 1.0)) * 100),
+                inactive: Math.round((normal.scene?.inactive?.opacity ?? 1.0) * 100),
+                active: Math.round((normal.scene?.active?.opacity ?? 1.0) * 100),
             },
             frame: {
-                inactive: Math.round((1 - (normal.frame?.inactive?.opacity ?? 1.0)) * 100),
-                active: Math.round((1 - (normal.frame?.active?.opacity ?? 1.0)) * 100),
+                inactive: Math.round((normal.frame?.inactive?.opacity ?? 1.0) * 100),
+                active: Math.round((normal.frame?.active?.opacity ?? 1.0) * 100),
             },
-            cover: {
-                inactive: Math.round((1 - (normal.cover?.inactive?.opacity ?? 1.0)) * 100),
-                active: Math.round((1 - (normal.cover?.active?.opacity ?? 1.0)) * 100),
+            cloak: {
+                inactive: Math.round((normal.cloak?.inactive?.opacity ?? 1.0) * 100),
+                active: Math.round((normal.cloak?.active?.opacity ?? 1.0) * 100),
             }
         };
     }
@@ -107,11 +107,11 @@
         settings.boxes.activeOpacity = 1 - (value / 100);
         handleUpdate();
     }
-    
-    function handleNormalWindowTransparency(e, part, state) {
+
+    function handleNormalWindowPresence(e, part, state) {
         const value = Number(e.target.value);
-        normalWindowTransparency[part][state] = value;
-        settings.windows.normal[part][state].opacity = 1 - (value / 100);
+        normalWindowPresence[part][state] = value;
+        settings.windows.normal[part][state].opacity = value / 100;
         handleUpdate();
     }
 
@@ -224,6 +224,10 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
+    }
+    .borderless-fieldset {
+        border: none;
+        padding: 0;
     }
     legend {
         color: var(--title-bar-text);
@@ -458,18 +462,23 @@
                 <div class="detail-tabs">
                     <button class="sub-tab-button" class:active={activeNormalWindowDetailTab === 'scene'} on:click={() => activeNormalWindowDetailTab = 'scene'}>Scene</button>
                     <button class="sub-tab-button" class:active={activeNormalWindowDetailTab === 'frame'} on:click={() => activeNormalWindowDetailTab = 'frame'}>Frame</button>
-                    <button class="sub-tab-button" class:active={activeNormalWindowDetailTab === 'cover'} on:click={() => activeNormalWindowDetailTab = 'cover'}>Cover</button>
+                    <button class="sub-tab-button" class:active={activeNormalWindowDetailTab === 'cloak'} on:click={() => activeNormalWindowDetailTab = 'cloak'}>Cloak</button>
                 </div>
 
-                {#each ['scene', 'frame', 'cover'] as part}
+                {#each ['scene', 'frame', 'cloak'] as part}
                     {#if activeNormalWindowDetailTab === part}
                         <h2>Normal Windows: {part.charAt(0).toUpperCase() + part.slice(1)} Appearance</h2>
                         <div class="two-column-layout">
                             {#each ['inactive', 'active'] as state}
                                 <div class="column">
                                     <h3>{state.charAt(0).toUpperCase() + state.slice(1)} State</h3>
-                                    <fieldset>
-                                        <legend>Background</legend>
+
+                                    <label class="color-picker-label">
+                                        <span>Presence ({normalWindowPresence[part]?.[state] ?? 100}%)</span>
+                                        <input type="range" min="0" max="100" step="1" value={normalWindowPresence[part]?.[state] ?? 100} on:input={(e) => handleNormalWindowPresence(e, part, state)}>
+                                    </label>
+
+                                    <fieldset class="borderless-fieldset" disabled={normalWindowPresence[part]?.[state] === 0}>
                                         <div>
                                             <label><input type="radio" bind:group={settings.windows.normal[part][state].bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
                                             {#if settings.windows.normal[part][state].bgType === 'gradient'}
@@ -501,13 +510,6 @@
                                             </div>
                                             {/if}
                                         </div>
-                                    </fieldset>
-                                    <fieldset>
-                                        <legend>Transparency</legend>
-                                        <label class="color-picker-label">
-                                            <span>Transparency ({normalWindowTransparency[part]?.[state] ?? 0}%)</span>
-                                            <input type="range" min="0" max="100" step="1" value={normalWindowTransparency[part]?.[state] ?? 0} on:input={(e) => handleNormalWindowTransparency(e, part, state)}>
-                                        </label>
                                     </fieldset>
                                 </div>
                             {/each}
@@ -693,7 +695,7 @@
                             <button class="test-button" on:click={testNoticeSound} title="Test Sound" disabled={settings.noticeDefaults.audio.sound === 'none'}>▶</button>
                         </div>
                     </label>
-                    {#if settings.noticeDefaults.audio.sound === 'custom'}
+                    {#if settings.noticeDefaults.audio.sound === 'cusm'}
                         <div class="options-group">
                             <label>
                                 <input class="text-input" type="text" bind:value={settings.noticeDefaults.audio.url} on:input={handleUpdate} placeholder="Enter Sound URL...">
@@ -713,3 +715,4 @@
     {componentName}
     {x} {y} {width} {height}
 />
+
