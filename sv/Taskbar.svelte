@@ -83,28 +83,43 @@
     }
 
     function getIdealButtonLeft(win, buttonWidth) {
-        // Fix #2: Use restored geometry for maximized windows
-        const winX = win.maximized && typeof win.restoreX === 'number' ? win.restoreX : win.x;
-        const winWidth = win.maximized && typeof win.restoreWidth === 'number' ? win.restoreWidth : win.width;
+        // Fix #1: Use restored geometry for maximized windows
+        const winX = win.maximized && typeof win.prevX === 'number' ? win.prevX : win.x;
+        const winWidth = win.maximized && typeof win.prevWidth === 'number' ? win.prevWidth : win.width;
 
-        // Convert window "world" coordinates to "screen" coordinates using windowView
+        // Fix #2: Account for sky frame width for correct alignment
+        const frameWidth = tbSettings?.width ?? 0;
+
+        // Convert window "world" coordinates to "screen" coordinates, relative to the desktop container
         const screenWinX = winX * $windowView.zoom + $windowView.panX;
         const screenWinWidth = winWidth * $windowView.zoom;
 
-        const windowCenter = screenWinX + screenWinWidth / 2;
-        const progress = Math.max(0, Math.min(1, windowCenter / screenWidth));
+        // The width of the desktop container in screen pixels
+        const screenDesktopWidth = screenWidth - (2 * frameWidth);
+        
+        // Center of window relative to the desktop container
+        const windowCenterInDesktop = screenWinX + screenWinWidth / 2;
 
-        const leftAlignedPos = screenWinX;
-        const rightAlignedPos = screenWinX + screenWinWidth - buttonWidth;
+        // Progress of the window's center across the desktop container
+        const progress = screenDesktopWidth > 0 
+            ? Math.max(0, Math.min(1, windowCenterInDesktop / screenDesktopWidth))
+            : 0.5;
+
+        // The final button position is relative to the full screen. We need to add the left frame's width as an offset.
+        const leftAlignedPos = screenWinX + frameWidth;
+        const rightAlignedPos = screenWinX + screenWinWidth - buttonWidth + frameWidth;
 
         let idealLeft = leftAlignedPos * (1 - progress) + rightAlignedPos * progress;
+        
+        // Clamp to screen edges minus button width. The collision logic will handle the rest.
         idealLeft = Math.max(0, Math.min(idealLeft, screenWidth - buttonWidth));
+        
         return idealLeft;
     }
 
     function getIdealButtonTop(win, buttonHeight) {
-        // Fix #2: Use restored geometry for maximized windows
-        const winY = win.maximized && typeof win.restoreY === 'number' ? win.restoreY : win.y;
+        // Fix #1: Use restored geometry for maximized windows
+        const winY = win.maximized && typeof win.prevY === 'number' ? win.prevY : win.y;
 
         const frameSettings = get(desktopSettings).sky?.frame;
         const th = frameSettings?.height ?? 40;
@@ -112,7 +127,9 @@
         const screenWinY = winY * $windowView.zoom + $windowView.panY;
         const screenDesktopHeight = window.innerHeight - th - bottomFrameHeight;
         
-        const progress = Math.max(0, Math.min(1, screenWinY / screenDesktopHeight));
+        const progress = screenDesktopHeight > 0
+            ? Math.max(0, Math.min(1, screenWinY / screenDesktopHeight))
+            : 0.5;
         const availableSpace = th - buttonHeight;
         const idealTop = progress * availableSpace;
         
