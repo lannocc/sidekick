@@ -103,9 +103,6 @@
 
     function getIdealButtonTop(win, buttonHeight) {
         const th = get(desktopSettings).sky.frame.height || 40;
-        if (win.minimized) {
-            return (th - buttonHeight) / 2; // Center minimized windows vertically
-        }
         const screenWinY = win.y * $windowView.zoom + $windowView.panY;
         const screenDesktopHeight = window.innerHeight - th;
         
