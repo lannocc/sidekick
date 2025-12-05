@@ -203,13 +203,20 @@
 
                     const collision = placedRects[collisionIndex];
                     
-                    // Fix #3: Handle collision with right-side controls
                     if (collisionIndex === 2) { // 0: left, 1: center, 2: right
                         left = collision.left - item.width; // Push left of the boundary
                         top = item.idealTop; // Reset vertical position to try again
                     } else if (currentRect.left < collision.right) {
-                        left = collision.right; // Push right from other items/controls
-                        top = item.idealTop; // Reset vertical position when pushed horizontally
+                        const newLeft = collision.right;
+                        // Check if pushing right would collide with the right-hand side controls
+                        if (newLeft + item.width > placedRects[2].left) {
+                            // It would collide. So we must push down instead of right.
+                            top = collision.bottom + GAP;
+                            left = item.idealLeft; // Reset horizontal position for the new "row"
+                        } else {
+                            left = newLeft; // Push right from other items/controls
+                            top = item.idealTop; // Reset vertical position when pushed horizontally
+                        }
                     } else {
                         top = collision.bottom + GAP; // Vertically blocked, move down to stack
                     }
@@ -301,8 +308,20 @@
         if (dragInfo.isDragging) {
             event.preventDefault(); // Prevent text selection etc. only when dragging
             const view = get(windowView);
+
+            const frameSettings = get(desktopSettings).sky?.frame;
+            const th = frameSettings?.height ?? 40;
+            const bottomFrameHeight = frameSettings?.width ?? 0;
+            const buttonSize = taskItemSizes.get(dragInfo.win.id) || { width: 100, height: 28 };
+
+            // The button's vertical position is a "minimap" of the window's position on the desktop.
+            // To make the button track the mouse 1:1, we need to scale the window's vertical movement.
+            const screenDesktopHeight = window.innerHeight - th - bottomFrameHeight;
+            const availableVSpace = th - buttonSize.height;
+            const scaleY = availableVSpace > 0 ? screenDesktopHeight / availableVSpace : 1;
+
             const newX = dragInfo.initialWinX + dx / view.zoom;
-            const newY = dragInfo.initialWinY + dy / view.zoom;
+            const newY = dragInfo.initialWinY + (dy * scaleY) / view.zoom;
 
             windows.updateWindowProps(dragInfo.win.id, {
                 x: newX,
