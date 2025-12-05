@@ -1443,7 +1443,6 @@
         top: 0; left: 0; right: 0; bottom: 0;
         background-position: center;
         transition: background 0.5s ease-in-out, opacity 0.5s ease-in-out;
-        z-index: -1;
         /* Fallback background color */
         background-color: var(--background-color);
     }
