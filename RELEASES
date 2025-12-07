@@ -2,6 +2,15 @@ Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
 
+v0.4.6
+======
+
+Date: December 5, 2025
+
+    * SkyBox: it's getting personal (desktop boxes many new UI features).
+    * New optional command-line argument for overlay in mounted media mode.
+
+
 v0.4.5
 ======
 
