@@ -4,9 +4,9 @@
 -->
 <script>
     import { get } from 'svelte/store';
-    import { windows } from './windows.js';
-    import { windowSettings } from './desktop.js';
-    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
+    import { windows } from '../windows.js';
+    import { windowSettings } from '../desktop.js';
+    import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
 
     export let id; // Window ID
     export let groupId;

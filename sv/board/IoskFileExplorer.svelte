@@ -6,9 +6,9 @@
     import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
     import { fileSystemRequests, fileSystemResponses, fileSystemWatchEvents } from './iosk.js';
-    import { newIoskFileViewer, windows, activeConsoles } from './windows.js';
-    import { windowSettings } from './desktop.js';
-    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
+    import { newIoskFileViewer, windows, activeConsoles } from '../windows.js';
+    import { windowSettings } from '../desktop.js';
+    import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
 
     // --- Component Props & State ---
     export let id; // Window ID, passed from Window.svelte

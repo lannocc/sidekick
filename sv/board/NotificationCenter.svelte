@@ -2,8 +2,8 @@
     import { onMount } from 'svelte';
     import { slide } from 'svelte/transition';
     import { get } from 'svelte/store';
-    import { notificationHistory, unreadNoticeCount } from './desktop.js';
-    import { windows } from './windows.js';
+    import { notificationHistory, unreadNoticeCount } from '../desktop.js';
+    import { windows } from '../windows.js';
     import NotificationCenter from './NotificationCenter.svelte';
 
     export let isActive;

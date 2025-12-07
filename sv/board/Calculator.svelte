@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows } from './windows.js';
+    import { windows } from '../windows.js';
 
     export let isActive;
     export let id;

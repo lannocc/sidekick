@@ -8,17 +8,17 @@
     import { get } from 'svelte/store';
     import { onMount, onDestroy } from 'svelte';
 
-    import IoskConsole from './IoskConsole.svelte';
-    import Calculator from './Calculator.svelte';
-    import Settings from './Settings.svelte';
-    import IoskFileExplorer from './IoskFileExplorer.svelte';
-    import IoskFileViewer from './IoskFileViewer.svelte';
-    import WebBrowser from './WebBrowser.svelte';
-    import IoskPrivateChat from './IoskPrivateChat.svelte';
-    import LocalTerminal from './LocalTerminal.svelte';
-    import LocalFileExplorer from './LocalFileExplorer.svelte';
-    import Ask from './Ask.svelte';
-    import IoskWatch from './IoskWatch.svelte';
+    import IoskConsole from './board/IoskConsole.svelte';
+    import Calculator from './board/Calculator.svelte';
+    import Settings from './board/Settings.svelte';
+    import IoskFileExplorer from './board/IoskFileExplorer.svelte';
+    import IoskFileViewer from './board/IoskFileViewer.svelte';
+    import WebBrowser from './board/WebBrowser.svelte';
+    import IoskPrivateChat from './board/IoskPrivateChat.svelte';
+    import LocalTerminal from './board/LocalTerminal.svelte';
+    import LocalFileExplorer from './board/LocalFileExplorer.svelte';
+    import Ask from './board/Ask.svelte';
+    import IoskWatch from './board/IoskWatch.svelte';
 
     let isLayoutDirty = true;
     let lastSavedLayoutSnapshot = '';

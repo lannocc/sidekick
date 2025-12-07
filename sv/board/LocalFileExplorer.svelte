@@ -4,11 +4,11 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus, createBox } from './local.js';
-    import { newAskWindow, windows } from './windows.js';
+    import { sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus, createBox } from '../local.js';
+    import { newAskWindow, windows } from '../windows.js';
     import { fileSelection } from './iosk.js';
     import { get } from 'svelte/store';
-    import { windowView, TASKBAR_HEIGHT } from './desktop.js';
+    import { windowView, TASKBAR_HEIGHT } from '../desktop.js';
 
     export let id;
     export let groupId;

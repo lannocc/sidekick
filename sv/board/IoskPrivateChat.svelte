@@ -6,7 +6,7 @@
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
     import { consoleCommands, privateMessages } from './iosk.js';
-    import { windows, activeConsoles } from './windows.js';
+    import { windows, activeConsoles } from '../windows.js';
     import { parseAnsi, stripAnsi } from './ansi.js';
 
     export let id;

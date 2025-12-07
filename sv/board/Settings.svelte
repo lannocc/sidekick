@@ -4,9 +4,9 @@
 -->
 <script>
     import { get } from 'svelte/store';
-    import { desktopSettings, windowSettings } from './desktop.js';
-    import { windows } from './windows.js';
-    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
+    import { desktopSettings, windowSettings } from '../desktop.js';
+    import { windows } from '../windows.js';
+    import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
     import { onDestroy } from 'svelte';
 
     export let id;

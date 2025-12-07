@@ -5,7 +5,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { sendMessage, fsReadResponse, fsError } from './local.js';
+    import { sendMessage, fsReadResponse, fsError } from '../local.js';
 
     export let path; // The full path to the file to view
 

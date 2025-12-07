@@ -7,7 +7,7 @@
     import { get } from 'svelte/store';
     import { fileSystemRequests, fileSystemResponses, fileSystemTailEvents } from './iosk.js';
     import { marked } from 'marked';
-    import { windows, activeConsoles } from './windows.js';
+    import { windows, activeConsoles } from '../windows.js';
     import { parseAnsi } from './ansi.js';
 
     // Highlight.js for syntax highlighting
