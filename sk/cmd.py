@@ -462,5 +462,5 @@ COMMANDS = {
     'iosk': (iosk,
         'run iosk system'),
     'local': (local,
-        'run local service for SKYBOARD'),
+        'local backend service for SKYBOARD'),
 }
