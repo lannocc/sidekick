@@ -8,7 +8,7 @@
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
     import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover } from './local.js';
     import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings } from './desktop.js';
-    import Board from './Board.svelte';
+    import Panel from './Panel.svelte';
 
     export let box;
 
@@ -62,8 +62,8 @@
     $: coverImageUrl = (() => {
         if (!coverPanelLocation || !panels) return null;
         const coverPanel = panels[coverPanelLocation];
-        if (coverPanel?.board_type === 'image' && coverPanel.board_config?.url) {
-            return coverPanel.board_config.url;
+        if (coverPanel?.panel_type === 'image' && coverPanel.panel_config?.url) {
+            return coverPanel.panel_config.url;
         }
         return null;
     })();
@@ -188,7 +188,7 @@
     let isUnfolded = false;
     let hoveredPanelKey = null; // Key ('x_y') of the currently hovered panel
 
-    $: isMenuOpen = contextMenu.visible || panelContextMenu.visible || showBoardPicker;
+    $: isMenuOpen = contextMenu.visible || panelContextMenu.visible || showPanelPicker;
     $: isExpanded = isUnfolded || isMenuOpen;
 
     // When the box is no longer expanded (closed AND menus are closed),
@@ -254,7 +254,7 @@
         const clickedInsideComponent = boxEl?.contains(event.target) ||
             (contextMenu.visible && event.target.closest('.context-menu')) ||
             (panelContextMenu.visible && event.target.closest('.context-menu')) ||
-            (showBoardPicker && event.target.closest('.board-picker'));
+            (showPanelPicker && event.target.closest('.panel-picker'));
 
         if (!clickedInsideComponent && !clickedOnAnotherBox) {
             if (isUnfolded) {
@@ -267,8 +267,8 @@
             if (panelContextMenu.visible) {
                 closePanelContextMenu();
             }
-            if (showBoardPicker) {
-                showBoardPicker = false;
+            if (showPanelPicker) {
+                showPanelPicker = false;
             }
         }
     }
@@ -279,8 +279,8 @@
                 closeContextMenu();
             } else if (panelContextMenu.visible) {
                 closePanelContextMenu();
-            } else if (showBoardPicker) {
-                showBoardPicker = false;
+            } else if (showPanelPicker) {
+                showPanelPicker = false;
             } else if (isUnfolded) {
                 isUnfolded = false;
             }
@@ -361,8 +361,8 @@
     }
 
     function setCoverImageFromPicker() {
-        const { location, parent } = boardPickerProps; // location is {x, y}
-        showBoardPicker = false;
+        const { location, parent } = panelPickerProps; // location is {x, y}
+        showPanelPicker = false;
         isUnfolded = false;
 
         const url = prompt("Enter URL for cover image:");
@@ -446,9 +446,9 @@
         }
     }
 
-    // --- Board Picker State & Logic ---
-    let showBoardPicker = false;
-    let boardPickerProps = {}; // { location: {x,y}, parent: {x,y}, clientX, clientY }
+    // --- Panel Picker State & Logic ---
+    let showPanelPicker = false;
+    let panelPickerProps = {}; // { location: {x,y}, parent: {x,y}, clientX, clientY }
 
     function getActiveTabTitle(win) {
         if (!win || !win.tabs) return '...';
@@ -457,19 +457,19 @@
     }
 
     function selectWindow(group) {
-        const { location, parent } = boardPickerProps; // location is {x, y}
+        const { location, parent } = panelPickerProps; // location is {x, y}
         const board_config = generateBoardConfigFromWindow(group);
         const board_type = group.tabs.length > 1 ? 'tabs' : 'window';
         savePanelConfig(box.id, location.x, location.y, board_type, board_config, parent);
         windows.removeWindow(group.id);
-        showBoardPicker = false;
+        showPanelPicker = false;
         isUnfolded = false;
     }
 
     function selectDash(layout) {
-        const { location, parent } = boardPickerProps; // location is {x, y}
+        const { location, parent } = panelPickerProps; // location is {x, y}
         savePanelConfig(box.id, location.x, location.y, 'dash', layout, parent);
-        showBoardPicker = false;
+        showPanelPicker = false;
         isUnfolded = false;
     }
 
@@ -491,33 +491,33 @@
             return;
         }
 
-        if (showBoardPicker) {
-            showBoardPicker = false;
+        if (showPanelPicker) {
+            showPanelPicker = false;
             return;
         }
 
         const panelKey = `${loc_x}_${loc_y}`;
         const panelConfig = panels[panelKey];
 
-        if (isAvailableSlot || !panelConfig || panelConfig.board_type === 'empty') {
+        if (isAvailableSlot || !panelConfig || panelConfig.panel_type === 'empty') {
             event.stopPropagation();
             const { panX, panY, zoom } = get(desktopView);
-            boardPickerProps = {
+            panelPickerProps = {
                 location: { x: loc_x, y: loc_y },
                 parent: parent,
                 clientX: (event.clientX - panX) / zoom,
                 clientY: (event.clientY - 40 - panY) / zoom,
             };
-            showBoardPicker = true;
+            showPanelPicker = true;
         } else {
-            const { board_type, board_config } = panelConfig;
+            const { panel_type, panel_config } = panelConfig;
 
-            if (board_type === 'image') {
-                if (board_config?.url) newWebBrowser({ initialUrl: board_config.url });
-            } else if (board_type === 'window' || board_type === 'tabs') {
-                windows.restoreWindow(board_config);
-            } else if (board_type === 'dash' && board_config?.windowGroups) {
-                for (const group of board_config.windowGroups) {
+            if (panel_type === 'image') {
+                if (panel_config?.url) newWebBrowser({ initialUrl: panel_config.url });
+            } else if (panel_type === 'window' || panel_type === 'tabs') {
+                windows.restoreWindow(panel_config);
+            } else if (panel_type === 'dash' && panel_config?.windowGroups) {
+                for (const group of panel_config.windowGroups) {
                     windows.restoreWindow(group);
                 }
             }
@@ -742,7 +742,7 @@
     .context-menu .delete { color: #e74c3c; }
     .context-menu .delete:hover { background-color: #c0392b; color: white; }
 
-    .board-picker {
+    .panel-picker {
         position: fixed;
         background-color: var(--window-bg);
         border: 1px solid var(--border-color);
@@ -822,7 +822,7 @@
             on:dragover={handleDragOver}
             on:drop={e => handleDrop(e, panel.loc_x, panel.loc_y, parent)}
         >
-            <Board board_type={panel.board_type} board_config={panel.board_config} />
+            <Panel panel_type={panel.panel_type} panel_config={panel.panel_config} />
         </div>
     {/each}
 
@@ -846,7 +846,7 @@
     <!-- Center Panel with Content -->
     <div class="panel center" style:background={backgroundStyle} on:click={e => handlePanelClick(e, 0, 0, false, null)} on:contextmenu={e => handlePanelRightClick(e, 0, 0)} class:drop-target={isDropTarget(0, 0)} on:mouseenter={() => handlePanelMouseEnter(0, 0)} on:mouseleave={() => handlePanelMouseLeave(0, 0)} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 0, 0, null)}>
         {#if centerPanel}
-            <Board board_type={centerPanel.board_type} board_config={centerPanel.board_config} />
+            <Panel panel_type={centerPanel.panel_type} panel_config={centerPanel.panel_config} />
         {:else}
             <div class="box-name">{box.name}</div>
             <div class="box-context" title={box.context}>{box.context}</div>
@@ -875,9 +875,9 @@
     </div>
 {/if}
 
-<!-- Board Picker UI -->
-{#if showBoardPicker}
-    <div class="board-picker" style:top="{boardPickerProps.clientY}px" style:left="{boardPickerProps.clientX}px" on:click|stopPropagation>
+<!-- Panel Picker UI -->
+{#if showPanelPicker}
+    <div class="panel-picker" style:top="{panelPickerProps.clientY}px" style:left="{panelPickerProps.clientX}px" on:click|stopPropagation>
         {#if !coverPanelLocation}
             <button class="picker-item" on:click={setCoverImageFromPicker}>
                 Set Cover Image...
