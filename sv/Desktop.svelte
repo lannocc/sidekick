@@ -825,7 +825,8 @@
         // --- From here, we know it's a desktop-level interaction ---
         desktopInteraction.set(true);
 
-        if (event.button !== 0) {
+        // We only care about left (0) and middle (1) clicks for dragging.
+        if (event.button !== 0 && event.button !== 1) {
             desktopInteraction.set(false); // Reset and exit, as mouseup handler won't be attached.
             return;
         }
@@ -833,19 +834,21 @@
         event.preventDefault(); // Prevent text selection, etc.
         event.stopPropagation();
 
-        // Update selection with unique IDs
-        if (event.ctrlKey) {
-            selectedItems.update(s => {
-                const newSet = new Set(s); // Create a new set to ensure reactivity
-                if (newSet.has(uniqueId)) {
-                    newSet.delete(uniqueId);
-                } else {
-                    newSet.add(uniqueId);
-                }
-                return newSet;
-            });
-        } else if (!get(selectedItems).has(uniqueId)) {
-            selectedItems.set(new Set([uniqueId]));
+        // Update selection with unique IDs, but only for left-clicks. Middle-click drag does not alter selection.
+        if (event.button === 0) {
+            if (event.ctrlKey) {
+                selectedItems.update(s => {
+                    const newSet = new Set(s); // Create a new set to ensure reactivity
+                    if (newSet.has(uniqueId)) {
+                        newSet.delete(uniqueId);
+                    } else {
+                        newSet.add(uniqueId);
+                    }
+                    return newSet;
+                });
+            } else if (!get(selectedItems).has(uniqueId)) {
+                selectedItems.set(new Set([uniqueId]));
+            }
         }
 
         // Prepare for dragging
@@ -860,13 +863,23 @@
         };
 
         dragStartData.items.clear();
-        get(selectedItems).forEach(selUniqueId => {
-            const [itemType, itemId] = selUniqueId.split('-');
-            const item = allItems.find(i => i.type === itemType && String(i.id) === itemId);
+        
+        if (event.button === 0) {
+            // For left-click, drag all selected items.
+            get(selectedItems).forEach(selUniqueId => {
+                const [itemType, itemId] = selUniqueId.split('-');
+                const item = allItems.find(i => i.type === itemType && String(i.id) === itemId);
+                if (item) {
+                    dragStartData.items.set(selUniqueId, { x: item.x, y: item.y, type: item.type, scale: item.scale });
+                }
+            });
+        } else { // event.button === 1
+            // For middle-click, drag only the single item that was clicked on.
+            const item = allItems.find(i => i.type === type && String(i.id) === id);
             if (item) {
-                dragStartData.items.set(selUniqueId, { x: item.x, y: item.y, type: item.type, scale: item.scale });
+                dragStartData.items.set(uniqueId, { x: item.x, y: item.y, type: item.type, scale: item.scale });
             }
-        });
+        }
 
         window.addEventListener('mousemove', handleItemDragMove);
         window.addEventListener('mouseup', handleItemDragEnd, { once: true });
