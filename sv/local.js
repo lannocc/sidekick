@@ -119,11 +119,15 @@ export function updateShortcutTransform(id, x, y, scale) {
     sendMessage({ type: 'update_shortcut_transform', id, x, y, scale });
 }
 
-export function createBackedWindow(config, x, y, width, height, scale = 1.0) {
-    sendMessage({ type: 'create_backed_window', config, x, y, width, height, scale });
+export function createBackedWindow(config, x, y, width, height, scale = 1.0, originalGroupId) {
+    sendMessage({ type: 'create_backed_window', config, x, y, width, height, scale, original_group_id: originalGroupId });
 }
-export function updateBackedWindowTransform(id, x, y, scale) {
-    sendMessage({ type: 'update_backed_window_transform', id, x, y, scale });
+export function updateBackedWindowTransform(id, x, y, scale, config) {
+    const message = { type: 'update_backed_window_transform', id, x, y, scale };
+    if (config) {
+        message.config = JSON.stringify(config);
+    }
+    sendMessage(message);
 }
 export function deleteBackedWindow(id) {
     sendMessage({ type: 'delete_backed_window', id });
