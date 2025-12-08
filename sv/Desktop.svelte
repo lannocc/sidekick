@@ -1343,7 +1343,11 @@
     function handleBackRequest(windowToBack) {
         // 1. Generate config for the new backed window, capturing live state
         const config = generateBoardConfigFromWindow(windowToBack, get(windows));
-        config.cloaked = windowToBack.cloaked; // Explicitly ensure cloaked state is preserved
+        // *** MODIFICATION START ***
+        // Explicitly ensure the cloaked state is preserved in the config.
+        const frontWindow = get(windows).find(w => w.id === windowToBack.id);
+        config.cloaked = frontWindow ? frontWindow.cloaked : false;
+        // *** MODIFICATION END ***
         const configStr = JSON.stringify(config);
 
         // Get view states for coordinate transformation

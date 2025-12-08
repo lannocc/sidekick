@@ -187,7 +187,6 @@
     function onResizeEnd() { isResizing = false; window.removeEventListener('mousemove', onResize); restoreFocus(); }
     function handleMiddleClick(event) { if (isBacked) return; if (event.button !== 1) return; event.preventDefault(); if (middleClickTimeout) { clearTimeout(middleClickTimeout); middleClickTimeout = null; windows.toggleCloak(id); return; } middleClickTimeout = setTimeout(() => { middleClickTimeout = null; }, 250); const onMove = () => { clearTimeout(middleClickTimeout); middleClickTimeout = null; if (maximized) return; if (event.target.closest('.content-area-container')) { dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY }); } else { onDragStart(event); } }; const onUp = () => { window.removeEventListener('mousemove', onMove); }; window.addEventListener('mousemove', onMove, { once: true }); window.addEventListener('mouseup', onUp, { once: true }); }
     function handleFrameMouseDown(event) {
-        if (isBacked) return;
         // For backed windows, all mouse down interactions are handled by Desktop.svelte
         if (isBacked) return;
 
@@ -339,7 +338,7 @@
         style:box-shadow={boxShadowStyle}
         style:--box-shadow={boxShadowStyle} 
         style:--notice-color={notice?.color} 
-        on:mousedown={handleFrameMouseDown}
+        on:mousedown={!isBacked ? handleFrameMouseDown : null}
     >
         <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={!isBacked ? handleTitleBarMouseDown : null} on:dblclick={!isBacked ? () => windows.toggleMaximize(id) : null} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity}; --frame-height: {frameHeight}px;">
             {#if !isBacked}
@@ -378,11 +377,11 @@
         </div>
 
         <div class="middle-row">
-            <div class="side-frame left" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
+            <div class="side-frame left" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={!isBacked ? handleFrameMouseDown : null}></div>
             <div class="content-area-wrapper">
                 {#each tabs as tab (tab.id)}
                     {@const { component, ...restOfTab } = tab}
-                    <div class="content-area-container" style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'} style:pointer-events={(isBacked && !isActive) || $desktopInteraction || $dragState || cloaked ? 'none' : null} style:background={generateBgStyle(sceneSettings)} style:opacity={sceneSettings?.opacity ?? 1.0} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} on:mousedown={handleContentMouseDown} on:wheel={e => handleContentWheel(e, tab)} on:focusout={e => handleFocusOut(e, tab)}>
+                    <div class="content-area-container" style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'} style:pointer-events={isBacked ? null : ($desktopInteraction || $dragState || cloaked ? 'none' : null)} style:background={generateBgStyle(sceneSettings)} style:opacity={sceneSettings?.opacity ?? 1.0} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} on:mousedown={handleContentMouseDown} on:wheel={e => handleContentWheel(e, tab)} on:focusout={e => handleFocusOut(e, tab)}>
                         <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
                             <svelte:component bind:this={componentInstances[tab.id]} this={component} {...restOfTab} groupId={id} id={tab.id} isActive={isActive && tab.id === activeTabId} {x} {y} {width} {height} {maximized} {isBacked} />
                             {#if componentInstances[tab.id]}
@@ -392,9 +391,9 @@
                     </div>
                 {/each}
             </div>
-            <div class="side-frame right" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
+            <div class="side-frame right" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={!isBacked ? handleFrameMouseDown : null}></div>
         </div>
-        <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
+        <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={!isBacked ? handleFrameMouseDown : null}></div>
 
         {#if !isBacked && showOptionsMenu}
             <div class="options-menu">
