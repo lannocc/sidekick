@@ -28,13 +28,18 @@
             const persistentId = bw.originalGroupId || bw.id;
             return {
                 ...config,
+                // Explicitly override with live data from the backed window record
+                x: bw.x,
+                y: bw.y,
+                scale: bw.scale || 1.0,
+                zIndex: bw.z_index || 1,
+
+                // Set derived/unified properties
                 id: persistentId,
                 isActive: interactiveBackedWindowId === persistentId,
                 originalBackedId: bw.id,
                 isBacked: true,
-                scale: bw.scale || 1.0,
                 tabs: config.tabs.map(t => ({...t, component: componentMap[t.componentType], id: t.originalId})),
-                zIndex: bw.z_index || 1,
                 notice: null, // Backed windows don't have notices for now
                 minimized: false, // Backed windows can't be minimized
                 // Pass the full backed window object for the context menu
@@ -56,6 +61,7 @@
     let totalContentBounds;
     let desktopEl;
     let backedComponentInstances = {};
+    let backedWindowMiddleClickTimeout = new Map();
 
     let taskbarHeight;
     $: taskbarHeight = $desktopSettings.sky?.frame?.height ?? TASKBAR_HEIGHT;
@@ -831,6 +837,28 @@
             return;
         }
 
+        // Double middle click to cloak/uncloak backed windows
+        if (type === 'backed_window' && event.button === 1) {
+            if (backedWindowMiddleClickTimeout.has(id)) {
+                clearTimeout(backedWindowMiddleClickTimeout.get(id));
+                backedWindowMiddleClickTimeout.delete(id);
+                event.preventDefault();
+                event.stopPropagation();
+                
+                const backedWindow = $backedWindows.find(bw => (bw.originalGroupId || bw.id) == id);
+                if (backedWindow) {
+                    const newConfig = { ...backedWindow.config, cloaked: !backedWindow.config.cloaked };
+                    updateBackedWindowTransform(backedWindow.id, backedWindow.x, backedWindow.y, backedWindow.scale, newConfig);
+                }
+                return; // Action complete, don't proceed to drag.
+            }
+
+            const timeoutId = setTimeout(() => {
+                backedWindowMiddleClickTimeout.delete(id);
+            }, 250);
+            backedWindowMiddleClickTimeout.set(id, timeoutId);
+        }
+
         // If the window is already interactive, let its content handle the event.
         if (isInteractive) {
             return;
@@ -1027,7 +1055,9 @@
         if (!isDraggingItems) return;
 
         if (!get(wasDraggingItems)) {
-            // On first move, set the dragging flag and cursor
+            // On first move, cancel any pending double-click actions and set the dragging flag/cursor
+            backedWindowMiddleClickTimeout.forEach(timeout => clearTimeout(timeout));
+            backedWindowMiddleClickTimeout.clear();
             document.body.classList.add('is-dragging-item');
             wasDraggingItems.set(true);
         }
@@ -1310,6 +1340,7 @@
     function handleBackRequest(windowToBack) {
         // 1. Generate config for the new backed window, capturing live state
         const config = generateBoardConfigFromWindow(windowToBack, get(windows));
+        config.cloaked = windowToBack.cloaked; // Explicitly ensure cloaked state is preserved
         const configStr = JSON.stringify(config);
 
         // Get view states for coordinate transformation
@@ -1394,6 +1425,7 @@
         if (saveViewTimeout) clearTimeout(saveViewTimeout);
         if (controlsTimeout) clearTimeout(controlsTimeout);
         if (desktopMiddleClickTimeout) clearTimeout(desktopMiddleClickTimeout);
+        backedWindowMiddleClickTimeout.forEach(timeout => clearTimeout(timeout));
         window.removeEventListener('mousemove', handleDesktopMouseMove);
         window.removeEventListener('mouseup', handleDesktopMouseUp);
         window.removeEventListener('mousemove', handleMinimapMouseMove);

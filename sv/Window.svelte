@@ -240,6 +240,9 @@
         border-color: rgba(52, 152, 219, 0.7);
         box-shadow: 0 5px 15px rgba(0,0,0,0.3), 0 0 8px rgba(52, 152, 219, 0.6);
     }
+    .backed-window-frame:not(.active) {
+        cursor: pointer;
+    }
     
     @keyframes notice-glow {
         50% { border-color: var(--notice-color); box-shadow: 0 0 20px 5px var(--notice-color), var(--original-shadow, 0 5px 15px rgba(0,0,0,0.3)); }
