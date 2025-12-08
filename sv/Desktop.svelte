@@ -62,6 +62,7 @@
     let desktopEl;
     let backedComponentInstances = {};
     let backedWindowMiddleClickTimeout = new Map();
+    let backedWindowLeftClickTimeout = new Map();
 
     let taskbarHeight;
     $: taskbarHeight = $desktopSettings.sky?.frame?.height ?? TASKBAR_HEIGHT;
@@ -837,6 +838,9 @@
             return;
         }
 
+        const backedWindowItem = (type === 'backed_window') ? $backedWindows.find(bw => (bw.originalGroupId || bw.id) == id) : null;
+        const isCloaked = backedWindowItem ? backedWindowItem.config.cloaked : false;
+
         // Double middle click to cloak/uncloak backed windows
         if (type === 'backed_window' && event.button === 1) {
             if (backedWindowMiddleClickTimeout.has(id)) {
@@ -845,10 +849,9 @@
                 event.preventDefault();
                 event.stopPropagation();
                 
-                const backedWindow = $backedWindows.find(bw => (bw.originalGroupId || bw.id) == id);
-                if (backedWindow) {
-                    const newConfig = { ...backedWindow.config, cloaked: !backedWindow.config.cloaked };
-                    updateBackedWindowTransform(backedWindow.id, backedWindow.x, backedWindow.y, backedWindow.scale, newConfig);
+                if (backedWindowItem) {
+                    const newConfig = { ...backedWindowItem.config, cloaked: !isCloaked };
+                    updateBackedWindowTransform(backedWindowItem.id, backedWindowItem.x, backedWindowItem.y, backedWindowItem.scale, newConfig);
                 }
                 return; // Action complete, don't proceed to drag.
             }
@@ -859,10 +862,33 @@
             backedWindowMiddleClickTimeout.set(id, timeoutId);
         }
 
+        // Double-left-click to uncloak an interactive, cloaked window
+        if (isInteractive && isCloaked && event.button === 0) {
+            if (backedWindowLeftClickTimeout.has(id)) {
+                clearTimeout(backedWindowLeftClickTimeout.get(id));
+                backedWindowLeftClickTimeout.delete(id);
+                event.preventDefault();
+                event.stopPropagation();
+                
+                if (backedWindowItem) {
+                    const newConfig = { ...backedWindowItem.config, cloaked: false };
+                    updateBackedWindowTransform(backedWindowItem.id, backedWindowItem.x, backedWindowItem.y, backedWindowItem.scale, newConfig);
+                }
+                return; // Action complete, don't proceed to drag.
+            }
+
+            const timeoutId = setTimeout(() => {
+                backedWindowLeftClickTimeout.delete(id);
+            }, 250);
+            backedWindowLeftClickTimeout.set(id, timeoutId);
+        }
+
         // If the window is already interactive, let its content handle the event,
-        // unless it's a middle-click, which we reserve for cloaking or dragging.
+        // unless it's a middle-click or it is cloaked (which should allow dragging).
         if (isInteractive && event.button !== 1) {
-            return;
+            if (!isCloaked) {
+                return;
+            }
         }
 
         // --- From here, we know it's a desktop-level interaction ---
@@ -1061,6 +1087,8 @@
             // On first move, cancel any pending double-click actions and set the dragging flag/cursor
             backedWindowMiddleClickTimeout.forEach(timeout => clearTimeout(timeout));
             backedWindowMiddleClickTimeout.clear();
+            backedWindowLeftClickTimeout.forEach(timeout => clearTimeout(timeout));
+            backedWindowLeftClickTimeout.clear();
             document.body.classList.add('is-dragging-item');
             wasDraggingItems.set(true);
         }
@@ -1433,6 +1461,7 @@
         if (controlsTimeout) clearTimeout(controlsTimeout);
         if (desktopMiddleClickTimeout) clearTimeout(desktopMiddleClickTimeout);
         backedWindowMiddleClickTimeout.forEach(timeout => clearTimeout(timeout));
+        backedWindowLeftClickTimeout.forEach(timeout => clearTimeout(timeout));
         window.removeEventListener('mousemove', handleDesktopMouseMove);
         window.removeEventListener('mouseup', handleDesktopMouseUp);
         window.removeEventListener('mousemove', handleMinimapMouseMove);
