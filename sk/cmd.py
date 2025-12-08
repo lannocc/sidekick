@@ -269,12 +269,24 @@ def version(args):
 
 
 def help_cmds(args):
+    if args:
+        sub_cmd = args[0]
+        if sub_cmd in COMMANDS:
+            cmd_handler = COMMANDS[sub_cmd][0]
+            cmd_handler(['--help'])
+            return
+        else:
+            print(f'!!! unknown command: {sub_cmd}')
+            print('Try `sk help` for a list of commands.')
+            return
+
     print('SideKick AI Admin')
     print()
     print('COMMAND USAGE:')
     print('     sk [options] <command> [args...]')
     print()
     print('Use `sk` to command and evaluate at a modular level.')
+    print('For help on a specific command, use `sk help <command>`.')
     print()
     print('The following commands are available:')
     for name, cmd in COMMANDS.items():
@@ -300,6 +312,11 @@ def action(args):
 
 def ticket(args):
     from . import ticket
+
+    if args and (args[0] == '--help' or args[0] == '-h'):
+        print("usage: sk ticket [<ticket-number>]")
+        print("\nView ticket details. If no ticket number is provided, you will be prompted.")
+        return
 
     if args:
         if len(args) != 1:
@@ -377,6 +394,12 @@ def tree(args):
 def md(args):
     from .util import get_md_code_block
     import sys
+
+    if args and (args[0] == '--help' or args[0] == '-h'):
+        print("usage: sk md [<language>]")
+        print("\nExtract a markdown code block from stdin.")
+        print("If language is not provided, it extracts the first code block found.")
+        return
 
     if args:
         if len(args) != 1:
