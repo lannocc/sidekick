@@ -13,10 +13,9 @@ import os
 from datetime import datetime
 
 print = print_flush
-ENCODING = tiktoken.get_encoding('cl100k_base')
 
 
-def _prepare_attachment(shot, file, package, quiet):
+def _prepare_attachment(shot, file, package, quiet, use_openai=False):
     """Handles screenshot, file, and package attachments, ensuring only one is used."""
     attachment_content = ""
     final_file_path = file
@@ -31,7 +30,7 @@ def _prepare_attachment(shot, file, package, quiet):
             print(f'SAVED SCREENSHOT to: {final_file_path}')
 
     elif package:
-        final_file_path, counts = package_directory(package)
+        final_file_path, counts = package_directory(package, use_openai=use_openai)
         if not quiet:
             print(f'PACKAGED to: {final_file_path}')
             if isinstance(counts, list):
@@ -207,7 +206,7 @@ def main(args, called=''):
                 print(f'!!! path not found or is not a regular file/directory: {path}')
                 return
 
-        final_file_path, attachment_content = _prepare_attachment(shot, file, pkg or None, quiet)
+        final_file_path, attachment_content = _prepare_attachment(shot, file, pkg or None, quiet, use_openai=use_openai)
         if final_file_path is None and attachment_content is None:
             # Error occurred and was printed in helper
             return
@@ -215,7 +214,7 @@ def main(args, called=''):
         prompt = None # Prompt is now handled interactively or via pipe
         if task:
             do_task(prompt, file=final_file_path, attachment_content=attachment_content, quiet=quiet,
-                         chatter=chatter, model=model)
+                         chatter=chatter, model=model, use_openai=use_openai)
         else:
             ask_question(prompt, file=final_file_path, attachment_content=attachment_content,
                            mdlang=lang, mdsave=save, work_file=save_work, quiet=quiet,
@@ -344,6 +343,7 @@ def tree(args):
 
     md = False
     count = False
+    use_openai = False
 
     while args and args[0].startswith('-'):
         op = args[0]
@@ -356,9 +356,11 @@ def tree(args):
             print('    sk [general-opts] tree [tree-opts] <directory>')
             print()
             print('The following tree command options are available:')
-            print('   -h  :: help for tree command (also --help)')
-            print('   -md :: markdown compatible output')
-            print('   -c  :: count bytes and tokens')
+            print('   -h       :: help for tree command (also --help)')
+            print('   -md      :: markdown compatible output')
+            print('   -c       :: count bytes and tokens')
+            print('   --google :: use google for token counting (default)')
+            print('   --openai :: use openai (tiktoken) for token counting')
             print()
             print('See `sk -h` for general options.')
             return
@@ -368,6 +370,12 @@ def tree(args):
 
         elif op == '-c':
             count = True
+
+        elif op == '--google':
+            use_openai = False
+
+        elif op == '--openai':
+            use_openai = True
 
         else:
             print(f'!!! unknown tree option: {op}')
@@ -388,7 +396,7 @@ def tree(args):
         print('  <<')
         print()
 
-    print(get_directory_tree_as_text(path, markdown=md, count=count))
+    print(get_directory_tree_as_text(path, markdown=md, count=count, use_openai=use_openai))
 
 
 def md(args):

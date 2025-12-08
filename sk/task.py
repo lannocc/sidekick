@@ -2,7 +2,7 @@
 # @%@~LICENSE~@%@
 
 from .action import Context
-from .util import play_error, play_success, print_flush as print
+from .util import play_error, play_success, print_flush as print, count_tokens
 from . import agent
 
 from binaryornot.check import is_binary
@@ -11,11 +11,8 @@ import tiktoken
 import os
 
 
-ENCODING = tiktoken.get_encoding('cl100k_base')
-
-
 def do_task(prompt=None, file=None, attachment_content="", quiet=False,
-            chatter=False, model=None):
+            chatter=False, model=None, use_openai=False):
 
     if not quiet:
         print('Perform a Task')
@@ -23,7 +20,7 @@ def do_task(prompt=None, file=None, attachment_content="", quiet=False,
 
     if attachment_content:
         attachment_bytes = len(attachment_content.encode('utf-8'))
-        attachment_tokens = len(ENCODING.encode(attachment_content))
+        attachment_tokens = count_tokens(attachment_content, use_openai=use_openai)
         if not quiet:
             print(f'SUBTOTAL Bytes: {attachment_bytes:,}')
             print(f'SUBTOTAL Tokens: {attachment_tokens:,}')
@@ -43,7 +40,7 @@ def do_task(prompt=None, file=None, attachment_content="", quiet=False,
 
     if not quiet:
         total_bytes = len(full_text.encode('utf-8'))
-        total_tokens = len(ENCODING.encode(full_text))
+        total_tokens = count_tokens(full_text, use_openai=use_openai)
         print(f'TOTAL INPUT Bytes: {total_bytes:,}')
         print(f'TOTAL INPUT Tokens: {total_tokens:,}')
         print()
@@ -59,7 +56,7 @@ def do_task(prompt=None, file=None, attachment_content="", quiet=False,
                 with open(result.path_name, 'r', encoding='utf-8') as f:
                     result_content = f.read()
                 output_bytes = len(result_content.encode('utf-8'))
-                output_tokens = len(ENCODING.encode(result_content))
+                output_tokens = count_tokens(result_content, use_openai=use_openai)
                 print()
                 print(f':: Total Output Bytes: {output_bytes:,}')
                 print(f':: Output Tokens: {output_tokens:,}')
