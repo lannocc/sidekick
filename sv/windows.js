@@ -248,13 +248,13 @@ function createWindowManager() {
             const newTabs = groupData.tabs.map(tabData => {
                 const component = componentMap[tabData.componentType];
                 if (!component) return null;
-                const { componentType, originalId, ...props } = tabData;
+                const { componentType, originalId, initialState, ...props } = tabData;
                 const allWindowSettings = get(windowSettings);
                 const componentSettings = allWindowSettings[tabData.componentType];
                 const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
                 const newTabId = ++tabIdCounter;
                 idMap.set(originalId, newTabId);
-                return { id: newTabId, component, componentName: tabData.componentType, ...props, zoom: props.zoom ?? defaultZoom, originalId };
+                return { id: newTabId, component, componentName: tabData.componentType, ...props, ...(initialState || {}), zoom: props.zoom ?? defaultZoom, originalId };
             }).filter(Boolean);
 
             if (newTabs.length === 0) continue;
@@ -747,7 +747,7 @@ function createWindowManager() {
             const component = componentMap[tabData.componentType];
             if (!component) return null;
 
-            const { componentType, ...props } = tabData;
+            const { componentType, initialState, ...props } = tabData;
 
             const allWindowSettings = get(windowSettings);
             const componentSettings = allWindowSettings[tabData.componentType];
@@ -758,6 +758,7 @@ function createWindowManager() {
                 component,
                 componentName: tabData.componentType,
                 ...props,
+                ...(initialState || {}),
                 zoom: props.zoom ?? defaultZoom,
             };
         }).filter(Boolean);

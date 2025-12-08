@@ -1706,7 +1706,7 @@
                     {#if activeTabConfig}
                         {@const Component = componentMap[activeTabConfig.componentType]}
                         {#if Component}
-                            {@const tabProps = { ...activeTabConfig, id: activeTabConfig.originalId, groupId: bw.id, isActive: false, isBacked: true, x: bw.x, y: bw.y, width: bw.width, height: bw.height }}
+                            {@const tabProps = { ...activeTabConfig, ...(activeTabConfig.initialState || {}), id: activeTabConfig.originalId, groupId: bw.id, isActive: false, isBacked: true, x: bw.x, y: bw.y, width: bw.width, height: bw.height }}
                             <div
                                 class="backed-window"
                                 class:selected={isSelected}
