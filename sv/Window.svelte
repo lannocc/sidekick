@@ -186,7 +186,24 @@
     function onResize(event) { if (!isResizing) return; const { x: ix, y: iy, width: iw, height: ih, mouseX: startX, mouseY: startY } = initialResizeState; const { zoom } = get(windowView); const dx = (event.clientX - startX) / zoom; const dy = (event.clientY - startY) / zoom; const minWidth = 250, minHeight = 150; let newX = ix, newY = iy, newWidth = iw, newHeight = ih; if (resizeDirection.includes('e')) { newWidth = iw + dx; } else if (resizeDirection.includes('w')) { newWidth = iw - dx; newX = ix + dx; } if (resizeDirection.includes('s')) { newHeight = ih + dy; } else if (resizeDirection.includes('n')) { newHeight = ih - dy; newY = iy + dy; } if (newWidth < minWidth) { if (resizeDirection.includes('w')) { newX -= minWidth - newWidth; } newWidth = minWidth; } if (newHeight < minHeight) { if (resizeDirection.includes('n')) { newY -= minHeight - newHeight; } newHeight = minHeight; } windows.updateWindowProps(id, { x: newX, y: newY, width: newWidth, height: newHeight }); }
     function onResizeEnd() { isResizing = false; window.removeEventListener('mousemove', onResize); restoreFocus(); }
     function handleMiddleClick(event) { if (isBacked) return; if (event.button !== 1) return; event.preventDefault(); if (middleClickTimeout) { clearTimeout(middleClickTimeout); middleClickTimeout = null; windows.toggleCloak(id); return; } middleClickTimeout = setTimeout(() => { middleClickTimeout = null; }, 250); const onMove = () => { clearTimeout(middleClickTimeout); middleClickTimeout = null; if (maximized) return; if (event.target.closest('.content-area-container')) { dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY }); } else { onDragStart(event); } }; const onUp = () => { window.removeEventListener('mousemove', onMove); }; window.addEventListener('mousemove', onMove, { once: true }); window.addEventListener('mouseup', onUp, { once: true }); }
-    function handleFrameMouseDown(event) { if (isBacked) return; if (event.button === 1) { if (event.ctrlKey) { event.preventDefault(); event.stopPropagation(); dispatch('backrequest'); return; } handleMiddleClick(event); event.stopPropagation(); return; } clearTimeout(focusFollowsMouseTimeout); if ((event.altKey || event.metaKey) && !maximized) { event.preventDefault(); if (event.button === 0) onDragStart(event); else if (event.button === 2) onResizeStart(event, 'se'); } else if (event.button === 0 && cloaked && !maximized) { event.preventDefault(); onDragStart(event); } else { windows.focusWindow(id); } }
+    function handleFrameMouseDown(event) {
+        if (isBacked) return;
+        // For backed windows, all mouse down interactions are handled by Desktop.svelte
+        if (isBacked) return;
+
+        // For front windows, handle middle-click for cloaking/dragging universally on the frame.
+        if (event.button === 1) {
+            if (event.ctrlKey) { event.preventDefault(); event.stopPropagation(); dispatch('backrequest'); return; }
+            handleMiddleClick(event);
+            event.stopPropagation();
+            return;
+        }
+
+        // For other buttons on front windows...
+        clearTimeout(focusFollowsMouseTimeout);
+        if ((event.altKey || event.metaKey) && !maximized) { event.preventDefault(); if (event.button === 0) onDragStart(event); else if (event.button === 2) onResizeStart(event, 'se'); } else if (event.button === 0 && cloaked && !maximized) { event.preventDefault(); onDragStart(event); } else { windows.focusWindow(id); }
+    }
+
     function handleTitleBarMouseDown(event) { if (isBacked) return; if (event.target.closest('button') || event.target.closest('.window-control') || event.target.closest('.tab')) { if (!isActive) windows.focusWindow(id); return; } if (event.button === 1) { if (event.ctrlKey) { event.preventDefault(); event.stopPropagation(); dispatch('backrequest'); return; } handleMiddleClick(event); event.stopPropagation(); return; } if (maximized) { if (!isActive) windows.focusWindow(id); return; } clearTimeout(focusFollowsMouseTimeout); if (event.altKey || event.metaKey) { event.preventDefault(); if (event.button === 0) { onDragStart(event); } else if (event.button === 2) { onResizeStart(event, 'se'); } } else if (event.button === 0) { onDragStart(event); } }
     function handleMouseEnter() { if (isBacked) return; if (settings?.focusFollowsMouse && !isActive) { focusFollowsMouseTimeout = setTimeout(() => windows.setActiveWindow(id), settings.focusDelay); } }
     function handleMouseLeave() { clearTimeout(focusFollowsMouseTimeout); }

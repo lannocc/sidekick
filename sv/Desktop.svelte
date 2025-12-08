@@ -859,8 +859,9 @@
             backedWindowMiddleClickTimeout.set(id, timeoutId);
         }
 
-        // If the window is already interactive, let its content handle the event.
-        if (isInteractive) {
+        // If the window is already interactive, let its content handle the event,
+        // unless it's a middle-click, which we reserve for cloaking or dragging.
+        if (isInteractive && event.button !== 1) {
             return;
         }
 
