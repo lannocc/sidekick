@@ -91,6 +91,10 @@
     $: cloakStyle = generateBgStyle(cloakSettings);
     $: cloakOpacity = cloaked ? (cloakSettings?.opacity ?? 0.8) : 0;
 
+    // --- NEW: Scrollbar Color Derivation ---
+    $: scrollbarThumbColor = (frameSettings?.bgType === 'color' ? frameSettings.bgColor : frameSettings?.bgGradientStart) || '#46627f';
+    $: scrollbarTrackColor = (sceneSettings?.bgType === 'color' ? sceneSettings.bgColor : sceneSettings?.bgGradientStart) || '#2c3e50';
+
     // --- Backed Window Specifics ---
     $: isSelected = $selectedItems.has(`backed_window-${id}`);
     
@@ -343,6 +347,8 @@
     style:width="{width * scale}px" style:height="{height * scale}px" 
     style:z-index="{zIndex}" 
     style:transform="{transform}"
+    style:--scrollbar-thumb-bg={scrollbarThumbColor}
+    style:--scrollbar-track-bg={scrollbarTrackColor}
     class:minimized
     class:maximized={!isBacked && maximized}
     class:backed={isBacked}

@@ -43,6 +43,13 @@
     $: frameHeight = frameSettings?.height ?? 40;
     $: frameWidth = frameSettings?.width ?? 0;
 
+    // --- NEW: Derive root scrollbar colors from sky settings ---
+    $: skySceneSettings = $desktopSettings.sky?.scene;
+    $: skyFrameSettings = $desktopSettings.sky?.frame;
+    $: rootScrollbarTrackColor = (skySceneSettings?.bgType === 'color' ? skySceneSettings.bgColor : skySceneSettings?.bgGradientStart) || '#2c3e50';
+    $: rootScrollbarThumbColor = (skyFrameSettings?.bgType === 'color' ? skyFrameSettings.bgColor : skyFrameSettings?.bgGradientStart) || '#46627f';
+
+
     function disableSkyCloak() {
         desktopSettings.update(s => {
             if (s.sky.cloak.opacity > 0) {
@@ -151,6 +158,15 @@
     });
 </script>
 
+<svelte:head>
+    <style>
+        :root {
+            --scrollbar-track-bg: {rootScrollbarTrackColor};
+            --scrollbar-thumb-bg: {rootScrollbarThumbColor};
+        }
+    </style>
+</svelte:head>
+
 <style>
     .sk-container {
         display: flex;
@@ -184,6 +200,30 @@
         z-index: 30000;
         pointer-events: none;
         transition: opacity 0.3s ease-in-out;
+    }
+
+    /* --- GLOBAL SCROLLBAR STYLES --- */
+    :global(*), :global(*::before), :global(*::after) {
+        /* For Firefox */
+        scrollbar-width: thin;
+        scrollbar-color: var(--scrollbar-thumb-bg, #46627f) var(--scrollbar-track-bg, #2c3e50);
+    }
+    :global(::-webkit-scrollbar) {
+        width: 12px;
+        height: 12px;
+    }
+    :global(::-webkit-scrollbar-track) {
+        background: var(--scrollbar-track-bg, #2c3e50);
+    }
+    :global(::-webkit-scrollbar-thumb) {
+        background-color: var(--scrollbar-thumb-bg, #46627f);
+        border-radius: 6px;
+        border: 3px solid transparent;
+        background-clip: content-box;
+    }
+    :global(::-webkit-scrollbar-thumb:hover) {
+        background-color: var(--scrollbar-thumb-bg, #46627f);
+        filter: brightness(1.2);
     }
 </style>
 
