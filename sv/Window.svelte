@@ -230,7 +230,7 @@
     .backed-window-frame {
         border: 1px solid var(--border-color);
         box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-        background-color: var(--window-bg);
+        background-color: transparent;
         overflow: hidden;
         border-radius: 6px;
         height: 100%;
