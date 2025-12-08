@@ -588,7 +588,7 @@ async def websocket_handler(websocket):
                 elif msg_type == 'create_backed_window':
                     config, x, y, w, h, scale = msg['config'], msg['x'], msg['y'], msg['width'], msg['height'], msg.get('scale', 1.0)
                     original_group_id = msg.get('original_group_id')
-                    print_action("Create BackedWin", f"x={int(x)}, y={int(y)}")
+                    print_action("Create BackWin", f"x={int(x)}, y={int(y)}")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
                         "INSERT INTO backed_window (config, x, y, width, height, scale, original_group_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -602,7 +602,7 @@ async def websocket_handler(websocket):
                     action_details = f"id={win_id}, x={int(x)}, y={int(y)}, scale={scale:.2f}"
                     if config_json:
                         action_details += ", config=updated"
-                    print_action("BackedWin Xform", action_details)
+                    print_action("BackWin Xform ", action_details)
                     cursor = DB_CONN.cursor()
                     if config_json:
                         cursor.execute(
@@ -618,7 +618,7 @@ async def websocket_handler(websocket):
                     await broadcast_backed_window_list()
                 elif msg_type == 'delete_backed_window':
                     win_id = msg['id']
-                    print_action("Delete BackedWin", f"id={win_id}")
+                    print_action("Delete BackWin", f"id={win_id}")
                     cursor = DB_CONN.cursor()
                     cursor.execute("DELETE FROM backed_window WHERE id = ?", (win_id,))
                     DB_CONN.commit()
