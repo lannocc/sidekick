@@ -97,7 +97,7 @@
     
     // --- Transform Logic ---
     $: currentView = isBacked ? $desktopView : $windowView;
-    $: transform = `translate(${currentView.panX}px, ${currentView.panY}px) scale(${currentView.zoom})`;
+    $: transform = `translate(${currentView.panX}px, ${currentView.panY}px) scale(${currentView.zoom}) translate(${x}px, ${y}px)`;
 
     // --- Interaction State ---
     let isDragging = false;
@@ -296,10 +296,9 @@
 </style>
 
 <div class="window-wrapper"
-    style:left="{x}px" style:top="{y}px" 
     style:width="{width * scale}px" style:height="{height * scale}px" 
     style:z-index="{zIndex}" 
-    style:transform="{isBacked ? `translate(${$desktopView.panX}px, ${$desktopView.panY}px) scale(${$desktopView.zoom})` : `translate(${$windowView.panX}px, ${$windowView.panY}px) scale(${$windowView.zoom})`}"
+    style:transform="{transform}"
     class:minimized
     class:maximized={!isBacked && maximized}
     class:backed={isBacked}
@@ -362,7 +361,7 @@
             <div class="content-area-wrapper">
                 {#each tabs as tab (tab.id)}
                     {@const { component, ...restOfTab } = tab}
-                    <div class="content-area-container" style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'} style:pointer-events={isBacked || $desktopInteraction || $dragState || cloaked ? 'none' : null} style:background={generateBgStyle(sceneSettings)} style:opacity={sceneSettings?.opacity ?? 1.0} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} on:mousedown={handleContentMouseDown} on:wheel={e => handleContentWheel(e, tab)} on:focusout={e => handleFocusOut(e, tab)}>
+                    <div class="content-area-container" style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'} style:pointer-events={(isBacked && !isActive) || $desktopInteraction || $dragState || cloaked ? 'none' : null} style:background={generateBgStyle(sceneSettings)} style:opacity={sceneSettings?.opacity ?? 1.0} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} on:mousedown={handleContentMouseDown} on:wheel={e => handleContentWheel(e, tab)} on:focusout={e => handleFocusOut(e, tab)}>
                         <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
                             <svelte:component bind:this={componentInstances[tab.id]} this={component} {...restOfTab} groupId={id} id={tab.id} isActive={isActive && tab.id === activeTabId} {x} {y} {width} {height} {maximized} {isBacked} />
                             {#if componentInstances[tab.id]}

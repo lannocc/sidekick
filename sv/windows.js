@@ -906,21 +906,6 @@ function createWindowManager() {
         const newY = frontWorldMidY - restoredWindowHeight / 2;
 
         const newConfig = { ...backedWindow.config };
-        
-        // **MODIFICATION START**: Preserve full component state, not just serialized state.
-        newConfig.tabs = newConfig.tabs.map(tabData => {
-            const instance = instanceRegistry.get(tabData.originalId);
-            const currentState = instance && typeof instance.getState === 'function' 
-                ? instance.getState() 
-                : (tabData.initialState || {});
-            
-            return {
-                ...tabData,
-                initialState: { ...(tabData.initialState || {}), ...currentState }
-            };
-        });
-        // **MODIFICATION END**
-
         newConfig.width = restoredWindowWidth;
         newConfig.height = restoredWindowHeight;
         

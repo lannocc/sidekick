@@ -29,6 +29,7 @@
             return {
                 ...config,
                 id: persistentId,
+                isActive: interactiveBackedWindowId === persistentId,
                 originalBackedId: bw.id,
                 isBacked: true,
                 scale: bw.scale || 1.0,
