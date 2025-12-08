@@ -28,6 +28,19 @@ export const dragState = writable(null);
 // Store for requesting a drag/resize action from another component
 export const dragRequest = writable(null);
 
+export const instanceRegistry = {
+    instances: new Map(),
+    register(tabId, instance) {
+        this.instances.set(tabId, instance);
+    },
+    unregister(tabId) {
+        this.instances.delete(tabId);
+    },
+    get(tabId) {
+        return this.instances.get(tabId);
+    }
+};
+
 // Map component type strings to actual components for restoring layouts
 export const componentMap = {
     'IoskConsole': IoskConsole,
@@ -1060,19 +1073,6 @@ export const activeConsoles = readable(new Map(), set => {
 
     return () => unsubscribe();
 });
-
-export const instanceRegistry = {
-    instances: new Map(),
-    register(tabId, instance) {
-        this.instances.set(tabId, instance);
-    },
-    unregister(tabId) {
-        this.instances.delete(tabId);
-    },
-    get(tabId) {
-        return this.instances.get(tabId);
-    }
-};
 
 
 // --- Window Creation Functions ---
