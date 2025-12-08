@@ -66,6 +66,8 @@ function findTabById(groups, tabId) {
 
 export function generateBoardConfigFromWindow(group, allWindows) {
     const layoutTabs = group.tabs.map(tab => {
+        const instance = instanceRegistry.get(tab.id); // Get component instance
+        const currentState = instance && typeof instance.getState === 'function' ? instance.getState() : {}; // Get state
         const associatedConsole = findTabById(allWindows, tab.consoleId);
         return {
             originalId: tab.id,
@@ -81,7 +83,7 @@ export function generateBoardConfigFromWindow(group, allWindows) {
             initialCommand: tab.initialCommand,
             initialPwd: tab.initialPwd,
             initialInterval: tab.initialInterval,
-            initialState: tab.initialState,
+            initialState: { ...(tab.initialState || {}), ...currentState }, // Merge current state
             consoleId: tab.consoleId, // Keep for remapping
         };
     });
@@ -903,6 +905,18 @@ function createWindowManager() {
         
         // Update the config with the new, transformed size before restoring.
         const newConfig = { ...backedWindow.config };
+        
+        // For each tab in the config, get its current state from the live component instance
+        newConfig.tabs = newConfig.tabs.map(tabData => {
+            const instance = instanceRegistry.get(tabData.originalId);
+            const currentState = instance && typeof instance.getState === 'function' ? instance.getState() : {};
+            
+            return {
+                ...tabData,
+                initialState: { ...(tabData.initialState || {}), ...currentState }
+            };
+        });
+        
         newConfig.width = restoredWindowWidth;
         newConfig.height = restoredWindowHeight;
         

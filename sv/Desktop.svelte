@@ -3,7 +3,7 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState } from './windows.js';
+    import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction } from './desktop.js';
     import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow } from './local.js';
@@ -14,6 +14,7 @@
     import { get } from 'svelte/store';
     import { connectionStatus } from './local.js';
     import { fade } from 'svelte/transition';
+    import InstanceRegistrar from './InstanceRegistrar.svelte';
 
     const initialSettings = get(desktopSettings);
     desktopView.set({
@@ -26,6 +27,7 @@
     let innerWidth, innerHeight, desktopWidth, desktopHeight;
     let totalContentBounds;
     let desktopEl;
+    let backedComponentInstances = {};
 
     let taskbarHeight;
     $: taskbarHeight = $desktopSettings.sky?.frame?.height ?? TASKBAR_HEIGHT;
@@ -1731,7 +1733,14 @@
                                 }}
                             >
                                 <div class="backed-content-area" style:zoom={activeTabConfig.zoom || 1.0}>
-                                    <svelte:component this={Component} {...tabProps} />
+                                    <svelte:component
+                                        bind:this={backedComponentInstances[activeTabConfig.originalId]}
+                                        this={Component}
+                                        {...tabProps}
+                                    />
+                                    {#if backedComponentInstances[activeTabConfig.originalId]}
+                                        <InstanceRegistrar tabId={activeTabConfig.originalId} instance={backedComponentInstances[activeTabConfig.originalId]} />
+                                    {/if}
                                 </div>
                             </div>
                         {/if}
