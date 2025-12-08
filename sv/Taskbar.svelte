@@ -144,18 +144,27 @@
     function getIdealButtonTop(win, buttonHeight) {
         // Fix #1: Use restored geometry for maximized windows
         const winY = win.maximized && typeof win.prevY === 'number' ? win.prevY : win.y;
+        const winHeight = win.maximized && typeof win.prevHeight === 'number' ? win.prevHeight : win.height;
 
         const frameSettings = get(desktopSettings).sky?.frame;
         const th = frameSettings?.height ?? 40;
         const bottomFrameHeight = frameSettings?.width ?? 0;
         const screenWinY = winY * $windowView.zoom + $windowView.panY;
+        const screenWinHeight = (winHeight || 0) * $windowView.zoom;
         const screenDesktopHeight = window.innerHeight - th - bottomFrameHeight;
         
-        const progress = screenDesktopHeight > 0
-            ? Math.max(0, Math.min(1, screenWinY / screenDesktopHeight))
-            : 0.5;
-        const availableSpace = th - buttonHeight;
-        const idealTop = progress * availableSpace;
+        // This logic treats the button as a minimap of the window's vertical position
+        // by mapping the window's movable range to the button's movable range.
+        const windowMovableSpace = screenDesktopHeight - screenWinHeight;
+        const buttonMovableSpace = th - buttonHeight;
+
+        if (windowMovableSpace <= 0 || buttonMovableSpace <= 0) {
+            return 0; // Default to top if no space to move
+        }
+
+        // Calculate progress of the window within its movable space
+        const progress = Math.max(0, Math.min(1, screenWinY / windowMovableSpace));
+        const idealTop = progress * buttonMovableSpace;
         
         return Math.max(0, Math.min(idealTop, th - buttonHeight));
     }
@@ -310,22 +319,30 @@
         if (dragInfo.isDragging) {
             event.preventDefault(); // Prevent text selection etc. only when dragging
             const view = get(windowView);
+            const win = dragInfo.win;
 
             const frameSettings = get(desktopSettings).sky?.frame;
             const th = frameSettings?.height ?? 40;
             const bottomFrameHeight = frameSettings?.width ?? 0;
-            const buttonSize = taskItemSizes.get(dragInfo.win.id) || { width: 100, height: 28 };
+            const buttonSize = taskItemSizes.get(win.id) || { width: 100, height: 28 };
 
-            // The button's vertical position is a "minimap" of the window's position on the desktop.
             // To make the button track the mouse 1:1, we need to scale the window's vertical movement.
+            // This scale factor is the inverse of the scaling used to position the button.
             const screenDesktopHeight = window.innerHeight - th - bottomFrameHeight;
-            const availableVSpace = th - buttonSize.height;
-            const scaleY = availableVSpace > 0 ? screenDesktopHeight / availableVSpace : 1;
+            const buttonMovableSpace = th - buttonSize.height;
+
+            const winHeight = win.maximized && typeof win.prevHeight === 'number' ? win.prevHeight : win.height;
+            const screenWinHeight = (winHeight || 0) * view.zoom;
+            const windowMovableSpace = screenDesktopHeight - screenWinHeight;
+            
+            const scaleY = buttonMovableSpace > 0 && windowMovableSpace > 0
+                ? windowMovableSpace / buttonMovableSpace
+                : 1;
 
             const newX = dragInfo.initialWinX + dx / view.zoom;
             const newY = dragInfo.initialWinY + (dy * scaleY) / view.zoom;
 
-            windows.updateWindowProps(dragInfo.win.id, {
+            windows.updateWindowProps(win.id, {
                 x: newX,
                 y: newY,
                 maximized: false,
