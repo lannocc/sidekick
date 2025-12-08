@@ -75,9 +75,10 @@
     }
 
     $: state = isActive ? 'active' : 'inactive';
+    $: windowType = isBacked ? 'back' : 'normal';
     
-    // --- Front Window Styles ---
-    $: frameSettings = settings?.windows?.normal?.frame?.[state];
+    // --- Window Styles (Unified) ---
+    $: frameSettings = settings?.windows?.[windowType]?.frame?.[state];
     $: frameStyle = generateBgStyle(frameSettings);
     $: frameHeight = frameSettings?.height ?? 30;
     $: frameWidth = frameSettings?.width ?? 0;
@@ -85,14 +86,12 @@
     $: boxShadowStyle = cloaked ? 'none' : (frameSettings?.shadowEnabled
         ? `${frameSettings.shadowInset ? 'inset ' : ''}${frameSettings.shadowX}px ${frameSettings.shadowY}px ${frameSettings.shadowBlur}px ${frameSettings.shadowSpread}px ${frameSettings.shadowColor}`
         : 'none');
-    $: sceneSettings = settings?.windows?.normal?.scene?.[state];
-    $: cloakSettings = settings?.windows?.normal?.cloak?.[state];
+    $: sceneSettings = settings?.windows?.[windowType]?.scene?.[state];
+    $: cloakSettings = settings?.windows?.[windowType]?.cloak?.[state];
     $: cloakStyle = generateBgStyle(cloakSettings);
     $: cloakOpacity = cloaked ? (cloakSettings?.opacity ?? 0.8) : 0;
 
-    // --- Backed Window Styles ---
-    $: backWindowSettings = settings?.windows?.back;
-    $: backWindowBgStyle = generateBgStyle(backWindowSettings);
+    // --- Backed Window Specifics ---
     $: isSelected = $selectedItems.has(`backed_window-${id}`);
     
     // --- Transform Logic ---
@@ -314,50 +313,49 @@
         class:noticing={!!notice} 
         class:cloaked
         class:selected={isBacked && isSelected}
-        style:box-shadow={isBacked ? null : boxShadowStyle}
+        style:box-shadow={boxShadowStyle}
         style:--box-shadow={boxShadowStyle} 
         style:--notice-color={notice?.color} 
-        style:background={isBacked ? backWindowBgStyle : null}
         on:mousedown={handleFrameMouseDown}
     >
-        {#if !isBacked}
-            <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={handleTitleBarMouseDown} on:dblclick={() => windows.toggleMaximize(id)} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity}; --frame-height: {frameHeight}px;">
+        <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={!isBacked ? handleTitleBarMouseDown : null} on:dblclick={!isBacked ? () => windows.toggleMaximize(id) : null} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity}; --frame-height: {frameHeight}px;">
+            {#if !isBacked}
                 <div class="window-controls" on:dblclick|stopPropagation on:mouseup|stopPropagation>
                     <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
                     <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>_</div>
                 </div>
+            {/if}
 
-                <div class="title-center">
-                    {#if tabs.length > 1}
-                        <div class="tabs-container" bind:this={tabsContainerEl} on:dblclick|stopPropagation>
-                            {#each tabs as tab (tab.id)}
-                                <div class="tab" class:active={tab.id === activeTabId} class:dragging={isTabDragging && draggedTabInfo.tabId === tab.id} data-tab-id={tab.id} on:mousedown={e => onTabMouseDown(e, tab)}>
-                                    <button class="tab-close-button" title="Close Tab" on:click|stopPropagation={() => windows.removeTab(id, tab.id)}>&times;</button>
-                                    <span class="tab-title" title={tab.title} on:click|stopPropagation={() => windows.setActiveTab(id, tab.id)}>{tab.title}</span>
-                                </div>
-                            {/each}
-                            {#if dropIndicator.visible}
-                                <div class="drop-indicator" style:left="{dropIndicator.left}px"></div>
-                            {/if}
-                        </div>
-                    {:else}
-                        <span class="title-text">{title}</span>
-                    {/if}
-                </div>
-
+            <div class="title-center">
+                {#if !isBacked && tabs.length > 1}
+                    <div class="tabs-container" bind:this={tabsContainerEl} on:dblclick|stopPropagation>
+                        {#each tabs as tab (tab.id)}
+                            <div class="tab" class:active={tab.id === activeTabId} class:dragging={isTabDragging && draggedTabInfo.tabId === tab.id} data-tab-id={tab.id} on:mousedown={e => onTabMouseDown(e, tab)}>
+                                <button class="tab-close-button" title="Close Tab" on:click|stopPropagation={() => windows.removeTab(id, tab.id)}>&times;</button>
+                                <span class="tab-title" title={tab.title} on:click|stopPropagation={() => windows.setActiveTab(id, tab.id)}>{tab.title}</span>
+                            </div>
+                        {/each}
+                        {#if dropIndicator.visible}
+                            <div class="drop-indicator" style:left="{dropIndicator.left}px"></div>
+                        {/if}
+                    </div>
+                {:else}
+                    <span class="title-text">{title}</span>
+                {/if}
+            </div>
+            
+            {#if !isBacked}
                 <div class="window-controls" on:dblclick|stopPropagation on:mouseup|stopPropagation>
                     <div class="window-control maximize" title={maximized ? 'Restore' : 'Maximize'} on:click={() => windows.toggleMaximize(id)} on:mousedown|stopPropagation>
                         {@html maximized ? '&#128470;' : '&#9632;'}
                     </div>
                     <div class="window-control options-menu-button" title="Options" bind:this={optionsButton} on:click|stopPropagation={() => showOptionsMenu = !showOptionsMenu}>≡</div>
                 </div>
-            </div>
-        {/if}
+            {/if}
+        </div>
 
         <div class="middle-row">
-            {#if !isBacked}
-                <div class="side-frame left" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
-            {/if}
+            <div class="side-frame left" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
             <div class="content-area-wrapper">
                 {#each tabs as tab (tab.id)}
                     {@const { component, ...restOfTab } = tab}
@@ -371,13 +369,9 @@
                     </div>
                 {/each}
             </div>
-            {#if !isBacked}
-                <div class="side-frame right" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
-            {/if}
+            <div class="side-frame right" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
         </div>
-        {#if !isBacked}
-            <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
-        {/if}
+        <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
 
         {#if !isBacked && showOptionsMenu}
             <div class="options-menu">
