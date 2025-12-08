@@ -750,12 +750,21 @@ function createWindowManager() {
 
             const { componentType, initialState, ...props } = tabData;
 
+            // *** MODIFICATION 1 START ***
+            // Use originalId to preserve the component instance across front/back transitions.
+            // This prevents components like IoskConsole from being destroyed and re-created.
+            const newTabId = tabData.originalId || ++tabIdCounter;
+            if (newTabId > tabIdCounter) {
+                tabIdCounter = newTabId; // Keep the global counter ahead of restored IDs.
+            }
+            // *** MODIFICATION 1 END ***
+
             const allWindowSettings = get(windowSettings);
             const componentSettings = allWindowSettings[tabData.componentType];
             const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
 
             return {
-                id: ++tabIdCounter,
+                id: newTabId, // Use the preserved or new ID
                 component,
                 componentName: tabData.componentType,
                 ...props,
@@ -766,7 +775,7 @@ function createWindowManager() {
 
         if (tabs.length === 0) return;
 
-        const activeTabInNewGroup = tabs.find(t => t.originalId === groupData.activeTabId);
+        const activeTabInNewGroup = tabs.find(t => t.id === groupData.activeTabId);
         const newActiveTabId = activeTabInNewGroup ? activeTabInNewGroup.id : (tabs[0] ? tabs[0].id : null);
 
         // Clean up originalId from tabs
@@ -893,6 +902,19 @@ function createWindowManager() {
             return;
         }
 
+        // *** MODIFICATION 2 START ***
+        // Before restoring, get the live, current state from the component instance
+        // instead of using the stale state saved when the window was first backed.
+        const liveConfig = JSON.parse(JSON.stringify(backedWindow.config));
+        liveConfig.tabs.forEach(tabData => {
+            // The key in instanceRegistry is the original tab ID, which is preserved.
+            const instance = instanceRegistry.get(tabData.originalId);
+            if (instance && typeof instance.getState === 'function') {
+                tabData.initialState = instance.getState();
+            }
+        });
+        // *** MODIFICATION 2 END ***
+
         const scale = backedWindow.scale || 1.0;
         const backedVisualWidth = backedWindow.width * scale;
         const backedVisualHeight = backedWindow.height * scale;
@@ -906,7 +928,7 @@ function createWindowManager() {
         const newX = frontWorldMidX - restoredWindowWidth / 2;
         const newY = frontWorldMidY - restoredWindowHeight / 2;
 
-        const newConfig = { ...backedWindow.config };
+        const newConfig = { ...liveConfig };
         newConfig.width = restoredWindowWidth;
         newConfig.height = restoredWindowHeight;
 
