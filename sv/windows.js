@@ -909,19 +909,24 @@ function createWindowManager() {
         const newConfig = { ...backedWindow.config };
         newConfig.width = restoredWindowWidth;
         newConfig.height = restoredWindowHeight;
-        
+
         // This flow still destroys the old component and creates a new one.
         // We call restoreWindow first, which adds to the `windows` store.
         // Then we call deleteBackedWindow, which removes from the `backedWindows` store.
         // The key is that Desktop.svelte will now render BOTH from a single combined list,
         // using the same component (<Window>) and a persistent ID.
-        restoreWindow({ 
-            ...newConfig, 
-            x: newX, 
+        restoreWindow({
+            ...newConfig,
+            x: newX,
             y: newY,
             // We need to carry over the ID to prevent re-creation
             id: backedWindow.originalGroupId || backedWindow.id,
         });
+
+        // Synchronously remove the window from the local store to prevent key duplication errors
+        // before the backend has a chance to respond and broadcast the new list.
+        backedWindows.update(bws => bws.filter(bw => bw.id !== backedWindow.id));
+
         deleteBackedWindow(backedWindow.id);
     };
 
