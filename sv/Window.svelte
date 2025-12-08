@@ -220,6 +220,9 @@
     .window-frame.has-custom-frame { border: none; }
     .window-frame.cloaked { border-color: transparent !important; background-color: transparent; }
     .window-frame.cloaked > *:not(.cloak):not(.resize-handle) { visibility: hidden; }
+    .backed-window-frame.cloaked > *:not(.cloak) {
+        visibility: hidden;
+    }
     .window-frame:not(.active) { border-color: #7f8c8d; }
     .window-frame.minimized { display: none; }
     .window-frame.maximized { border-radius: 0; }
@@ -406,8 +409,11 @@
             </div>
         {/if}
         
+        <div class="cloak" style:background={cloakStyle} style:opacity={cloakOpacity} style:pointer-events={cloaked ? 'auto' : 'none'}
+             on:dblclick|stopPropagation={!isBacked ? () => windows.toggleCloak(id) : null}
+             on:mousedown={!isBacked ? handleFrameMouseDown : null}></div>
+
         {#if !isBacked}
-            <div class="cloak" style:background={cloakStyle} style:opacity={cloakOpacity} style:pointer-events={cloaked ? 'auto' : 'none'} on:dblclick|stopPropagation={() => windows.toggleCloak(id)} on:mousedown={handleFrameMouseDown}></div>
             <div class="resize-handle n" on:mousedown|stopPropagation={e => onResizeStart(e, 'n')}></div>
             <div class="resize-handle s" on:mousedown|stopPropagation={e => onResizeStart(e, 's')}></div>
             <div class="resize-handle w" on:mousedown|stopPropagation={e => onResizeStart(e, 'w')}></div>
