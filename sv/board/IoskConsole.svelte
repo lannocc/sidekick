@@ -24,7 +24,6 @@
     // These will be passed in when restoring a dash layout
     export let wsUrl = undefined;
     export let username = undefined;
-    export let initialState = {};
 
     // Local values for the connection form inputs to avoid direct prop binding issues
     let localWsUrl, localUsername;
@@ -33,15 +32,15 @@
     desktopSettings.subscribe(value => settings = value);
 
     // --- State for Connection & Room Awareness ---
-    let isConnected = false;
-    let localHostname = '';
-    let roomName = null;
-    let roomTopic = '';
-    let motd = '';
-    let roomParticipants = [];
-    let availableRooms = [];
+    export let isConnected = false;
+    export let localHostname = '';
+    export let roomName = null;
+    export let roomTopic = '';
+    export let motd = '';
+    export let roomParticipants = [];
+    export let availableRooms = [];
+    export let userColors = {}; // New state for user color mapping
     let showRoomsMenu = false;
-    let userColors = {}; // New state for user color mapping
 
     // --- State for Attach Menu ---
     let showAttachMenu = false;
@@ -61,16 +60,16 @@
     };
 
     // --- State for Token Telemetry ---
-    let userTokenStats = {};
+    export let userTokenStats = {};
     let tokenTooltip = { visible: false, x: 0, y: 0, user: null };
 
     // --- Internal Component State ---
-    let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
-    let command = '';
-    let commandHistory = [];
+    export let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
+    export let command = '';
+    export let commandHistory = [];
     let historyIndex = 0;
-    let unsentCommand = '';
-    let currentPrompt = '';
+    export let unsentCommand = '';
+    export let currentPrompt = '';
 
     // --- DOM element refs ---
     let terminalEl;
@@ -80,8 +79,8 @@
     let attachButton;
 
     // --- Users Panel State ---
-    let usersPanelWidth = 260;
-    let isUsersPanelCollapsed = true;
+    export let usersPanelWidth = 260;
+    export let isUsersPanelCollapsed = true;
     let isResizing = false;
 
     let prevRoomName = null;
@@ -94,6 +93,23 @@
             isUsersPanelCollapsed = true;
         }
         prevRoomName = roomName;
+    }
+
+    // When restoring state, the live `isConnected` value from the preserved
+    // instance is the source of truth. The prop value is from a snapshot.
+    // We only restore from props if the connection is not currently active.
+    // The `output` and `commandHistory` are always safe to restore.
+    $: {
+        if (!isConnected) {
+            localHostname = localHostname;
+            roomName = roomName;
+            roomTopic = roomTopic;
+            motd = motd;
+            roomParticipants = roomParticipants;
+            availableRooms = availableRooms;
+            userColors = userColors;
+            userTokenStats = userTokenStats;
+        }
     }
 
     export function getState() {
@@ -284,23 +300,6 @@
     }
 
     onMount(() => {
-        if (initialState && Object.keys(initialState).length > 0) {
-            output = initialState.output || [];
-            commandHistory = initialState.commandHistory || [];
-            historyIndex = commandHistory.length;
-            currentPrompt = initialState.currentPrompt || '';
-            roomName = initialState.roomName || null;
-            roomTopic = initialState.roomTopic || '';
-            motd = initialState.motd || '';
-            roomParticipants = initialState.roomParticipants || [];
-            availableRooms = initialState.availableRooms || [];
-            userColors = initialState.userColors || {};
-            userTokenStats = initialState.userTokenStats || {};
-            localHostname = initialState.localHostname || '';
-            usersPanelWidth = initialState.usersPanelWidth ?? 260;
-            isUsersPanelCollapsed = initialState.isUsersPanelCollapsed ?? true;
-        }
-
         // Initialize local input values from passed-in props
         localWsUrl = wsUrl;
         localUsername = username;
@@ -340,6 +339,9 @@
         window.removeEventListener('click', handleGlobalClick);
         window.removeEventListener('keydown', handleGlobalKeyDown);
     });
+
+    // When history is restored, reset the index to the end
+    $: historyIndex = commandHistory.length;
 
     $: if (id !== undefined && groupId !== undefined) {
         windows.updateTabProps(groupId, id, {

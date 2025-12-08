@@ -22,13 +22,21 @@
 
     // Local state variables that hold the actual, live state of the calculator.
     // They are initialized from the props once.
-    let localDisplay = display;
-    let localCurrentInput = currentInput;
-    let localPreviousInput = previousInput;
-    let localOperator = operator;
-    let localLastOperand = lastOperand;
-    let localLastOperator = lastOperator;
-    let localCalculationDone = calculationDone;
+    let localDisplay, localCurrentInput, localPreviousInput, localOperator, localLastOperand, localLastOperator, localCalculationDone;
+
+    // This reactive block synchronizes the component's internal state with its
+    // props. This is crucial for when the component instance is preserved (e.g.,
+    // during a back/unback transition) and its state needs to be restored from
+    // the new props. It runs initially and whenever the props change.
+    $: {
+        localDisplay = display;
+        localCurrentInput = currentInput;
+        localPreviousInput = previousInput;
+        localOperator = operator;
+        localLastOperand = lastOperand;
+        localLastOperator = lastOperator;
+        localCalculationDone = calculationDone;
+    }
 
     // This function is called by the window manager to save the component's state.
     // It now returns the local state, not the initial props.

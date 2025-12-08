@@ -39,7 +39,14 @@
                 isActive: interactiveBackedWindowId === persistentId,
                 originalBackedId: bw.id,
                 isBacked: true,
-                tabs: config.tabs.map(t => ({...t, component: componentMap[t.componentType], id: t.originalId})),
+                tabs: config.tabs.map(t => {
+                    // Spread the saved state from initialState onto the tab object itself,
+                    // making it consistent with how windows are restored.
+                    const tabProps = { ...t, ...(t.initialState || {}) };
+                    tabProps.component = componentMap[t.componentType];
+                    tabProps.id = t.originalId;
+                    return tabProps;
+                }),
                 notice: null, // Backed windows don't have notices for now
                 minimized: false, // Backed windows can't be minimized
                 // Pass the full backed window object for the context menu
