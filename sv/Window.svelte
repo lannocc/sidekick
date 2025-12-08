@@ -204,8 +204,21 @@
     }
 
     function handleTitleBarMouseDown(event) { if (isBacked) return; if (event.target.closest('button') || event.target.closest('.window-control') || event.target.closest('.tab')) { if (!isActive) windows.focusWindow(id); return; } if (event.button === 1) { if (event.ctrlKey) { event.preventDefault(); event.stopPropagation(); dispatch('backrequest'); return; } handleMiddleClick(event); event.stopPropagation(); return; } if (maximized) { if (!isActive) windows.focusWindow(id); return; } clearTimeout(focusFollowsMouseTimeout); if (event.altKey || event.metaKey) { event.preventDefault(); if (event.button === 0) { onDragStart(event); } else if (event.button === 2) { onResizeStart(event, 'se'); } } else if (event.button === 0) { onDragStart(event); } }
-    function handleMouseEnter() { if (isBacked) return; if (settings?.focusFollowsMouse && !isActive) { focusFollowsMouseTimeout = setTimeout(() => windows.setActiveWindow(id), settings.focusDelay); } }
-    function handleMouseLeave() { clearTimeout(focusFollowsMouseTimeout); }
+
+    function handleMouseEnter() {
+        if (settings?.focusFollowsMouse && !isActive) {
+            focusFollowsMouseTimeout = setTimeout(() => {
+                if (isBacked) {
+                    dispatch('backedmouseenterfocus');
+                } else {
+                    windows.setActiveWindow(id);
+                }
+            }, settings.focusDelay);
+        }
+    }
+    function handleMouseLeave() {
+        clearTimeout(focusFollowsMouseTimeout);
+    }
 
 </script>
 
@@ -339,8 +352,10 @@
         style:--box-shadow={boxShadowStyle} 
         style:--notice-color={notice?.color} 
         on:mousedown={!isBacked ? handleFrameMouseDown : null}
+        on:mouseenter={handleMouseEnter}
+        on:mouseleave={handleMouseLeave}
     >
-        <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={!isBacked ? handleTitleBarMouseDown : null} on:dblclick={!isBacked ? () => windows.toggleMaximize(id) : null} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity}; --frame-height: {frameHeight}px;">
+        <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={!isBacked ? handleTitleBarMouseDown : null} on:dblclick={!isBacked ? () => windows.toggleMaximize(id) : null} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity}; --frame-height: {frameHeight}px;">
             {#if !isBacked}
                 <div class="window-controls" on:dblclick|stopPropagation on:mouseup|stopPropagation>
                     <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
@@ -381,7 +396,7 @@
             <div class="content-area-wrapper">
                 {#each tabs as tab (tab.id)}
                     {@const { component, ...restOfTab } = tab}
-                    <div class="content-area-container" style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'} style:pointer-events={isBacked ? null : ($desktopInteraction || $dragState || cloaked ? 'none' : null)} style:background={generateBgStyle(sceneSettings)} style:opacity={sceneSettings?.opacity ?? 1.0} on:mouseenter={handleMouseEnter} on:mouseleave={handleMouseLeave} on:mousedown={handleContentMouseDown} on:wheel={e => handleContentWheel(e, tab)} on:focusout={e => handleFocusOut(e, tab)}>
+                    <div class="content-area-container" style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'} style:pointer-events={isBacked ? null : ($desktopInteraction || $dragState || cloaked ? 'none' : null)} style:background={generateBgStyle(sceneSettings)} style:opacity={sceneSettings?.opacity ?? 1.0} on:mousedown={handleContentMouseDown} on:wheel={e => handleContentWheel(e, tab)} on:focusout={e => handleFocusOut(e, tab)}>
                         <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
                             <svelte:component bind:this={componentInstances[tab.id]} this={component} {...restOfTab} groupId={id} id={tab.id} isActive={isActive && tab.id === activeTabId} {x} {y} {width} {height} {maximized} {isBacked} />
                             {#if componentInstances[tab.id]}

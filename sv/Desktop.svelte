@@ -77,6 +77,13 @@
     // --- Backed Window Interaction State ---
     let interactiveBackedWindowId = null;
 
+    // If a front window becomes active, deactivate the backed window.
+    $: if ($windows.some(w => w.isActive)) {
+        if (interactiveBackedWindowId !== null) {
+            interactiveBackedWindowId = null;
+        }
+    }
+
     $: isDesktopEmpty = allRenderableWindows.length === 0 && 
                         ($desktopShortcuts || []).length === 0 && 
                         ($boxes || []).length === 0;
@@ -810,14 +817,29 @@
 
 
     function handleGlobalMouseDown(event) {
+        if (event.target.closest('.window-wrapper:not(.backed)')) {
+            // Click was on a front window, let Window.svelte handle it. It will manage its own focus.
+            return;
+        }
+    
         const targetItemEl = event.target.closest('.shortcut, .box, .window-wrapper.backed');
-
+    
+        // Clicking anything other than a front window (and not a middle click)
+        // should clear front window focus.
+        if (event.button !== 1) {
+            windows.unfocusAllWindows();
+        }
+        
+        // If we're not clicking on a backed window itself (and not a middle click),
+        // clear the active backed window.
+        if (event.button !== 1 && (!targetItemEl || targetItemEl.dataset.type !== 'backed_window')) {
+            interactiveBackedWindowId = null;
+        }
+    
         if (targetItemEl) {
             handleItemMouseDown(event, targetItemEl);
         } else {
-            // Any click not on a draggable/selectable item should deactivate the interactive window.
-            interactiveBackedWindowId = null;
-            
+            // This is a click on the desktop background. We already cleared backed window focus above.
             if (event.target.classList.contains('desktop-background')) {
                 if (event.button === 1) { // Middle mouse for panning
                     handleDesktopMiddleClick(event);
@@ -1172,6 +1194,7 @@
             if (selected.length === 1 && selected[0].startsWith('backed_window-')) {
                 const [_, idStr] = selected[0].split('-');
                 interactiveBackedWindowId = parseInt(idStr, 10);
+                windows.unfocusAllWindows();
             }
         }
 
@@ -1790,6 +1813,10 @@
                 {...win} 
                 on:backrequest={() => handleBackRequest(win)}
                 on:contextmenubacked={(event) => showBackedWindowContextMenu(event, win.backedWindowObject)}
+                on:backedmouseenterfocus={() => {
+                    interactiveBackedWindowId = win.id;
+                    windows.unfocusAllWindows();
+                }}
                 on:wheelbacked={e => {
                     if (e.ctrlKey || e.altKey) {
                         e.preventDefault();

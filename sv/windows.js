@@ -1036,6 +1036,15 @@ function createWindowManager() {
         });
     };
 
+    const unfocusAllWindows = () => {
+        update(windows => {
+            if (windows.some(w => w.isActive)) {
+                return windows.map(w => ({ ...w, isActive: false }));
+            }
+            return windows;
+        });
+    };
+
     return {
         subscribe,
         addWindow,
@@ -1062,6 +1071,7 @@ function createWindowManager() {
         restoreLayout,
         notifyActivity,
         unbackWindow,
+        unfocusAllWindows,
     };
 }
 
