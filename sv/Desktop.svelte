@@ -821,93 +821,23 @@
         }
     }
 
-    function handleItemMouseDown(event, itemEl) {
+    function startItemDrag(event, itemEl) {
         const id = itemEl.dataset.id;
         const type = itemEl.dataset.type;
         const uniqueId = `${type}-${id}`;
-        const isInteractive = type === 'backed_window' && parseInt(id, 10) === interactiveBackedWindowId;
 
-        // This action should work regardless of interactive state
-        if (type === 'backed_window' && event.shiftKey && event.button === 1) { // Shift + Middle click
-            event.preventDefault();
-            event.stopPropagation();
-            const backedWindow = $backedWindows.find(bw => (bw.originalGroupId || bw.id) == id);
-            if (backedWindow) {
-                windows.unbackWindow(backedWindow);
-            }
-            return;
-        }
-
-        const backedWindowItem = (type === 'backed_window') ? $backedWindows.find(bw => (bw.originalGroupId || bw.id) == id) : null;
-        const isCloaked = backedWindowItem ? backedWindowItem.config.cloaked : false;
-
-        // Double middle click to cloak/uncloak backed windows
-        if (type === 'backed_window' && event.button === 1) {
-            if (backedWindowMiddleClickTimeout.has(id)) {
-                clearTimeout(backedWindowMiddleClickTimeout.get(id));
-                backedWindowMiddleClickTimeout.delete(id);
-                event.preventDefault();
-                event.stopPropagation();
-                
-                if (backedWindowItem) {
-                    const newConfig = { ...backedWindowItem.config, cloaked: !isCloaked };
-                    updateBackedWindowTransform(backedWindowItem.id, backedWindowItem.x, backedWindowItem.y, backedWindowItem.scale, newConfig);
-                }
-                return; // Action complete, don't proceed to drag.
-            }
-
-            const timeoutId = setTimeout(() => {
-                backedWindowMiddleClickTimeout.delete(id);
-            }, 250);
-            backedWindowMiddleClickTimeout.set(id, timeoutId);
-        }
-
-        // Double-left-click to uncloak an interactive, cloaked window
-        if (isInteractive && isCloaked && event.button === 0) {
-            if (backedWindowLeftClickTimeout.has(id)) {
-                clearTimeout(backedWindowLeftClickTimeout.get(id));
-                backedWindowLeftClickTimeout.delete(id);
-                event.preventDefault();
-                event.stopPropagation();
-                
-                if (backedWindowItem) {
-                    const newConfig = { ...backedWindowItem.config, cloaked: false };
-                    updateBackedWindowTransform(backedWindowItem.id, backedWindowItem.x, backedWindowItem.y, backedWindowItem.scale, newConfig);
-                }
-                return; // Action complete, don't proceed to drag.
-            }
-
-            const timeoutId = setTimeout(() => {
-                backedWindowLeftClickTimeout.delete(id);
-            }, 250);
-            backedWindowLeftClickTimeout.set(id, timeoutId);
-        }
-
-        // If the window is already interactive, let its content handle the event,
-        // unless it's a middle-click or it is cloaked (which should allow dragging).
-        if (isInteractive && event.button !== 1) {
-            if (!isCloaked) {
-                return;
-            }
-        }
-
-        // --- From here, we know it's a desktop-level interaction ---
-        desktopInteraction.set(true);
-
-        // We only care about left (0) and middle (1) clicks for dragging.
         if (event.button !== 0 && event.button !== 1) {
-            desktopInteraction.set(false); // Reset and exit, as mouseup handler won't be attached.
+            desktopInteraction.set(false);
             return;
         }
-
-        event.preventDefault(); // Prevent text selection, etc.
+        
+        event.preventDefault();
         event.stopPropagation();
 
-        // Update selection with unique IDs, but only for left-clicks. Middle-click drag does not alter selection.
         if (event.button === 0) {
             if (event.ctrlKey) {
                 selectedItems.update(s => {
-                    const newSet = new Set(s); // Create a new set to ensure reactivity
+                    const newSet = new Set(s);
                     if (newSet.has(uniqueId)) {
                         newSet.delete(uniqueId);
                     } else {
@@ -922,10 +852,9 @@
         
         dragStartData.button = event.button;
 
-        // Prepare for dragging
         isDraggingItems = true;
-        dragStartItemStates = allItems.map(i => ({ ...i })); // Capture initial state of all items
-        pushedItemsOriginalPositions.clear(); // Reset pushed items map
+        dragStartItemStates = allItems.map(i => ({ ...i }));
+        pushedItemsOriginalPositions.clear();
 
         const { panX, panY, zoom } = get(desktopView);
         dragStartData.mouse = {
@@ -936,7 +865,6 @@
         dragStartData.items.clear();
         
         if (event.button === 0) {
-            // For left-click, drag all selected items.
             get(selectedItems).forEach(selUniqueId => {
                 const [itemType, itemId] = selUniqueId.split('-');
                 const item = allItems.find(i => i.type === itemType && String(i.id) === itemId);
@@ -945,7 +873,6 @@
                 }
             });
         } else { // event.button === 1
-            // For middle-click, drag only the single item that was clicked on.
             const item = allItems.find(i => i.type === type && String(i.id) === id);
             if (item) {
                 dragStartData.items.set(uniqueId, { x: item.x, y: item.y, type: item.type, scale: item.scale });
@@ -954,6 +881,92 @@
 
         window.addEventListener('mousemove', handleItemDragMove);
         window.addEventListener('mouseup', handleItemDragEnd, { once: true });
+    }
+
+    function handleItemMouseDown(event, itemEl) {
+        const id = itemEl.dataset.id;
+        const type = itemEl.dataset.type;
+        const isInteractive = type === 'backed_window' && parseInt(id, 10) === interactiveBackedWindowId;
+
+        if (type === 'backed_window' && event.shiftKey && event.button === 1) {
+            event.preventDefault();
+            event.stopPropagation();
+            const backedWindow = $backedWindows.find(bw => (bw.originalGroupId || bw.id) == id);
+            if (backedWindow) {
+                windows.unbackWindow(backedWindow);
+            }
+            return;
+        }
+
+        const backedWindowItem = (type === 'backed_window') ? $backedWindows.find(bw => (bw.originalGroupId || bw.id) == id) : null;
+        const isCloaked = backedWindowItem ? backedWindowItem.config.cloaked : false;
+
+        if (type === 'backed_window' && event.button === 1) {
+            if (backedWindowMiddleClickTimeout.has(id)) {
+                clearTimeout(backedWindowMiddleClickTimeout.get(id));
+                backedWindowMiddleClickTimeout.delete(id);
+                event.preventDefault();
+                event.stopPropagation();
+                
+                if (backedWindowItem) {
+                    const newConfig = { ...backedWindowItem.config, cloaked: !isCloaked };
+                    updateBackedWindowTransform(backedWindowItem.id, backedWindowItem.x, backedWindowItem.y, backedWindowItem.scale, newConfig);
+                }
+                return;
+            }
+            const timeoutId = setTimeout(() => backedWindowMiddleClickTimeout.delete(id), 250);
+            backedWindowMiddleClickTimeout.set(id, timeoutId);
+        }
+
+        if (isInteractive && isCloaked && event.button === 0) {
+            if (backedWindowLeftClickTimeout.has(id)) {
+                clearTimeout(backedWindowLeftClickTimeout.get(id));
+                backedWindowLeftClickTimeout.delete(id);
+                event.preventDefault();
+                event.stopPropagation();
+                
+                if (backedWindowItem) {
+                    const newConfig = { ...backedWindowItem.config, cloaked: false };
+                    updateBackedWindowTransform(backedWindowItem.id, backedWindowItem.x, backedWindowItem.y, backedWindowItem.scale, newConfig);
+                }
+                return;
+            }
+            const timeoutId = setTimeout(() => backedWindowLeftClickTimeout.delete(id), 250);
+            backedWindowLeftClickTimeout.set(id, timeoutId);
+        }
+
+        if (isInteractive && event.button !== 1) {
+            if (!isCloaked) return;
+        }
+
+        desktopInteraction.set(true);
+
+        // For middle-click, use "drag-on-move" pattern to prevent choppiness from browser interference.
+        if (event.button === 1) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const onMove = () => {
+                window.removeEventListener('mouseup', onUp); // A drag has started, the real dragEnd handler will take over.
+                if (backedWindowMiddleClickTimeout.has(id)) {
+                    clearTimeout(backedWindowMiddleClickTimeout.get(id));
+                    backedWindowMiddleClickTimeout.delete(id);
+                }
+                startItemDrag(event, itemEl);
+            };
+
+            const onUp = () => {
+                window.removeEventListener('mousemove', onMove);
+                desktopInteraction.set(false); // It was just a click, reset state.
+            };
+
+            window.addEventListener('mousemove', onMove, { once: true });
+            window.addEventListener('mouseup', onUp, { once: true });
+            return;
+        }
+
+        // For left-click, start the drag immediately.
+        startItemDrag(event, itemEl);
     }
 
     function resolveCollisions(frameItems, activeItemIds, startStates, pushedItemsMap) {
