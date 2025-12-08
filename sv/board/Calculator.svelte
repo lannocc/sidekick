@@ -10,13 +10,31 @@
     export let id;
     export let groupId;
 
-    let display = '0';
-    let currentInput = '';
-    let previousInput = '';
-    let operator = null;
-    let lastOperand = '';
-    let lastOperator = null;
-    let calculationDone = false;
+    // --- State Management ---
+    // These are props that can be passed in to restore state.
+    // They have default values for a new instance.
+    export let display = '0';
+    export let currentInput = '';
+    export let previousInput = '';
+    export let operator = null;
+    export let lastOperand = '';
+    export let lastOperator = null;
+    export let calculationDone = false;
+
+    // This function is called by the window manager to save the component's state.
+    export function getState() {
+        return {
+            display,
+            currentInput,
+            previousInput,
+            operator,
+            lastOperand,
+            lastOperator,
+            calculationDone,
+        };
+    }
+    // --- End State Management ---
+
     let calculatorEl;
 
     function clear() {

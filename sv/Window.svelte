@@ -772,6 +772,7 @@
         <div class="side-frame left" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};" on:mousedown={handleFrameMouseDown}></div>
         <div class="content-area-wrapper">
              {#each tabs as tab (tab.id)}
+                {@const { component, ...restOfTab } = tab}
                 <div
                     class="content-area-container"
                     style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'}
@@ -788,8 +789,8 @@
                     <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
                         <svelte:component
                             bind:this={componentInstances[tab.id]}
-                            this={tab.component}
-                            {...tab}
+                            this={component}
+                            {...restOfTab}
                             groupId={id}
                             id={tab.id}
                             isActive={isActive && tab.id === activeTabId}
