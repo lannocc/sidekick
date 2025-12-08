@@ -727,7 +727,7 @@
     let isSelecting = false;
     let isDraggingItems = false;
     let selectionRect = { visible: false, x1: 0, y1: 0, x2: 0, y2: 0 };
-    let dragStartData = { mouse: { x: 0, y: 0 }, items: new Map() };
+    let dragStartData = { mouse: { x: 0, y: 0 }, items: new Map(), button: 0 };
     let dragStartItemStates = [];
     let pushedItemsOriginalPositions = new Map();
 
@@ -802,20 +802,20 @@
 
 
     function handleGlobalMouseDown(event) {
-        const targetIsBackedWindow = event.target.closest('.backed-window');
-        if (!targetIsBackedWindow) {
-            interactiveBackedWindowId = null;
-        }
-
         const targetItemEl = event.target.closest('.shortcut, .box, .window-wrapper.backed');
 
         if (targetItemEl) {
             handleItemMouseDown(event, targetItemEl);
-        } else if (event.target.classList.contains('desktop-background')) {
-            if (event.button === 1) { // Middle mouse for panning
-                handleDesktopMiddleClick(event);
-            } else if (event.button === 0) { // Left mouse for selection
-                handleMarqueeSelectStart(event);
+        } else {
+            // Any click not on a draggable/selectable item should deactivate the interactive window.
+            interactiveBackedWindowId = null;
+            
+            if (event.target.classList.contains('desktop-background')) {
+                if (event.button === 1) { // Middle mouse for panning
+                    handleDesktopMiddleClick(event);
+                } else if (event.button === 0) { // Left mouse for selection
+                    handleMarqueeSelectStart(event);
+                }
             }
         }
     }
@@ -892,6 +892,8 @@
                 selectedItems.set(new Set([uniqueId]));
             }
         }
+        
+        dragStartData.button = event.button;
 
         // Prepare for dragging
         isDraggingItems = true;
@@ -1115,8 +1117,8 @@
                     updateBackedWindowTransform(item.originalBackedId || item.id, item.x, item.y, item.scale);
                 }
             });
-        } else {
-            // This was a click, not a drag. Check if the clicked item was a backed window.
+        } else if (dragStartData.button === 0) {
+            // This was a click (not a drag), and it was a left-click. Activate the window.
             const selected = [...dragStartData.items.keys()];
             if (selected.length === 1 && selected[0].startsWith('backed_window-')) {
                 const [_, idStr] = selected[0].split('-');
