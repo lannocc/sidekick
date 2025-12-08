@@ -104,15 +104,14 @@
     let componentInstances = {};
     function handleContentMouseDown(event) {
         if (event.button === 1) {
+            if (event.ctrlKey) { // Ctrl + Middle click
+                event.preventDefault();
+                event.stopPropagation();
+                dispatch('backrequest');
+                return;
+            }
             handleMiddleClick(event);
             event.stopPropagation();
-            return;
-        }
-
-        if (event.ctrlKey && event.button === 1) { // Ctrl + Middle click
-            event.preventDefault();
-            event.stopPropagation();
-            dispatch('backrequest');
             return;
         }
 
