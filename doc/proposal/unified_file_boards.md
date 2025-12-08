@@ -1,7 +1,7 @@
 # Proposal: Unifying the Local and IOSK File Explorers
 
 **Author:** LANNOCC
-**Date:** 11/28/2025
+**Date:** 12/8/2025
 **Status:** Draft
 
 ## 1. Introduction & Motivation
