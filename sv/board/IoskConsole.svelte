@@ -114,6 +114,7 @@
 
     export function getState() {
         return {
+            isConnected,
             output,
             commandHistory,
             currentPrompt,

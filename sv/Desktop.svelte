@@ -1414,11 +1414,8 @@
     function handleBackRequest(windowToBack) {
         // 1. Generate config for the new backed window, capturing live state
         const config = generateBoardConfigFromWindow(windowToBack, get(windows));
-        // *** MODIFICATION START ***
-        // Explicitly ensure the cloaked state is preserved in the config.
         const frontWindow = get(windows).find(w => w.id === windowToBack.id);
         config.cloaked = frontWindow ? frontWindow.cloaked : false;
-        // *** MODIFICATION END ***
         const configStr = JSON.stringify(config);
 
         // Get view states for coordinate transformation
@@ -1465,7 +1462,30 @@
         // 3. Resolve collisions
         const updatedFrameItems = resolveCollisions(frameItems, activeItemIds, startStates, pushedItemsMap);
 
-        // 4. Persist changes
+        const backedItem = updatedFrameItems.find(item => item.id === windowToBack.id);
+        if (!backedItem) {
+            console.error("Could not find item to back after collision resolution.");
+            return;
+        }
+
+        // 4. Perform an atomic, optimistic update to prevent component destruction
+        backedWindows.update(bws => {
+            const optimisticBackedWindow = {
+                id: `temp-${Date.now()}`, // Temporary ID, will be replaced by backend response
+                originalGroupId: backedItem.id,
+                config: JSON.parse(backedItem.config),
+                x: backedItem.x,
+                y: backedItem.y,
+                width: backedItem.width,
+                height: backedItem.height,
+                scale: backedItem.scale,
+                z_index: 1, // Placeholder
+            };
+            return [...bws, optimisticBackedWindow];
+        });
+        windows.removeWindow(windowToBack.id);
+
+        // 5. Persist all changes to the backend asynchronously
         const itemsToUpdate = new Set([...activeItemIds, ...pushedItemsMap.keys()]);
         updatedFrameItems.forEach(item => {
             const uniqueId = `${item.type}-${item.id}`;
@@ -1484,9 +1504,6 @@
                 }
             }
         });
-
-        // 5. Remove original window from the front-end store
-        windows.removeWindow(windowToBack.id);
     }
 
 
