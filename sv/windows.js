@@ -80,7 +80,8 @@ function findTabById(groups, tabId) {
 export function generateBoardConfigFromWindow(group, allWindows) {
     const layoutTabs = group.tabs.map(tab => {
         const instance = instanceRegistry.get(tab.id); // Get component instance
-        const currentState = instance && typeof instance.getState === 'function' ? instance.getState() : {}; // Get state
+        // Get state from the live instance if possible, otherwise use the initial state from the tab object
+        const currentState = instance && typeof instance.getState === 'function' ? instance.getState() : (tab.initialState || {});
         const associatedConsole = findTabById(allWindows, tab.consoleId);
         return {
             originalId: tab.id,
@@ -883,7 +884,6 @@ function createWindowManager() {
     };
 
     const unbackWindow = (backedWindow) => {
-        // Get current view states for coordinate transformation
         const dv = get(desktopView);
         const wv = get(windowView);
 
@@ -892,53 +892,51 @@ function createWindowManager() {
             return;
         }
 
-        // Get the visual dimensions of the backed window on the back layer, accounting for scale
         const scale = backedWindow.scale || 1.0;
         const backedVisualWidth = backedWindow.width * scale;
         const backedVisualHeight = backedWindow.height * scale;
-
-        // Calculate the midpoint of the backed window in back-layer world coordinates
         const backWorldMidX = backedWindow.x + backedVisualWidth / 2;
         const backWorldMidY = backedWindow.y + backedVisualHeight / 2;
-        
-        // Transform this midpoint into front-layer world coordinates
         const frontWorldMidX = ((backWorldMidX * dv.zoom) + dv.panX - wv.panX) / wv.zoom;
         const frontWorldMidY = ((backWorldMidY * dv.zoom) + dv.panY - wv.panY) / wv.zoom;
-        
-        // Calculate the new dimensions for the restored window. The world-space size is adjusted
-        // by the zoom factor change, which makes it visually larger/smaller as requested.
         const zoomFactor = wv.zoom / dv.zoom;
         const restoredWindowWidth = backedVisualWidth * zoomFactor;
         const restoredWindowHeight = backedVisualHeight * zoomFactor;
-
-        // Calculate the new top-left (x, y) for the restored window in front-layer world coordinates
         const newX = frontWorldMidX - restoredWindowWidth / 2;
         const newY = frontWorldMidY - restoredWindowHeight / 2;
-        
-        deleteBackedWindow(backedWindow.id);
-        
-        // Update the config with the new, transformed size before restoring.
+
         const newConfig = { ...backedWindow.config };
         
-        // For each tab in the config, get its current state from the live component instance
+        // **MODIFICATION START**: Preserve full component state, not just serialized state.
         newConfig.tabs = newConfig.tabs.map(tabData => {
             const instance = instanceRegistry.get(tabData.originalId);
-            const currentState = instance && typeof instance.getState === 'function' ? instance.getState() : {};
+            const currentState = instance && typeof instance.getState === 'function' 
+                ? instance.getState() 
+                : (tabData.initialState || {});
             
             return {
                 ...tabData,
                 initialState: { ...(tabData.initialState || {}), ...currentState }
             };
         });
-        
+        // **MODIFICATION END**
+
         newConfig.width = restoredWindowWidth;
         newConfig.height = restoredWindowHeight;
         
+        // This flow still destroys the old component and creates a new one.
+        // We call restoreWindow first, which adds to the `windows` store.
+        // Then we call deleteBackedWindow, which removes from the `backedWindows` store.
+        // The key is that Desktop.svelte will now render BOTH from a single combined list,
+        // using the same component (<Window>) and a persistent ID.
         restoreWindow({ 
             ...newConfig, 
             x: newX, 
-            y: newY, 
+            y: newY,
+            // We need to carry over the ID to prevent re-creation
+            id: backedWindow.originalGroupId || backedWindow.id,
         });
+        deleteBackedWindow(backedWindow.id);
     };
 
     // --- Sentinel Implementation ---
