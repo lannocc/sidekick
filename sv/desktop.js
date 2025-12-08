@@ -77,14 +77,32 @@ function loadSettings() {
                 },
             },
             back: {
-                bgType: 'color',
-                bgColor: '#3b4252',
-                bgGradientStart: '#3b4252',
-                bgGradientEnd: '#4c566a',
-                bgImage: '',
-                bgImageDisplayMode: 'cover',
-                inactiveOpacity: 0.8,
-                activeOpacity: 1.0,
+                scene: {
+                    active: {
+                        bgType: 'color', bgColor: '#3b4252', bgGradientStart: '#3b4252', bgGradientEnd: '#4c566a', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
+                    },
+                    inactive: {
+                        bgType: 'color', bgColor: '#3b4252', bgGradientStart: '#3b4252', bgGradientEnd: '#4c566a', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
+                    },
+                },
+                frame: {
+                    active: {
+                        bgType: 'color', bgColor: '#34495e', bgGradientStart: '#34495e', bgGradientEnd: '#4a637f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 0, width: 0,
+                        shadowEnabled: false, shadowX: 0, shadowY: 5, shadowBlur: 15, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.3)', shadowInset: false,
+                    },
+                    inactive: {
+                        bgType: 'color', bgColor: '#34495e', bgGradientStart: '#34495e', bgGradientEnd: '#4a637f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 0, width: 0,
+                        shadowEnabled: false, shadowX: 0, shadowY: 2, shadowBlur: 8, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.2)', shadowInset: false,
+                    },
+                },
+                cloak: {
+                    active: {
+                        bgType: 'color', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
+                    },
+                    inactive: {
+                        bgType: 'color', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
+                    },
+                },
             }
         },
         focusFollowsMouse: false,
@@ -166,6 +184,32 @@ function loadSettings() {
                     };
                 }
 
+                // Migration for old back window settings
+                if (parsed.windows?.back?.inactiveOpacity !== undefined) {
+                    const oldBack = { ...parsed.windows.back };
+                    const newBack = JSON.parse(JSON.stringify(defaults.windows.back)); // deep copy defaults
+
+                    const sceneSettings = {
+                        bgType: oldBack.bgType,
+                        bgColor: oldBack.bgColor,
+                        bgGradientStart: oldBack.bgGradientStart,
+                        bgGradientEnd: oldBack.bgGradientEnd,
+                        bgImage: oldBack.bgImage,
+                        bgImageDisplayMode: oldBack.bgImageDisplayMode,
+                    };
+
+                    newBack.scene.active = {
+                        ...newBack.scene.active,
+                        ...sceneSettings,
+                        opacity: oldBack.activeOpacity ?? 1.0,
+                    };
+                    newBack.scene.inactive = {
+                        ...newBack.scene.inactive,
+                        ...sceneSettings,
+                        opacity: oldBack.inactiveOpacity ?? 0.8,
+                    };
+                    parsed.windows.back = newBack;
+                }
 
                 // Merge with defaults, handling nested objects
                 const settings = { ...defaults, ...parsed };
@@ -190,7 +234,20 @@ function loadSettings() {
                             inactive: { ...defaults.windows.normal.cloak.inactive, ...(parsed.windows?.normal?.cloak?.inactive || {}) }
                         },
                     },
-                    back: { ...defaults.windows.back, ...(parsed.windows?.back || {}) }
+                    back: {
+                        scene: {
+                            active: { ...defaults.windows.back.scene.active, ...(parsed.windows?.back?.scene?.active || {}) },
+                            inactive: { ...defaults.windows.back.scene.inactive, ...(parsed.windows?.back?.scene?.inactive || {}) }
+                        },
+                        frame: {
+                            active: { ...defaults.windows.back.frame.active, ...(parsed.windows?.back?.frame?.active || {}) },
+                            inactive: { ...defaults.windows.back.frame.inactive, ...(parsed.windows?.back?.frame?.inactive || {}) }
+                        },
+                        cloak: {
+                            active: { ...defaults.windows.back.cloak.active, ...(parsed.windows?.back?.cloak?.active || {}) },
+                            inactive: { ...defaults.windows.back.cloak.inactive, ...(parsed.windows?.back?.cloak?.inactive || {}) }
+                        },
+                    }
                 };
                 settings.noticeDefaults = {
                     ...defaults.noticeDefaults,
