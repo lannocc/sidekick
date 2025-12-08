@@ -385,7 +385,7 @@
     <div class="tabs">
         <button class="tab-button" class:active={activeTab === 'sky'} on:click={() => activeTab = 'sky'}>Sky</button>
         <button class="tab-button" class:active={activeTab === 'boxes'} on:click={() => activeTab = 'boxes'}>Box</button>
-        <button class="tab-button" class:active={activeTab === 'windows'} on:click={() => activeTab = 'windows'}>Board</button>
+        <button class="tab-button" class:active={activeTab === 'windows'} on:click={() => activeTab = 'windows'}>Window</button>
         <button class="tab-button" class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
     </div>
 
