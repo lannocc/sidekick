@@ -406,7 +406,7 @@
             <div class="content-area-wrapper">
                 {#each tabs as tab (tab.id)}
                     {@const { component, ...restOfTab } = tab}
-                    <div class="content-area-container" style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'} style:pointer-events={isBacked ? null : ($desktopInteraction || $dragState || cloaked ? 'none' : null)} style:background={generateBgStyle(sceneSettings)} style:opacity={sceneSettings?.opacity ?? 1.0} on:mousedown={handleContentMouseDown} on:wheel={e => handleContentWheel(e, tab)} on:focusout={e => handleFocusOut(e, tab)}>
+                    <div class="content-area-container" style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'} style:pointer-events={isBacked ? (isActive && !cloaked ? null : 'none') : ($desktopInteraction || $dragState || cloaked ? 'none' : null)} style:background={generateBgStyle(sceneSettings)} style:opacity={sceneSettings?.opacity ?? 1.0} on:mousedown={handleContentMouseDown} on:wheel={e => handleContentWheel(e, tab)} on:focusout={e => handleFocusOut(e, tab)}>
                         <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
                             <svelte:component bind:this={componentInstances[tab.id]} this={component} {...restOfTab} groupId={id} id={tab.id} isActive={isActive && tab.id === activeTabId} {x} {y} {width} {height} {maximized} {isBacked} />
                             {#if componentInstances[tab.id]}
