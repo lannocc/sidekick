@@ -89,6 +89,19 @@ DB_CONN = None
 CONNECTED_CLIENTS = set()
 # --------------------
 
+def _run_migrations(cursor):
+    """Runs database migrations."""
+    log.info("Checking for database migrations...")
+
+    # Migration: Add original_group_id to backed_window
+    # Check if the column exists first to make the migration idempotent.
+    cursor.execute("PRAGMA table_info(backed_window)")
+    columns = [row['name'] for row in cursor.fetchall()]
+    if 'original_group_id' not in columns:
+        log.info("Applying migration: Adding 'original_group_id' to 'backed_window' table.")
+        cursor.execute("ALTER TABLE backed_window ADD COLUMN original_group_id INTEGER")
+        log.info("Migration successful.")
+
 def init_db():
     """Initializes the SQLite database for Skybox."""
     global DB_CONN
@@ -164,6 +177,9 @@ def init_db():
             original_group_id INTEGER
         );
     """)
+
+    # Run migrations for existing databases
+    _run_migrations(cursor)
 
     DB_CONN.commit()
     log.info("Skybox database initialized.")
