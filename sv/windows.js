@@ -777,10 +777,11 @@ function createWindowManager() {
             const maxZ = updatedWindows.reduce((max, w) => Math.max(max, w.zIndex), 99);
 
             const newGroup = {
-                id: ++windowGroupIdCounter,
+                id: groupData.id || ++windowGroupIdCounter,
                 x: groupData.x, y: groupData.y, width: groupData.width, height: groupData.height,
                 minimized: false,
                 maximized: groupData.maximized,
+                cloaked: groupData.cloaked ?? false,
                 isActive: true,
                 zIndex: maxZ + 1,
                 prevX: groupData.x, prevY: groupData.y, prevWidth: groupData.width, prevHeight: groupData.height,
