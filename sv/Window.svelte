@@ -206,16 +206,26 @@
     function handleTitleBarMouseDown(event) { if (isBacked) return; if (event.target.closest('button') || event.target.closest('.window-control') || event.target.closest('.tab')) { if (!isActive) windows.focusWindow(id); return; } if (event.button === 1) { if (event.ctrlKey) { event.preventDefault(); event.stopPropagation(); dispatch('backrequest'); return; } handleMiddleClick(event); event.stopPropagation(); return; } if (maximized) { if (!isActive) windows.focusWindow(id); return; } clearTimeout(focusFollowsMouseTimeout); if (event.altKey || event.metaKey) { event.preventDefault(); if (event.button === 0) { onDragStart(event); } else if (event.button === 2) { onResizeStart(event, 'se'); } } else if (event.button === 0) { onDragStart(event); } }
 
     function handleMouseEnter() {
-        if (settings?.focusFollowsMouse && !isActive) {
+        if (settings?.focusFollowsMouse) {
+            clearTimeout(focusFollowsMouseTimeout);
             focusFollowsMouseTimeout = setTimeout(() => {
                 if (isBacked) {
-                    dispatch('backedmouseenterfocus');
+                    // An active backed window can re-assert focus if mouse moves over it from a front window.
+                    if (isActive) {
+                        windows.unfocusAllWindows();
+                    }
+                    // Inactive backed windows do not activate on mouse-over.
                 } else {
-                    windows.setActiveWindow(id);
+                    // A front window will activate if not already active. This will also
+                    // deactivate any active backed window via reactive logic in Desktop.svelte.
+                    if (!isActive) {
+                        windows.setActiveWindow(id);
+                    }
                 }
             }, settings.focusDelay);
         }
     }
+
     function handleMouseLeave() {
         clearTimeout(focusFollowsMouseTimeout);
     }
