@@ -24,6 +24,7 @@
     // These will be passed in when restoring a dash layout
     export let wsUrl = undefined;
     export let username = undefined;
+    export let initialState = {};
 
     // Local values for the connection form inputs to avoid direct prop binding issues
     let localWsUrl, localUsername;
@@ -95,6 +96,23 @@
         prevRoomName = roomName;
     }
 
+    export function getState() {
+        return {
+            output,
+            commandHistory,
+            currentPrompt,
+            roomName,
+            roomTopic,
+            motd,
+            roomParticipants,
+            availableRooms,
+            userColors,
+            userTokenStats,
+            localHostname,
+            usersPanelWidth,
+            isUsersPanelCollapsed,
+        };
+    }
 
     // --- Helper functions for telemetry display ---
     function abbreviateNumber(num) {
@@ -266,6 +284,23 @@
     }
 
     onMount(() => {
+        if (initialState && Object.keys(initialState).length > 0) {
+            output = initialState.output || [];
+            commandHistory = initialState.commandHistory || [];
+            historyIndex = commandHistory.length;
+            currentPrompt = initialState.currentPrompt || '';
+            roomName = initialState.roomName || null;
+            roomTopic = initialState.roomTopic || '';
+            motd = initialState.motd || '';
+            roomParticipants = initialState.roomParticipants || [];
+            availableRooms = initialState.availableRooms || [];
+            userColors = initialState.userColors || {};
+            userTokenStats = initialState.userTokenStats || {};
+            localHostname = initialState.localHostname || '';
+            usersPanelWidth = initialState.usersPanelWidth ?? 260;
+            isUsersPanelCollapsed = initialState.isUsersPanelCollapsed ?? true;
+        }
+
         // Initialize local input values from passed-in props
         localWsUrl = wsUrl;
         localUsername = username;
