@@ -127,11 +127,11 @@
             return;
         }
         if ((event.altKey || event.metaKey) && !maximized) {
-            if (event.button === 0) { dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY }); }
+            if (event.button === 0) { dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY, focus: false }); }
             else if (event.button === 2) {
                 const relX = event.clientX - x, relY = event.clientY - y;
                 let yDir = relY < height / 3 ? 'n' : (relY > (height * 2) / 3 ? 's' : ''), xDir = relX < width / 3 ? 'w' : (relX > (width * 2) / 3 ? 'e' : '');
-                if (yDir + xDir) { dragRequest.set({ id, type: 'resize', direction: yDir + xDir, clientX: event.clientX, clientY: event.clientY }); }
+                if (yDir + xDir) { dragRequest.set({ id, type: 'resize', direction: yDir + xDir, clientX: event.clientX, clientY: event.clientY, focus: false }); }
             }
         } else if (!isActive) { windows.focusWindow(id); }
     }
@@ -159,8 +159,8 @@
         const request = $dragRequest;
         dragRequest.set(null);
         const mockEvent = { clientX: request.clientX, clientY: request.clientY, target: titleBarEl, preventDefault: () => {}, button: request.type === 'move' ? 0 : 2 };
-        if (request.type === 'move') { onDragStart(mockEvent); } 
-        else if (request.type === 'resize') { onResizeStart(mockEvent, request.direction); }
+        if (request.type === 'move') { onDragStart(mockEvent, { focus: request.focus ?? true }); } 
+        else if (request.type === 'resize') { onResizeStart(mockEvent, request.direction, { focus: request.focus ?? true }); }
     }
     let showGenericSettingsModal = false;
     function openSettings() {
@@ -184,7 +184,21 @@
     function onTabMouseUp(e) { window.removeEventListener('mousemove', onTabMouseMove); document.body.style.cursor = 'auto'; if (isTabDragging) { if (draggedTabInfo.isDetaching) { windows.detachTabToNewWindow(draggedTabInfo.groupId, draggedTabInfo.tabId, e.clientX - 100, e.clientY - 15); } else if (tabDragHasMoved) { windows.reorderTab(draggedTabInfo.groupId, draggedTabInfo.tabId, draggedTabInfo.targetTabId); } } isTabDragging = false; draggedTabInfo = null; dropIndicator.visible = false; tabDragHasMoved = false; }
     async function restoreFocus() { if (activeTab.lastFocusedElement && document.body.contains(activeTab.lastFocusedElement)) { await tick(); activeTab.lastFocusedElement.focus({ preventScroll: true }); } }
     $: if (isActive && !isBacked) Promise.resolve().then(restoreFocus);
-    function onDragStart(event) { isDragging = true; dragState.set({ draggingGroupId: id, dropTargetGroupId: null, dropTargetBoxPanel: null }); const { panX, panY, zoom } = get(windowView); const worldMouseX = (event.clientX - panX) / zoom; const worldMouseY = ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom; dragOffsetX = worldMouseX - x; dragOffsetY = worldMouseY - y; window.addEventListener('mousemove', onDrag); window.addEventListener('mouseup', onDragEnd, { once: true }); windows.focusWindow(id); document.body.style.cursor = 'move'; }
+    function onDragStart(event, { focus = true } = {}) {
+        isDragging = true;
+        dragState.set({ draggingGroupId: id, dropTargetGroupId: null, dropTargetBoxPanel: null });
+        const { panX, panY, zoom } = get(windowView);
+        const worldMouseX = (event.clientX - panX) / zoom;
+        const worldMouseY = ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom;
+        dragOffsetX = worldMouseX - x;
+        dragOffsetY = worldMouseY - y;
+        window.addEventListener('mousemove', onDrag);
+        window.addEventListener('mouseup', onDragEnd, { once: true });
+        if (focus) {
+            windows.focusWindow(id);
+        }
+        document.body.style.cursor = 'move';
+    }
 
     function onDrag(event) {
         if (!isDragging) return;
@@ -228,10 +242,22 @@
     }
 
     function onDragEnd() { isDragging = false; document.body.style.cursor = 'auto'; window.removeEventListener('mousemove', onDrag); const currentDragState = get(dragState); if (currentDragState) { if (currentDragState.dropTargetGroupId) { windows.groupWindows(currentDragState.draggingGroupId, currentDragState.dropTargetGroupId); } else if (currentDragState.dropTargetBoxPanel) { const { boxId, location } = currentDragState.dropTargetBoxPanel; const allWindows = get(windows); const sourceGroup = allWindows.find(g => g.id === currentDragState.draggingGroupId); if (sourceGroup) { const board_config = generateBoardConfigFromWindow(sourceGroup, allWindows); const board_type = sourceGroup.tabs.length > 1 ? 'tabs' : 'window'; savePanelConfig(boxId, location, board_type, board_config); windows.removeWindow(currentDragState.draggingGroupId); } } } dragState.set(null); restoreFocus(); }
-    function onResizeStart(event, directionOverride = '') { if (maximized || isBacked) return; let direction = directionOverride || (event.target.classList.contains('resize-handle') ? 'se' : ''); if (!direction) return; isResizing = true; resizeDirection = direction; initialResizeState = { x, y, width, height, mouseX: event.clientX, mouseY: event.clientY }; window.addEventListener('mousemove', onResize); window.addEventListener('mouseup', onResizeEnd, { once: true }); windows.focusWindow(id); }
+    function onResizeStart(event, directionOverride = '', { focus = true } = {}) {
+        if (maximized || isBacked) return;
+        let direction = directionOverride || (event.target.classList.contains('resize-handle') ? 'se' : '');
+        if (!direction) return;
+        isResizing = true;
+        resizeDirection = direction;
+        initialResizeState = { x, y, width, height, mouseX: event.clientX, mouseY: event.clientY };
+        window.addEventListener('mousemove', onResize);
+        window.addEventListener('mouseup', onResizeEnd, { once: true });
+        if (focus) {
+            windows.focusWindow(id);
+        }
+    }
     function onResize(event) { if (!isResizing) return; const { x: ix, y: iy, width: iw, height: ih, mouseX: startX, mouseY: startY } = initialResizeState; const { zoom } = get(windowView); const dx = (event.clientX - startX) / zoom; const dy = (event.clientY - startY) / zoom; const minWidth = 250, minHeight = 150; let newX = ix, newY = iy, newWidth = iw, newHeight = ih; if (resizeDirection.includes('e')) { newWidth = iw + dx; } else if (resizeDirection.includes('w')) { newWidth = iw - dx; newX = ix + dx; } if (resizeDirection.includes('s')) { newHeight = ih + dy; } else if (resizeDirection.includes('n')) { newHeight = ih - dy; newY = iy + dy; } if (newWidth < minWidth) { if (resizeDirection.includes('w')) { newX -= minWidth - newWidth; } newWidth = minWidth; } if (newHeight < minHeight) { if (resizeDirection.includes('n')) { newY -= minHeight - newHeight; } newHeight = minHeight; } windows.updateWindowProps(id, { x: newX, y: newY, width: newWidth, height: newHeight }); }
     function onResizeEnd() { isResizing = false; window.removeEventListener('mousemove', onResize); restoreFocus(); }
-    function handleMiddleClick(event) { if (isBacked) return; if (event.button !== 1) return; event.preventDefault(); if (middleClickTimeout) { clearTimeout(middleClickTimeout); middleClickTimeout = null; windows.toggleCloak(id); return; } middleClickTimeout = setTimeout(() => { middleClickTimeout = null; }, 250); const onMove = () => { clearTimeout(middleClickTimeout); middleClickTimeout = null; if (maximized) return; if (event.target.closest('.content-area-container')) { dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY }); } else { onDragStart(event); } }; const onUp = () => { window.removeEventListener('mousemove', onMove); }; window.addEventListener('mousemove', onMove, { once: true }); window.addEventListener('mouseup', onUp, { once: true }); }
+    function handleMiddleClick(event) { if (isBacked) return; if (event.button !== 1) return; event.preventDefault(); if (middleClickTimeout) { clearTimeout(middleClickTimeout); middleClickTimeout = null; windows.toggleCloak(id); return; } middleClickTimeout = setTimeout(() => { middleClickTimeout = null; }, 250); const onMove = () => { clearTimeout(middleClickTimeout); middleClickTimeout = null; if (maximized) return; if (event.target.closest('.content-area-container')) { dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY, focus: false }); } else { onDragStart(event, { focus: false }); } }; const onUp = () => { window.removeEventListener('mousemove', onMove); }; window.addEventListener('mousemove', onMove, { once: true }); window.addEventListener('mouseup', onUp, { once: true }); }
     function handleFrameMouseDown(event) {
         // For backed windows, all mouse down interactions are handled by Desktop.svelte
         if (isBacked) return;
@@ -246,7 +272,16 @@
 
         // For other buttons on front windows...
         clearTimeout(focusFollowsMouseTimeout);
-        if ((event.altKey || event.metaKey) && !maximized) { event.preventDefault(); if (event.button === 0) onDragStart(event); else if (event.button === 2) onResizeStart(event, 'se'); } else if (event.button === 0 && cloaked && !maximized) { event.preventDefault(); onDragStart(event); } else { windows.focusWindow(id); }
+        if ((event.altKey || event.metaKey) && !maximized) {
+            event.preventDefault();
+            if (event.button === 0) onDragStart(event, { focus: false });
+            else if (event.button === 2) onResizeStart(event, 'se', { focus: false });
+        } else if (event.button === 0 && cloaked && !maximized) {
+            event.preventDefault();
+            onDragStart(event, { focus: false });
+        } else {
+            windows.focusWindow(id);
+        }
     }
 
     function handleTitleBarMouseDown(event) {
@@ -274,10 +309,10 @@
         if (event.altKey || event.metaKey) {
             event.preventDefault();
             if (event.button === 0) {
-                onDragStart(event);
+                onDragStart(event, { focus: false });
             }
             else if (event.button === 2) {
-                onResizeStart(event, 'se');
+                onResizeStart(event, 'se', { focus: false });
             }
         } else if (event.button === 0) {
             // This is a left-click on a non-maximized title bar.
@@ -299,6 +334,7 @@
     }
 
     function handleMouseEnter() {
+        if (get(dragState)) return;
         if (settings?.focusFollowsMouse) {
             clearTimeout(focusFollowsMouseTimeout);
             focusFollowsMouseTimeout = setTimeout(() => {
