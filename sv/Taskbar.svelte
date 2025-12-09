@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter } from './windows.js';
+    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, removeWindow } from './windows.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems } from './desktop.js';
     import { createBox, connectionStatus } from './local.js';
     import Clock from './Clock.svelte';
@@ -511,6 +511,35 @@
         max-height: 300px;
         overflow-y: auto; display: flex; flex-direction: column; width: 200px;
     }
+    .menu-item-row {
+        display: flex;
+        align-items: stretch;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .menu-item-row:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .menu-item-close {
+        background-color: #ff5f56;
+        border: none;
+        color: white;
+        cursor: pointer;
+        padding: 0 12px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .menu-item-close:hover {
+        background-color: #e0443e;
+    }
+    .menu-item-row .menu-item {
+        border-bottom: none;
+        flex-grow: 1;
+    }
+    .menu-item-row:hover .menu-item {
+        background-color: transparent;
+    }
     .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 10px 15px; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border-color); }
     .menu-item:last-child { border-bottom: none; }
     .menu-item:hover { background-color: var(--taskbar-button-hover-bg); }
@@ -593,9 +622,12 @@
         {#if showWindowsMenu}
             <div class="windows-menu" style={menuBackgroundStyle}>
                 {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
-                    <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
-                        {getActiveTabTitle(win)}
-                    </button>
+                    <div class="menu-item-row">
+                        <button class="menu-item-close" on:click={() => windows.removeWindow(win.id)} title="Close window">✕</button>
+                        <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
+                            {getActiveTabTitle(win)}
+                        </button>
+                    </div>
                 {:else}
                     <span class="menu-item-empty">No open windows</span>
                 {/each}
@@ -684,4 +716,3 @@
         {/if}
     </div>
 </div>
-
