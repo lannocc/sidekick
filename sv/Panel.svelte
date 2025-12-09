@@ -3,16 +3,16 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    export let board_type;
-    export let board_config;
+    export let panel_type;
+    export let panel_config;
 
     let containerEl;
     let previewScale = 1;
     let previewDesktop = { width: 0, height: 0, top: 0, left: 0 };
 
-    $: if (board_type === 'dash' && board_config && containerEl) {
-        const savedDesktopWidth = board_config.desktop?.width || 1920;
-        const savedDesktopHeight = board_config.desktop?.height || 1080;
+    $: if (panel_type === 'dash' && panel_config && containerEl) {
+        const savedDesktopWidth = panel_config.desktop?.width || 1920;
+        const savedDesktopHeight = panel_config.desktop?.height || 1080;
         const scaleX = containerEl.clientWidth / savedDesktopWidth;
         const scaleY = containerEl.clientHeight / savedDesktopHeight;
         previewScale = Math.min(scaleX, scaleY) * 0.95;
@@ -46,10 +46,10 @@
 </style>
 
 <div class="board-container" bind:this={containerEl}>
-    {#if board_type === 'image' && board_config?.url}
-        <img src={board_config.url} alt="Box Panel Content" class="panel-image"/>
-    {:else if (board_type === 'window' || board_type === 'tabs') && board_config?.tabs}
-        {@const group = board_config}
+    {#if panel_type === 'image' && panel_config?.url}
+        <img src={panel_config.url} alt="Box Panel Content" class="panel-image"/>
+    {:else if (panel_type === 'window' || panel_type === 'tabs') && panel_config?.tabs}
+        {@const group = panel_config}
         <div class="mini-window">
             <div class="mini-title-bar">
                 {#each group.tabs as tab (tab.originalId)}
@@ -60,9 +60,9 @@
             </div>
             <div class="mini-content" />
         </div>
-    {:else if board_type === 'dash' && board_config?.windowGroups && previewDesktop.width > 0}
+    {:else if panel_type === 'dash' && panel_config?.windowGroups && previewDesktop.width > 0}
          <div class="preview-screen" style:width="{previewDesktop.width}px" style:height="{previewDesktop.height}px" style:top="{previewDesktop.top}px" style:left="{previewDesktop.left}px">
-            {#each (board_config.windowGroups || []) as group}
+            {#each (panel_config.windowGroups || []) as group}
                 {@const isMaximized = group.maximized}
                 <div class="preview-window" title={group.tabs.map(t => t.title).join(' | ')} style:left="{isMaximized ? 0 : (group.x * previewScale)}px" style:top="{isMaximized ? 0 : (group.y * previewScale)}px" style:width="{isMaximized ? '100%' : Math.max(20, group.width * previewScale)}px" style:height="{isMaximized ? '100%' : Math.max(16, group.height * previewScale)}px">
                     <div class="preview-title-bar">

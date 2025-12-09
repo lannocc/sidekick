@@ -28,31 +28,50 @@
     $: isSelected = $selectedItems.has(`box-${box.id}`);
     $: maxWindowZ = Math.max(100, ...$windows.map(w => w.zIndex));
 
-    let backgroundStyle = '';
-    $: {
-        let style = 'var(--window-bg)'; // Default fallback
-        if ($desktopSettings && $desktopSettings.boxes) {
-            const bg = $desktopSettings.boxes;
-            if (bg.bgType === 'gradient') {
-                style = `linear-gradient(45deg, ${bg.bgGradientStart} 0%, ${bg.bgGradientEnd} 100%)`;
-            } else if (bg.bgType === 'color') {
-                style = bg.bgColor;
-            } else if (bg.bgType === 'image' && bg.bgImage) {
-                let size = 'cover';
-                let repeat = 'no-repeat';
-                let position = 'center center';
+    // --- Unfold State ---
+    let isUnfolded = false;
+    let hoveredPanelKey = null; // Key ('x_y') of the currently hovered panel
 
-                switch (bg.bgImageDisplayMode) {
-                    case 'contain': size = 'contain'; break;
-                    case 'stretch': size = '100% 100%'; break;
-                    case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
-                    case 'cover': default: break;
-                }
-                style = `url('${bg.bgImage}') ${position} / ${size} ${repeat}`;
+    $: isMenuOpen = contextMenu.visible || panelContextMenu.visible || showPanelPicker;
+    $: isExpanded = isUnfolded || isMenuOpen;
+
+    // --- Style Generation ---
+    function generateBgStyle(bgSettings) {
+        if (!bgSettings) return null;
+        if (bgSettings.bgType === 'gradient') return `linear-gradient(45deg, ${bgSettings.bgGradientStart} 0%, ${bgSettings.bgGradientEnd} 100%)`;
+        if (bgSettings.bgType === 'color') return bgSettings.bgColor;
+        if (bgSettings.bgType === 'image' && bgSettings.bgImage) {
+            let size = 'cover', repeat = 'no-repeat', position = 'center center';
+            switch (bgSettings.bgImageDisplayMode) {
+                case 'contain': size = 'contain'; break;
+                case 'stretch': size = '100% 100%'; break;
+                case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
+                case 'cover': default: break;
             }
+            return `url('${bgSettings.bgImage}') ${position} / ${size} ${repeat}`;
         }
-        backgroundStyle = style;
+        return null;
     }
+
+    $: state = isExpanded ? 'active' : 'inactive';
+    
+    $: frameSettings = $desktopSettings.boxes?.frame?.[state];
+    $: frameStyle = generateBgStyle(frameSettings);
+    $: frameWidth = frameSettings?.width ?? 0;
+    $: frameOpacity = frameSettings?.opacity ?? 1.0;
+    $: boxShadowStyle = frameSettings?.shadowEnabled
+        ? `${frameSettings.shadowInset ? 'inset ' : ''}${frameSettings.shadowX}px ${frameSettings.shadowY}px ${frameSettings.shadowBlur}px ${frameSettings.shadowSpread}px ${frameSettings.shadowColor}`
+        : 'none';
+    
+    $: sceneSettings = $desktopSettings.boxes?.scene?.[state];
+    $: sceneStyle = generateBgStyle(sceneSettings);
+    $: sceneOpacity = sceneSettings?.opacity ?? 1.0;
+    
+    // Cloak uses 'inactive' settings since it's only visible when the box is folded/inactive
+    $: cloakSettings = $desktopSettings.boxes?.cloak?.inactive;
+    $: cloakStyle = generateBgStyle(cloakSettings);
+    $: cloakOpacity = cloakSettings?.opacity ?? 1.0;
+
 
     // --- Panel Grid Logic ---
     $: panels = box.panels || {};
@@ -183,13 +202,6 @@
     let boxEl;
     let saveTransformTimeout;
     let clickTimeout = null;
-
-    // --- Unfold State ---
-    let isUnfolded = false;
-    let hoveredPanelKey = null; // Key ('x_y') of the currently hovered panel
-
-    $: isMenuOpen = contextMenu.visible || panelContextMenu.visible || showPanelPicker;
-    $: isExpanded = isUnfolded || isMenuOpen;
 
     // When the box is no longer expanded (closed AND menus are closed),
     // also clear the specific panel key to hide available slots.
@@ -557,7 +569,7 @@
         position: absolute;
         cursor: pointer;
         user-select: none;
-        transition: z-index 0s 0.3s, border-color 0.2s ease-in-out, opacity 0.3s ease-in-out; /* Delay z-index change until after animation */
+        transition: z-index 0s 0.3s, border-color 0.2s ease-in-out; /* Delay z-index change until after animation */
         border: 1px solid transparent;
         border-radius: 7px; /* A bit larger than panel's 6px */
     }
@@ -573,13 +585,36 @@
         transition-delay: 0s;
     }
 
+    .box-cloak {
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        z-index: 4;
+        border-radius: 6px;
+        transition: opacity 0.3s ease-in-out;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 5px;
+        color: var(--title-bar-text);
+        text-align: center;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        background-size: cover;
+        background-position: center;
+    }
+    .box.is-unfolded .box-cloak {
+        opacity: 0;
+        pointer-events: none;
+    }
+
     .box-cover {
         position: absolute;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
-        z-index: 4; /* On top of the center panel */
+        z-index: 5; /* On top of the default cloak */
         border-radius: 6px;
         overflow: hidden;
         opacity: 1;
@@ -604,29 +639,29 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: var(--window-bg);
-        background-position: center;
-        background-size: cover;
-        border: 1px solid var(--border-color);
         border-radius: 6px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
         box-sizing: border-box;
         transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
         color: var(--title-bar-text);
         text-align: center;
-        padding: 5px;
     }
-    .panel.drop-target {
-        border-color: #3498db;
-        box-shadow: 0 0 15px 5px rgba(52, 152, 219, 0.6);
+    .panel.drop-target .panel-scene {
+        outline: 2px solid #3498db;
+        outline-offset: -2px;
     }
-
-    .center {
-        z-index: 3;
+    .panel-scene {
+        width: 100%;
+        height: 100%;
+        border-radius: 3px;
+        overflow: hidden;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
+    }
+
+    .center {
+        z-index: 3;
         cursor: pointer;
     }
 
@@ -787,7 +822,7 @@
 
 <div
     class="box"
-    class:is-unfolded={isExpanded}
+    class:is-unfolded={isUnfolded}
     class:selected={isSelected}
     data-id={box.id}
     data-type="box"
@@ -797,11 +832,25 @@
     style:width="{boxWidth}px"
     style:height="{boxHeight}px"
     style:z-index={isExpanded ? maxWindowZ + 1 : 10}
-    style:opacity={isExpanded ? ($desktopSettings.boxes?.activeOpacity ?? 1.0) : ($desktopSettings.boxes?.inactiveOpacity ?? 0.8)}
     on:wheel={handleWheel}
     on:scale
 >
-    <!-- Box Cover Image (dissolves on unfold) -->
+    <!-- Default Cloak (visible when folded) -->
+    <div 
+        class="box-cloak" 
+        style:background={cloakStyle} 
+        style:opacity={cloakOpacity}
+        style:visibility={isUnfolded ? 'hidden' : 'visible'}
+        on:click|self={e => handlePanelClick(e, 0, 0)}
+        on:contextmenu={e => handlePanelRightClick(e, 0, 0)}
+    >
+        {#if !coverImageUrl}
+            <div class="box-name">{box.name}</div>
+            <div class="box-context" title={box.context}>{box.context}</div>
+        {/if}
+    </div>
+
+    <!-- User-defined Cover Image (also visible when folded) -->
     {#if coverImageUrl}
         <div class="box-cover" on:click={(e) => handlePanelClick(e, 0, 0)}>
             <img src={coverImageUrl} alt="{box.name} cover" class="cover-image" />
@@ -813,16 +862,23 @@
         {@const parent = {x: panel.parent_loc_x, y: panel.parent_loc_y}}
         <div
             class="panel"
-            style={`--pos-transform: translateX(${panel.loc_x * 105}%) translateY(${panel.loc_y * 105}%); --unfold-delay: ${(panel.distance - 1) * 75}ms; background: ${backgroundStyle};`}
+            style:--pos-transform="translateX({panel.loc_x * 105}%) translateY({panel.loc_y * 105}%)"
+            style:--unfold-delay="{(panel.distance - 1) * 75}ms"
+            style:background={frameStyle}
+            style:opacity={frameOpacity}
+            style:box-shadow={boxShadowStyle}
+            style:padding="{frameWidth}px"
+            class:drop-target={isDropTarget(panel.loc_x, panel.loc_y)}
             on:click={e => handlePanelClick(e, panel.loc_x, panel.loc_y)}
             on:contextmenu={e => handlePanelRightClick(e, panel.loc_x, panel.loc_y)}
-            class:drop-target={isDropTarget(panel.loc_x, panel.loc_y)}
             on:mouseenter={() => handlePanelMouseEnter(panel.loc_x, panel.loc_y)}
             on:mouseleave={() => handlePanelMouseLeave(panel.loc_x, panel.loc_y)}
             on:dragover={handleDragOver}
             on:drop={e => handleDrop(e, panel.loc_x, panel.loc_y, parent)}
         >
-            <Panel panel_type={panel.panel_type} panel_config={panel.panel_config} />
+            <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
+                <Panel panel_type={panel.panel_type} panel_config={panel.panel_config} />
+            </div>
         </div>
     {/each}
 
@@ -832,25 +888,48 @@
         <div
             class="panel is-empty from-{slot.from}"
             class:is-visible={hoveredPanelKey === parentKey}
-            style={`--pos-transform: translateX(${slot.x * 105}%) translateY(${slot.y * 105}%); --unfold-delay: ${(slot.distance - 1) * 75}ms; background: ${backgroundStyle};`}
+            style:--pos-transform="translateX({slot.x * 105}%) translateY({slot.y * 105}%)"
+            style:--unfold-delay="{(slot.distance - 1) * 75}ms"
+            style:background={frameStyle}
+            style:opacity={frameOpacity}
+            style:box-shadow={boxShadowStyle}
+            style:padding="{frameWidth}px"
+            class:drop-target={isDropTarget(slot.x, slot.y)}
             on:click={e => handlePanelClick(e, slot.x, slot.y, true, slot.parent)}
             on:contextmenu|preventDefault|stopPropagation
-            class:drop-target={isDropTarget(slot.x, slot.y)}
             on:mouseenter={() => handlePanelMouseEnter(slot.x, slot.y)}
             on:mouseleave={() => handlePanelMouseLeave(slot.x, slot.y)}
             on:dragover={handleDragOver}
             on:drop={e => handleDrop(e, slot.x, slot.y, slot.parent)}
-        />
+        >
+            <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity} />
+        </div>
     {/each}
 
     <!-- Center Panel with Content -->
-    <div class="panel center" style:background={backgroundStyle} on:click={e => handlePanelClick(e, 0, 0, false, null)} on:contextmenu={e => handlePanelRightClick(e, 0, 0)} class:drop-target={isDropTarget(0, 0)} on:mouseenter={() => handlePanelMouseEnter(0, 0)} on:mouseleave={() => handlePanelMouseLeave(0, 0)} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 0, 0, null)}>
-        {#if centerPanel}
-            <Panel panel_type={centerPanel.panel_type} panel_config={centerPanel.panel_config} />
-        {:else}
-            <div class="box-name">{box.name}</div>
-            <div class="box-context" title={box.context}>{box.context}</div>
-        {/if}
+    <div 
+        class="panel center" 
+        style:background={frameStyle}
+        style:opacity={isUnfolded ? frameOpacity : 0}
+        style:box-shadow={boxShadowStyle}
+        style:padding="{frameWidth}px"
+        style:pointer-events={isUnfolded ? 'auto' : 'none'}
+        class:drop-target={isDropTarget(0, 0)} 
+        on:click={e => handlePanelClick(e, 0, 0, false, null)} 
+        on:contextmenu={e => handlePanelRightClick(e, 0, 0)} 
+        on:mouseenter={() => handlePanelMouseEnter(0, 0)} 
+        on:mouseleave={() => handlePanelMouseLeave(0, 0)} 
+        on:dragover={handleDragOver} 
+        on:drop={e => handleDrop(e, 0, 0, null)}
+    >
+        <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
+            {#if centerPanel}
+                <Panel panel_type={centerPanel.panel_type} panel_config={centerPanel.panel_config} />
+            {:else}
+                <div class="box-name">{box.name}</div>
+                <div class="box-context" title={box.context}>{box.context}</div>
+            {/if}
+        </div>
     </div>
 </div>
 

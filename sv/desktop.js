@@ -38,14 +38,32 @@ function loadSettings() {
             }
         },
         boxes: {
-            bgType: 'color',
-            bgColor: '#3b4252',
-            bgGradientStart: '#3b4252',
-            bgGradientEnd: '#4c566a',
-            bgImage: '',
-            bgImageDisplayMode: 'cover',
-            inactiveOpacity: 0.8,
-            activeOpacity: 1.0,
+            scene: {
+                active: {
+                    bgType: 'color', bgColor: '#434C5E', bgGradientStart: '', bgGradientEnd: '', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
+                },
+                inactive: {
+                    bgType: 'color', bgColor: '#434C5E', bgGradientStart: '', bgGradientEnd: '', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.9,
+                }
+            },
+            frame: {
+                active: {
+                    bgType: 'gradient', bgColor: '', bgGradientStart: '#88C0D0', bgGradientEnd: '#81A1C1', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, width: 2,
+                    shadowEnabled: true, shadowX: 0, shadowY: 0, shadowBlur: 8, shadowSpread: 1, shadowColor: '#88C0D0', shadowInset: false,
+                },
+                inactive: {
+                    bgType: 'color', bgColor: '#4C566A', bgGradientStart: '', bgGradientEnd: '', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, width: 2,
+                    shadowEnabled: false, shadowX: 0, shadowY: 0, shadowBlur: 0, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0)', shadowInset: false,
+                }
+            },
+            cloak: {
+                active: {
+                    bgType: 'image', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '/skyboards.png', bgImageDisplayMode: 'cover', opacity: 1.0,
+                },
+                inactive: {
+                    bgType: 'image', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '/skyboards.png', bgImageDisplayMode: 'cover', opacity: 1.0,
+                }
+            }
         },
         windows: {
             normal: {
@@ -211,6 +229,33 @@ function loadSettings() {
                     parsed.windows.back = newBack;
                 }
 
+                // Migration for old box settings
+                if (parsed.boxes?.bgType) {
+                    const oldBoxes = { ...parsed.boxes };
+                    const newBoxes = JSON.parse(JSON.stringify(defaults.boxes)); // deep copy
+
+                    const sceneSettings = {
+                        bgType: oldBoxes.bgType,
+                        bgColor: oldBoxes.bgColor,
+                        bgGradientStart: oldBoxes.bgGradientStart,
+                        bgGradientEnd: oldBoxes.bgGradientEnd,
+                        bgImage: oldBoxes.bgImage,
+                        bgImageDisplayMode: oldBoxes.bgImageDisplayMode,
+                    };
+
+                    newBoxes.scene.active = {
+                        ...newBoxes.scene.active,
+                        ...sceneSettings,
+                        opacity: oldBoxes.activeOpacity ?? 1.0,
+                    };
+                    newBoxes.scene.inactive = {
+                        ...newBoxes.scene.inactive,
+                        ...sceneSettings,
+                        opacity: oldBoxes.inactiveOpacity ?? 0.8,
+                    };
+                    parsed.boxes = newBoxes;
+                }
+
                 // Merge with defaults, handling nested objects
                 const settings = { ...defaults, ...parsed };
                 settings.sky = {
@@ -218,7 +263,20 @@ function loadSettings() {
                     frame: { ...defaults.sky.frame, ...(parsed.sky?.frame || {}) },
                     cloak: { ...defaults.sky.cloak, ...(parsed.sky?.cloak || {}) },
                 };
-                settings.boxes = { ...defaults.boxes, ...(parsed.boxes || {}) };
+                settings.boxes = {
+                    scene: {
+                        active: { ...defaults.boxes.scene.active, ...(parsed.boxes?.scene?.active || {}) },
+                        inactive: { ...defaults.boxes.scene.inactive, ...(parsed.boxes?.scene?.inactive || {}) }
+                    },
+                    frame: {
+                        active: { ...defaults.boxes.frame.active, ...(parsed.boxes?.frame?.active || {}) },
+                        inactive: { ...defaults.boxes.frame.inactive, ...(parsed.boxes?.frame?.inactive || {}) }
+                    },
+                    cloak: {
+                        active: { ...defaults.boxes.cloak.active, ...(parsed.boxes?.cloak?.active || {}) },
+                        inactive: { ...defaults.boxes.cloak.inactive, ...(parsed.boxes?.cloak?.inactive || {}) }
+                    },
+                };
                 settings.windows = {
                     normal: {
                         scene: {
