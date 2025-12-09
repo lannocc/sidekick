@@ -284,6 +284,13 @@
         }
     }
 
+    function handleTitleBarWheel(event) {
+        if (isBacked) return;
+        event.preventDefault();
+        event.stopPropagation();
+        windows.toggleCloak(id);
+    }
+
     function handleTitleBarMouseDown(event) {
         if (isBacked) return;
         if (event.target.closest('button') || event.target.closest('.window-control') || event.target.closest('.tab')) {
@@ -500,7 +507,7 @@
         on:mouseenter={handleMouseEnter}
         on:mouseleave={handleMouseLeave}
     >
-        <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={!isBacked ? handleTitleBarMouseDown : null} on:dblclick={!isBacked ? () => windows.toggleMaximize(id) : null} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity}; --frame-height: {frameHeight}px;">
+        <div class="title-bar" bind:this={titleBarEl} class:drop-target={$dragState?.dropTargetGroupId === id && $dragState?.draggingGroupId !== id} on:mousedown={!isBacked ? handleTitleBarMouseDown : null} on:dblclick={!isBacked ? () => windows.toggleMaximize(id) : null} on:wheel={handleTitleBarWheel} data-group-id={id} style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity}; --frame-height: {frameHeight}px;">
             {#if !isBacked}
                 <div class="window-controls" on:dblclick|stopPropagation on:mouseup|stopPropagation>
                     <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>

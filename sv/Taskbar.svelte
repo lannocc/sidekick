@@ -425,6 +425,12 @@
         }
     }
 
+    function handleTaskbarWheel(event) {
+        if (event.target !== event.currentTarget) return;
+        event.preventDefault();
+        toggleSkyCloak();
+    }
+
     onMount(() => {
         window.addEventListener('click', handleWindowClick);
     });
@@ -624,7 +630,7 @@
 
 <svelte:window bind:innerWidth={screenWidth} />
 
-<div class="taskbar" on:mousedown={handleTaskbarMouseDown} style="--tb-height: {tbHeight}px">
+<div class="taskbar" on:mousedown={handleTaskbarMouseDown} on:wheel={handleTaskbarWheel} style="--tb-height: {tbHeight}px">
     <div class="taskbar-left" bind:this={leftSectionEl}>
         <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>✕</button>
         <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">&mdash;</button>
