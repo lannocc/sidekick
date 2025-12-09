@@ -249,7 +249,54 @@
         if ((event.altKey || event.metaKey) && !maximized) { event.preventDefault(); if (event.button === 0) onDragStart(event); else if (event.button === 2) onResizeStart(event, 'se'); } else if (event.button === 0 && cloaked && !maximized) { event.preventDefault(); onDragStart(event); } else { windows.focusWindow(id); }
     }
 
-    function handleTitleBarMouseDown(event) { if (isBacked) return; if (event.target.closest('button') || event.target.closest('.window-control') || event.target.closest('.tab')) { if (!isActive) windows.focusWindow(id); return; } if (event.button === 1) { if (event.ctrlKey) { event.preventDefault(); event.stopPropagation(); dispatch('backrequest'); return; } handleMiddleClick(event); event.stopPropagation(); return; } if (maximized) { if (!isActive) windows.focusWindow(id); return; } clearTimeout(focusFollowsMouseTimeout); if (event.altKey || event.metaKey) { event.preventDefault(); if (event.button === 0) { onDragStart(event); } else if (event.button === 2) { onResizeStart(event, 'se'); } } else if (event.button === 0) { onDragStart(event); } }
+    function handleTitleBarMouseDown(event) {
+        if (isBacked) return;
+        if (event.target.closest('button') || event.target.closest('.window-control') || event.target.closest('.tab')) {
+            if (!isActive) windows.focusWindow(id);
+            return;
+        }
+        if (event.button === 1) {
+            if (event.ctrlKey) {
+                event.preventDefault();
+                event.stopPropagation();
+                dispatch('backrequest');
+                return;
+            }
+            handleMiddleClick(event);
+            event.stopPropagation();
+            return;
+        }
+        if (maximized) {
+            if (!isActive) windows.focusWindow(id);
+            return;
+        }
+        clearTimeout(focusFollowsMouseTimeout);
+        if (event.altKey || event.metaKey) {
+            event.preventDefault();
+            if (event.button === 0) {
+                onDragStart(event);
+            }
+            else if (event.button === 2) {
+                onResizeStart(event, 'se');
+            }
+        } else if (event.button === 0) {
+            // This is a left-click on a non-maximized title bar.
+            // We set up listeners to start the drag ONLY if the mouse moves.
+            // This allows the browser's default dblclick event to fire.
+            windows.focusWindow(id); // Focus on mousedown regardless.
+
+            const onMove = () => {
+                window.removeEventListener('mouseup', onUp); // Drag has started, onDragEnd will handle the final mouseup.
+                onDragStart(event);
+            };
+            const onUp = () => {
+                window.removeEventListener('mousemove', onMove); // It was just a click, cleanup.
+            };
+
+            window.addEventListener('mousemove', onMove, { once: true });
+            window.addEventListener('mouseup', onUp, { once: true });
+        }
+    }
 
     function handleMouseEnter() {
         if (settings?.focusFollowsMouse) {
