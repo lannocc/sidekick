@@ -458,6 +458,11 @@
     .taskbar-left > .windows-button:first-child:hover { background-color: #e0443e; }
     .taskbar-left > .windows-button:nth-child(2) { background-color: #ffbd2e; border-color: #e0a320; color: white; }
     .taskbar-left > .windows-button:nth-child(2):hover { background-color: #e0a320; }
+    .taskbar-left > .windows-button:nth-child(2).active {
+        background-color: #27ae60; /* A different green to indicate active state */
+        border-color: #229954;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.25);
+    }
     .start-button { background-color: #3498db; border: 1px solid #2980b9; color: white; transition: box-shadow 0.3s ease-in-out; padding: 4px; }
     .start-button:hover { background-color: #2980b9; }
     .start-button img { height: 100%; display: block; object-fit: contain; }
