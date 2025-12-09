@@ -589,12 +589,9 @@
         position: absolute;
         top: 0; left: 0; width: 100%; height: 100%;
         z-index: 4;
-        border-radius: 6px;
         transition: opacity 0.3s ease-in-out;
         cursor: pointer;
         box-sizing: border-box;
-        background-size: cover;
-        background-position: center;
     }
     .box.is-unfolded .box-cloak {
         opacity: 0;
@@ -605,8 +602,8 @@
         width: 100%;
         height: 100%;
         position: relative;
-        border-radius: 3px;
         overflow: hidden;
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
     }
     .box-cloak-content {
         position: absolute;
@@ -618,6 +615,7 @@
         padding: 5px;
         color: var(--title-bar-text);
         text-align: center;
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
     }
 
     .box-cover {
@@ -651,30 +649,56 @@
         left: 0;
         width: 100%;
         height: 100%;
-        border-radius: 6px;
         box-sizing: border-box;
         transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
         color: var(--title-bar-text);
         text-align: center;
     }
-    .panel.drop-target .panel-scene {
-        outline: 2px solid #3498db;
-        outline-offset: -2px;
-    }
     .panel-scene {
         width: 100%;
         height: 100%;
-        border-radius: 3px;
-        overflow: hidden;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
     }
 
     .center {
         z-index: 3;
         cursor: pointer;
+    }
+
+    /* --- NEW FRAME STYLES --- */
+    .box-frame {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        border-radius: 6px;
+        overflow: hidden;
+        background: transparent;
+        transition: box-shadow 0.3s ease-in-out;
+    }
+    .top-frame, .bottom-frame, .side-frame {
+        flex-shrink: 0;
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out, width 0.3s ease-in-out, height 0.3s ease-in-out;
+    }
+    .middle-row {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: row;
+        overflow: hidden;
+    }
+    .content-area-wrapper {
+        flex-grow: 1;
+        position: relative;
+        overflow: hidden;
+    }
+    .content-area-wrapper.drop-target {
+        outline: 2px solid #3498db;
+        outline-offset: -2px;
     }
 
     /* All side panels start hidden and scaled down */
@@ -851,18 +875,24 @@
     {#if !coverImageUrl}
     <div 
         class="box-cloak" 
-        style:background={frameStyle}
-        style:opacity={frameOpacity}
-        style:padding="{frameWidth}px"
-        style:box-shadow={boxShadowStyle}
         on:click|self={e => handlePanelClick(e, 0, 0)}
         on:contextmenu={e => handlePanelRightClick(e, 0, 0)}
     >
-        <div class="box-cloak-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
-            <div class="box-cloak-content" style:background={cloakStyle} style:opacity={cloakOpacity}>
-                <div class="box-name">{box.name}</div>
-                <div class="box-context" title={box.context}>{box.context}</div>
+        <div class="box-frame" style:box-shadow={boxShadowStyle}>
+            <div class="top-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+            <div class="middle-row">
+                <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                <div class="content-area-wrapper">
+                    <div class="box-cloak-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
+                        <div class="box-cloak-content" style:background={cloakStyle} style:opacity={cloakOpacity}>
+                            <div class="box-name">{box.name}</div>
+                            <div class="box-context" title={box.context}>{box.context}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
             </div>
+            <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
         </div>
     </div>
     {/if}
@@ -881,11 +911,7 @@
             class="panel"
             style:--pos-transform="translateX({panel.loc_x * 105}%) translateY({panel.loc_y * 105}%)"
             style:--unfold-delay="{(panel.distance - 1) * 75}ms"
-            style:background={frameStyle}
             style:--frame-opacity={frameOpacity}
-            style:box-shadow={boxShadowStyle}
-            style:padding="{frameWidth}px"
-            class:drop-target={isDropTarget(panel.loc_x, panel.loc_y)}
             on:click={e => handlePanelClick(e, panel.loc_x, panel.loc_y)}
             on:contextmenu={e => handlePanelRightClick(e, panel.loc_x, panel.loc_y)}
             on:mouseenter={() => handlePanelMouseEnter(panel.loc_x, panel.loc_y)}
@@ -893,8 +919,18 @@
             on:dragover={handleDragOver}
             on:drop={e => handleDrop(e, panel.loc_x, panel.loc_y, parent)}
         >
-            <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
-                <Panel board_type={panel.board_type} board_config={panel.board_config} />
+            <div class="box-frame" style:box-shadow={boxShadowStyle}>
+                <div class="top-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                <div class="middle-row">
+                    <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                    <div class="content-area-wrapper" class:drop-target={isDropTarget(panel.loc_x, panel.loc_y)}>
+                        <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
+                            <Panel board_type={panel.board_type} board_config={panel.board_config} />
+                        </div>
+                    </div>
+                    <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                </div>
+                <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
             </div>
         </div>
     {/each}
@@ -907,11 +943,7 @@
             class:is-visible={hoveredPanelKey === parentKey}
             style:--pos-transform="translateX({slot.x * 105}%) translateY({slot.y * 105}%)"
             style:--unfold-delay="{(slot.distance - 1) * 75}ms"
-            style:background={frameStyle}
             style:--frame-opacity={frameOpacity}
-            style:box-shadow={boxShadowStyle}
-            style:padding="{frameWidth}px"
-            class:drop-target={isDropTarget(slot.x, slot.y)}
             on:click={e => handlePanelClick(e, slot.x, slot.y, true, slot.parent)}
             on:contextmenu|preventDefault|stopPropagation
             on:mouseenter={() => handlePanelMouseEnter(slot.x, slot.y)}
@@ -919,19 +951,25 @@
             on:dragover={handleDragOver}
             on:drop={e => handleDrop(e, slot.x, slot.y, slot.parent)}
         >
-            <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity} />
+            <div class="box-frame" style:box-shadow={boxShadowStyle}>
+                <div class="top-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                <div class="middle-row">
+                    <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                    <div class="content-area-wrapper" class:drop-target={isDropTarget(slot.x, slot.y)}>
+                        <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity} />
+                    </div>
+                    <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                </div>
+                <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+            </div>
         </div>
     {/each}
 
     <!-- Center Panel with Content -->
     <div 
         class="panel center" 
-        style:background={frameStyle}
-        style:opacity={isUnfolded ? frameOpacity : 0}
-        style:box-shadow={boxShadowStyle}
-        style:padding="{frameWidth}px"
+        style:opacity={isUnfolded ? 1 : 0}
         style:pointer-events={isUnfolded ? 'auto' : 'none'}
-        class:drop-target={isDropTarget(0, 0)} 
         on:click={e => handlePanelClick(e, 0, 0, false, null)} 
         on:contextmenu={e => handlePanelRightClick(e, 0, 0)} 
         on:mouseenter={() => handlePanelMouseEnter(0, 0)} 
@@ -939,13 +977,23 @@
         on:dragover={handleDragOver} 
         on:drop={e => handleDrop(e, 0, 0, null)}
     >
-        <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
-            {#if centerPanel}
-                <Panel board_type={centerPanel.board_type} board_config={centerPanel.board_config} />
-            {:else}
-                <div class="box-name">{box.name}</div>
-                <div class="box-context" title={box.context}>{box.context}</div>
-            {/if}
+        <div class="box-frame" style:box-shadow={boxShadowStyle}>
+            <div class="top-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+            <div class="middle-row">
+                <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                <div class="content-area-wrapper" class:drop-target={isDropTarget(0, 0)}>
+                    <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
+                        {#if centerPanel}
+                            <Panel board_type={centerPanel.board_type} board_config={centerPanel.board_config} />
+                        {:else}
+                            <div class="box-name">{box.name}</div>
+                            <div class="box-context" title={box.context}>{box.context}</div>
+                        {/if}
+                    </div>
+                </div>
+                <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+            </div>
+            <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
         </div>
     </div>
 </div>
