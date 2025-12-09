@@ -599,6 +599,7 @@
     }
     .close-all-row .menu-item {
         color: #e74c3c;
+        font-weight: bold;
     }
     .close-all-row:hover {
         background-color: #c0392b;
@@ -646,8 +647,8 @@
                 {/each}
                 {#if $windows.length > 0}
                     <div class="menu-item-row close-all-row" on:click={handleCloseAllClick}>
-                        <div class="menu-item-close">✕</div>
-                        <div class="menu-item">Close All</div>
+                        <button type="button" class="menu-item-close">✕</button>
+                        <button type="button" class="menu-item">Close All</button>
                     </div>
                 {/if}
             </div>
