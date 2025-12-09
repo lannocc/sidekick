@@ -480,15 +480,14 @@
         font-weight: bold;
         cursor: pointer;
         height: calc(var(--tb-height, 40px) * 0.7);
+        width: calc(var(--tb-height, 40px) * 0.7);
+        box-sizing: border-box;
         font-size: calc(var(--tb-height, 40px) * 0.35);
         border-radius: calc(var(--tb-height, 40px) * 0.1);
         border: 1px solid var(--border-color);
         display: flex;
         align-items: center;
         justify-content: center;
-    }
-    .windows-button, .quick-launch-button {
-        padding: 0 calc(var(--tb-height, 40px) * 0.25);
     }
     .windows-button { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); }
     .windows-button:hover { background-color: var(--taskbar-button-hover-bg); }
