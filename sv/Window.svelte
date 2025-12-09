@@ -113,6 +113,7 @@
     let optionsButton;
     let tabsContainerEl;
     let titleBarEl;
+    let windowWrapperEl;
     let middleClickTimeout;
     let componentInstances = {};
 
@@ -184,7 +185,48 @@
     async function restoreFocus() { if (activeTab.lastFocusedElement && document.body.contains(activeTab.lastFocusedElement)) { await tick(); activeTab.lastFocusedElement.focus({ preventScroll: true }); } }
     $: if (isActive && !isBacked) Promise.resolve().then(restoreFocus);
     function onDragStart(event) { isDragging = true; dragState.set({ draggingGroupId: id, dropTargetGroupId: null, dropTargetBoxPanel: null }); const { panX, panY, zoom } = get(windowView); const worldMouseX = (event.clientX - panX) / zoom; const worldMouseY = ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom; dragOffsetX = worldMouseX - x; dragOffsetY = worldMouseY - y; window.addEventListener('mousemove', onDrag); window.addEventListener('mouseup', onDragEnd, { once: true }); windows.focusWindow(id); document.body.style.cursor = 'move'; }
-    function onDrag(event) { if (!isDragging) return; const { panX, panY, zoom } = get(windowView); const worldMouseX = (event.clientX - panX) / zoom; const worldMouseY = ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom; const newX = worldMouseX - dragOffsetX; const newY = worldMouseY - dragOffsetY; windows.updateWindowProps(id, { x: newX, y: newY }); titleBarEl.style.pointerEvents = 'none'; const elementUnder = document.elementFromPoint(event.clientX, event.clientY); titleBarEl.style.pointerEvents = 'auto'; const targetTitleBar = elementUnder?.closest('.title-bar'); const targetId = targetTitleBar ? parseInt(targetTitleBar.dataset.groupId, 10) : null; if (targetId && targetId !== id) { dragState.update(s => ({ ...s, dropTargetGroupId: targetId, dropTargetBoxPanel: null })); } else { dragState.update(s => ({ ...s, dropTargetGroupId: null })); } }
+
+    function onDrag(event) {
+        if (!isDragging) return;
+
+        // Check for drop targets. A CSS class now handles pointer-events on the
+        // dragging window, allowing elementFromPoint to see what's underneath.
+        const elementUnder = document.elementFromPoint(event.clientX, event.clientY);
+
+        // Only allow dropping on another window's title bar for grouping.
+        const targetTitleBar = elementUnder?.closest('.title-bar');
+        const targetWrapper = targetTitleBar?.closest('.window-wrapper:not(.backed)');
+        let newDropTargetId = null;
+
+        if (targetWrapper && targetWrapper !== windowWrapperEl) {
+            const targetId = parseInt(targetWrapper.dataset.id, 10);
+            if (targetId) {
+                newDropTargetId = targetId;
+            }
+        }
+
+        if (newDropTargetId) {
+             dragState.update(s => ({ ...s, dropTargetGroupId: newDropTargetId, dropTargetBoxPanel: null }));
+        } else {
+            const dropPanel = elementUnder?.closest('[data-box-id][data-location]');
+            if (dropPanel) {
+                const boxId = parseInt(dropPanel.dataset.boxId, 10);
+                const location = dropPanel.dataset.location;
+                dragState.update(s => ({ ...s, dropTargetGroupId: null, dropTargetBoxPanel: { boxId, location } }));
+            } else {
+                dragState.update(s => ({ ...s, dropTargetGroupId: null, dropTargetBoxPanel: null }));
+            }
+        }
+
+        // Now, update the window's position in the store to make it follow the cursor.
+        const { panX, panY, zoom } = get(windowView);
+        const worldMouseX = (event.clientX - panX) / zoom;
+        const worldMouseY = ((event.clientY - TASKBAR_HEIGHT) - panY) / zoom;
+        const newX = worldMouseX - dragOffsetX;
+        const newY = worldMouseY - dragOffsetY;
+        windows.updateWindowProps(id, { x: newX, y: newY });
+    }
+
     function onDragEnd() { isDragging = false; document.body.style.cursor = 'auto'; window.removeEventListener('mousemove', onDrag); const currentDragState = get(dragState); if (currentDragState) { if (currentDragState.dropTargetGroupId) { windows.groupWindows(currentDragState.draggingGroupId, currentDragState.dropTargetGroupId); } else if (currentDragState.dropTargetBoxPanel) { const { boxId, location } = currentDragState.dropTargetBoxPanel; const allWindows = get(windows); const sourceGroup = allWindows.find(g => g.id === currentDragState.draggingGroupId); if (sourceGroup) { const board_config = generateBoardConfigFromWindow(sourceGroup, allWindows); const board_type = sourceGroup.tabs.length > 1 ? 'tabs' : 'window'; savePanelConfig(boxId, location, board_type, board_config); windows.removeWindow(currentDragState.draggingGroupId); } } } dragState.set(null); restoreFocus(); }
     function onResizeStart(event, directionOverride = '') { if (maximized || isBacked) return; let direction = directionOverride || (event.target.classList.contains('resize-handle') ? 'se' : ''); if (!direction) return; isResizing = true; resizeDirection = direction; initialResizeState = { x, y, width, height, mouseX: event.clientX, mouseY: event.clientY }; window.addEventListener('mousemove', onResize); window.addEventListener('mouseup', onResizeEnd, { once: true }); windows.focusWindow(id); }
     function onResize(event) { if (!isResizing) return; const { x: ix, y: iy, width: iw, height: ih, mouseX: startX, mouseY: startY } = initialResizeState; const { zoom } = get(windowView); const dx = (event.clientX - startX) / zoom; const dy = (event.clientY - startY) / zoom; const minWidth = 250, minHeight = 150; let newX = ix, newY = iy, newWidth = iw, newHeight = ih; if (resizeDirection.includes('e')) { newWidth = iw + dx; } else if (resizeDirection.includes('w')) { newWidth = iw - dx; newX = ix + dx; } if (resizeDirection.includes('s')) { newHeight = ih + dy; } else if (resizeDirection.includes('n')) { newHeight = ih - dy; newY = iy + dy; } if (newWidth < minWidth) { if (resizeDirection.includes('w')) { newX -= minWidth - newWidth; } newWidth = minWidth; } if (newHeight < minHeight) { if (resizeDirection.includes('n')) { newY -= minHeight - newHeight; } newHeight = minHeight; } windows.updateWindowProps(id, { x: newX, y: newY, width: newWidth, height: newHeight }); }
@@ -242,10 +284,12 @@
         position: absolute;
         transform-origin: 0 0;
     }
+    .window-wrapper.dragging {
+        pointer-events: none;
+    }
     .window-frame, .backed-window-frame {
         display: flex;
         flex-direction: column;
-        pointer-events: auto;
         box-sizing: border-box;
         transition: border-color 0.3s ease-in-out, border-radius 0.3s ease-in-out, box-shadow 0.4s ease-in-out, opacity 0.2s ease-in-out;
     }
@@ -299,7 +343,7 @@
     }
 
     /* ... (Most other styles are fine, just need to scope them correctly) ... */
-    .title-bar { flex-shrink: 0; color: var(--title-bar-text); display: flex; justify-content: space-between; align-items: center; padding: 0 8px; cursor: move; border-top-left-radius: 5px; border-top-right-radius: 5px; user-select: none; position: relative; pointer-events: auto; transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out, height 0.3s ease-in-out; }
+    .title-bar { flex-shrink: 0; color: var(--title-bar-text); display: flex; justify-content: space-between; align-items: center; padding: 0 8px; cursor: move; border-top-left-radius: 5px; border-top-right-radius: 5px; user-select: none; position: relative; transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out, height 0.3s ease-in-out; }
     .title-bar.drop-target::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(52, 152, 219, 0.4); border: 2px dashed #3498db; z-index: 1; pointer-events: none; border-radius: 5px; }
     .title-center { flex-grow: 1; text-align: center; overflow: hidden; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
     .title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 30px; }
@@ -322,10 +366,10 @@
     .options-menu-button { background-color: #3498db; color: white; line-height: 0.8; }
     .middle-row { flex-grow: 1; display: flex; flex-direction: row; overflow: hidden; }
     .content-area-wrapper { flex-grow: 1; position: relative; overflow: hidden; }
-    .content-area-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: auto; padding: 5px; pointer-events: auto; box-sizing: border-box; transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out; }
-    .side-frame, .bottom-frame { flex-shrink: 0; pointer-events: auto; transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out, width 0.3s ease-in-out, height 0.3s ease-in-out; }
+    .content-area-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: auto; padding: 5px; box-sizing: border-box; transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out; }
+    .side-frame, .bottom-frame { flex-shrink: 0; transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out, width 0.3s ease-in-out, height 0.3s ease-in-out; }
     .cloak { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 5; pointer-events: none; border-radius: 5px; transition: opacity 0.3s ease-in-out, background 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
-    .resize-handle { position: absolute; pointer-events: auto; z-index: 6; }
+    .resize-handle { position: absolute; z-index: 6; }
     .resize-handle.n { top: -4px; left: 8px; right: 8px; height: 8px; cursor: n-resize; }
     .resize-handle.s { bottom: -4px; left: 8px; right: 8px; height: 8px; cursor: s-resize; }
     .resize-handle.w { top: 8px; bottom: 8px; left: -4px; width: 8px; cursor: w-resize; }
@@ -334,7 +378,7 @@
     .resize-handle.ne { top: -4px; right: -4px; width: 12px; height: 12px; cursor: ne-resize; }
     .resize-handle.sw { bottom: -4px; left: -4px; width: 12px; height: 12px; cursor: sw-resize; }
     .resize-handle.se { bottom: -4px; right: -4px; width: 12px; height: 12px; cursor: se-resize; }
-    .options-menu { position: absolute; top: 35px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 1000; display: flex; flex-direction: column; min-width: 150px; padding: 4px 0; user-select: none; pointer-events: auto; }
+    .options-menu { position: absolute; top: 35px; right: 8px; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 1000; display: flex; flex-direction: column; min-width: 150px; padding: 4px 0; user-select: none; }
     .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; font-size: 14px; }
     .menu-item:hover:not(:disabled) { background-color: var(--taskbar-button-hover-bg); }
     .menu-item:disabled { color: #7f8c8d; cursor: not-allowed; }
@@ -344,14 +388,16 @@
 </style>
 
 <div class="window-wrapper"
-    style:width="{width * scale}px" style:height="{height * scale}px" 
-    style:z-index="{zIndex}" 
+    bind:this={windowWrapperEl}
+    style:width="{width * scale}px" style:height="{height * scale}px"
+    style:z-index="{zIndex}"
     style:transform="{transform}"
     style:--scrollbar-thumb-bg={scrollbarThumbColor}
     style:--scrollbar-track-bg={scrollbarTrackColor}
     class:minimized
     class:maximized={!isBacked && maximized}
     class:backed={isBacked}
+    class:dragging={isDragging}
     data-id={id}
     data-type={isBacked ? 'backed_window' : 'window'}
     on:contextmenu|preventDefault|stopPropagation={isBacked ? (e) => dispatch('contextmenubacked', e) : null}
