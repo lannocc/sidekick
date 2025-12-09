@@ -27,13 +27,13 @@ function loadSettings() {
                 width: 0,
             },
             cloak: {
-                bgType: 'color',
+                bgType: 'image',
                 bgColor: '#000000',
                 bgGradientStart: '#000000',
                 bgGradientEnd: '#222222',
-                bgImage: '',
+                bgImage: '/skyboards.png',
                 bgImageDisplayMode: 'cover',
-                opacity: 0.0,
+                opacity: 1.0,
                 lastOpacity: 0.8, // ADD THIS LINE to store the last active opacity
             }
         },
@@ -58,7 +58,7 @@ function loadSettings() {
             },
             cloak: {
                 inactive: {
-                    bgType: 'image', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '/skyboards.png', bgImageDisplayMode: 'cover', opacity: 1.0,
+                    bgType: 'image', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '/skybox.png', bgImageDisplayMode: 'cover', opacity: 1.0,
                 }
             }
         },
@@ -84,10 +84,10 @@ function loadSettings() {
                 },
                 cloak: {
                     active: {
-                        bgType: 'color', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
+                        bgType: 'image', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '/skyboard.png', bgImageDisplayMode: 'cover', opacity: 1.0,
                     },
                     inactive: {
-                        bgType: 'color', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
+                        bgType: 'image', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '/skyboard.png', bgImageDisplayMode: 'cover', opacity: 0.77,
                     },
                 },
             },
