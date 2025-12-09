@@ -964,8 +964,9 @@
             backedWindowLeftClickTimeout.set(id, timeoutId);
         }
 
+        const isTitleBarClick = !!event.target.closest('.title-bar');
         if (isInteractive && event.button !== 1) {
-            if (!isCloaked) return;
+            if (!isCloaked && !isTitleBarClick) return;
         }
 
         desktopInteraction.set(true);
