@@ -528,7 +528,7 @@
     }
     .skybridge-overlay {
         position: absolute;
-        top: 8px; /* Corresponds to start-menu padding */
+        top: calc(8px + 52px + 8px); /* Corresponds to start-menu padding + 1 row + 1 gap */
         left: 8px; /* Corresponds to start-menu padding */
         width: calc(4 * 52px + 3 * 8px); /* 4 columns + 3 gaps */
         height: 52px; /* 1 row */
