@@ -876,7 +876,7 @@
     {#if !coverImageUrl}
     <div 
         class="box-cloak" 
-        on:click|self={e => handlePanelClick(e, 0, 0)}
+        on:click={e => handlePanelClick(e, 0, 0)}
         on:contextmenu={e => handlePanelRightClick(e, 0, 0)}
     >
         <div class="box-frame" style:box-shadow={boxShadowStyle}>
