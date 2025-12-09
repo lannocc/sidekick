@@ -504,7 +504,7 @@
             {#if !isBacked}
                 <div class="window-controls" on:dblclick|stopPropagation on:mouseup|stopPropagation>
                     <div class="window-control close" title="Close" on:click={() => windows.removeWindow(id)} on:mousedown|stopPropagation>&times;</div>
-                    <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>_</div>
+                    <div class="window-control minimize" title="Minimize" on:click={() => windows.toggleMinimize(id)} on:mousedown|stopPropagation>—</div>
                 </div>
             {/if}
 
