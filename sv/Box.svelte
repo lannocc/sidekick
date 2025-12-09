@@ -592,6 +592,25 @@
         border-radius: 6px;
         transition: opacity 0.3s ease-in-out;
         cursor: pointer;
+        box-sizing: border-box;
+        background-size: cover;
+        background-position: center;
+    }
+    .box.is-unfolded .box-cloak {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .box-cloak-scene {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        border-radius: 3px;
+        overflow: hidden;
+    }
+    .box-cloak-content {
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -599,13 +618,6 @@
         padding: 5px;
         color: var(--title-bar-text);
         text-align: center;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        background-size: cover;
-        background-position: center;
-    }
-    .box.is-unfolded .box-cloak {
-        opacity: 0;
-        pointer-events: none;
     }
 
     .box-cover {
@@ -839,14 +851,19 @@
     {#if !coverImageUrl}
     <div 
         class="box-cloak" 
-        style:background={cloakStyle} 
-        style:opacity={cloakOpacity}
-        style:visibility={isUnfolded ? 'hidden' : 'visible'}
+        style:background={frameStyle}
+        style:opacity={frameOpacity}
+        style:padding="{frameWidth}px"
+        style:box-shadow={boxShadowStyle}
         on:click|self={e => handlePanelClick(e, 0, 0)}
         on:contextmenu={e => handlePanelRightClick(e, 0, 0)}
     >
-        <div class="box-name">{box.name}</div>
-        <div class="box-context" title={box.context}>{box.context}</div>
+        <div class="box-cloak-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
+            <div class="box-cloak-content" style:background={cloakStyle} style:opacity={cloakOpacity}>
+                <div class="box-name">{box.name}</div>
+                <div class="box-context" title={box.context}>{box.context}</div>
+            </div>
+        </div>
     </div>
     {/if}
 
