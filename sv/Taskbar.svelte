@@ -505,7 +505,12 @@
         padding: 8px;
         width: auto;
     }
-    .windows-menu { left: 10px; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; width: 200px; }
+    .windows-menu {
+        top: calc(var(--tb-height, 40px) * 0.85);
+        left: 0;
+        max-height: 300px;
+        overflow-y: auto; display: flex; flex-direction: column; width: 200px;
+    }
     .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 10px 15px; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border-color); }
     .menu-item:last-child { border-bottom: none; }
     .menu-item:hover { background-color: var(--taskbar-button-hover-bg); }
