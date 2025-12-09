@@ -34,7 +34,7 @@
 
     $: cloakSettings = $desktopSettings.sky?.cloak;
     $: cloakStyle = cloakSettings ? generateBgStyle(cloakSettings) : '';
-    $: cloakOpacity = cloakSettings?.opacity ?? 0;
+    $: cloakOpacity = (cloakSettings?.enabled ?? false) ? (cloakSettings?.opacity ?? 0) : 0;
 
     // Frame settings
     $: frameSettings = $desktopSettings.sky?.frame;
@@ -52,16 +52,13 @@
 
     function disableSkyCloak() {
         desktopSettings.update(s => {
-            if (s.sky.cloak.opacity > 0) {
-                s.sky.cloak.lastOpacity = s.sky.cloak.opacity;
-                s.sky.cloak.opacity = 0;
-            }
+            s.sky.cloak.enabled = false;
             return s;
         });
     }
 
     function handleKeyDown(e) {
-        if ($desktopSettings.sky?.cloak?.opacity > 0) {
+        if (cloakOpacity > 0) {
             e.preventDefault();
             e.stopPropagation();
             disableSkyCloak();

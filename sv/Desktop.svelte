@@ -773,12 +773,7 @@
 
     function toggleSkyCloak() {
         desktopSettings.update(s => {
-            if (s.sky.cloak.opacity > 0) {
-                s.sky.cloak.lastOpacity = s.sky.cloak.opacity;
-                s.sky.cloak.opacity = 0;
-            } else {
-                s.sky.cloak.opacity = s.sky.cloak.lastOpacity || 0.8;
-            }
+            s.sky.cloak.enabled = !s.sky.cloak.enabled;
             return s;
         });
     }

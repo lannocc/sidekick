@@ -33,8 +33,8 @@ function loadSettings() {
                 bgGradientEnd: '#222222',
                 bgImage: '/skyboards.png',
                 bgImageDisplayMode: 'cover',
-                opacity: 1.0,
-                lastOpacity: 0.8, // ADD THIS LINE to store the last active opacity
+                opacity: 0.8,
+                enabled: true,
             }
         },
         boxes: {
