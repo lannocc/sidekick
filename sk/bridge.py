@@ -55,9 +55,9 @@ def print_action(action, details=""):
 def print_startup_banner():
     """Prints a colorful startup banner."""
     if not sys.stdout.isatty():
-        log.info(f"Starting Skybox Local Server on ws://{HOST}:{PORT}")
+        log.info(f"Starting SKYBRIDGE Local Server on ws://{HOST}:{PORT}")
         return
-    print(f"\n{Colors.BOLD}{Colors.GREEN}--- Skybox Local Server ---{Colors.RESET}")
+    print(f"\n{Colors.BOLD}{Colors.GREEN}--- SKYBRIDGE Local Server ---{Colors.RESET}")
     print(f"{Colors.CYAN}  Listening on: ws://{HOST}:{PORT}{Colors.RESET}")
     print(f"{Colors.YELLOW}  Press Ctrl+C to stop the server.{Colors.RESET}\n")
 
@@ -84,7 +84,7 @@ HOST = '127.0.0.1'
 ENCODING = tiktoken.get_encoding('cl100k_base')
 running_asks = {}
 
-# --- Skybox Globals ---
+# --- SKYBRIDGE Globals ---
 DB_CONN = None
 CONNECTED_CLIENTS = set()
 # --------------------
@@ -103,10 +103,10 @@ def _run_migrations(cursor):
         log.info("Migration successful.")
 
 def init_db():
-    """Initializes the SQLite database for Skybox."""
+    """Initializes the SQLite database for SKYBRIDGE."""
     global DB_CONN
-    db_path = os.path.join(config.DIRS.user_data_dir, 'skybox.db')
-    log.info(f"Using Skybox database at {db_path}")
+    db_path = os.path.join(config.DIRS.user_data_dir, 'skybridge.db')
+    log.info(f"Using SKYBRIDGE database at {db_path}")
     DB_CONN = sqlite3.connect(db_path)
     DB_CONN.row_factory = sqlite3.Row  # Makes rows dict-like
     DB_CONN.execute("PRAGMA foreign_keys = ON;") # Enforce foreign key constraints
@@ -182,7 +182,7 @@ def init_db():
     _run_migrations(cursor)
 
     DB_CONN.commit()
-    log.info("Skybox database initialized.")
+    log.info("SKYBRIDGE database initialized.")
 
 async def broadcast_box_list():
     """Fetches all boxes and broadcasts them to all connected clients."""
@@ -625,7 +625,7 @@ async def websocket_handler(websocket):
                     await broadcast_backed_window_list()
 
 
-                # --- Skybox Box Operations ---
+                # --- SKYBRIDGE Box Operations ---
                 elif msg_type == 'list_boxes':
                     print_action("List Boxes")
                     cursor = DB_CONN.cursor()
@@ -738,7 +738,7 @@ async def websocket_handler(websocket):
                     DB_CONN.commit()
                     await broadcast_box_list()
 
-                # --- Skybox Panel/Board Operations ---
+                # --- SKYBRIDGE Panel/Board Operations ---
                 elif msg_type == 'get_box_config':
                     box_id = msg.get('id')
                     print_action("Get Box Cfg", f"id={box_id}")

@@ -292,9 +292,9 @@ def help_cmds(args):
         print(f'   {name} :: {cmd[1]}')
     print()
     print('SEE ALSO:')
-    print('    ask -h')
-    print('   task -h')
-    print('   iosk')
+    print('        ask -h')
+    print('       task -h')
+    print('       iosk')
 
 
 def agent(args):
@@ -437,10 +437,15 @@ def iosk(args):
     iosk_run(args)
 
 
-def local(args):
-    from .local import main as local_main
+def bridge(args):
+    from .bridge import main as bridge_main
 
-    local_main(args)
+    bridge_main(args)
+
+
+def bridge_entry_point():
+    import sys
+    bridge(sys.argv[1:])
 
 
 OPTIONS = {
@@ -492,6 +497,6 @@ COMMANDS = {
     #    'ask commands'),
     'iosk': (iosk,
         'run iosk system'),
-    'local': (local,
-        'local backend service for SKYBOARD'),
+    'bridge': (bridge,
+        'SKYBRIDGE local backend service for SKYBOARD'),
 }

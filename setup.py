@@ -54,6 +54,7 @@ def run():
                 'ask=sk.__main__:run',
                 'task=sk.__main__:run',
                 'iosk=sk.iosk.cmd:run',
+                'skybridge=sk.cmd:bridge_entry_point',
             ],
         },
     )
@@ -81,4 +82,3 @@ def findversion(root, name):
 
 if __name__ == '__main__':
     run()
-
