@@ -601,8 +601,9 @@
     .box-cloak-scene {
         width: 100%;
         height: 100%;
-        position: relative;
-        overflow: hidden;
+        position: absolute;
+        top: 0;
+        left: 0;
         transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
     }
     .box-cloak-content {
@@ -884,10 +885,10 @@
                 <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
                 <div class="content-area-wrapper">
                     <div class="box-cloak-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
-                        <div class="box-cloak-content" style:background={cloakStyle} style:opacity={cloakOpacity}>
-                            <div class="box-name">{box.name}</div>
-                            <div class="box-context" title={box.context}>{box.context}</div>
-                        </div>
+                    </div>
+                    <div class="box-cloak-content" style:background={cloakStyle} style:opacity={cloakOpacity}>
+                        <div class="box-name">{box.name}</div>
+                        <div class="box-context" title={box.context}>{box.context}</div>
                     </div>
                 </div>
                 <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
