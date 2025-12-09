@@ -578,8 +578,8 @@
 
 <div class="taskbar" on:mousedown={handleTaskbarMouseDown} style="--tb-height: {tbHeight}px">
     <div class="taskbar-left" bind:this={leftSectionEl}>
-        <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">&mdash;</button>
         <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>W~</button>
+        <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">&mdash;</button>
         {#if showWindowsMenu}
             <div class="windows-menu" style={menuBackgroundStyle}>
                 {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
