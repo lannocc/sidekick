@@ -236,7 +236,7 @@
     <div class="top-frame" style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity};">
         <Taskbar />
     </div>
-    <div class="desktop-wrapper" style="overflow: {$activeBoxId !== null ? 'visible' : 'hidden'};">
+    <div class="desktop-wrapper" style="overflow: hidden;">
         <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
         <div class="desktop-area">
             <Desktop />

@@ -202,14 +202,24 @@
 
     let innerWidth, innerHeight;
     const BASE_WIDTH = 180;
-    // The dynamic calculation becomes a fallback for older boxes without a stored ratio.
-    $: dynamicAspectRatio = (innerHeight > 0 && innerWidth > 0) ? (innerHeight - TASKBAR_HEIGHT) / innerWidth : 0;
+
+    $: taskbarHeight = $desktopSettings.sky?.frame?.height ?? TASKBAR_HEIGHT;
+    $: frameWidth = $desktopSettings.sky?.frame?.width ?? 0;
+
+    // The dynamic calculation becomes a fallback for older boxes without a stored ratio
+    $: dynamicAspectRatio = (innerHeight > 0 && innerWidth > 0) ? (innerHeight - taskbarHeight) / innerWidth : 0;
     $: aspectRatio = box.aspect_ratio ?? dynamicAspectRatio;
 
     $: boxWidth = BASE_WIDTH * scale;
     $: boxHeight = BASE_WIDTH * aspectRatio * scale;
 
     let boxEl;
+
+    // --- Positioning Logic ---
+    $: transform = `translate(${$desktopView.panX}px, ${$desktopView.panY}px) scale(${$desktopView.zoom}) translate(${x}px, ${y}px)`;
+    $: fixedTop = isExpanded ? (y * $desktopView.zoom) + $desktopView.panY + taskbarHeight : null;
+    $: fixedLeft = isExpanded ? (x * $desktopView.zoom) + $desktopView.panX + frameWidth : null;
+
     let saveTransformTimeout;
     let clickTimeout = null;
 
@@ -262,7 +272,6 @@
         }
     }
     function closeContextMenu() {
-        contextMenu.visible = false;
     }
     function closePanelContextMenu() {
         panelContextMenu.visible = false;
@@ -572,7 +581,7 @@
         return target?.boxId === box.id && target?.location?.x === loc_x && target?.location?.y === loc_y;
     }
 
-    $: transform = `translate(${$desktopView.panX}px, ${$desktopView.panY}px) scale(${$desktopView.zoom}) translate(${x}px, ${y}px)`;
+    $: zIndex = isExpanded ? 21000 : ($activeBoxId === box.id ? 21000 : ($activeBoxId !== null ? 0 : 10));
 
 </script>
 
@@ -877,10 +886,13 @@
     data-id={box.id}
     data-type="box"
     bind:this={boxEl}
-    style:transform={transform}
-    style:width="{boxWidth}px"
-    style:height="{boxHeight}px"
-    style:z-index={isExpanded ? 21000 : 10}
+    style:position={isExpanded ? 'fixed' : null}
+    style:top={isExpanded ? `${fixedTop}px` : null}
+    style:left={isExpanded ? `${fixedLeft}px` : null}
+    style:width="{isExpanded ? boxWidth * $desktopView.zoom : boxWidth}px"
+    style:height="{isExpanded ? boxHeight * $desktopView.zoom : boxHeight}px"
+    style:transform={isExpanded ? 'none' : transform}
+    style:z-index={zIndex}
     on:wheel={handleWheel}
     on:scale
 >

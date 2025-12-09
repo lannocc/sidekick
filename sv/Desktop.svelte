@@ -1800,12 +1800,12 @@
     }}
 />
 
-<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop} style="overflow: {$activeBoxId !== null ? 'visible' : 'hidden'};">
+<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop} style="overflow: hidden;">
     <div class="desktop-background" style:background={backgroundStyle || ''} style:opacity={sceneOpacity}></div>
     <!-- BACK LAYER (for non-window items) -->
     <div class="desktop-content back-layer">
         {#if $connectionStatus === 'connected'}
-            <div class="shortcuts-layer">
+            <div class="shortcuts-layer" style:z-index={$activeBoxId !== null ? 0 : 'auto'}>
                 {#each $desktopShortcuts as shortcut (shortcut.id)}
                     <Shortcut {...shortcut} on:scale={e => handleItemScaleRequest({ detail: { ...e.detail, type: 'shortcut' } })}/>
                 {/each}
