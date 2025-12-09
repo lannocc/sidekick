@@ -57,9 +57,6 @@ function loadSettings() {
                 }
             },
             cloak: {
-                active: {
-                    bgType: 'image', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '/skyboards.png', bgImageDisplayMode: 'cover', opacity: 1.0,
-                },
                 inactive: {
                     bgType: 'image', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '/skyboards.png', bgImageDisplayMode: 'cover', opacity: 1.0,
                 }
@@ -174,7 +171,6 @@ function loadSettings() {
                         inactive: { ...defaults.boxes.frame.inactive, ...(parsed.boxes?.frame?.inactive || {}) }
                     },
                     cloak: {
-                        active: { ...defaults.boxes.cloak.active, ...(parsed.boxes?.cloak?.active || {}) },
                         inactive: { ...defaults.boxes.cloak.inactive, ...(parsed.boxes?.cloak?.inactive || {}) }
                     },
                 };

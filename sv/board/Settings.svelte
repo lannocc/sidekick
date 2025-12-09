@@ -38,7 +38,9 @@
         const boxes = settings.boxes;
         for (const part of ['scene', 'frame', 'cloak']) {
             if (typeof boxes[part] !== 'object' || boxes[part] === null) boxes[part] = {};
-            if (typeof boxes[part].active !== 'object' || boxes[part].active === null) boxes[part].active = {};
+            if (part !== 'cloak') { // only scene and frame have active state
+                if (typeof boxes[part].active !== 'object' || boxes[part].active === null) boxes[part].active = {};
+            }
             if (typeof boxes[part].inactive !== 'object' || boxes[part].inactive === null) boxes[part].inactive = {};
         }
     }
@@ -56,7 +58,6 @@
             },
             cloak: {
                 inactive: Math.round((boxes.cloak?.inactive?.opacity ?? 1.0) * 100),
-                active: Math.round((boxes.cloak?.active?.opacity ?? 1.0) * 100),
             }
         };
     }
@@ -596,7 +597,7 @@
                 {#if activeBoxDetailTab === part}
                     <h2>Box: {part.charAt(0).toUpperCase() + part.slice(1)} Appearance</h2>
                     <div class="two-column-layout">
-                        {#each ['inactive', 'active'] as state}
+                        {#each (part === 'cloak' ? ['inactive'] : ['inactive', 'active']) as state}
                             <div class="column">
                                 <h3>{state.charAt(0).toUpperCase() + state.slice(1)} State</h3>
 
