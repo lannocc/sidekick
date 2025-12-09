@@ -490,13 +490,23 @@
     .windows-button.active { background-color: var(--taskbar-button-hover-bg); }
 
     .start-menu, .windows-menu { position: absolute; top: calc(var(--tb-height, 40px) + 5px); background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 10000; }
-    .start-menu { right: 10px; display: grid; grid-template-columns: repeat(4, 52px); grid-template-rows: repeat(2, 52px); gap: 8px; padding: 8px; width: auto; }
+    .start-menu {
+        top: calc(var(--tb-height, 40px) * 0.85);
+        right: 0;
+        display: grid;
+        grid-template-columns: repeat(4, 52px);
+        grid-template-rows: repeat(2, 52px);
+        gap: 8px;
+        padding: 8px;
+        width: auto;
+    }
     .windows-menu { left: 10px; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; width: 200px; }
     .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 10px 15px; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border-color); }
     .menu-item:last-child { border-bottom: none; }
     .menu-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .menu-item:disabled { color: #7f8c8d; cursor: not-allowed; }
     .start-menu .menu-item {
+        position: relative;
         padding: 0;
         text-align: center;
         border-bottom: none;
@@ -515,6 +525,13 @@
     }
     .start-menu .menu-item:disabled:hover {
         background-color: transparent;
+    }
+    .menu-badge {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 16px;
+        height: 16px;
     }
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
     .menu-item-empty { padding: 10px 15px; color: #7f8c8d; font-style: italic; }
@@ -620,15 +637,19 @@
                 <!-- Top Row -->
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Ask">?</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBox(); showMenu = false; }} disabled={$connectionStatus !== 'connected'} title="New Box">📦</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Files">📁</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer({ sourceEvent: e }); }} disabled={$connectionStatus != 'connected'} title="Files">📁</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalTerminal({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Terminal">&gt;_</button>
-                
+
                 <!-- Bottom Row -->
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchSettings({ sourceEvent: e }); }} title="Settings">⚙️</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchCalculator({ sourceEvent: e }); }} title="Calculator">🧮</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebBrowser({ sourceEvent: e }); showMenu = false; }} title="Web Browser">🌐</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">🖥️</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">
+                    🖥️
+            <img class="menu-badge" src="/iosk.png" alt="IOSK" />
+                </button>
             </div>
         {/if}
     </div>
 </div>
+
