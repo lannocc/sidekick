@@ -358,10 +358,10 @@
         visibility: hidden;
     }
     .window-frame:not(.active) { border-color: #7f8c8d; }
-    .window-frame.minimized { display: none; }
-    .window-frame.maximized { border-radius: 0; }
-    .window-frame.maximized .resize-handle { display: none; }
-    .window-frame.maximized .title-bar { cursor: default; }
+    .window-wrapper.minimized { display: none; }
+    .window-wrapper.maximized .window-frame { border-radius: 0; }
+    .window-wrapper.maximized .resize-handle { display: none; }
+    .window-wrapper.maximized .title-bar { cursor: default; }
 
     /* Styles for the back (frameless) window */
     .backed-window-frame {
