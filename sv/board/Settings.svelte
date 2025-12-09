@@ -24,9 +24,8 @@
 
     let activeTab = 'general';
     let activeSkySubTab = 'scene';
-    let activeWindowsSubTab = 'normal';
-    let activeNormalWindowDetailTab = 'scene';
-    let activeBackWindowDetailTab = 'scene';
+    let activeWindowDetailTab = 'scene';
+    let activeBackBoardDetailTab = 'scene';
     let inactiveTransparency, activeTransparency;
     let normalWindowPresence = {};
     let backWindowPresence = {};
@@ -385,7 +384,8 @@
     <div class="tabs">
         <button class="tab-button" class:active={activeTab === 'sky'} on:click={() => activeTab = 'sky'}>Sky</button>
         <button class="tab-button" class:active={activeTab === 'boxes'} on:click={() => activeTab = 'boxes'}>Box</button>
-        <button class="tab-button" class:active={activeTab === 'windows'} on:click={() => activeTab = 'windows'}>Window</button>
+        <button class="tab-button" class:active={activeTab === 'backBoard'} on:click={() => activeTab = 'backBoard'}>Back Board</button>
+        <button class="tab-button" class:active={activeTab === 'window'} on:click={() => activeTab = 'window'}>Window</button>
         <button class="tab-button" class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
     </div>
 
@@ -630,223 +630,217 @@
                 </label>
             </fieldset>
         {/if}
-        {#if activeTab === 'windows' && settings.windows}
+        {#if activeTab === 'backBoard' && settings.windows}
             <div class="sub-tabs">
-                <button class="sub-tab-button" class:active={activeWindowsSubTab === 'back'} on:click={() => activeWindowsSubTab = 'back'}>Back Windows</button>
-                <button class="sub-tab-button" class:active={activeWindowsSubTab === 'normal'} on:click={() => activeWindowsSubTab = 'normal'}>Normal Windows</button>
+                <button class="sub-tab-button" class:active={activeBackBoardDetailTab === 'scene'} on:click={() => activeBackBoardDetailTab = 'scene'}>Scene</button>
+                <button class="sub-tab-button" class:active={activeBackBoardDetailTab === 'frame'} on:click={() => activeBackBoardDetailTab = 'frame'}>Frame</button>
+                <button class="sub-tab-button" class:active={activeBackBoardDetailTab === 'cloak'} on:click={() => activeBackBoardDetailTab = 'cloak'}>Cloak</button>
             </div>
-            {#if activeWindowsSubTab === 'normal'}
-                <div class="detail-tabs">
-                    <button class="sub-tab-button" class:active={activeNormalWindowDetailTab === 'scene'} on:click={() => activeNormalWindowDetailTab = 'scene'}>Scene</button>
-                    <button class="sub-tab-button" class:active={activeNormalWindowDetailTab === 'frame'} on:click={() => activeNormalWindowDetailTab = 'frame'}>Frame</button>
-                    <button class="sub-tab-button" class:active={activeNormalWindowDetailTab === 'cloak'} on:click={() => activeNormalWindowDetailTab = 'cloak'}>Cloak</button>
-                </div>
 
-                {#each ['scene', 'frame', 'cloak'] as part}
-                    {#if activeNormalWindowDetailTab === part}
-                        <h2>Normal Windows: {part.charAt(0).toUpperCase() + part.slice(1)} Appearance</h2>
-                        <div class="two-column-layout">
-                            {#each ['inactive', 'active'] as state}
-                                <div class="column">
-                                    <h3>{state.charAt(0).toUpperCase() + state.slice(1)} State</h3>
+            {#each ['scene', 'frame', 'cloak'] as part}
+                {#if activeBackBoardDetailTab === part}
+                    <h2>Back Board: {part.charAt(0).toUpperCase() + part.slice(1)} Appearance</h2>
+                    <div class="two-column-layout">
+                        {#each ['inactive', 'active'] as state}
+                            <div class="column">
+                                <h3>{state.charAt(0).toUpperCase() + state.slice(1)} State</h3>
 
+                                <label class="color-picker-label">
+                                    <span>Presence ({backWindowPresence[part]?.[state] ?? 100}%)</span>
+                                    <input type="range" min="0" max="100" step="1" value={backWindowPresence[part]?.[state] ?? 100} on:input={(e) => handleBackWindowPresence(e, part, state)}>
+                                </label>
+
+                                {#if part === 'frame'}
                                     <label class="color-picker-label">
-                                        <span>Presence ({normalWindowPresence[part]?.[state] ?? 100}%)</span>
-                                        <input type="range" min="0" max="100" step="1" value={normalWindowPresence[part]?.[state] ?? 100} on:input={(e) => handleNormalWindowPresence(e, part, state)}>
+                                        <span>Height (px)</span>
+                                        <input class="text-input" type="number" bind:value={settings.windows.back[part][state].height} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
                                     </label>
-
-                                    {#if part === 'frame'}
-                                        <label class="color-picker-label">
-                                            <span>Height (px)</span>
-                                            <input class="text-input" type="number" bind:value={settings.windows.normal[part][state].height} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
-                                        </label>
-                                        <label class="color-picker-label">
-                                            <span>Width (px)</span>
-                                            <input class="text-input" type="number" bind:value={settings.windows.normal[part][state].width} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
-                                        </label>
-                                    {/if}
-
-                                    <fieldset class="borderless-fieldset" disabled={normalWindowPresence[part]?.[state] === 0}>
-                                        <div>
-                                            <label><input type="radio" bind:group={settings.windows.normal[part][state].bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
-                                            {#if settings.windows.normal[part][state].bgType === 'gradient'}
-                                            <div class="options-group">
-                                                <label class="color-picker-label"><span>Start Color</span><input type="color" bind:value={settings.windows.normal[part][state].bgGradientStart} on:input={handleUpdate}></label>
-                                                <label class="color-picker-label"><span>End Color</span><input type="color" bind:value={settings.windows.normal[part][state].bgGradientEnd} on:input={handleUpdate}></label>
-                                            </div>
-                                            {/if}
-                                        </div>
-                                        <div>
-                                            <label><input type="radio" bind:group={settings.windows.normal[part][state].bgType} value="color" on:change={handleUpdate}> Solid Color</label>
-                                            {#if settings.windows.normal[part][state].bgType === 'color'}
-                                            <div class="options-group">
-                                                <label class="color-picker-label"><span>Color</span><input type="color" bind:value={settings.windows.normal[part][state].bgColor} on:input={handleUpdate}></label>
-                                            </div>
-                                            {/if}
-                                        </div>
-                                        <div>
-                                            <label><input type="radio" bind:group={settings.windows.normal[part][state].bgType} value="image" on:change={handleUpdate}> Image</label>
-                                            {#if settings.windows.normal[part][state].bgType === 'image'}
-                                            <div class="options-group">
-                                                <label><input class="text-input" type="text" bind:value={settings.windows.normal[part][state].bgImage} on:input={handleUpdate} placeholder="Enter Image URL..."></label>
-                                                <label class="color-picker-label">
-                                                    <span>Display Mode</span>
-                                                    <select class="select-input" bind:value={settings.windows.normal[part][state].bgImageDisplayMode} on:change={handleUpdate}>
-                                                        <option value="cover">Cover</option><option value="contain">Fit</option><option value="stretch">Stretch</option><option value="tile">Tile</option>
-                                                    </select>
-                                                </label>
-                                            </div>
-                                            {/if}
-                                        </div>
-                                    </fieldset>
-                                    
-                                    {#if part === 'frame'}
-                                        <fieldset>
-                                            <legend>Shadow / Glow</legend>
-                                            <label>
-                                                <input type="checkbox" bind:checked={settings.windows.normal.frame[state].shadowEnabled} on:change={handleUpdate}>
-                                                Enable Shadow
-                                            </label>
-                                            <fieldset class="borderless-fieldset" disabled={!settings.windows.normal.frame[state].shadowEnabled}>
-                                                <label class="color-picker-label">
-                                                    <span>Color</span>
-                                                    <input type="color" bind:value={settings.windows.normal.frame[state].shadowColor} on:input={handleUpdate}>
-                                                </label>
-                                                <label class="color-picker-label">
-                                                    <span>X Offset (px)</span>
-                                                    <input class="text-input" type="number" bind:value={settings.windows.normal.frame[state].shadowX} on:input={handleUpdate} step="1" style="width: 80px;">
-                                                </label>
-                                                <label class="color-picker-label">
-                                                    <span>Y Offset (px)</span>
-                                                    <input class="text-input" type="number" bind:value={settings.windows.normal.frame[state].shadowY} on:input={handleUpdate} step="1" style="width: 80px;">
-                                                </label>
-                                                <label class="color-picker-label">
-                                                    <span>Blur (px)</span>
-                                                    <input class="text-input" type="number" bind:value={settings.windows.normal.frame[state].shadowBlur} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
-                                                </label>
-                                                <label class="color-picker-label">
-                                                    <span>Spread (px)</span>
-                                                    <input class="text-input" type="number" bind:value={settings.windows.normal.frame[state].shadowSpread} on:input={handleUpdate} step="1" style="width: 80px;">
-                                                </label>
-                                                <label>
-                                                    <input type="checkbox" bind:checked={settings.windows.normal.frame[state].shadowInset} on:change={handleUpdate}>
-                                                    Inset Shadow
-                                                </label>
-                                            </fieldset>
-                                        </fieldset>
-                                    {/if}
-                                </div>
-                            {/each}
-                        </div>
-                    {/if}
-                {/each}
-            {/if}
-            {#if activeWindowsSubTab === 'back'}
-                <div class="detail-tabs">
-                    <button class="sub-tab-button" class:active={activeBackWindowDetailTab === 'scene'} on:click={() => activeBackWindowDetailTab = 'scene'}>Scene</button>
-                    <button class="sub-tab-button" class:active={activeBackWindowDetailTab === 'frame'} on:click={() => activeBackWindowDetailTab = 'frame'}>Frame</button>
-                    <button class="sub-tab-button" class:active={activeBackWindowDetailTab === 'cloak'} on:click={() => activeBackWindowDetailTab = 'cloak'}>Cloak</button>
-                </div>
-
-                {#each ['scene', 'frame', 'cloak'] as part}
-                    {#if activeBackWindowDetailTab === part}
-                        <h2>Back Windows: {part.charAt(0).toUpperCase() + part.slice(1)} Appearance</h2>
-                        <div class="two-column-layout">
-                            {#each ['inactive', 'active'] as state}
-                                <div class="column">
-                                    <h3>{state.charAt(0).toUpperCase() + state.slice(1)} State</h3>
-
                                     <label class="color-picker-label">
-                                        <span>Presence ({backWindowPresence[part]?.[state] ?? 100}%)</span>
-                                        <input type="range" min="0" max="100" step="1" value={backWindowPresence[part]?.[state] ?? 100} on:input={(e) => handleBackWindowPresence(e, part, state)}>
+                                        <span>Width (px)</span>
+                                        <input class="text-input" type="number" bind:value={settings.windows.back[part][state].width} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
                                     </label>
+                                {/if}
 
-                                    {#if part === 'frame'}
-                                        <label class="color-picker-label">
-                                            <span>Height (px)</span>
-                                            <input class="text-input" type="number" bind:value={settings.windows.back[part][state].height} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
-                                        </label>
-                                        <label class="color-picker-label">
-                                            <span>Width (px)</span>
-                                            <input class="text-input" type="number" bind:value={settings.windows.back[part][state].width} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
-                                        </label>
-                                    {/if}
-
-                                    <fieldset class="borderless-fieldset" disabled={backWindowPresence[part]?.[state] === 0}>
-                                        <div>
-                                            <label><input type="radio" bind:group={settings.windows.back[part][state].bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
-                                            {#if settings.windows.back[part][state].bgType === 'gradient'}
-                                            <div class="options-group">
-                                                <label class="color-picker-label"><span>Start Color</span><input type="color" bind:value={settings.windows.back[part][state].bgGradientStart} on:input={handleUpdate}></label>
-                                                <label class="color-picker-label"><span>End Color</span><input type="color" bind:value={settings.windows.back[part][state].bgGradientEnd} on:input={handleUpdate}></label>
-                                            </div>
-                                            {/if}
+                                <fieldset class="borderless-fieldset" disabled={backWindowPresence[part]?.[state] === 0}>
+                                    <div>
+                                        <label><input type="radio" bind:group={settings.windows.back[part][state].bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
+                                        {#if settings.windows.back[part][state].bgType === 'gradient'}
+                                        <div class="options-group">
+                                            <label class="color-picker-label"><span>Start Color</span><input type="color" bind:value={settings.windows.back[part][state].bgGradientStart} on:input={handleUpdate}></label>
+                                            <label class="color-picker-label"><span>End Color</span><input type="color" bind:value={settings.windows.back[part][state].bgGradientEnd} on:input={handleUpdate}></label>
                                         </div>
-                                        <div>
-                                            <label><input type="radio" bind:group={settings.windows.back[part][state].bgType} value="color" on:change={handleUpdate}> Solid Color</label>
-                                            {#if settings.windows.back[part][state].bgType === 'color'}
-                                            <div class="options-group">
-                                                <label class="color-picker-label"><span>Color</span><input type="color" bind:value={settings.windows.back[part][state].bgColor} on:input={handleUpdate}></label>
-                                            </div>
-                                            {/if}
+                                        {/if}
+                                    </div>
+                                    <div>
+                                        <label><input type="radio" bind:group={settings.windows.back[part][state].bgType} value="color" on:change={handleUpdate}> Solid Color</label>
+                                        {#if settings.windows.back[part][state].bgType === 'color'}
+                                        <div class="options-group">
+                                            <label class="color-picker-label"><span>Color</span><input type="color" bind:value={settings.windows.back[part][state].bgColor} on:input={handleUpdate}></label>
                                         </div>
-                                        <div>
-                                            <label><input type="radio" bind:group={settings.windows.back[part][state].bgType} value="image" on:change={handleUpdate}> Image</label>
-                                            {#if settings.windows.back[part][state].bgType === 'image'}
-                                            <div class="options-group">
-                                                <label><input class="text-input" type="text" bind:value={settings.windows.back[part][state].bgImage} on:input={handleUpdate} placeholder="Enter Image URL..."></label>
-                                                <label class="color-picker-label">
-                                                    <span>Display Mode</span>
-                                                    <select class="select-input" bind:value={settings.windows.back[part][state].bgImageDisplayMode} on:change={handleUpdate}>
-                                                        <option value="cover">Cover</option><option value="contain">Fit</option><option value="stretch">Stretch</option><option value="tile">Tile</option>
-                                                    </select>
-                                                </label>
-                                            </div>
-                                            {/if}
-                                        </div>
-                                    </fieldset>
-                                    
-                                    {#if part === 'frame'}
-                                        <fieldset>
-                                            <legend>Shadow / Glow</legend>
-                                            <label>
-                                                <input type="checkbox" bind:checked={settings.windows.back.frame[state].shadowEnabled} on:change={handleUpdate}>
-                                                Enable Shadow
+                                        {/if}
+                                    </div>
+                                    <div>
+                                        <label><input type="radio" bind:group={settings.windows.back[part][state].bgType} value="image" on:change={handleUpdate}> Image</label>
+                                        {#if settings.windows.back[part][state].bgType === 'image'}
+                                        <div class="options-group">
+                                            <label><input class="text-input" type="text" bind:value={settings.windows.back[part][state].bgImage} on:input={handleUpdate} placeholder="Enter Image URL..."></label>
+                                            <label class="color-picker-label">
+                                                <span>Display Mode</span>
+                                                <select class="select-input" bind:value={settings.windows.back[part][state].bgImageDisplayMode} on:change={handleUpdate}>
+                                                    <option value="cover">Cover</option><option value="contain">Fit</option><option value="stretch">Stretch</option><option value="tile">Tile</option>
+                                                </select>
                                             </label>
-                                            <fieldset class="borderless-fieldset" disabled={!settings.windows.back.frame[state].shadowEnabled}>
-                                                <label class="color-picker-label">
-                                                    <span>Color</span>
-                                                    <input type="color" bind:value={settings.windows.back.frame[state].shadowColor} on:input={handleUpdate}>
-                                                </label>
-                                                <label class="color-picker-label">
-                                                    <span>X Offset (px)</span>
-                                                    <input class="text-input" type="number" bind:value={settings.windows.back.frame[state].shadowX} on:input={handleUpdate} step="1" style="width: 80px;">
-                                                </label>
-                                                <label class="color-picker-label">
-                                                    <span>Y Offset (px)</span>
-                                                    <input class="text-input" type="number" bind:value={settings.windows.back.frame[state].shadowY} on:input={handleUpdate} step="1" style="width: 80px;">
-                                                </label>
-                                                <label class="color-picker-label">
-                                                    <span>Blur (px)</span>
-                                                    <input class="text-input" type="number" bind:value={settings.windows.back.frame[state].shadowBlur} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
-                                                </label>
-                                                <label class="color-picker-label">
-                                                    <span>Spread (px)</span>
-                                                    <input class="text-input" type="number" bind:value={settings.windows.back.frame[state].shadowSpread} on:input={handleUpdate} step="1" style="width: 80px;">
-                                                </label>
-                                                <label>
-                                                    <input type="checkbox" bind:checked={settings.windows.back.frame[state].shadowInset} on:change={handleUpdate}>
-                                                    Inset Shadow
-                                                </label>
-                                            </fieldset>
+                                        </div>
+                                        {/if}
+                                    </div>
+                                </fieldset>
+                                
+                                {#if part === 'frame'}
+                                    <fieldset>
+                                        <legend>Shadow / Glow</legend>
+                                        <label>
+                                            <input type="checkbox" bind:checked={settings.windows.back.frame[state].shadowEnabled} on:change={handleUpdate}>
+                                            Enable Shadow
+                                        </label>
+                                        <fieldset class="borderless-fieldset" disabled={!settings.windows.back.frame[state].shadowEnabled}>
+                                            <label class="color-picker-label">
+                                                <span>Color</span>
+                                                <input type="color" bind:value={settings.windows.back.frame[state].shadowColor} on:input={handleUpdate}>
+                                            </label>
+                                            <label class="color-picker-label">
+                                                <span>X Offset (px)</span>
+                                                <input class="text-input" type="number" bind:value={settings.windows.back.frame[state].shadowX} on:input={handleUpdate} step="1" style="width: 80px;">
+                                            </label>
+                                            <label class="color-picker-label">
+                                                <span>Y Offset (px)</span>
+                                                <input class="text-input" type="number" bind:value={settings.windows.back.frame[state].shadowY} on:input={handleUpdate} step="1" style="width: 80px;">
+                                            </label>
+                                            <label class="color-picker-label">
+                                                <span>Blur (px)</span>
+                                                <input class="text-input" type="number" bind:value={settings.windows.back.frame[state].shadowBlur} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
+                                            </label>
+                                            <label class="color-picker-label">
+                                                <span>Spread (px)</span>
+                                                <input class="text-input" type="number" bind:value={settings.windows.back.frame[state].shadowSpread} on:input={handleUpdate} step="1" style="width: 80px;">
+                                            </label>
+                                            <label>
+                                                <input type="checkbox" bind:checked={settings.windows.back.frame[state].shadowInset} on:change={handleUpdate}>
+                                                Inset Shadow
+                                            </label>
                                         </fieldset>
-                                    {/if}
-                                </div>
-                            {/each}
-                        </div>
-                    {/if}
-                {/each}
-            {/if}
+                                    </fieldset>
+                                {/if}
+                            </div>
+                        {/each}
+                    </div>
+                {/if}
+            {/each}
+        {/if}
+        {#if activeTab === 'window' && settings.windows}
+            <div class="sub-tabs">
+                <button class="sub-tab-button" class:active={activeWindowDetailTab === 'scene'} on:click={() => activeWindowDetailTab = 'scene'}>Scene</button>
+                <button class="sub-tab-button" class:active={activeWindowDetailTab === 'frame'} on:click={() => activeWindowDetailTab = 'frame'}>Frame</button>
+                <button class="sub-tab-button" class:active={activeWindowDetailTab === 'cloak'} on:click={() => activeWindowDetailTab = 'cloak'}>Cloak</button>
+            </div>
+
+            {#each ['scene', 'frame', 'cloak'] as part}
+                {#if activeWindowDetailTab === part}
+                    <h2>Window: {part.charAt(0).toUpperCase() + part.slice(1)} Appearance</h2>
+                    <div class="two-column-layout">
+                        {#each ['inactive', 'active'] as state}
+                            <div class="column">
+                                <h3>{state.charAt(0).toUpperCase() + state.slice(1)} State</h3>
+
+                                <label class="color-picker-label">
+                                    <span>Presence ({normalWindowPresence[part]?.[state] ?? 100}%)</span>
+                                    <input type="range" min="0" max="100" step="1" value={normalWindowPresence[part]?.[state] ?? 100} on:input={(e) => handleNormalWindowPresence(e, part, state)}>
+                                </label>
+
+                                {#if part === 'frame'}
+                                    <label class="color-picker-label">
+                                        <span>Height (px)</span>
+                                        <input class="text-input" type="number" bind:value={settings.windows.normal[part][state].height} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
+                                    </label>
+                                    <label class="color-picker-label">
+                                        <span>Width (px)</span>
+                                        <input class="text-input" type="number" bind:value={settings.windows.normal[part][state].width} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
+                                    </label>
+                                {/if}
+
+                                <fieldset class="borderless-fieldset" disabled={normalWindowPresence[part]?.[state] === 0}>
+                                    <div>
+                                        <label><input type="radio" bind:group={settings.windows.normal[part][state].bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
+                                        {#if settings.windows.normal[part][state].bgType === 'gradient'}
+                                        <div class="options-group">
+                                            <label class="color-picker-label"><span>Start Color</span><input type="color" bind:value={settings.windows.normal[part][state].bgGradientStart} on:input={handleUpdate}></label>
+                                            <label class="color-picker-label"><span>End Color</span><input type="color" bind:value={settings.windows.normal[part][state].bgGradientEnd} on:input={handleUpdate}></label>
+                                        </div>
+                                        {/if}
+                                    </div>
+                                    <div>
+                                        <label><input type="radio" bind:group={settings.windows.normal[part][state].bgType} value="color" on:change={handleUpdate}> Solid Color</label>
+                                        {#if settings.windows.normal[part][state].bgType === 'color'}
+                                        <div class="options-group">
+                                            <label class="color-picker-label"><span>Color</span><input type="color" bind:value={settings.windows.normal[part][state].bgColor} on:input={handleUpdate}></label>
+                                        </div>
+                                        {/if}
+                                    </div>
+                                    <div>
+                                        <label><input type="radio" bind:group={settings.windows.normal[part][state].bgType} value="image" on:change={handleUpdate}> Image</label>
+                                        {#if settings.windows.normal[part][state].bgType === 'image'}
+                                        <div class="options-group">
+                                            <label><input class="text-input" type="text" bind:value={settings.windows.normal[part][state].bgImage} on:input={handleUpdate} placeholder="Enter Image URL..."></label>
+                                            <label class="color-picker-label">
+                                                <span>Display Mode</span>
+                                                <select class="select-input" bind:value={settings.windows.normal[part][state].bgImageDisplayMode} on:change={handleUpdate}>
+                                                    <option value="cover">Cover</option><option value="contain">Fit</option><option value="stretch">Stretch</option><option value="tile">Tile</option>
+                                                </select>
+                                            </label>
+                                        </div>
+                                        {/if}
+                                    </div>
+                                </fieldset>
+                                
+                                {#if part === 'frame'}
+                                    <fieldset>
+                                        <legend>Shadow / Glow</legend>
+                                        <label>
+                                            <input type="checkbox" bind:checked={settings.windows.normal.frame[state].shadowEnabled} on:change={handleUpdate}>
+                                            Enable Shadow
+                                        </label>
+                                        <fieldset class="borderless-fieldset" disabled={!settings.windows.normal.frame[state].shadowEnabled}>
+                                            <label class="color-picker-label">
+                                                <span>Color</span>
+                                                <input type="color" bind:value={settings.windows.normal.frame[state].shadowColor} on:input={handleUpdate}>
+                                            </label>
+                                            <label class="color-picker-label">
+                                                <span>X Offset (px)</span>
+                                                <input class="text-input" type="number" bind:value={settings.windows.normal.frame[state].shadowX} on:input={handleUpdate} step="1" style="width: 80px;">
+                                            </label>
+                                            <label class="color-picker-label">
+                                                <span>Y Offset (px)</span>
+                                                <input class="text-input" type="number" bind:value={settings.windows.normal.frame[state].shadowY} on:input={handleUpdate} step="1" style="width: 80px;">
+                                            </label>
+                                            <label class="color-picker-label">
+                                                <span>Blur (px)</span>
+                                                <input class="text-input" type="number" bind:value={settings.windows.normal.frame[state].shadowBlur} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
+                                            </label>
+                                            <label class="color-picker-label">
+                                                <span>Spread (px)</span>
+                                                <input class="text-input" type="number" bind:value={settings.windows.normal.frame[state].shadowSpread} on:input={handleUpdate} step="1" style="width: 80px;">
+                                            </label>
+                                            <label>
+                                                <input type="checkbox" bind:checked={settings.windows.normal.frame[state].shadowInset} on:change={handleUpdate}>
+                                                Inset Shadow
+                                            </label>
+                                        </fieldset>
+                                    </fieldset>
+                                {/if}
+                            </div>
+                        {/each}
+                    </div>
+                {/if}
+            {/each}
         {/if}
 
         {#if activeTab === 'general'}
