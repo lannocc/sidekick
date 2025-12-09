@@ -292,7 +292,7 @@
 <div class="dash-dialog">
     <div class="dash-header">
         <div class="header-controls left">
-            <button class="control-button cancel" on:click={handleCancelDash} title="Cancel and Close All Windows">&times;</button>
+            <button class="control-button cancel" on:click={handleCancelDash} title="Close All Windows">&times;</button>
             <button class="control-button" on:click={handleMinimizeDash} title="Show Desktop">_</button>
         </div>
         <h1 class="dash-title">Dash</h1>
