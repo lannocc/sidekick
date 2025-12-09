@@ -7,7 +7,7 @@
     import { get } from 'svelte/store';
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
     import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover } from './local.js';
-    import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings } from './desktop.js';
+    import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId } from './desktop.js';
     import Panel from './Panel.svelte';
 
     export let box;
@@ -30,6 +30,17 @@
     // --- Unfold State ---
     let isUnfolded = false;
     let hoveredPanelKey = null; // Key ('x_y') of the currently hovered panel
+
+    $: if (isExpanded) {
+        activeBoxId.set(box.id);
+    } else if (get(activeBoxId) === box.id) {
+        activeBoxId.set(null);
+    }
+    onDestroy(() => {
+        if (get(activeBoxId) === box.id) {
+            activeBoxId.set(null);
+        }
+    });
 
     $: isMenuOpen = contextMenu.visible || panelContextMenu.visible || showPanelPicker;
     $: isExpanded = isUnfolded || isMenuOpen;
@@ -280,18 +291,6 @@
             }
             if (showPanelPicker) {
                 showPanelPicker = false;
-            }
-        }
-    }
-
-    function handleKeyDown(event) {
-        if (event.key === 'Escape') {
-            if (contextMenu.visible) {
-                closeContextMenu();
-            } else if (panelContextMenu.visible) {
-                closePanelContextMenu();
-            } else if (showPanelPicker) {
-                showPanelPicker = false;
             } else if (isUnfolded) {
                 isUnfolded = false;
             }
@@ -302,12 +301,24 @@
         updateUnfoldDirection(); // Set initial direction
         window.addEventListener('click', handleWindowClick, true); // Use capture phase
         window.addEventListener('keydown', handleKeyDown);
+        return () => { // Svelte's onDestroy is implicitly called by this return
+            window.removeEventListener('click', handleWindowClick, true);
+            window.removeEventListener('keydown', handleKeyDown);
+            if (clickTimeout) clearTimeout(clickTimeout);
+            if (get(activeBoxId) === box.id) {
+                activeBoxId.set(null);
+            }
+        };
     });
-    onDestroy(() => {
-        window.removeEventListener('click', handleWindowClick, true); // Use capture phase
-        window.removeEventListener('keydown', handleKeyDown);
-        if (clickTimeout) clearTimeout(clickTimeout);
-    });
+
+    function handleKeyDown(event) {
+        if (event.key === 'Escape') {
+            if (contextMenu.visible) closeContextMenu();
+            else if (panelContextMenu.visible) closePanelContextMenu();
+            else if (showPanelPicker) showPanelPicker = false;
+            else if (isUnfolded) isUnfolded = false;
+        }
+    }
 
     // --- Context Menu Actions ---
     function renameBox() {
@@ -561,6 +572,8 @@
         return target?.boxId === box.id && target?.location?.x === loc_x && target?.location?.y === loc_y;
     }
 
+    $: transform = `translate(${$desktopView.panX}px, ${$desktopView.panY}px) scale(${$desktopView.zoom}) translate(${x}px, ${y}px)`;
+
 </script>
 
 <style>
@@ -569,6 +582,7 @@
         cursor: pointer;
         user-select: none;
         transition: z-index 0s 0.3s, border-color 0.2s ease-in-out; /* Delay z-index change until after animation */
+        transform-origin: 0 0;
         border: 1px solid transparent;
         border-radius: 7px; /* A bit larger than panel's 6px */
     }
@@ -863,8 +877,7 @@
     data-id={box.id}
     data-type="box"
     bind:this={boxEl}
-    style:left="{x}px"
-    style:top="{y}px"
+    style:transform={transform}
     style:width="{boxWidth}px"
     style:height="{boxHeight}px"
     style:z-index={isExpanded ? 21000 : 10}

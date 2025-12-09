@@ -332,6 +332,8 @@ export const wasDraggingItems = writable(false);
 // This is used to immediately disable pointer events on other layers to prevent unintended hover/focus effects.
 export const desktopInteraction = writable(false);
 
+// Store to track if a box is unfolded/expanded to manage global z-index contexts.
+export const activeBoxId = writable(null);
 
 // New stores for Notification Center
 export const notificationHistory = writable([]);
