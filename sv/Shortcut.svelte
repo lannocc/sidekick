@@ -22,6 +22,8 @@
     $: isSelected = $selectedItems.has(`shortcut-${id}`);
     let element;
 
+    $: transform = `translate(${$desktopView.panX}px, ${$desktopView.panY}px) scale(${$desktopView.zoom}) translate(${x}px, ${y}px) scale(${scale || 1.0})`;
+
     // By using afterUpdate, we ensure the rendered dimensions are always kept up-to-date
     // in our central store. This is more robust than onMount because it accounts for
     // dimension changes that might happen after the initial render, such as a long
@@ -81,6 +83,9 @@
         transition: background-color 0.1s ease-in-out, transform 0.1s ease-out;
         pointer-events: auto;
         border: 1px solid transparent;
+        /* Position is now handled by transform, so set top/left to 0 */
+        top: 0;
+        left: 0;
     }
     .shortcut.selected {
         background-color: rgba(52, 152, 219, 0.3);
@@ -113,9 +118,7 @@
     class:selected={isSelected}
     data-id={id}
     data-type="shortcut"
-    style:left="{x}px"
-    style:top="{y}px"
-    style:transform="scale({scale || 1.0})"
+    style:transform={transform}
     on:click={handleClick}
     on:wheel={handleWheel}
     on:scale
