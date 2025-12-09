@@ -7,7 +7,7 @@
     import Desktop from './Desktop.svelte';
     import Taskbar from './Taskbar.svelte';
     import { windows } from './windows.js';
-    import { dashActive, dashLayouts, dashCycleIndex, desktopSettings } from './desktop.js';
+    import { dashActive, dashLayouts, dashCycleIndex, desktopSettings, activeBoxId } from './desktop.js';
     import { get } from 'svelte/store';
     import { initializeLocalConnection } from './local.js';
 
@@ -179,7 +179,6 @@
     .desktop-wrapper {
         flex-grow: 1;
         display: flex;
-        overflow: hidden;
     }
     .desktop-area {
         flex-grow: 1;
@@ -237,7 +236,7 @@
     <div class="top-frame" style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity};">
         <Taskbar />
     </div>
-    <div class="desktop-wrapper">
+    <div class="desktop-wrapper" style="overflow: {$activeBoxId !== null ? 'visible' : 'hidden'};">
         <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
         <div class="desktop-area">
             <Desktop />

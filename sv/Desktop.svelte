@@ -5,7 +5,7 @@
 <script>
     import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction } from './desktop.js';
+    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId } from './desktop.js';
     import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow } from './local.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
@@ -1545,7 +1545,6 @@
         position: relative;
         width: 100%;
         height: 100%;
-        overflow: hidden;
     }
     .desktop-background {
         position: absolute;
@@ -1801,7 +1800,7 @@
     }}
 />
 
-<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
+<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop} style="overflow: {$activeBoxId !== null ? 'visible' : 'hidden'};">
     <div class="desktop-background" style:background={backgroundStyle || ''} style:opacity={sceneOpacity}></div>
     <!-- BACK LAYER (for non-window items) -->
     <div class="desktop-content back-layer">
