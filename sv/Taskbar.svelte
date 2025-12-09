@@ -526,6 +526,25 @@
     .start-menu .menu-item:disabled:hover {
         background-color: transparent;
     }
+    .skybridge-overlay {
+        position: absolute;
+        top: 8px; /* Corresponds to start-menu padding */
+        left: 8px; /* Corresponds to start-menu padding */
+        width: calc(4 * 52px + 3 * 8px); /* 4 columns + 3 gaps */
+        height: 52px; /* 1 row */
+        background-color: rgba(30, 30, 30, 0.33);
+        backdrop-filter: blur(1px);
+        color: white;
+        font-weight: bold;
+        font-size: 13px;
+        letter-spacing: 0.5px;
+        border-radius: 6px;
+        z-index: 5;
+        pointer-events: none; /* Let clicks pass through to disabled buttons */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
     .menu-badge {
         position: absolute;
         top: 4px;
@@ -634,20 +653,23 @@
         <button class="start-button" class:connected={$connectionStatus === 'connected'} bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }} title="SKY Menu"><img src="/skyboards.png" alt="SKY Menu"></button>
         {#if showMenu}
             <div class="start-menu" style={menuBackgroundStyle}>
+                {#if $connectionStatus !== 'connected'}
+                    <div class="skybridge-overlay">SKYBRIDGE REQUIRED</div>
+                {/if}
                 <!-- Top Row -->
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Ask">?</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBox(); showMenu = false; }} disabled={$connectionStatus !== 'connected'} title="New Box">📦</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer({ sourceEvent: e }); }} disabled={$connectionStatus != 'connected'} title="Files">📁</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalTerminal({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Terminal">&gt;_</button>
-
-                <!-- Bottom Row -->
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchSettings({ sourceEvent: e }); }} title="Settings">⚙️</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchCalculator({ sourceEvent: e }); }} title="Calculator">🧮</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebBrowser({ sourceEvent: e }); showMenu = false; }} title="Web Browser">🌐</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">
                     🖥️
-            <img class="menu-badge" src="/iosk.png" alt="IOSK" />
+                    <img class="menu-badge" src="/iosk.png" alt="IOSK" />
                 </button>
+
+                <!-- Bottom Row -->
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Ask">?</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBox(); showMenu = false; }} disabled={$connectionStatus !== 'connected'} title="New Box">📦</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Files">📁</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalTerminal({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Terminal">&gt;_</button>
             </div>
         {/if}
     </div>
