@@ -593,8 +593,22 @@
     }
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
     .menu-item-empty { padding: 10px 15px; color: #7f8c8d; font-style: italic; }
-    .menu-item.close-all { color: #e74c3c; border-top: 1px solid var(--border-color); border-bottom: none; }
-    .menu-item.close-all:hover { background-color: #c0392b; color: white; }
+    .close-all-row {
+        cursor: pointer;
+        border-top: 1px solid var(--border-color);
+        border-bottom: none;
+    }
+    .close-all-row .menu-item {
+        color: #e74c3c;
+    }
+    .close-all-row:hover {
+        background-color: #c0392b;
+        color: white;
+    }
+    /* When hovering the entire "Close All" row, highlight the 'x' button too */
+    .close-all-row:hover .menu-item-close {
+        background-color: #e0443e;
+    }
     .start-button, .windows-list-button { position: relative; }
     .start-button::after, .windows-list-button::after { content: ''; position: absolute; bottom: 0px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
     .start-button::after { right: 5px; }
@@ -631,7 +645,12 @@
                 {:else}
                     <span class="menu-item-empty">No open windows</span>
                 {/each}
-                {#if $windows.length > 0}<button class="menu-item close-all" on:click={handleCloseAllClick}>Close All</button>{/if}
+                {#if $windows.length > 0}
+                    <div class="menu-item-row close-all-row" on:click={handleCloseAllClick}>
+                        <div class="menu-item-close">✕</div>
+                        <div class="menu-item">Close All</div>
+                    </div>
+                {/if}
             </div>
         {/if}
     </div>
