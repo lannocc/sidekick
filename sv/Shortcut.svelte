@@ -80,7 +80,7 @@
         user-select: none;
         padding: 4px;
         border-radius: 4px;
-        transition: background-color 0.1s ease-in-out, transform 0.1s ease-out;
+        transition: background-color 0.1s ease-in-out;
         pointer-events: auto;
         border: 1px solid transparent;
         /* Position is now handled by transform, so set top/left to 0 */
