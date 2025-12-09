@@ -64,19 +64,19 @@
     }
 
     $: state = isExpanded ? 'active' : 'inactive';
-    
+
     $: frameSettings = $desktopSettings.boxes?.frame?.[state];
     $: frameStyle = generateBgStyle(frameSettings);
-    $: frameWidth = frameSettings?.width ?? 0;
+    $: frameWidth = frameSettings?.width ?? 0; // This is the box's internal frame width. It's correct to keep this name.
     $: frameOpacity = frameSettings?.opacity ?? 1.0;
     $: boxShadowStyle = frameSettings?.shadowEnabled
         ? `${frameSettings.shadowInset ? 'inset ' : ''}${frameSettings.shadowX}px ${frameSettings.shadowY}px ${frameSettings.shadowBlur}px ${frameSettings.shadowSpread}px ${frameSettings.shadowColor}`
         : 'none';
-    
+
     $: sceneSettings = $desktopSettings.boxes?.scene?.[state];
     $: sceneStyle = generateBgStyle(sceneSettings);
     $: sceneOpacity = sceneSettings?.opacity ?? 1.0;
-    
+
     // Cloak uses 'inactive' settings since it's only visible when the box is folded/inactive
     $: cloakSettings = $desktopSettings.boxes?.cloak?.inactive;
     $: cloakStyle = generateBgStyle(cloakSettings);
@@ -204,10 +204,14 @@
     const BASE_WIDTH = 180;
 
     $: taskbarHeight = $desktopSettings.sky?.frame?.height ?? TASKBAR_HEIGHT;
-    $: frameWidth = $desktopSettings.sky?.frame?.width ?? 0;
+    // --- FIX START ---
+    // Renamed to avoid conflict with the box's own internal `frameWidth`
+    $: desktopSideFrameWidth = $desktopSettings.sky?.frame?.width ?? 0;
 
     // The dynamic calculation becomes a fallback for older boxes without a stored ratio
-    $: dynamicAspectRatio = (innerHeight > 0 && innerWidth > 0) ? (innerHeight - taskbarHeight) / innerWidth : 0;
+    // Corrected to use the actual desktop area width
+    $: dynamicAspectRatio = (innerHeight > 0 && innerWidth > 0) ? (innerHeight - taskbarHeight) / (innerWidth - 2 * desktopSideFrameWidth) : 0;
+    // --- FIX END ---
     $: aspectRatio = box.aspect_ratio ?? dynamicAspectRatio;
 
     $: boxWidth = BASE_WIDTH * scale;
@@ -218,7 +222,10 @@
     // --- Positioning Logic ---
     $: transform = `translate(${$desktopView.panX}px, ${$desktopView.panY}px) scale(${$desktopView.zoom}) translate(${x}px, ${y}px)`;
     $: fixedTop = isExpanded ? (y * $desktopView.zoom) + $desktopView.panY + taskbarHeight : null;
-    $: fixedLeft = isExpanded ? (x * $desktopView.zoom) + $desktopView.panX + frameWidth : null;
+    // --- FIX START ---
+    // Use the correctly-named desktop side frame width for positioning
+    $: fixedLeft = isExpanded ? (x * $desktopView.zoom) + $desktopView.panX + desktopSideFrameWidth : null;
+    // --- FIX END ---
 
     let saveTransformTimeout;
     let clickTimeout = null;
