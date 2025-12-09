@@ -81,8 +81,8 @@
     $: coverImageUrl = (() => {
         if (!coverPanelLocation || !panels) return null;
         const coverPanel = panels[coverPanelLocation];
-        if (coverPanel?.panel_type === 'image' && coverPanel.panel_config?.url) {
-            return coverPanel.panel_config.url;
+        if (coverPanel?.board_type === 'image' && coverPanel.board_config?.url) {
+            return coverPanel.board_config.url;
         }
         return null;
     })();
@@ -511,7 +511,7 @@
         const panelKey = `${loc_x}_${loc_y}`;
         const panelConfig = panels[panelKey];
 
-        if (isAvailableSlot || !panelConfig || panelConfig.panel_type === 'empty') {
+        if (isAvailableSlot || !panelConfig || panelConfig.board_type === 'empty') {
             event.stopPropagation();
             const { panX, panY, zoom } = get(desktopView);
             panelPickerProps = {
@@ -522,14 +522,14 @@
             };
             showPanelPicker = true;
         } else {
-            const { panel_type, panel_config } = panelConfig;
+            const { board_type, board_config } = panelConfig;
 
-            if (panel_type === 'image') {
-                if (panel_config?.url) newWebBrowser({ initialUrl: panel_config.url });
-            } else if (panel_type === 'window' || panel_type === 'tabs') {
-                windows.restoreWindow(panel_config);
-            } else if (panel_type === 'dash' && panel_config?.windowGroups) {
-                for (const group of panel_config.windowGroups) {
+            if (board_type === 'image') {
+                if (board_config?.url) newWebBrowser({ initialUrl: board_config.url });
+            } else if (board_type === 'window' || board_type === 'tabs') {
+                windows.restoreWindow(board_config);
+            } else if (board_type === 'dash' && board_config?.windowGroups) {
+                for (const group of board_config.windowGroups) {
                     windows.restoreWindow(group);
                 }
             }
@@ -693,7 +693,7 @@
 
     /* Unfold EXISTING side panels on click */
     .box.is-unfolded .panel:not(.center):not(.is-empty) {
-        opacity: 1;
+        opacity: var(--frame-opacity);
         transform: var(--pos-transform, translate(0,0));
         pointer-events: auto;
         transition-delay: var(--unfold-delay, 0s);
@@ -701,7 +701,7 @@
 
     /* Make VISIBLE empty slots interactive */
     .box.is-unfolded .panel.is-empty.is-visible {
-        opacity: 1;
+        opacity: var(--frame-opacity);
         pointer-events: auto;
         transition-delay: var(--unfold-delay, 0s);
     }
@@ -836,6 +836,7 @@
     on:scale
 >
     <!-- Default Cloak (visible when folded) -->
+    {#if !coverImageUrl}
     <div 
         class="box-cloak" 
         style:background={cloakStyle} 
@@ -844,11 +845,10 @@
         on:click|self={e => handlePanelClick(e, 0, 0)}
         on:contextmenu={e => handlePanelRightClick(e, 0, 0)}
     >
-        {#if !coverImageUrl}
-            <div class="box-name">{box.name}</div>
-            <div class="box-context" title={box.context}>{box.context}</div>
-        {/if}
+        <div class="box-name">{box.name}</div>
+        <div class="box-context" title={box.context}>{box.context}</div>
     </div>
+    {/if}
 
     <!-- User-defined Cover Image (also visible when folded) -->
     {#if coverImageUrl}
@@ -865,7 +865,7 @@
             style:--pos-transform="translateX({panel.loc_x * 105}%) translateY({panel.loc_y * 105}%)"
             style:--unfold-delay="{(panel.distance - 1) * 75}ms"
             style:background={frameStyle}
-            style:opacity={frameOpacity}
+            style:--frame-opacity={frameOpacity}
             style:box-shadow={boxShadowStyle}
             style:padding="{frameWidth}px"
             class:drop-target={isDropTarget(panel.loc_x, panel.loc_y)}
@@ -877,7 +877,7 @@
             on:drop={e => handleDrop(e, panel.loc_x, panel.loc_y, parent)}
         >
             <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
-                <Panel panel_type={panel.panel_type} panel_config={panel.panel_config} />
+                <Panel board_type={panel.board_type} board_config={panel.board_config} />
             </div>
         </div>
     {/each}
@@ -891,7 +891,7 @@
             style:--pos-transform="translateX({slot.x * 105}%) translateY({slot.y * 105}%)"
             style:--unfold-delay="{(slot.distance - 1) * 75}ms"
             style:background={frameStyle}
-            style:opacity={frameOpacity}
+            style:--frame-opacity={frameOpacity}
             style:box-shadow={boxShadowStyle}
             style:padding="{frameWidth}px"
             class:drop-target={isDropTarget(slot.x, slot.y)}
@@ -924,7 +924,7 @@
     >
         <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
             {#if centerPanel}
-                <Panel panel_type={centerPanel.panel_type} panel_config={centerPanel.panel_config} />
+                <Panel board_type={centerPanel.board_type} board_config={centerPanel.board_config} />
             {:else}
                 <div class="box-name">{box.name}</div>
                 <div class="box-context" title={box.context}>{box.context}</div>
