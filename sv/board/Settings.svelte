@@ -26,15 +26,39 @@
     let activeSkySubTab = 'scene';
     let activeWindowDetailTab = 'scene';
     let activeBackBoardDetailTab = 'scene';
-    let inactiveTransparency, activeTransparency;
+    let activeBoxDetailTab = 'scene';
     let normalWindowPresence = {};
     let backWindowPresence = {};
+    let boxPresence = {};
     let skyScenePresence, skyFramePresence, skyCloakPresence;
 
 
+    // Ensure the settings object has the required structure for boxes
     $: if (settings && settings.boxes) {
-        inactiveTransparency = Math.round((1 - (settings.boxes.inactiveOpacity ?? 0.8)) * 100);
-        activeTransparency = Math.round((1 - (settings.boxes.activeOpacity ?? 1.0)) * 100);
+        const boxes = settings.boxes;
+        for (const part of ['scene', 'frame', 'cloak']) {
+            if (typeof boxes[part] !== 'object' || boxes[part] === null) boxes[part] = {};
+            if (typeof boxes[part].active !== 'object' || boxes[part].active === null) boxes[part].active = {};
+            if (typeof boxes[part].inactive !== 'object' || boxes[part].inactive === null) boxes[part].inactive = {};
+        }
+    }
+
+    $: if (settings && settings.boxes) {
+        const boxes = settings.boxes;
+        boxPresence = {
+            scene: {
+                inactive: Math.round((boxes.scene?.inactive?.opacity ?? 0.8) * 100),
+                active: Math.round((boxes.scene?.active?.opacity ?? 1.0) * 100),
+            },
+            frame: {
+                inactive: Math.round((boxes.frame?.inactive?.opacity ?? 1.0) * 100),
+                active: Math.round((boxes.frame?.active?.opacity ?? 1.0) * 100),
+            },
+            cloak: {
+                inactive: Math.round((boxes.cloak?.inactive?.opacity ?? 1.0) * 100),
+                active: Math.round((boxes.cloak?.active?.opacity ?? 1.0) * 100),
+            }
+        };
     }
 
     // Ensure the settings object has the required structure for sky
@@ -130,17 +154,10 @@
         desktopSettings.set(settings);
     }
 
-    function handleInactiveTransparency(e) {
+    function handleBoxPresence(e, part, state) {
         const value = Number(e.target.value);
-        inactiveTransparency = value;
-        settings.boxes.inactiveOpacity = 1 - (value / 100);
-        handleUpdate();
-    }
-
-    function handleActiveTransparency(e) {
-        const value = Number(e.target.value);
-        activeTransparency = value;
-        settings.boxes.activeOpacity = 1 - (value / 100);
+        boxPresence[part][state] = value;
+        settings.boxes[part][state].opacity = value / 100;
         handleUpdate();
     }
 
@@ -568,67 +585,111 @@
                 </fieldset>
             {/if}
         {/if}
-        {#if activeTab === 'boxes'}
-            <h2>Boxes Appearance</h2>
-             <fieldset>
-                <legend>Scene</legend>
-                <div>
-                    <label><input type="radio" bind:group={settings.boxes.bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
-                    {#if settings.boxes.bgType === 'gradient'}
-                    <div class="options-group">
-                        <label class="color-picker-label">
-                            <span>Start Color</span>
-                            <input type="color" bind:value={settings.boxes.bgGradientStart} on:input={handleUpdate}>
-                        </label>
-                        <label class="color-picker-label">
-                            <span>End Color</span>
-                            <input type="color" bind:value={settings.boxes.bgGradientEnd} on:input={handleUpdate}>
-                        </label>
+        {#if activeTab === 'boxes' && settings.boxes}
+            <div class="sub-tabs">
+                <button class="sub-tab-button" class:active={activeBoxDetailTab === 'scene'} on:click={() => activeBoxDetailTab = 'scene'}>Scene</button>
+                <button class="sub-tab-button" class:active={activeBoxDetailTab === 'frame'} on:click={() => activeBoxDetailTab = 'frame'}>Frame</button>
+                <button class="sub-tab-button" class:active={activeBoxDetailTab === 'cloak'} on:click={() => activeBoxDetailTab = 'cloak'}>Cloak</button>
+            </div>
+
+            {#each ['scene', 'frame', 'cloak'] as part}
+                {#if activeBoxDetailTab === part}
+                    <h2>Box: {part.charAt(0).toUpperCase() + part.slice(1)} Appearance</h2>
+                    <div class="two-column-layout">
+                        {#each ['inactive', 'active'] as state}
+                            <div class="column">
+                                <h3>{state.charAt(0).toUpperCase() + state.slice(1)} State</h3>
+
+                                <label class="color-picker-label">
+                                    <span>Presence ({boxPresence[part]?.[state] ?? 100}%)</span>
+                                    <input type="range" min="0" max="100" step="1" value={boxPresence[part]?.[state] ?? 100} on:input={(e) => handleBoxPresence(e, part, state)}>
+                                </label>
+
+                                {#if part === 'frame'}
+                                    <label class="color-picker-label">
+                                        <span>Height (px)</span>
+                                        <input class="text-input" type="number" bind:value={settings.boxes[part][state].height} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
+                                    </label>
+                                    <label class="color-picker-label">
+                                        <span>Width (px)</span>
+                                        <input class="text-input" type="number" bind:value={settings.boxes[part][state].width} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
+                                    </label>
+                                {/if}
+
+                                <fieldset class="borderless-fieldset" disabled={boxPresence[part]?.[state] === 0}>
+                                    <div>
+                                        <label><input type="radio" bind:group={settings.boxes[part][state].bgType} value="gradient" on:change={handleUpdate}> Gradient</label>
+                                        {#if settings.boxes[part][state].bgType === 'gradient'}
+                                        <div class="options-group">
+                                            <label class="color-picker-label"><span>Start Color</span><input type="color" bind:value={settings.boxes[part][state].bgGradientStart} on:input={handleUpdate}></label>
+                                            <label class="color-picker-label"><span>End Color</span><input type="color" bind:value={settings.boxes[part][state].bgGradientEnd} on:input={handleUpdate}></label>
+                                        </div>
+                                        {/if}
+                                    </div>
+                                    <div>
+                                        <label><input type="radio" bind:group={settings.boxes[part][state].bgType} value="color" on:change={handleUpdate}> Solid Color</label>
+                                        {#if settings.boxes[part][state].bgType === 'color'}
+                                        <div class="options-group">
+                                            <label class="color-picker-label"><span>Color</span><input type="color" bind:value={settings.boxes[part][state].bgColor} on:input={handleUpdate}></label>
+                                        </div>
+                                        {/if}
+                                    </div>
+                                    <div>
+                                        <label><input type="radio" bind:group={settings.boxes[part][state].bgType} value="image" on:change={handleUpdate}> Image</label>
+                                        {#if settings.boxes[part][state].bgType === 'image'}
+                                        <div class="options-group">
+                                            <label><input class="text-input" type="text" bind:value={settings.boxes[part][state].bgImage} on:input={handleUpdate} placeholder="Enter Image URL..."></label>
+                                            <label class="color-picker-label">
+                                                <span>Display Mode</span>
+                                                <select class="select-input" bind:value={settings.boxes[part][state].bgImageDisplayMode} on:change={handleUpdate}>
+                                                    <option value="cover">Cover</option><option value="contain">Fit</option><option value="stretch">Stretch</option><option value="tile">Tile</option>
+                                                </select>
+                                            </label>
+                                        </div>
+                                        {/if}
+                                    </div>
+                                </fieldset>
+                                
+                                {#if part === 'frame'}
+                                    <fieldset>
+                                        <legend>Shadow / Glow</legend>
+                                        <label>
+                                            <input type="checkbox" bind:checked={settings.boxes.frame[state].shadowEnabled} on:change={handleUpdate}>
+                                            Enable Shadow
+                                        </label>
+                                        <fieldset class="borderless-fieldset" disabled={!settings.boxes.frame[state].shadowEnabled}>
+                                            <label class="color-picker-label">
+                                                <span>Color</span>
+                                                <input type="color" bind:value={settings.boxes.frame[state].shadowColor} on:input={handleUpdate}>
+                                            </label>
+                                            <label class="color-picker-label">
+                                                <span>X Offset (px)</span>
+                                                <input class="text-input" type="number" bind:value={settings.boxes.frame[state].shadowX} on:input={handleUpdate} step="1" style="width: 80px;">
+                                            </label>
+                                            <label class="color-picker-label">
+                                                <span>Y Offset (px)</span>
+                                                <input class="text-input" type="number" bind:value={settings.boxes.frame[state].shadowY} on:input={handleUpdate} step="1" style="width: 80px;">
+                                            </label>
+                                            <label class="color-picker-label">
+                                                <span>Blur (px)</span>
+                                                <input class="text-input" type="number" bind:value={settings.boxes.frame[state].shadowBlur} on:input={handleUpdate} min="0" step="1" style="width: 80px;">
+                                            </label>
+                                            <label class="color-picker-label">
+                                                <span>Spread (px)</span>
+                                                <input class="text-input" type="number" bind:value={settings.boxes.frame[state].shadowSpread} on:input={handleUpdate} step="1" style="width: 80px;">
+                                            </label>
+                                            <label>
+                                                <input type="checkbox" bind:checked={settings.boxes.frame[state].shadowInset} on:change={handleUpdate}>
+                                                Inset Shadow
+                                            </label>
+                                        </fieldset>
+                                    </fieldset>
+                                {/if}
+                            </div>
+                        {/each}
                     </div>
-                    {/if}
-                </div>
-                <div>
-                     <label><input type="radio" bind:group={settings.boxes.bgType} value="color" on:change={handleUpdate}> Solid Color</label>
-                    {#if settings.boxes.bgType === 'color'}
-                    <div class="options-group">
-                         <label class="color-picker-label">
-                            <span>Color</span>
-                            <input type="color" bind:value={settings.boxes.bgColor} on:input={handleUpdate}>
-                        </label>
-                    </div>
-                    {/if}
-                </div>
-                 <div>
-                    <label><input type="radio" bind:group={settings.boxes.bgType} value="image" on:change={handleUpdate}> Image</label>
-                    {#if settings.boxes.bgType === 'image'}
-                    <div class="options-group">
-                        <label>
-                            <input class="text-input" type="text" bind:value={settings.boxes.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
-                        </label>
-                        <label class="color-picker-label">
-                            <span>Display Mode</span>
-                            <select class="select-input" bind:value={settings.boxes.bgImageDisplayMode} on:change={handleUpdate}>
-                                <option value="cover">Cover</option>
-                                <option value="contain">Fit</option>
-                                <option value="stretch">Stretch</option>
-                                <option value="tile">Tile</option>
-                            </select>
-                        </label>
-                    </div>
-                    {/if}
-                </div>
-            </fieldset>
-            <fieldset>
-                <legend>Transparency</legend>
-                <label class="color-picker-label">
-                    <span>Inactive ({inactiveTransparency}%)</span>
-                    <input type="range" min="0" max="100" step="1" value={inactiveTransparency} on:input={handleInactiveTransparency}>
-                </label>
-                <label class="color-picker-label">
-                    <span>Active ({activeTransparency}%)</span>
-                    <input type="range" min="0" max="100" step="1" value={activeTransparency} on:input={handleActiveTransparency}>
-                </label>
-            </fieldset>
+                {/if}
+            {/each}
         {/if}
         {#if activeTab === 'backBoard' && settings.windows}
             <div class="sub-tabs">
