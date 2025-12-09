@@ -15,10 +15,10 @@
 
     let showWindowsMenu = false; // For Windows list menu
     let windowsButton;
-    
+
     let screenWidth;
     let menuBackgroundStyle = '';
-    
+
     $: tbSettings = $desktopSettings.sky?.frame;
     $: tbHeight = tbSettings?.height || 40;
 
@@ -118,12 +118,12 @@
 
         // The width of the desktop container in screen pixels
         const screenDesktopWidth = screenWidth - (2 * frameWidth);
-        
+
         // Center of window relative to the desktop container
         const windowCenterInDesktop = screenWinX + screenWinWidth / 2;
 
         // Progress of the window's center across the desktop container
-        const progress = screenDesktopWidth > 0 
+        const progress = screenDesktopWidth > 0
             ? Math.max(0, Math.min(1, windowCenterInDesktop / screenDesktopWidth))
             : 0.5;
 
@@ -132,12 +132,12 @@
         const rightAlignedPos = screenWinX + screenWinWidth - buttonWidth + frameWidth;
 
         let idealLeft = leftAlignedPos * (1 - progress) + rightAlignedPos * progress;
-        
+
         // Clamp the ideal position to be above the desktop area, respecting side frames.
         // This provides a much better starting point for the collision logic.
         const desktopScreenRight = screenWidth - frameWidth;
         idealLeft = Math.max(frameWidth, Math.min(idealLeft, desktopScreenRight - buttonWidth));
-        
+
         return idealLeft;
     }
 
@@ -152,7 +152,7 @@
         const screenWinY = winY * $windowView.zoom + $windowView.panY;
         const screenWinHeight = (winHeight || 0) * $windowView.zoom;
         const screenDesktopHeight = window.innerHeight - th - bottomFrameHeight;
-        
+
         // This logic treats the button as a minimap of the window's vertical position
         // by mapping the window's movable range to the button's movable range.
         const windowMovableSpace = screenDesktopHeight - screenWinHeight;
@@ -165,7 +165,7 @@
         // Calculate progress of the window within its movable space
         const progress = Math.max(0, Math.min(1, screenWinY / windowMovableSpace));
         const idealTop = progress * buttonMovableSpace;
-        
+
         return Math.max(0, Math.min(idealTop, th - buttonHeight));
     }
 
@@ -208,12 +208,12 @@
                 for (let i = 0; i < 50; i++) { // Failsafe iteration limit
                     top = Math.max(0, Math.min(top, tbHeight - item.height)); // Clamp top
                     const currentRect = { left, top, right: left + item.width, bottom: top + item.height };
-                    
+
                     const collisionIndex = placedRects.findIndex(r => intersects(currentRect, r));
                     if (collisionIndex === -1) break; // Found a spot
 
                     const collision = placedRects[collisionIndex];
-                    
+
                     if (collisionIndex === 2) { // 0: left, 1: center, 2: right
                         left = collision.left - item.width; // Push left of the boundary
                         top = item.idealTop; // Reset vertical position to try again
@@ -232,11 +232,11 @@
                         top = collision.bottom + GAP; // Vertically blocked, move down to stack
                     }
                 }
-                
+
                 newLayouts[item.id] = { left, top };
                 placedRects.push({ left, top, right: left + item.width, bottom: top + item.height });
             }
-            
+
             taskItemLayouts = newLayouts;
         }
     } else if ($windows.length === 0) {
@@ -258,7 +258,7 @@
                 windows.toggleCloak(win.id);
                 return;
             }
-            
+
             const timeout = setTimeout(() => {
                 middleClickTimeouts.delete(win.id);
             }, 250);
@@ -272,7 +272,7 @@
                 if (Math.abs(dx) > 3 || Math.abs(dy) > 3) { // Drag threshold
                     clearTimeout(middleClickTimeouts.get(win.id));
                     middleClickTimeouts.delete(win.id);
-                    
+
                     window.removeEventListener('mousemove', onMove);
                     window.removeEventListener('mouseup', onUp);
 
@@ -288,7 +288,7 @@
 
                     window.addEventListener('mousemove', handleDragMove);
                     window.addEventListener('mouseup', handleDragEnd, { once: true });
-                    
+
                     handleDragMove(moveEvent);
                 }
             };
@@ -296,7 +296,7 @@
             const onUp = () => {
                 window.removeEventListener('mousemove', onMove);
             };
-            
+
             window.addEventListener('mousemove', onMove);
             // Fix #1: Make onUp listener self-removing for robustness
             window.addEventListener('mouseup', onUp, { once: true });
@@ -334,7 +334,7 @@
             const winHeight = win.maximized && typeof win.prevHeight === 'number' ? win.prevHeight : win.height;
             const screenWinHeight = (winHeight || 0) * view.zoom;
             const windowMovableSpace = screenDesktopHeight - screenWinHeight;
-            
+
             const scaleY = buttonMovableSpace > 0 && windowMovableSpace > 0
                 ? windowMovableSpace / buttonMovableSpace
                 : 1;
@@ -458,8 +458,9 @@
     .taskbar-left > .windows-button:first-child:hover { background-color: #e0443e; }
     .taskbar-left > .windows-button:nth-child(2) { background-color: #ffbd2e; border-color: #e0a320; color: white; }
     .taskbar-left > .windows-button:nth-child(2):hover { background-color: #e0a320; }
-    .start-button { background-color: #3498db; border: 1px solid #2980b9; color: white; transition: box-shadow 0.3s ease-in-out; }
+    .start-button { background-color: #3498db; border: 1px solid #2980b9; color: white; transition: box-shadow 0.3s ease-in-out; padding: 4px; }
     .start-button:hover { background-color: #2980b9; }
+    .start-button img { height: 100%; display: block; object-fit: contain; }
     @keyframes sky-glow {
         50% { border-color: #5dade2; box-shadow: 0 0 12px 3px #5dade2; }
     }
@@ -474,10 +475,15 @@
         font-weight: bold;
         cursor: pointer;
         height: calc(var(--tb-height, 40px) * 0.7);
-        padding: 0 calc(var(--tb-height, 40px) * 0.25);
         font-size: calc(var(--tb-height, 40px) * 0.35);
         border-radius: calc(var(--tb-height, 40px) * 0.1);
         border: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .windows-button, .quick-launch-button {
+        padding: 0 calc(var(--tb-height, 40px) * 0.25);
     }
     .windows-button { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); }
     .windows-button:hover { background-color: var(--taskbar-button-hover-bg); }
@@ -498,11 +504,11 @@
     .start-button::after, .windows-list-button::after { content: ''; position: absolute; bottom: 0px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
     .start-button::after { right: 5px; }
     .windows-list-button::after { left: 5px; }
-    
+
     /* Scalable clock */
     .clock-button { background: none; border: none; color: inherit; padding: 0; cursor: pointer; position: relative; border-radius: 4px; display: flex; align-items: center; justify-content: center; width: calc(var(--tb-height, 40px) - 6px); height: calc(var(--tb-height, 40px) - 6px); }
     .clock-button:hover { background-color: var(--taskbar-button-hover-bg); }
-    
+
     .notice-badge { position: absolute; top: 0px; right: 0px; background-color: #e74c3c; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; font-weight: bold; display: flex; align-items: center; justify-content: center; line-height: 1; border: 1px solid var(--taskbar-bg); }
 
     /* New styles for tab representation */
@@ -588,7 +594,7 @@
     </div>
     <div class="taskbar-right" bind:this={rightSectionEl}>
         <button class="quick-launch-button" on:click|stopPropagation={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">$+</button>
-        <button class="start-button" class:connected={$connectionStatus === 'connected'} bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }}>SKY</button>
+        <button class="start-button" class:connected={$connectionStatus === 'connected'} bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }} title="SKY Menu"><img src="/skyboards.png" alt="SKY Menu"></button>
         {#if showMenu}
             <div class="start-menu" style={menuBackgroundStyle}>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchSettings({ sourceEvent: e }); }}>Settings</button>
@@ -606,3 +612,4 @@
         {/if}
     </div>
 </div>
+
