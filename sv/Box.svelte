@@ -26,7 +26,6 @@
     $: coverPanelLocation = box.cover_panel_location;
     $: canSetCover = !coverPanelLocation;
     $: isSelected = $selectedItems.has(`box-${box.id}`);
-    $: maxWindowZ = Math.max(100, ...$windows.map(w => w.zIndex));
 
     // --- Unfold State ---
     let isUnfolded = false;
@@ -787,7 +786,7 @@
         border: 1px solid var(--border-color);
         border-radius: 4px;
         box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        z-index: 10001;
+        z-index: 23000;
         display: flex;
         flex-direction: column;
         padding: 4px 0;
@@ -820,7 +819,7 @@
         border: 1px solid var(--border-color);
         border-radius: 4px;
         box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        z-index: 10001;
+        z-index: 23000;
         display: flex;
         flex-direction: column;
         padding: 4px 0;
@@ -868,7 +867,7 @@
     style:top="{y}px"
     style:width="{boxWidth}px"
     style:height="{boxHeight}px"
-    style:z-index={isExpanded ? maxWindowZ + 1 : 10}
+    style:z-index={isExpanded ? 21000 : 10}
     on:wheel={handleWheel}
     on:scale
 >

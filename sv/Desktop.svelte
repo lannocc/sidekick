@@ -1579,7 +1579,7 @@
         border: 1px solid var(--border-color);
         border-radius: 4px;
         box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        z-index: 10001; /* Above Dash */
+        z-index: 23000;
         display: flex;
         flex-direction: column;
         padding: 4px 0;
@@ -1647,7 +1647,7 @@
         position: absolute;
         top: 20px;
         right: 20px;
-        z-index: 10000;
+        z-index: 22000;
         display: flex;
         flex-direction: column;
         align-items: center;

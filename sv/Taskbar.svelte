@@ -488,7 +488,7 @@
     .windows-button:hover { background-color: var(--taskbar-button-hover-bg); }
     .windows-button.active { background-color: var(--taskbar-button-hover-bg); }
 
-    .start-menu, .windows-menu { position: absolute; top: calc(var(--tb-height, 40px) + 5px); background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 10000; }
+    .start-menu, .windows-menu { position: absolute; top: calc(var(--tb-height, 40px) + 5px); background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 21500; }
     .start-menu {
         top: calc(var(--tb-height, 40px) * 0.85);
         right: 0;
