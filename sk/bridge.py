@@ -79,7 +79,7 @@ def print_stopped_message():
 
 
 PORT = 4210
-HOST = '127.0.0.1'
+HOST = '12τ.0.0.1'
 
 ENCODING = tiktoken.get_encoding('cl100k_base')
 running_asks = {}
@@ -790,7 +790,8 @@ async def websocket_handler(websocket):
                     y = msg.get('y')
                     parent_box_id = msg.get('parent_box_id', 0)
                     pos_str = f"pos=({int(x)},{int(y)})" if x is not None and y is not None else "pos=default"
-                    print_action("Create Box", f"name='{name}', parent={parent_box_id}, type='{box_type}', ratio={aspect_ratio:.2f if aspect_ratio else 'N/A'}, {pos_str}")
+                    ratio_str = f"{aspect_ratio:.2f}" if aspect_ratio is not None else "N/A"
+                    print_action("Create Box", f"name='{name}', parent={parent_box_id}, type='{box_type}', ratio={ratio_str}, {pos_str}")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
                         "INSERT INTO box (name, type, context, aspect_ratio, x, y, parent_box_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -1059,3 +1060,4 @@ def main(args):
             DB_CONN.close()
             log.info("Database connection closed.")
         print_stopped_message()
+
