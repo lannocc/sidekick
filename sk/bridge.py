@@ -79,7 +79,7 @@ def print_stopped_message():
 
 
 PORT = 4210
-HOST = '12τ.0.0.1'
+HOST = '127.0.0.1'
 
 ENCODING = tiktoken.get_encoding('cl100k_base')
 running_asks = {}
