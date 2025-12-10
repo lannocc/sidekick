@@ -130,12 +130,11 @@ def init_db():
         );
     """)
 
+    # New schema for settings table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS settings (
-            box_id INTEGER NOT NULL,
-            key TEXT NOT NULL,
-            value TEXT NOT NULL,
-            PRIMARY KEY (box_id, key),
+            box_id INTEGER PRIMARY KEY,
+            config TEXT NOT NULL,
             FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
         );
     """)
@@ -171,18 +170,49 @@ def init_db():
         );
     """)
 
-    # --- Migration for parent_box_id ---
-    cursor.execute("PRAGMA table_info(box)")
-    columns = [row['name'] for row in cursor.fetchall()]
-    if 'parent_box_id' not in columns:
-        log.info("Migrating 'box' table: adding 'parent_box_id' column.")
-        try:
-            # Add column with foreign key constraint and set a default for existing rows
-            cursor.execute("ALTER TABLE box ADD COLUMN parent_box_id INTEGER REFERENCES box(id) ON DELETE CASCADE")
-            cursor.execute("UPDATE box SET parent_box_id = 0 WHERE id != 0")
-            log.info("Migration successful: 'parent_box_id' added and defaulted.")
-        except sqlite3.OperationalError as e:
-            log.error(f"Failed to migrate 'box' table for nesting. Manual intervention may be required. Error: {e}")
+    # --- Migration for settings table ---
+    try:
+        cursor.execute("PRAGMA table_info(settings)")
+        columns = [row['name'] for row in cursor.fetchall()]
+        if 'config' not in columns and 'key' in columns:
+            log.info("Migrating 'settings' table to new config format.")
+
+            # 1. Read old data
+            cursor.execute("SELECT box_id, key, value FROM settings")
+            old_data = cursor.fetchall()
+
+            box_configs = {}
+            for row in old_data:
+                box_id = row['box_id']
+                if box_id not in box_configs:
+                    box_configs[box_id] = {}
+                try:
+                    box_configs[box_id][row['key']] = json.loads(row['value'])
+                except (json.JSONDecodeError, TypeError):
+                    box_configs[box_id][row['key']] = row['value'] # Store as-is if not valid JSON
+
+            # 2. Drop old table and create new one
+            cursor.execute("DROP TABLE settings")
+            cursor.execute("""
+                CREATE TABLE settings (
+                    box_id INTEGER PRIMARY KEY,
+                    config TEXT NOT NULL,
+                    FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
+                );
+            """)
+
+            # 3. Insert converted data
+            for box_id, config_data in box_configs.items():
+                cursor.execute(
+                    "INSERT INTO settings (box_id, config) VALUES (?, ?)",
+                    (box_id, json.dumps(config_data))
+                )
+
+            DB_CONN.commit()
+            log.info("Migration successful: 'settings' table updated.")
+    except sqlite3.OperationalError:
+        # This can happen if the settings table does not exist at all, which is fine.
+        pass
     # --- End Migration ---
 
     # For new databases, create the default 'Main Desktop' box with id=0.
@@ -191,13 +221,12 @@ def init_db():
                    (0, 'Main Desktop', 'local', '.'))
 
     # Set default values for the main desktop (box_id=0) if they don't exist
-    cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'panX', json.dumps(0)))
-    cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'panY', json.dumps(0)))
-    cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'zoom', json.dumps(1.0)))
-
+    default_config = json.dumps({'panX': 0, 'panY': 0, 'zoom': 1.0})
+    cursor.execute("INSERT OR IGNORE INTO settings (box_id, config) VALUES (?, ?)", (0, default_config))
 
     DB_CONN.commit()
     log.info("SKYBRIDGE database initialized.")
+
 
 async def broadcast_box_list():
     """Fetches all boxes and broadcasts them to all connected clients."""
@@ -269,6 +298,7 @@ async def broadcast_box_config(box_id):
         log.info(f"Broadcasting box_config for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
+
 async def broadcast_settings(box_id):
     """Fetches settings for a given box and broadcasts them."""
     if not DB_CONN:
@@ -276,9 +306,10 @@ async def broadcast_settings(box_id):
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (box_id,))
-    settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
-
+    cursor.execute("SELECT config FROM settings WHERE box_id = ?", (box_id,))
+    row = cursor.fetchone()
+    settings = json.loads(row['config']) if row and row['config'] else {}
+    
     message = json.dumps({'type': 'desktop_settings', 'settings': settings, 'box_id': box_id})
 
     if CONNECTED_CLIENTS:
@@ -537,14 +568,13 @@ async def websocket_handler(websocket):
                 # --- Desktop Settings ---
                 elif msg_type == 'update_desktop_settings':
                     box_id = msg.get('box_id', 0)
-                    settings_to_update = msg.get('settings', {})
-                    print_action("Update Dsk Cfg", f"box={box_id}, {settings_to_update}")
+                    settings_blob = msg.get('settings', {})
+                    print_action("Update Dsk Cfg", f"box={box_id}")
                     cursor = DB_CONN.cursor()
-                    for key, value in settings_to_update.items():
-                        cursor.execute(
-                            "INSERT OR REPLACE INTO settings (box_id, key, value) VALUES (?, ?, ?)",
-                            (box_id, key, json.dumps(value))
-                        )
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO settings (box_id, config) VALUES (?, ?)",
+                        (box_id, json.dumps(settings_blob))
+                    )
                     DB_CONN.commit()
                     await broadcast_settings(box_id)
 
@@ -641,14 +671,19 @@ async def websocket_handler(websocket):
                     box_id = msg.get('box_id', 0)
                     print_action("Get Dsk Set", f"box={box_id}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (box_id,))
-                    settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
-                    # If no settings exist for this box, use defaults from box 0
-                    if not settings and box_id != 0:
-                        log.info(f"No settings for box {box_id}, using defaults from box 0.")
-                        cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (0,))
-                        settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
+                    
+                    cursor.execute("SELECT config FROM settings WHERE box_id = ?", (box_id,))
+                    row = cursor.fetchone()
 
+                    # If no settings exist for this box, use defaults from box 0
+                    if not row and box_id != 0:
+                        log.info(f"No settings for box {box_id}, using defaults from box 0.")
+                        cursor.execute("SELECT config FROM settings WHERE box_id = ?", (0,))
+                        row = cursor.fetchone()
+                    
+                    settings = json.loads(row['config']) if row and row['config'] else {}
+
+                    # Ensure defaults exist if config is partial/missing
                     if 'panX' not in settings: settings['panX'] = 0
                     if 'panY' not in settings: settings['panY'] = 0
                     if 'zoom' not in settings: settings['zoom'] = 1.0

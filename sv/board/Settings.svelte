@@ -4,10 +4,11 @@
 -->
 <script>
     import { get } from 'svelte/store';
-    import { desktopSettings, windowSettings } from '../desktop.js';
+    import { desktopSettings, windowSettings, currentBoxId } from '../desktop.js';
     import { windows } from '../windows.js';
     import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
     import { onDestroy } from 'svelte';
+    import { connectionStatus, boxes, saveSettingsToBox, getDesktopSettings, desktopSettingsResponse } from '../bridge.js';
 
     export let id;
     export let groupId;
@@ -18,9 +19,36 @@
         settings = JSON.parse(JSON.stringify(value));
     });
 
+    let settingsToLoadBoxId = null;
+    const unsubscribeResponse = desktopSettingsResponse.subscribe(msg => {
+        if (msg && msg.box_id === settingsToLoadBoxId) {
+            if (msg.settings && Object.keys(msg.settings).length > 0) {
+                desktopSettings.set(msg.settings);
+                // The reactive 'settings' variable will update automatically via its own subscription
+            } else {
+                console.warn(`Loaded settings from box ${settingsToLoadBoxId} were empty.`);
+            }
+            settingsToLoadBoxId = null; // Reset after handling
+        }
+    });
+
     onDestroy(() => {
         if (unsubscribe) unsubscribe();
+        if (unsubscribeResponse) unsubscribeResponse();
     });
+
+    let showSaveLoadMenu = false;
+
+    function handleLoad(boxId) {
+        settingsToLoadBoxId = boxId;
+        getDesktopSettings(boxId);
+        showSaveLoadMenu = false;
+    }
+    
+    function handleSave(boxId) {
+        saveSettingsToBox(boxId);
+        showSaveLoadMenu = false;
+    }
 
     let activeTab = 'general';
     let activeSkySubTab = 'scene';
@@ -153,6 +181,7 @@
 
     function handleUpdate() {
         desktopSettings.set(settings);
+        saveSettingsToBox(get(currentBoxId));
     }
 
     function handleBoxPresence(e, part, state) {
@@ -278,6 +307,86 @@
         color: #3498db;
         opacity: 1;
     }
+
+    .tabs-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 15px;
+    }
+    .tabs {
+        margin-bottom: 0;
+        border-bottom: none;
+    }
+
+    .settings-actions {
+        position: relative;
+    }
+
+    .menu-button {
+        background: none;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .menu-button:hover:not(:disabled) {
+        background-color: var(--taskbar-button-hover-bg);
+        border-color: var(--border-color);
+    }
+    .menu-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+    }
+    .menu-button img {
+        width: 16px;
+        height: 16px;
+        filter: invert(0.8);
+    }
+
+    .dropdown-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        background-color: var(--console-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        z-index: 10;
+        min-width: 200px;
+        padding: 5px 0;
+    }
+    .menu-header {
+        padding: 5px 10px;
+        font-size: 11px;
+        font-weight: bold;
+        text-transform: uppercase;
+        color: var(--taskbar-text);
+        opacity: 0.7;
+    }
+    .menu-item {
+        padding: 8px 15px;
+        cursor: pointer;
+        background: none;
+        border: none;
+        width: 100%;
+        text-align: left;
+        color: var(--taskbar-text);
+        font-size: 13px;
+    }
+    .menu-item:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .menu-divider {
+        height: 1px;
+        background-color: var(--border-color);
+        margin: 5px 0;
+    }
+
     h2 {
         margin: 0 0 10px 0;
         color: var(--title-bar-text);
@@ -399,12 +508,41 @@
 </style>
 
 <div class="settings-container">
-    <div class="tabs">
-        <button class="tab-button" class:active={activeTab === 'sky'} on:click={() => activeTab = 'sky'}>Sky</button>
-        <button class="tab-button" class:active={activeTab === 'boxes'} on:click={() => activeTab = 'boxes'}>Box</button>
-        <button class="tab-button" class:active={activeTab === 'backBoard'} on:click={() => activeTab = 'backBoard'}>Back Board</button>
-        <button class="tab-button" class:active={activeTab === 'window'} on:click={() => activeTab = 'window'}>Window</button>
-        <button class="tab-button" class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
+    <div class="tabs-container">
+        <div class="tabs">
+            <button class="tab-button" class:active={activeTab === 'sky'} on:click={() => activeTab = 'sky'}>Sky</button>
+            <button class="tab-button" class:active={activeTab === 'boxes'} on:click={() => activeTab = 'boxes'}>Box</button>
+            <button class="tab-button" class:active={activeTab === 'backBoard'} on:click={() => activeTab = 'backBoard'}>Back Board</button>
+            <button class="tab-button" class:active={activeTab === 'window'} on:click={() => activeTab = 'window'}>Window</button>
+            <button class="tab-button" class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
+        </div>
+        <div class="settings-actions">
+            <button 
+                class="menu-button"
+                on:click={() => showSaveLoadMenu = !showSaveLoadMenu}
+                disabled={$connectionStatus !== 'connected'}
+                title={$connectionStatus !== 'connected' ? 'SKYBRIDGE connection required' : 'Load/Save Settings'}
+            >
+                <img src="/skybox.png" alt="menu" />
+            </button>
+            {#if showSaveLoadMenu && $connectionStatus === 'connected'}
+                <div class="dropdown-menu">
+                    <div class="menu-header">Load From Box</div>
+                    {#each $boxes as box (box.id)}
+                        <button class="menu-item" on:click={() => handleLoad(box.id)} style:font-weight={$currentBoxId === box.id ? 'bold' : 'normal'}>
+                            {box.name}
+                        </button>
+                    {/each}
+                    <div class="menu-divider"></div>
+                    <div class="menu-header">Save To Box</div>
+                    {#each $boxes as box (box.id)}
+                         <button class="menu-item" on:click={() => handleSave(box.id)} style:font-weight={$currentBoxId === box.id ? 'bold' : 'normal'}>
+                            {box.name}
+                        </button>
+                    {/each}
+                </div>
+            {/if}
+        </div>
     </div>
 
     {#if settings}

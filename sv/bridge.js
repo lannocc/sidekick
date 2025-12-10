@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import { desktopView, TASKBAR_HEIGHT, currentBoxId } from './desktop.js';
+import { desktopSettings, desktopView, TASKBAR_HEIGHT, currentBoxId } from './desktop.js';
 
 const PORT = 4210;
 const URL = `ws://localhost:${PORT}`;
@@ -133,8 +133,13 @@ export function updateBoxTransform(id, x, y, scale) {
 export function setBoxCover(box_id, location) {
     sendMessage({ type: 'set_box_cover', box_id, location });
 }
-export function updateDesktopSettings(settings) {
-    sendMessage({ type: 'update_desktop_settings', settings, box_id: get(currentBoxId) });
+export function updateDesktopSettings(partialSettings) {
+    const newSettings = { ...get(desktopSettings), ...partialSettings };
+    desktopSettings.set(newSettings); // Update the store, which will trigger saves
+    sendMessage({ type: 'update_desktop_settings', settings: newSettings, box_id: get(currentBoxId) });
+}
+export function saveSettingsToBox(targetBoxId) {
+    sendMessage({ type: 'update_desktop_settings', settings: get(desktopSettings), box_id: targetBoxId });
 }
 export function updateShortcutTransform(id, x, y, scale) {
     sendMessage({ type: 'update_shortcut_transform', id, x, y, scale });
@@ -219,7 +224,14 @@ function attemptConnection() {
                 case 'desktop_settings':
                     desktopSettingsResponse.set(msg);
                     if (msg.box_id === get(currentBoxId)) {
-                        desktopView.set(msg.settings || { panX: 0, panY: 0, zoom: 1.0 });
+                        if (msg.settings && Object.keys(msg.settings).length > 0) {
+                            // This will set the entire theme and also trigger the derived
+                            // stores (desktopView, windowView) to update.
+                            desktopSettings.set(msg.settings);
+                        } else {
+                             // Fallback if backend sends empty settings for some reason
+                            desktopView.set({ panX: 0, panY: 0, zoom: 1.0 });
+                        }
                     }
                     break;
                 case 'shortcut_list':
