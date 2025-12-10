@@ -636,6 +636,40 @@ async def websocket_handler(websocket):
                         DB_CONN.commit()
                         await broadcast_backed_window_list(row['box_id'])
 
+                # --- Getters for Box Contents ---
+                elif msg_type == 'get_desktop_settings':
+                    box_id = msg.get('box_id', 0)
+                    print_action("Get Dsk Set", f"box={box_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (box_id,))
+                    settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
+                    # If no settings exist for this box, use defaults from box 0
+                    if not settings and box_id != 0:
+                        log.info(f"No settings for box {box_id}, using defaults from box 0.")
+                        cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (0,))
+                        settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
+
+                    if 'panX' not in settings: settings['panX'] = 0
+                    if 'panY' not in settings: settings['panY'] = 0
+                    if 'zoom' not in settings: settings['zoom'] = 1.0
+                    await websocket.send(json.dumps({'type': 'desktop_settings', 'settings': settings, 'box_id': box_id}))
+
+                elif msg_type == 'get_shortcut_list':
+                    box_id = msg.get('box_id', 0)
+                    print_action("Get Shortcuts", f"box={box_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("SELECT id, name, type, path, x, y, scale FROM shortcut WHERE box_id = ?", (box_id,))
+                    shortcuts = [dict(row) for row in cursor.fetchall()]
+                    await websocket.send(json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts, 'box_id': box_id}))
+
+                elif msg_type == 'get_backed_window_list':
+                    box_id = msg.get('box_id', 0)
+                    print_action("Get BackWins", f"box={box_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("SELECT id, config, x, y, width, height, scale, z_index, original_group_id FROM board WHERE box_id = ?", (box_id,))
+                    windows = [dict(row) for row in cursor.fetchall()]
+                    await websocket.send(json.dumps({'type': 'backed_window_list', 'windows': windows, 'box_id': box_id}))
+
 
                 # --- SKYBRIDGE Box Operations ---
                 elif msg_type == 'list_boxes':
