@@ -109,6 +109,76 @@
         }
     }
 
+    // --- New file and reset handlers ---
+    let fileInputEl;
+
+    function handleResetSettings() {
+        if (confirm('Are you sure you want to reset all current theme settings to their defaults? This will not affect any saved box settings.')) {
+            const currentViewSettings = {
+                panX: get(desktopSettings).panX,
+                panY: get(desktopSettings).panY,
+                zoom: get(desktopSettings).zoom,
+                windowPanX: get(desktopSettings).windowPanX,
+                windowPanY: get(desktopSettings).windowPanY,
+                windowZoom: get(desktopSettings).windowZoom,
+            };
+            const defaultSettings = mergeWithDefaults({}); // Get full default object
+            const newSettings = { ...defaultSettings, ...currentViewSettings };
+            desktopSettings.set(newSettings);
+        }
+    }
+
+    function triggerLoadFromFile() {
+        fileInputEl?.click();
+    }
+
+    function handleLoadFromFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const loadedTheme = JSON.parse(e.target.result);
+                const currentViewSettings = {
+                    panX: get(desktopSettings).panX,
+                    panY: get(desktopSettings).panY,
+                    zoom: get(desktopSettings).zoom,
+                    windowPanX: get(desktopSettings).windowPanX,
+                    windowPanY: get(desktopSettings).windowPanY,
+                    windowZoom: get(desktopSettings).windowZoom,
+                };
+                const combined = { ...loadedTheme, ...currentViewSettings };
+                const fullSettings = mergeWithDefaults(combined);
+                desktopSettings.set(fullSettings);
+            } catch (err) {
+                alert('Error parsing JSON file. Please check the file format.');
+                console.error('Error loading settings from file:', err);
+            }
+        };
+        reader.onerror = () => {
+            alert('Error reading file.');
+            console.error('FileReader error:', reader.error);
+        };
+        reader.readAsText(file);
+        event.target.value = ''; // Reset input
+    }
+
+    function handleSaveToFile() {
+        const themeSettings = getThemePart(get(desktopSettings));
+        const jsonString = JSON.stringify(themeSettings, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'skybridge-theme.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    // --- End new handlers ---
+
     let activeTab = 'general';
     let activeSkySubTab = 'scene';
     let activeWindowDetailTab = 'scene';
@@ -240,7 +310,6 @@
 
     function handleUpdate() {
         desktopSettings.set(settings);
-        saveSettingsToBox(get(currentBoxId));
     }
 
     function handleBoxPresence(e, part, state) {
@@ -381,6 +450,8 @@
 
     .settings-actions {
         position: relative;
+        display: flex;
+        gap: 4px;
     }
 
     .menu-button {
@@ -392,10 +463,15 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        color: var(--taskbar-text);
+        font-size: 16px;
+        line-height: 1;
+        opacity: 0.8;
     }
     .menu-button:hover:not(:disabled) {
         background-color: var(--taskbar-button-hover-bg);
         border-color: var(--border-color);
+        opacity: 1;
     }
     .menu-button:disabled {
         cursor: not-allowed;
@@ -663,22 +739,48 @@
             <button class="tab-button" class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
         </div>
         <div class="settings-actions">
-            <button 
+            <button
                 class="menu-button"
-                on:click={() => showSaveLoadMenu = !showSaveLoadMenu}
-                disabled={$connectionStatus !== 'connected'}
-                title={$connectionStatus !== 'connected' ? 'SKYBRIDGE connection required' : 'Manage Box Settings'}
+                on:click={handleResetSettings}
+                title="Reset current settings to default"
             >
-                <img src="/skybox.png" alt="menu" />
+                ↩️
             </button>
-            {#if showSaveLoadMenu && $connectionStatus === 'connected'}
-                <div class="dropdown-menu">
-                    <div class="menu-header">Manage Box Settings</div>
-                    {#each boxTree as box (box.id)}
-                        {@render renderBox(box, 0)}
-                    {/each}
-                </div>
-            {/if}
+            <button
+                class="menu-button"
+                on:click={triggerLoadFromFile}
+                title="Load settings from JSON file"
+            >
+                📤
+            </button>
+            <input type="file" accept=".json,.theme" style="display: none;" on:change={handleLoadFromFile} bind:this={fileInputEl} />
+            
+            <div style="position: relative;">
+                <button 
+                    class="menu-button"
+                    on:click={() => showSaveLoadMenu = !showSaveLoadMenu}
+                    disabled={$connectionStatus !== 'connected'}
+                    title={$connectionStatus !== 'connected' ? 'SKYBRIDGE connection required' : 'Manage Box Settings'}
+                >
+                    <img src="/skybox.png" alt="menu" />
+                </button>
+                {#if showSaveLoadMenu && $connectionStatus === 'connected'}
+                    <div class="dropdown-menu">
+                        <div class="menu-header">Manage Box Settings</div>
+                        {#each boxTree as box (box.id)}
+                            {@render renderBox(box, 0)}
+                        {/each}
+                    </div>
+                {/if}
+            </div>
+
+            <button
+                class="menu-button"
+                on:click={handleSaveToFile}
+                title="Save current settings to JSON file"
+            >
+                📥
+            </button>
         </div>
     </div>
 
