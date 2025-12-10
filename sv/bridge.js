@@ -155,12 +155,11 @@ export function saveSettingsToBox(targetBoxId) {
 export function clearSettingsForBox(targetBoxId) {
     sendMessage({ type: 'clear_box_settings', box_id: targetBoxId });
 
-    // If the currently active box was just cleared, the backend will broadcast
-    // the new settings state, which will be picked up by the onmessage handler.
-    // A direct fetch can also be done for immediacy if needed.
-    if (targetBoxId === get(currentBoxId)) {
-        getDesktopSettings(targetBoxId);
-    }
+    // After clearing settings, the backend broadcasts the new state. However, to prevent
+    // a race condition where the UI updates with has_custom_settings=false before the
+    // broadcast arrives, we explicitly request the new settings. This ensures the
+    // local settings cache (`allBoxSettings`) is updated promptly, resolving the stuck UI.
+    getDesktopSettings(targetBoxId);
 }
 export function updateShortcutTransform(id, x, y, scale) {
     sendMessage({ type: 'update_shortcut_transform', id, x, y, scale });
