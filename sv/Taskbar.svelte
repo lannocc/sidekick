@@ -5,8 +5,8 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, newBoxesWindow } from './windows.js';
-    import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems } from './desktop.js';
-    import { connectionStatus } from './bridge.js';
+    import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox } from './desktop.js';
+    import { connectionStatus, switchToBox, boxes } from './bridge.js';
     import Clock from './Clock.svelte';
     import { get } from 'svelte/store';
 
@@ -624,7 +624,34 @@
         <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>✕</button>
         <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">&mdash;</button>
         {#if showWindowsMenu}
+            {@const mainBox = $boxes.find(b => b.id === 0)}
             <div class="windows-menu" style={menuBackgroundStyle}>
+                <div class="menu-item-row">
+                    <button class="menu-item" 
+                        disabled={$connectionStatus !== 'connected' || $currentBoxId === 0}
+                        on:click={() => { if ($connectionStatus === 'connected') { switchToBox(0); showWindowsMenu = false; } }}>
+                        {mainBox ? mainBox.name : 'Main Desktop Box'}
+                    </button>
+                </div>
+
+                {#if $currentBoxId !== 0 && $currentBox}
+                    <div class="menu-item-row">
+                        <button class="menu-item-close" 
+                            on:click={() => { if ($connectionStatus === 'connected') { switchToBox(0); showWindowsMenu = false; } }} 
+                            disabled={$connectionStatus !== 'connected'}
+                            title="Return to Main Desktop">
+                            ✕
+                        </button>
+                        <button class="menu-item" disabled>
+                            {$currentBox.name}
+                        </button>
+                    </div>
+                {/if}
+
+                {#if $windows.length > 0}
+                    <div class="menu-separator"></div>
+                {/if}
+
                 {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
                     <div class="menu-item-row">
                         <button class="menu-item-close" on:click={() => windows.removeWindow(win.id)} title="Close window">✕</button>
@@ -638,7 +665,7 @@
                 {#if $windows.length > 0}
                     <div class="menu-item-row close-all-row" on:click={handleCloseAllClick}>
                         <button type="button" class="menu-item-close">✕</button>
-                        <button type="button" class="menu-item">Close All</button>
+                        <button type="button" class="menu-item">Close All Windows</button>
                     </div>
                 {/if}
             </div>
