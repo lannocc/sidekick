@@ -89,114 +89,6 @@ DB_CONN = None
 CONNECTED_CLIENTS = set()
 # --------------------
 
-def _run_migrations(cursor):
-    """Runs database migrations for existing databases."""
-    log.info("Checking for database migrations...")
-
-    # MIGRATION: Ensure default box with id=0 exists for FK constraints.
-    cursor.execute("INSERT OR IGNORE INTO box (id, name, type, context) VALUES (?, ?, ?, ?)",
-                   (0, 'Main Desktop', 'local', '.'))
-
-    # MIGRATION: Rename old tables if they exist.
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='desktop_shortcut'")
-    if cursor.fetchone():
-        log.info("Migrating: Renaming 'desktop_shortcut' to 'shortcut'.")
-        # Drop the empty placeholder table created by `init_db` to allow the rename.
-        cursor.execute("DROP TABLE IF EXISTS shortcut")
-        cursor.execute("ALTER TABLE desktop_shortcut RENAME TO shortcut")
-
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='desktop_settings'")
-    if cursor.fetchone():
-        log.info("Migrating: Renaming 'desktop_settings' to 'settings'.")
-        # Drop the empty placeholder table created by `init_db` to allow the rename.
-        cursor.execute("DROP TABLE IF EXISTS settings")
-        cursor.execute("ALTER TABLE desktop_settings RENAME TO settings")
-
-    # MIGRATION: Rename 'backed_window' to 'board'.
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='backed_window'")
-    if cursor.fetchone():
-        log.info("Migrating: Renaming 'backed_window' to 'board'.")
-        cursor.execute("DROP TABLE IF EXISTS board")
-        cursor.execute("ALTER TABLE backed_window RENAME TO board")
-
-    # MIGRATION: Add 'box_id' to 'shortcut' table.
-    cursor.execute("PRAGMA table_info(shortcut)")
-    if 'box_id' not in {row['name'] for row in cursor.fetchall()}:
-        log.info("Applying migration: Adding 'box_id' to 'shortcut' table.")
-        cursor.execute("ALTER TABLE shortcut RENAME TO _shortcut_old")
-        cursor.execute("""
-            CREATE TABLE shortcut (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                box_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                type TEXT NOT NULL CHECK(type IN ('file', 'dir')),
-                path TEXT NOT NULL,
-                x REAL NOT NULL,
-                y REAL NOT NULL,
-                scale REAL NOT NULL DEFAULT 1.0,
-                FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
-                UNIQUE(box_id, path)
-            );
-        """)
-        cursor.execute("INSERT INTO shortcut (id, box_id, name, type, path, x, y, scale) SELECT id, 0, name, type, path, x, y, scale FROM _shortcut_old")
-        cursor.execute("DROP TABLE _shortcut_old")
-        log.info("Migration successful.")
-
-    # MIGRATION: Add 'box_id' to 'settings' table.
-    cursor.execute("PRAGMA table_info(settings)")
-    if 'box_id' not in {row['name'] for row in cursor.fetchall()}:
-        log.info("Applying migration: Adding 'box_id' to 'settings' table.")
-        cursor.execute("ALTER TABLE settings RENAME TO _settings_old")
-        cursor.execute("""
-            CREATE TABLE settings (
-                box_id INTEGER NOT NULL,
-                key TEXT NOT NULL,
-                value TEXT NOT NULL,
-                PRIMARY KEY (box_id, key),
-                FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
-            );
-        """)
-        cursor.execute("INSERT INTO settings (box_id, key, value) SELECT 0, key, value FROM _settings_old")
-        cursor.execute("DROP TABLE _settings_old")
-        log.info("Migration successful.")
-
-
-    # MIGRATION: Add 'original_group_id' and 'box_id' to 'board' table.
-    cursor.execute("PRAGMA table_info(board)")
-    bw_columns = {row['name'] for row in cursor.fetchall()}
-    if 'box_id' not in bw_columns:
-        log.info("Applying migration: Adding 'box_id' to 'board' table.")
-        # Recreate the table to add the new column and foreign key.
-        cursor.execute("ALTER TABLE board RENAME TO _board_old")
-        cursor.execute("""
-            CREATE TABLE board (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                box_id INTEGER NOT NULL,
-                config TEXT NOT NULL,
-                x REAL NOT NULL,
-                y REAL NOT NULL,
-                width REAL NOT NULL,
-                height REAL NOT NULL,
-                scale REAL NOT NULL DEFAULT 1.0,
-                z_index INTEGER NOT NULL DEFAULT 0,
-                original_group_id INTEGER,
-                FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
-            );
-        """)
-        # Dynamically build the column list for copying to handle old and newer schemas.
-        old_cols_list = ['id', 'config', 'x', 'y', 'width', 'height', 'scale', 'z_index', 'original_group_id']
-        old_cols_to_copy = [c for c in old_cols_list if c in bw_columns]
-        old_cols_str = ", ".join(old_cols_to_copy)
-        cursor.execute(f"INSERT INTO board (box_id, {old_cols_str}) SELECT 0, {old_cols_str} FROM _board_old")
-        cursor.execute("DROP TABLE _board_old")
-        log.info("Migration successful.")
-    elif 'original_group_id' not in bw_columns:
-        # Handle case where box_id exists but original_group_id does not.
-        log.info("Applying migration: Adding 'original_group_id' to 'board' table.")
-        cursor.execute("ALTER TABLE board ADD COLUMN original_group_id INTEGER")
-        log.info("Migration successful.")
-
-
 def init_db():
     """Initializes the SQLite database for SKYBRIDGE."""
     global DB_CONN
@@ -277,11 +169,12 @@ def init_db():
         );
     """)
 
-    # Run migrations for existing databases. This will ensure the box with id=0 exists.
-    _run_migrations(cursor)
+    # For new databases, create the default 'Main Desktop' box with id=0.
+    # This is required for foreign key constraints and default settings.
+    cursor.execute("INSERT OR IGNORE INTO box (id, name, type, context) VALUES (?, ?, ?, ?)",
+                   (0, 'Main Desktop', 'local', '.'))
 
     # Set default values for the main desktop (box_id=0) if they don't exist
-    # This must be done AFTER migrations to ensure the default box exists.
     cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'panX', json.dumps(0)))
     cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'panY', json.dumps(0)))
     cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'zoom', json.dumps(1.0)))
@@ -599,21 +492,6 @@ async def websocket_handler(websocket):
     active_terminals = {} # term_id -> {'pid': pid, 'fd': fd, 'task': task}
 
     try:
-        # Send initial state for the main desktop (box_id=0) for backward compatibility
-        cursor = DB_CONN.cursor()
-        cursor.execute("SELECT key, value FROM settings WHERE box_id = 0")
-        settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
-        await websocket.send(json.dumps({'type': 'desktop_settings', 'settings': settings}))
-
-        cursor.execute("SELECT id, name, type, path, x, y, scale FROM shortcut WHERE box_id = 0")
-        shortcuts = [dict(row) for row in cursor.fetchall()]
-        await websocket.send(json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts}))
-
-        cursor.execute("SELECT id, config, x, y, width, height, scale, z_index, original_group_id FROM board WHERE box_id = 0")
-        backed_windows = [dict(row) for row in cursor.fetchall()]
-        await websocket.send(json.dumps({'type': 'backed_window_list', 'windows': backed_windows}))
-
-
         async for message in websocket:
             try:
                 msg = json.loads(message)
