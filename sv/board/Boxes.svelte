@@ -1,7 +1,18 @@
 <!-- sv/board/Boxes.svelte -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { boxes, updateBox, deleteBox } from '../bridge.js';
+    import { 
+        boxes, 
+        updateBox, 
+        deleteBox,
+        connectionStatus,
+        getShortcuts,
+        getBackedWindows,
+        getDesktopSettings,
+        shortcutListResponse,
+        backedWindowListResponse,
+        desktopSettingsResponse
+    } from '../bridge.js';
     import { currentBoxId } from '../desktop.js';
     import { newBox as createNewBoxEntity } from '../windows.js';
 
@@ -9,6 +20,11 @@
     let selectedBox = null;
     let nameInput = '';
     let activeTab = 'general';
+
+    // --- State for selected box details ---
+    let selectedBoxShortcuts = [];
+    let selectedBoxBackedWindows = [];
+    let selectedBoxSettings = {};
 
     // --- State for resizable panel ---
     let leftPanelWidth = 220;
@@ -21,6 +37,24 @@
 
     function toggleExpand(boxId) {
         expanded[boxId] = !expanded[boxId];
+    }
+
+    // When selectedBoxId changes, request its details
+    $: if (selectedBoxId !== null && $connectionStatus === 'connected') {
+        getShortcuts(selectedBoxId);
+        getBackedWindows(selectedBoxId);
+        getDesktopSettings(selectedBoxId);
+    }
+
+    // Listen to responses and update local state if it's for our selected box
+    $: if ($shortcutListResponse && $shortcutListResponse.box_id === selectedBoxId) {
+        selectedBoxShortcuts = $shortcutListResponse.shortcuts || [];
+    }
+    $: if ($backedWindowListResponse && $backedWindowListResponse.box_id === selectedBoxId) {
+        selectedBoxBackedWindows = $backedWindowListResponse.windows || [];
+    }
+    $: if ($desktopSettingsResponse && $desktopSettingsResponse.box_id === selectedBoxId) {
+        selectedBoxSettings = $desktopSettingsResponse.settings || {};
     }
 
     // Rebuild the tree structure when the source box list changes
@@ -82,6 +116,10 @@
     function handleSelectBox(id) {
         if (selectedBoxId !== id) {
             activeTab = 'general';
+            // Clear old data to prevent flicker
+            selectedBoxShortcuts = [];
+            selectedBoxBackedWindows = [];
+            selectedBoxSettings = {};
         }
         selectedBoxId = id;
     }
@@ -359,8 +397,10 @@
     }
     .tab-content {
         flex-grow: 1;
+        overflow-y: auto;
     }
     .tab-pane {
+        padding-top: 16px;
         display: flex;
         flex-direction: column;
         gap: 16px;
@@ -371,8 +411,50 @@
         font-style: italic;
         text-align: center;
     }
+    .disconnected-overlay {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 8px;
+        color: var(--text-color-light);
+        background-color: hsla(0, 0%, 20%, 0.5);
+        font-size: 1.5em;
+        font-weight: bold;
+        border-radius: 8px;
+    }
+    .details-list {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .details-list li {
+        background-color: var(--input-bg);
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid var(--border-color);
+        font-family: monospace;
+        font-size: 0.9em;
+        word-break: break-all;
+    }
+    .details-list li strong {
+        color: var(--text-color);
+    }
+    .details-list li pre {
+        margin-top: 4px;
+        padding: 4px;
+        background-color: rgba(0,0,0,0.2);
+        border-radius: 4px;
+        white-space: pre-wrap;
+    }
 </style>
 
+{#if $connectionStatus === 'connected'}
 <div class="boxes-container" class:resizing={isResizing}>
     <button class="new-box-btn" on:click={handleNewBox} title="New Box">
         <img src="/skybox.png" alt="Box" class="new-box-icon" />
@@ -446,11 +528,45 @@
                         </div>
                     </div>
                 {:else if activeTab === 'shortcuts'}
-                    <div class="tab-pane-placeholder">Shortcuts for this box will be listed here.</div>
+                    <div class="tab-pane">
+                        {#if selectedBoxShortcuts.length > 0}
+                            <ul class="details-list">
+                                {#each selectedBoxShortcuts as shortcut}
+                                    <li><strong>{shortcut.name}</strong> [{shortcut.type}] <br/> {shortcut.path}</li>
+                                {/each}
+                            </ul>
+                        {:else}
+                            <div class="tab-pane-placeholder">No shortcuts configured for this box.</div>
+                        {/if}
+                    </div>
                 {:else if activeTab === 'boards'}
-                    <div class="tab-pane-placeholder">Backed boards for this box will be listed here.</div>
+                    <div class="tab-pane">
+                        {#if selectedBoxBackedWindows.length > 0}
+                            <ul class="details-list">
+                                {#each selectedBoxBackedWindows as board}
+                                    <li>
+                                        <strong>ID: {board.id}</strong><br/>
+                                        Position: ({Math.round(board.x)}, {Math.round(board.y)}), Scale: {board.scale.toFixed(2)}<br/>
+                                        Config: <pre>{JSON.stringify(board.config, null, 2)}</pre>
+                                    </li>
+                                {/each}
+                            </ul>
+                        {:else}
+                            <div class="tab-pane-placeholder">No backed boards found for this box.</div>
+                        {/if}
+                    </div>
                 {:else if activeTab === 'settings'}
-                    <div class="tab-pane-placeholder">Settings for this box will be listed here.</div>
+                    <div class="tab-pane">
+                         {#if Object.keys(selectedBoxSettings).length > 0}
+                            <ul class="details-list">
+                                {#each Object.entries(selectedBoxSettings) as [key, value]}
+                                    <li><strong>{key}:</strong> {JSON.stringify(value)}</li>
+                                {/each}
+                            </ul>
+                        {:else}
+                            <div class="tab-pane-placeholder">No custom settings for this box. Using defaults.</div>
+                        {/if}
+                    </div>
                 {/if}
             </div>
 
@@ -461,3 +577,11 @@
         {/if}
     </div>
 </div>
+{:else}
+    <div class="disconnected-overlay">
+        <span>SKYBRIDGE REQUIRED</span>
+        <span style="font-size: 0.7em; font-weight: normal; text-transform: capitalize;">
+            Connection Status: {$connectionStatus}
+        </span>
+    </div>
+{/if}

@@ -23,6 +23,11 @@ export const askStatsResponse = writable(null);
 export const boxes = writable([]);
 export const backedWindows = writable([]);
 
+// --- Stores for inspecting arbitrary boxes ---
+export const shortcutListResponse = writable(null);
+export const backedWindowListResponse = writable(null);
+export const desktopSettingsResponse = writable(null);
+
 // --- Desktop Shortcuts Store ---
 const { subscribe: shortcutsSubscribe, set: shortcutsSet, update: shortcutsUpdate } = writable([]);
 export const desktopShortcuts = {
@@ -149,6 +154,17 @@ export function deleteBackedWindow(id) {
     sendMessage({ type: 'delete_backed_window', id });
 }
 
+// --- Getters for inspecting arbitrary boxes ---
+export function getShortcuts(box_id) {
+    sendMessage({ type: 'get_shortcut_list', box_id });
+}
+export function getBackedWindows(box_id) {
+    sendMessage({ type: 'get_backed_window_list', box_id });
+}
+export function getDesktopSettings(box_id) {
+    sendMessage({ type: 'get_desktop_settings', box_id });
+}
+
 
 function attemptConnection() {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
@@ -201,21 +217,24 @@ function attemptConnection() {
                     askStatsResponse.set({ ...msg, timestamp: Date.now() });
                     break;
                 case 'desktop_settings':
+                    desktopSettingsResponse.set(msg);
                     if (msg.box_id === get(currentBoxId)) {
                         desktopView.set(msg.settings || { panX: 0, panY: 0, zoom: 1.0 });
                     }
                     break;
                 case 'shortcut_list':
+                    shortcutListResponse.set(msg);
                     if (msg.box_id === get(currentBoxId)) {
                         shortcutsSet(msg.shortcuts || []);
                     }
                     break;
                 case 'backed_window_list':
+                    const windows = (msg.windows || []).map(w => ({
+                        ...w,
+                        config: JSON.parse(w.config)
+                    }));
+                    backedWindowListResponse.set({ ...msg, windows: windows });
                     if (msg.box_id === get(currentBoxId)) {
-                        const windows = (msg.windows || []).map(w => ({
-                            ...w,
-                            config: JSON.parse(w.config)
-                        }));
                         backedWindows.set(windows);
                     }
                     break;
