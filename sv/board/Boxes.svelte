@@ -59,7 +59,7 @@
     .boxes-container {
         display: flex;
         height: 100%;
-        background-color: var(--window-bg);
+        background-color: transparent; /* Changed */
         color: var(--text-color);
         position: relative;
     }
@@ -70,6 +70,8 @@
         display: flex;
         flex-direction: column;
         overflow-y: auto;
+        background-color: hsla(0, 0%, 50%, 0.15); /* Added */
+        border-radius: 8px 0 0 8px; /* Added */
     }
     .box-list-item {
         display: flex;
@@ -97,6 +99,11 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
+    .delete-btn-placeholder { /* Added for alignment */
+        width: 24px;
+        height: 24px;
+        flex-shrink: 0;
+    }
     .delete-btn {
         background: none;
         border: none;
@@ -104,9 +111,16 @@
         cursor: pointer;
         font-size: 16px;
         line-height: 1;
-        padding: 0 4px;
         visibility: hidden; /* Hide by default */
         border-radius: 50%;
+        /* Sizing for alignment */
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
     }
     .box-list-item:hover .delete-btn {
         visibility: visible; /* Show on hover */
@@ -118,7 +132,7 @@
     .right-panel {
         flex-grow: 1;
         padding: 16px;
-        padding-top: 48px; /* Space for the absolute positioned button */
+        padding-top: 64px; /* Space for the absolute positioned button */
         display: flex;
         flex-direction: column;
         gap: 16px;
@@ -133,7 +147,8 @@
         font-size: 0.9em;
         color: var(--text-color-light);
     }
-    .details-group input, .details-group span {
+    /* Split rule for visual distinction */
+    .details-group input {
         padding: 8px;
         background-color: var(--input-bg);
         border: 1px solid var(--border-color);
@@ -142,23 +157,55 @@
         font-size: 1em;
     }
     .details-group span {
+        padding: 8px;
+        background-color: transparent; /* Changed */
+        border: 1px solid transparent; /* Changed */
+        border-radius: 4px;
+        color: var(--text-color-light); /* Changed */
+        font-size: 1em;
         font-family: monospace;
         word-break: break-all;
     }
     .new-box-btn {
         position: absolute;
-        top: 8px;
-        right: 8px;
-        padding: 6px 12px;
+        top: 12px;
+        right: 12px;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         background-color: var(--button-bg);
         border: 1px solid var(--button-border-color);
-        color: var(--button-text-color);
-        border-radius: 4px;
+        border-radius: 8px;
         cursor: pointer;
         z-index: 10;
     }
     .new-box-btn:hover {
         background-color: var(--button-hover-bg);
+    }
+    .new-box-icon { /* Added */
+        width: 24px;
+        height: 24px;
+        opacity: 0.9;
+    }
+    .plus-badge { /* Added */
+        position: absolute;
+        bottom: -2px;
+        right: -2px;
+        background-color: #27ae60;
+        color: white;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        font-size: 14px;
+        font-weight: bold;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 2px solid var(--window-bg);
     }
     .no-selection {
         display: flex;
@@ -171,7 +218,10 @@
 </style>
 
 <div class="boxes-container">
-    <button class="new-box-btn" on:click={handleNewBox}>New Box</button>
+    <button class="new-box-btn" on:click={handleNewBox} title="New Box">
+        <img src="/skybox.png" alt="Box" class="new-box-icon" />
+        <span class="plus-badge">+</span>
+    </button>
     
     <div class="left-panel">
         {#each $boxes.sort((a, b) => a.id - b.id) as box (box.id)}
@@ -181,13 +231,15 @@
                 on:click={() => handleSelectBox(box.id)}
                 title={box.name}
             >
-                <img src="/skybox.png" alt="Box" class="box-icon" />
-                <span class="box-name">{box.name}</span>
                 {#if box.id !== 0}
                     <button class="delete-btn" title="Delete Box" on:click|stopPropagation={() => handleDeleteBox(box.id, box.name)}>
                         ✕
                     </button>
+                {:else}
+                    <div class="delete-btn-placeholder"></div>
                 {/if}
+                <img src="/skybox.png" alt="Box" class="box-icon" />
+                <span class="box-name">{box.name}</span>
             </div>
         {/each}
     </div>
