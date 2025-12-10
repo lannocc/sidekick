@@ -7,9 +7,17 @@
     import Desktop from './Desktop.svelte';
     import Taskbar from './Taskbar.svelte';
     import { windows } from './windows.js';
-    import { dashActive, dashLayouts, dashCycleIndex, desktopSettings, activeBoxId, skyCloakEnabled, currentBoxId } from './desktop.js';
+    import { dashActive, dashLayouts, dashCycleIndex, desktopSettings, activeBoxId, skyCloakEnabled, currentBoxId, currentBox } from './desktop.js';
     import { get } from 'svelte/store';
-    import { initializeLocalConnection } from './bridge.js';
+    import { initializeLocalConnection, connectionStatus } from './bridge.js';
+
+    // --- NEW: Title update logic ---
+    let title = 'SKYBOARD';
+    $: if ($connectionStatus === 'connected' && $currentBox) {
+        title = `${$currentBox.name} | SKYBOARD`;
+    } else {
+        title = 'SKYBOARD';
+    }
 
     // --- NEW: Box switching effect logic ---
     let boxSwitchKey = 0;
@@ -168,6 +176,7 @@
 </script>
 
 <svelte:head>
+    <title>{title}</title>
     <style>
         :root {
             --scrollbar-track-bg: {rootScrollbarTrackColor};
