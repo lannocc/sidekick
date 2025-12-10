@@ -7,7 +7,7 @@
     import { get } from 'svelte/store';
     import { windows, dragState, instanceRegistry, dragRequest, generateBoardConfigFromWindow } from './windows.js';
     import { desktopSettings, windowSettings, windowView, desktopView, TASKBAR_HEIGHT, desktopInteraction, selectedItems } from './desktop.js';
-    import { savePanelConfig } from './local.js';
+    import { savePanelConfig } from './bridge.js';
     import IoskConsole from './board/IoskConsole.svelte';
     import IoskFileExplorer from './board/IoskFileExplorer.svelte';
     import IoskFileViewer from './board/IoskFileViewer.svelte';

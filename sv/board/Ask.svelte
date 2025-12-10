@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { sendMessage, askOutput, askError, askExit, connectionStatus, askStatsResponse } from '../local.js';
+    import { sendMessage, askOutput, askError, askExit, connectionStatus, askStatsResponse } from '../bridge.js';
     import { newLocalFileExplorer, windows } from '../windows.js';
     import { fileSelection } from './iosk.js';
 

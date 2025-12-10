@@ -14,7 +14,7 @@ import IoskWatch from './board/IoskWatch.svelte';
 import IoskUserInspector from './board/IoskUserInspector.svelte';
 import NotificationCenter from './board/NotificationCenter.svelte';
 import { TASKBAR_HEIGHT, desktopSettings, windowSettings, notificationHistory, unreadNoticeCount, desktopView, windowView } from './desktop.js';
-import { createBackedWindow, deleteBackedWindow, createBox, boxes, desktopShortcuts, backedWindows } from './local.js';
+import { createBackedWindow, deleteBackedWindow, createBox, boxes, desktopShortcuts, backedWindows } from './bridge.js';
 
 let windowGroupIdCounter = 0;
 let tabIdCounter = 0;

@@ -6,13 +6,13 @@
     import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId } from './desktop.js';
-    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow } from './local.js';
+    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow } from './bridge.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import Shortcut from './Shortcut.svelte';
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { connectionStatus } from './local.js';
+    import { connectionStatus } from './bridge.js';
     import { fade } from 'svelte/transition';
     import InstanceRegistrar from './InstanceRegistrar.svelte';
 

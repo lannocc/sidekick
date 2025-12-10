@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus, createBox } from '../local.js';
+    import { sendMessage, fsListResponse, fsReadResponse, fsError, connectionStatus, createBox } from '../bridge.js';
     import { newAskWindow, windows } from '../windows.js';
     import { fileSelection } from './iosk.js';
     import { get } from 'svelte/store';

@@ -6,7 +6,7 @@
 <script>
     import { newLocalFileExplorer, newLocalFileViewer } from './windows.js';
     import { desktopView, selectedItems, wasDraggingItems } from './desktop.js';
-    import { desktopShortcuts, updateShortcutTransform } from './local.js';
+    import { desktopShortcuts, updateShortcutTransform } from './bridge.js';
     import { get } from 'svelte/store';
     import { onDestroy, afterUpdate, createEventDispatcher } from 'svelte';
 

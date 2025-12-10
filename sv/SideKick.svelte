@@ -9,7 +9,7 @@
     import { windows } from './windows.js';
     import { dashActive, dashLayouts, dashCycleIndex, desktopSettings, activeBoxId } from './desktop.js';
     import { get } from 'svelte/store';
-    import { initializeLocalConnection } from './local.js';
+    import { initializeLocalConnection } from './bridge.js';
 
     function generateBgStyle(bgSettings) {
         if (!bgSettings) return '';
