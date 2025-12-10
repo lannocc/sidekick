@@ -314,8 +314,23 @@ export const desktopView = writable({ panX: 0, panY: 0, zoom: 1.0 });
 // New store for FRONT layer (windows) pan and zoom. Synced with localStorage.
 export const windowView = writable({ panX: 0, panY: 0, zoom: 1.0 });
 
-// Initialize windowView from localStorage and subscribe to save its changes.
+// Initialize view stores from the main settings store and set up two-way binding.
 const initialSettings = get(desktopSettings);
+
+desktopView.set({
+    panX: initialSettings.panX || 0,
+    panY: initialSettings.panY || 0,
+    zoom: initialSettings.zoom || 1.0
+});
+desktopView.subscribe(value => {
+    desktopSettings.update(settings => ({
+        ...settings,
+        panX: value.panX,
+        panY: value.panY,
+        zoom: value.zoom
+    }));
+});
+
 windowView.set({
     panX: initialSettings.windowPanX || 0,
     panY: initialSettings.windowPanY || 0,

@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import { desktopSettings, desktopView, TASKBAR_HEIGHT, currentBoxId, mergeWithDefaults } from './desktop.js';
+import { desktopSettings, desktopView, windowView, TASKBAR_HEIGHT, currentBoxId, mergeWithDefaults } from './desktop.js';
 
 const PORT = 4210;
 const URL = `ws://localhost:${PORT}`;
@@ -133,13 +133,22 @@ export function updateBoxTransform(id, x, y, scale) {
 export function setBoxCover(box_id, location) {
     sendMessage({ type: 'set_box_cover', box_id, location });
 }
+
+function updateViewSettings(viewSettings) {
+    sendMessage({ type: 'update_view_settings', settings: viewSettings, box_id: get(currentBoxId) });
+}
+
 export function updateDesktopSettings(partialSettings) {
     const newSettings = { ...get(desktopSettings), ...partialSettings };
     desktopSettings.set(newSettings); // Update the store, which will trigger saves
-    sendMessage({ type: 'update_desktop_settings', settings: newSettings, box_id: get(currentBoxId) });
+    
+    const { panX, panY, zoom, windowPanX, windowPanY, windowZoom, ...themeSettings } = newSettings;
+    sendMessage({ type: 'update_desktop_settings', settings: themeSettings, box_id: get(currentBoxId) });
 }
 export function saveSettingsToBox(targetBoxId) {
-    sendMessage({ type: 'update_desktop_settings', settings: get(desktopSettings), box_id: targetBoxId });
+    const fullSettings = get(desktopSettings);
+    const { panX, panY, zoom, windowPanX, windowPanY, windowZoom, ...themeSettings } = fullSettings;
+    sendMessage({ type: 'update_desktop_settings', settings: themeSettings, box_id: targetBoxId });
 }
 export function updateShortcutTransform(id, x, y, scale) {
     sendMessage({ type: 'update_shortcut_transform', id, x, y, scale });
@@ -170,6 +179,25 @@ export function getDesktopSettings(box_id) {
     sendMessage({ type: 'get_desktop_settings', box_id });
 }
 
+function setupViewSettingsPersistence() {
+    let debounceTimer;
+    const saveViewSettings = () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            const dv = get(desktopView);
+            const wv = get(windowView);
+            const viewSettings = {
+                panX: dv.panX, panY: dv.panY, zoom: dv.zoom,
+                windowPanX: wv.panX, windowPanY: wv.panY, windowZoom: wv.zoom,
+            };
+            updateViewSettings(viewSettings);
+        }, 500); // Debounce updates by 500ms
+    };
+
+    desktopView.subscribe(saveViewSettings);
+    windowView.subscribe(saveViewSettings);
+}
+
 
 function attemptConnection() {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
@@ -183,6 +211,7 @@ function attemptConnection() {
         connectionStatus.set('connected');
         sendMessage({ type: 'list_boxes' });
         switchToBox(0); // Load the main desktop content
+        setupViewSettingsPersistence(); // Persist pan/zoom changes
         processQueue(); // Send any messages that were were queued
         if (reconnectTimer) {
             clearTimeout(reconnectTimer);

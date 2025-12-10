@@ -130,11 +130,22 @@ def init_db():
         );
     """)
 
-    # New schema for settings table
+    # Schema for settings table (pan/zoom, etc.) - key/value store
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS settings (
+            box_id INTEGER NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT,
+            PRIMARY KEY (box_id, key),
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
+        );
+    """)
+
+    # New schema for config table (theming, etc.) - single JSON blob
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS config (
             box_id INTEGER PRIMARY KEY,
-            config TEXT NOT NULL,
+            theme TEXT NOT NULL,
             FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
         );
     """)
@@ -170,59 +181,15 @@ def init_db():
         );
     """)
 
-    # --- Migration for settings table ---
-    try:
-        cursor.execute("PRAGMA table_info(settings)")
-        columns = [row['name'] for row in cursor.fetchall()]
-        if 'config' not in columns and 'key' in columns:
-            log.info("Migrating 'settings' table to new config format.")
-
-            # 1. Read old data
-            cursor.execute("SELECT box_id, key, value FROM settings")
-            old_data = cursor.fetchall()
-
-            box_configs = {}
-            for row in old_data:
-                box_id = row['box_id']
-                if box_id not in box_configs:
-                    box_configs[box_id] = {}
-                try:
-                    box_configs[box_id][row['key']] = json.loads(row['value'])
-                except (json.JSONDecodeError, TypeError):
-                    box_configs[box_id][row['key']] = row['value'] # Store as-is if not valid JSON
-
-            # 2. Drop old table and create new one
-            cursor.execute("DROP TABLE settings")
-            cursor.execute("""
-                CREATE TABLE settings (
-                    box_id INTEGER PRIMARY KEY,
-                    config TEXT NOT NULL,
-                    FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
-                );
-            """)
-
-            # 3. Insert converted data
-            for box_id, config_data in box_configs.items():
-                cursor.execute(
-                    "INSERT INTO settings (box_id, config) VALUES (?, ?)",
-                    (box_id, json.dumps(config_data))
-                )
-
-            DB_CONN.commit()
-            log.info("Migration successful: 'settings' table updated.")
-    except sqlite3.OperationalError:
-        # This can happen if the settings table does not exist at all, which is fine.
-        pass
-    # --- End Migration ---
-
     # For new databases, create the default 'Main Desktop' box with id=0.
     # This is required for foreign key constraints and default settings.
     cursor.execute("INSERT OR IGNORE INTO box (id, name, type, context) VALUES (?, ?, ?, ?)",
                    (0, 'Main Desktop', 'local', '.'))
 
     # Set default values for the main desktop (box_id=0) if they don't exist
-    default_config = json.dumps({'panX': 0, 'panY': 0, 'zoom': 1.0})
-    cursor.execute("INSERT OR IGNORE INTO settings (box_id, config) VALUES (?, ?)", (0, default_config))
+    default_settings = {'panX': 0, 'panY': 0, 'zoom': 1.0, 'windowPanX': 0, 'windowPanY': 0, 'windowZoom': 1.0}
+    for key, value in default_settings.items():
+        cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, key, json.dumps(value)))
 
     DB_CONN.commit()
     log.info("SKYBRIDGE database initialized.")
@@ -306,9 +273,31 @@ async def broadcast_settings(box_id):
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT config FROM settings WHERE box_id = ?", (box_id,))
-    row = cursor.fetchone()
-    settings = json.loads(row['config']) if row and row['config'] else {}
+
+    # Get view settings (key/value)
+    cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (box_id,))
+    view_settings_rows = cursor.fetchall()
+    if not view_settings_rows and box_id != 0:
+        cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (0,))
+        view_settings_rows = cursor.fetchall()
+
+    view_settings = {}
+    for row in view_settings_rows:
+        try:
+            view_settings[row['key']] = json.loads(row['value'])
+        except (json.JSONDecodeError, TypeError):
+            view_settings[row['key']] = row['value']
+
+    # Get theme config (JSON blob)
+    cursor.execute("SELECT theme FROM config WHERE box_id = ?", (box_id,))
+    theme_row = cursor.fetchone()
+    if not theme_row and box_id != 0:
+        cursor.execute("SELECT theme FROM config WHERE box_id = ?", (0,))
+        theme_row = cursor.fetchone()
+    
+    theme_settings = json.loads(theme_row['theme']) if theme_row and theme_row['theme'] else {}
+
+    settings = {**theme_settings, **view_settings}
     
     message = json.dumps({'type': 'desktop_settings', 'settings': settings, 'box_id': box_id})
 
@@ -568,14 +557,28 @@ async def websocket_handler(websocket):
                 # --- Desktop Settings ---
                 elif msg_type == 'update_desktop_settings':
                     box_id = msg.get('box_id', 0)
-                    settings_blob = msg.get('settings', {})
-                    print_action("Update Dsk Cfg", f"box={box_id}")
+                    theme_blob = msg.get('settings', {})
+                    print_action("Update Theme", f"box={box_id}")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
-                        "INSERT OR REPLACE INTO settings (box_id, config) VALUES (?, ?)",
-                        (box_id, json.dumps(settings_blob))
+                        "INSERT OR REPLACE INTO config (box_id, theme) VALUES (?, ?)",
+                        (box_id, json.dumps(theme_blob))
                     )
                     DB_CONN.commit()
+                    await broadcast_settings(box_id)
+                
+                elif msg_type == 'update_view_settings':
+                    box_id = msg.get('box_id', 0)
+                    view_settings = msg.get('settings', {})
+                    print_action("Update View", f"box={box_id}, keys={list(view_settings.keys())}")
+                    cursor = DB_CONN.cursor()
+                    for key, value in view_settings.items():
+                        cursor.execute(
+                            "INSERT OR REPLACE INTO settings (box_id, key, value) VALUES (?, ?, ?)",
+                            (box_id, key, json.dumps(value))
+                        )
+                    DB_CONN.commit()
+                    # Broadcast full settings so client stays in sync
                     await broadcast_settings(box_id)
 
                 # --- Desktop Shortcut Operations ---
@@ -672,16 +675,32 @@ async def websocket_handler(websocket):
                     print_action("Get Dsk Set", f"box={box_id}")
                     cursor = DB_CONN.cursor()
                     
-                    cursor.execute("SELECT config FROM settings WHERE box_id = ?", (box_id,))
-                    row = cursor.fetchone()
+                    # Get view settings
+                    cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (box_id,))
+                    view_settings_rows = cursor.fetchall()
+                    if not view_settings_rows and box_id != 0:
+                        log.info(f"No view settings for box {box_id}, using defaults from box 0.")
+                        cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (0,))
+                        view_settings_rows = cursor.fetchall()
 
-                    # If no settings exist for this box, use defaults from box 0
-                    if not row and box_id != 0:
-                        log.info(f"No settings for box {box_id}, using defaults from box 0.")
-                        cursor.execute("SELECT config FROM settings WHERE box_id = ?", (0,))
-                        row = cursor.fetchone()
+                    view_settings = {}
+                    for row in view_settings_rows:
+                        try:
+                            view_settings[row['key']] = json.loads(row['value'])
+                        except (json.JSONDecodeError, TypeError):
+                            view_settings[row['key']] = row['value']
+
+                    # Get theme config
+                    cursor.execute("SELECT theme FROM config WHERE box_id = ?", (box_id,))
+                    theme_row = cursor.fetchone()
+                    if not theme_row and box_id != 0:
+                        log.info(f"No theme config for box {box_id}, using defaults from box 0.")
+                        cursor.execute("SELECT theme FROM config WHERE box_id = ?", (0,))
+                        theme_row = cursor.fetchone()
                     
-                    settings = json.loads(row['config']) if row and row['config'] else {}
+                    theme_settings = json.loads(theme_row['theme']) if theme_row and theme_row['theme'] else {}
+
+                    settings = {**theme_settings, **view_settings}
 
                     # Ensure defaults exist if config is partial/missing
                     if 'panX' not in settings: settings['panX'] = 0
