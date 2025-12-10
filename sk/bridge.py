@@ -105,11 +105,13 @@ def init_db():
             name TEXT NOT NULL,
             type TEXT NOT NULL CHECK(type IN ('local', 'iosk')),
             context TEXT NOT NULL,
+            parent_box_id INTEGER,
             x INTEGER DEFAULT 100,
             y INTEGER DEFAULT 100,
             scale REAL DEFAULT 1.0,
             cover_panel_location TEXT,
-            aspect_ratio REAL
+            aspect_ratio REAL,
+            FOREIGN KEY(parent_box_id) REFERENCES box(id) ON DELETE CASCADE
         );
     """)
 
@@ -169,6 +171,20 @@ def init_db():
         );
     """)
 
+    # --- Migration for parent_box_id ---
+    cursor.execute("PRAGMA table_info(box)")
+    columns = [row['name'] for row in cursor.fetchall()]
+    if 'parent_box_id' not in columns:
+        log.info("Migrating 'box' table: adding 'parent_box_id' column.")
+        try:
+            # Add column with foreign key constraint and set a default for existing rows
+            cursor.execute("ALTER TABLE box ADD COLUMN parent_box_id INTEGER REFERENCES box(id) ON DELETE CASCADE")
+            cursor.execute("UPDATE box SET parent_box_id = 0 WHERE id != 0")
+            log.info("Migration successful: 'parent_box_id' added and defaulted.")
+        except sqlite3.OperationalError as e:
+            log.error(f"Failed to migrate 'box' table for nesting. Manual intervention may be required. Error: {e}")
+    # --- End Migration ---
+
     # For new databases, create the default 'Main Desktop' box with id=0.
     # This is required for foreign key constraints and default settings.
     cursor.execute("INSERT OR IGNORE INTO box (id, name, type, context) VALUES (?, ?, ?, ?)",
@@ -190,7 +206,7 @@ async def broadcast_box_list():
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio FROM box ORDER BY name")
+    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio, parent_box_id FROM box ORDER BY name")
     boxes = [dict(row) for row in cursor.fetchall()]
 
     message = json.dumps({'type': 'box_list', 'boxes': boxes})
@@ -625,7 +641,7 @@ async def websocket_handler(websocket):
                 elif msg_type == 'list_boxes':
                     print_action("List Boxes")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio FROM box ORDER BY name")
+                    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio, parent_box_id FROM box ORDER BY name")
                     boxes = [dict(row) for row in cursor.fetchall()]
                     await websocket.send(json.dumps({'type': 'box_list', 'boxes': boxes}))
 
@@ -636,12 +652,13 @@ async def websocket_handler(websocket):
                     aspect_ratio = msg.get('aspect_ratio')
                     x = msg.get('x')
                     y = msg.get('y')
+                    parent_box_id = msg.get('parent_box_id', 0)
                     pos_str = f"pos=({int(x)},{int(y)})" if x is not None and y is not None else "pos=default"
-                    print_action("Create Box", f"name='{name}', type='{box_type}', ratio={aspect_ratio:.2f}, {pos_str}")
+                    print_action("Create Box", f"name='{name}', parent={parent_box_id}, type='{box_type}', ratio={aspect_ratio:.2f if aspect_ratio else 'N/A'}, {pos_str}")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
-                        "INSERT INTO box (name, type, context, aspect_ratio, x, y) VALUES (?, ?, ?, ?, ?, ?)",
-                        (name, box_type, context, aspect_ratio, x, y)
+                        "INSERT INTO box (name, type, context, aspect_ratio, x, y, parent_box_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (name, box_type, context, aspect_ratio, x, y, parent_box_id)
                     )
                     new_id = cursor.lastrowid
 
@@ -906,4 +923,3 @@ def main(args):
             DB_CONN.close()
             log.info("Database connection closed.")
         print_stopped_message()
-
