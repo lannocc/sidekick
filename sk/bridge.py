@@ -234,10 +234,6 @@ def init_db():
             FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
         );
     """)
-    # Set default values for the main desktop (box_id=0) if they don't exist
-    cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'panX', json.dumps(0)))
-    cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'panY', json.dumps(0)))
-    cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'zoom', json.dumps(1.0)))
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS shortcut (
@@ -270,8 +266,15 @@ def init_db():
         );
     """)
 
-    # Run migrations for existing databases
+    # Run migrations for existing databases. This will ensure the box with id=0 exists.
     _run_migrations(cursor)
+
+    # Set default values for the main desktop (box_id=0) if they don't exist
+    # This must be done AFTER migrations to ensure the default box exists.
+    cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'panX', json.dumps(0)))
+    cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'panY', json.dumps(0)))
+    cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'zoom', json.dumps(1.0)))
+
 
     DB_CONN.commit()
     log.info("SKYBRIDGE database initialized.")
