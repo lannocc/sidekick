@@ -1,4 +1,3 @@
-<!-- sv/board/Boxes.svelte -->
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { 
@@ -8,10 +7,10 @@
         connectionStatus,
         getShortcuts,
         getBackedWindows,
-        getDesktopSettings,
+        getBoxSpecificSettings, // Changed
         shortcutListResponse,
         backedWindowListResponse,
-        desktopSettingsResponse
+        specificSettingsResponse // Changed
     } from '../bridge.js';
     import { currentBoxId } from '../desktop.js';
     import { newBox as createNewBoxEntity } from '../windows.js';
@@ -39,11 +38,12 @@
         expanded[boxId] = !expanded[boxId];
     }
 
+
     // When selectedBoxId changes, request its details
     $: if (selectedBoxId !== null && $connectionStatus === 'connected') {
         getShortcuts(selectedBoxId);
         getBackedWindows(selectedBoxId);
-        getDesktopSettings(selectedBoxId);
+        getBoxSpecificSettings(selectedBoxId); // Changed
     }
 
     // Listen to responses and update local state if it's for our selected box
@@ -53,8 +53,8 @@
     $: if ($backedWindowListResponse && $backedWindowListResponse.box_id === selectedBoxId) {
         selectedBoxBackedWindows = $backedWindowListResponse.windows || [];
     }
-    $: if ($desktopSettingsResponse && $desktopSettingsResponse.box_id === selectedBoxId) {
-        selectedBoxSettings = $desktopSettingsResponse.settings || {};
+    $: if ($specificSettingsResponse && $specificSettingsResponse.box_id === selectedBoxId) { // Changed
+        selectedBoxSettings = $specificSettingsResponse.settings || {}; // Changed
     }
 
     // Rebuild the tree structure when the source box list changes

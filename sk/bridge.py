@@ -89,6 +89,53 @@ DB_CONN = None
 CONNECTED_CLIENTS = set()
 # --------------------
 
+def get_resolved_settings_sync(box_id, cursor):
+    """
+    Fetches the fully resolved settings for a box by traversing its parent chain.
+    Settings from children override settings from parents.
+    """
+    box_ids_to_check = []
+    current_id = box_id
+    
+    # Build the chain of inheritance from child up to the root (box 0)
+    # Use a set to prevent infinite loops on malformed data, though FKs should prevent this.
+    seen_ids = set()
+    while current_id is not None and current_id not in seen_ids:
+        box_ids_to_check.append(current_id)
+        seen_ids.add(current_id)
+        if current_id == 0:
+            break
+        cursor.execute("SELECT parent_box_id FROM box WHERE id = ?", (current_id,))
+        row = cursor.fetchone()
+        current_id = row['parent_box_id'] if row else None
+        
+    resolved_settings = {}
+    
+    # Iterate from the root down to the child, merging settings.
+    for current_box_id in reversed(box_ids_to_check):
+        # Get theme config
+        cursor.execute("SELECT theme FROM config WHERE box_id = ?", (current_box_id,))
+        theme_row = cursor.fetchone()
+        theme_settings = json.loads(theme_row['theme']) if theme_row and theme_row['theme'] else {}
+        
+        # Get view settings
+        cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (current_box_id,))
+        view_settings = {}
+        for row in cursor.fetchall():
+            try:
+                view_settings[row['key']] = json.loads(row['value'])
+            except (json.JSONDecodeError, TypeError):
+                view_settings[row['key']] = row['value']
+        
+        # Merge theme and view for the current level
+        current_level_settings = {**theme_settings, **view_settings}
+        
+        # Update the resolved settings. Keys in current_level_settings will
+        # overwrite keys from parent levels.
+        resolved_settings.update(current_level_settings)
+        
+    return resolved_settings
+
 def _get_boxes_with_settings_info(cursor):
     """Helper to fetch all boxes and annotate them with settings status."""
     cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio, parent_box_id FROM box ORDER BY name")
@@ -288,38 +335,15 @@ async def broadcast_box_config(box_id):
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
+
 async def broadcast_settings(box_id):
-    """Fetches settings for a given box and broadcasts them."""
+    """Fetches resolved settings for a given box and broadcasts them."""
     if not DB_CONN:
         log.error("Database not connected, cannot broadcast desktop settings.")
         return
 
     cursor = DB_CONN.cursor()
-
-    # Get view settings (key/value)
-    cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (box_id,))
-    view_settings_rows = cursor.fetchall()
-    if not view_settings_rows and box_id != 0:
-        cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (0,))
-        view_settings_rows = cursor.fetchall()
-
-    view_settings = {}
-    for row in view_settings_rows:
-        try:
-            view_settings[row['key']] = json.loads(row['value'])
-        except (json.JSONDecodeError, TypeError):
-            view_settings[row['key']] = row['value']
-
-    # Get theme config (JSON blob)
-    cursor.execute("SELECT theme FROM config WHERE box_id = ?", (box_id,))
-    theme_row = cursor.fetchone()
-    if not theme_row and box_id != 0:
-        cursor.execute("SELECT theme FROM config WHERE box_id = ?", (0,))
-        theme_row = cursor.fetchone()
-    
-    theme_settings = json.loads(theme_row['theme']) if theme_row and theme_row['theme'] else {}
-
-    settings = {**theme_settings, **view_settings}
+    settings = get_resolved_settings_sync(box_id, cursor)
     
     message = json.dumps({'type': 'desktop_settings', 'settings': settings, 'box_id': box_id})
 
@@ -588,7 +612,29 @@ async def websocket_handler(websocket):
                     )
                     DB_CONN.commit()
                     await broadcast_box_list() # Broadcast to update has_custom_settings flag
-                    await broadcast_settings(box_id)
+                    
+                    # After saving, broadcast the new specific settings for this box to keep client caches in sync.
+                    # Get view settings
+                    cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (box_id,))
+                    view_settings = {}
+                    for row in cursor.fetchall():
+                        try:
+                            view_settings[row['key']] = json.loads(row['value'])
+                        except (json.JSONDecodeError, TypeError):
+                            view_settings[row['key']] = row['value']
+
+                    # Get theme config
+                    cursor.execute("SELECT theme FROM config WHERE box_id = ?", (box_id,))
+                    theme_row = cursor.fetchone()
+                    theme_settings = json.loads(theme_row['theme']) if theme_row and theme_row['theme'] else {}
+
+                    specific_settings = {**theme_settings, **view_settings}
+                    
+                    response_message = json.dumps({'type': 'box_specific_settings_response', 'settings': specific_settings, 'box_id': box_id})
+                    if CONNECTED_CLIENTS:
+                        log.info(f"Broadcasting updated specific settings for box {box_id}.")
+                        await asyncio.gather(*[client.send(response_message) for client in CONNECTED_CLIENTS])
+
                 
                 elif msg_type == 'update_view_settings':
                     box_id = msg.get('box_id', 0)
@@ -603,7 +649,7 @@ async def websocket_handler(websocket):
                     DB_CONN.commit()
                     # Broadcast full settings so client stays in sync
                     await broadcast_box_list() # Broadcast to update has_custom_settings flag
-                    await broadcast_settings(box_id)
+                    #await broadcast_settings(box_id)
 
                 elif msg_type == 'clear_box_settings':
                     box_id = msg.get('box_id')
@@ -627,7 +673,13 @@ async def websocket_handler(websocket):
                     DB_CONN.commit()
                     
                     await broadcast_box_list() # To update the has_custom_settings flag
-                    # await broadcast_settings(box_id) # To push the new inherited settings to clients
+                    
+                    # Also broadcast the new (empty) specific settings for the cleared box.
+                    message = json.dumps({'type': 'box_specific_settings_response', 'settings': {}, 'box_id': box_id})
+                    if CONNECTED_CLIENTS:
+                        log.info(f"Broadcasting cleared specific settings for box {box_id}.")
+                        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
+
 
                 # --- Desktop Shortcut Operations ---
                 elif msg_type == 'create_shortcut':
@@ -677,6 +729,17 @@ async def websocket_handler(websocket):
                     original_group_id = msg.get('original_group_id')
                     print_action("Create BackWin", f"box={box_id}, x={int(x)}, y={int(y)}")
                     cursor = DB_CONN.cursor()
+
+                    # New: Ensure original_group_id is unique for this box_id.
+                    # If another backed window is using this ID, it means the old one
+                    # is stale. We nullify its original_group_id to give precedence 
+                    # to the new one, preventing key collisions on the frontend.
+                    if original_group_id is not None:
+                        cursor.execute(
+                            "UPDATE board SET original_group_id = NULL WHERE box_id = ? AND original_group_id = ?",
+                            (box_id, original_group_id)
+                        )
+
                     cursor.execute(
                         "INSERT INTO board (box_id, config, x, y, width, height, scale, original_group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                         (box_id, config, x, y, w, h, scale, original_group_id)
@@ -717,22 +780,30 @@ async def websocket_handler(websocket):
                         DB_CONN.commit()
                         await broadcast_backed_window_list(row['box_id'])
 
+
                 # --- Getters for Box Contents ---
                 elif msg_type == 'get_desktop_settings':
                     box_id = msg.get('box_id', 0)
                     print_action("Get Dsk Set", f"box={box_id}")
                     cursor = DB_CONN.cursor()
                     
+                    settings = get_resolved_settings_sync(box_id, cursor)
+
+                    # Ensure defaults exist if config is partial/missing
+                    if 'panX' not in settings: settings['panX'] = 0
+                    if 'panY' not in settings: settings['panY'] = 0
+                    if 'zoom' not in settings: settings['zoom'] = 1.0
+                    await websocket.send(json.dumps({'type': 'desktop_settings', 'settings': settings, 'box_id': box_id}))
+
+                elif msg_type == 'get_box_specific_settings':
+                    box_id = msg.get('box_id', 0)
+                    print_action("Get Box Spec Set", f"box={box_id}")
+                    cursor = DB_CONN.cursor()
+                    
                     # Get view settings
                     cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (box_id,))
-                    view_settings_rows = cursor.fetchall()
-                    if not view_settings_rows and box_id != 0:
-                        log.info(f"No view settings for box {box_id}, using defaults from box 0.")
-                        cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (0,))
-                        view_settings_rows = cursor.fetchall()
-
                     view_settings = {}
-                    for row in view_settings_rows:
+                    for row in cursor.fetchall():
                         try:
                             view_settings[row['key']] = json.loads(row['value'])
                         except (json.JSONDecodeError, TypeError):
@@ -741,20 +812,11 @@ async def websocket_handler(websocket):
                     # Get theme config
                     cursor.execute("SELECT theme FROM config WHERE box_id = ?", (box_id,))
                     theme_row = cursor.fetchone()
-                    if not theme_row and box_id != 0:
-                        log.info(f"No theme config for box {box_id}, using defaults from box 0.")
-                        cursor.execute("SELECT theme FROM config WHERE box_id = ?", (0,))
-                        theme_row = cursor.fetchone()
-                    
                     theme_settings = json.loads(theme_row['theme']) if theme_row and theme_row['theme'] else {}
 
-                    settings = {**theme_settings, **view_settings}
-
-                    # Ensure defaults exist if config is partial/missing
-                    if 'panX' not in settings: settings['panX'] = 0
-                    if 'panY' not in settings: settings['panY'] = 0
-                    if 'zoom' not in settings: settings['zoom'] = 1.0
-                    await websocket.send(json.dumps({'type': 'desktop_settings', 'settings': settings, 'box_id': box_id}))
+                    specific_settings = {**theme_settings, **view_settings}
+                    
+                    await websocket.send(json.dumps({'type': 'box_specific_settings_response', 'settings': specific_settings, 'box_id': box_id}))
 
                 elif msg_type == 'get_shortcut_list':
                     box_id = msg.get('box_id', 0)
@@ -1060,4 +1122,3 @@ def main(args):
             DB_CONN.close()
             log.info("Database connection closed.")
         print_stopped_message()
-

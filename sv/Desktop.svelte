@@ -19,13 +19,33 @@
     // *** MODIFICATION START ***
     // Create a single derived store for all window-like entities to render.
     // This is the key to preserving component instances across front/back transitions.
-    $: allRenderableWindows = [
-        ...$windows.map(w => ({ ...w, isBacked: false, scale: 1.0 })),
-        ...($backedWindows || []).map(bw => {
+    $: allRenderableWindows = (() => {
+        const frontWindows = $windows.map(w => ({ ...w, isBacked: false, scale: 1.0 }));
+        
+        // Initialize seenKeys with all keys from front windows to detect collisions between front/back layers.
+        const seenKeys = new Set(frontWindows.map(w => w.id));
+
+        const mappedBackedWindows = ($backedWindows || []).map(bw => {
             const config = bw.config;
-            // The backed window's ID from the database is used as the key.
-            // When unbacked, a new window is created with its `originalGroupId` to maintain the key.
-            const persistentId = bw.originalGroupId || bw.id;
+            // The preferred key is originalGroupId for component persistence, otherwise the db id.
+            let persistentId = bw.originalGroupId != null ? bw.originalGroupId : bw.id;
+
+            // Check if this preferred key is already taken by a front window or another backed window.
+            if (seenKeys.has(persistentId)) {
+                console.warn(`Duplicate key (${persistentId}) found for backed window (collides with front window or other backed window). Using unique DB ID ${bw.id} as key to prevent crash.`);
+                // Fallback to the unique DB id.
+                persistentId = bw.id;
+            }
+
+            // It's possible the fallback DB ID is also a duplicate. This is a rare
+            // but possible edge case. If it happens, we must not crash.
+            if (seenKeys.has(persistentId)) {
+                console.error(`Unresolvable key collision for backed window ${bw.id}. Using prefixed key as last resort.`);
+                persistentId = `dbid-${bw.id}`;
+            }
+
+            seenKeys.add(persistentId);
+            
             return {
                 ...config,
                 // Explicitly override with live data from the backed window record
@@ -52,8 +72,10 @@
                 // Pass the full backed window object for the context menu
                 backedWindowObject: bw,
             };
-        })
-    ];
+        });
+
+        return [...frontWindows, ...mappedBackedWindows];
+    })();
     // *** MODIFICATION END ***
 
     const initialSettings = get(desktopSettings);
