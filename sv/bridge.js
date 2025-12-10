@@ -7,7 +7,7 @@ const URL = `ws://localhost:${PORT}`;
 let socket;
 let reconnectTimer;
 const RECONNECT_DELAY = 3000; // 3 seconds
-let ignoreNextSettingsUpdateForCurrentBox = false;
+// REMOVED: let ignoreNextSettingsUpdateForCurrentBox = false;
 
 export const connectionStatus = writable('disconnected'); // 'connecting', 'connected', 'disconnected', 'error'
 
@@ -28,6 +28,7 @@ export const backedWindows = writable([]);
 export const shortcutListResponse = writable(null);
 export const backedWindowListResponse = writable(null);
 export const desktopSettingsResponse = writable(null);
+export const specificSettingsResponse = writable(null); // For specific settings requests
 export const allBoxSettings = writable({}); // map of box_id -> settings object
 
 // --- Desktop Shortcuts Store ---
@@ -83,6 +84,16 @@ export function switchToBox(boxId) {
     sendMessage({ type: 'get_shortcut_list', box_id: boxId });
     sendMessage({ type: 'get_backed_window_list', box_id: boxId });
 }
+
+export function clearSettingsForBox(targetBoxId) {
+    sendMessage({ type: 'clear_box_settings', box_id: targetBoxId });
+
+    // After clearing, the backend will broadcast the new box_list and the new resolved settings.
+    // To prevent a race condition for UI that depends on specific settings (like the Save/Load menu),
+    // we also explicitly request the now-empty specific settings for this box to update our local cache.
+    getBoxSpecificSettings(targetBoxId);
+}
+
 
 export function createBox(name, box_type, context, { aspectRatio, screenX, screenY, parent_box_id } = {}) {
     let finalAspectRatio = aspectRatio;
@@ -153,18 +164,6 @@ export function saveSettingsToBox(targetBoxId) {
     const { panX, panY, zoom, windowPanX, windowPanY, windowZoom, ...themeSettings } = fullSettings;
     sendMessage({ type: 'update_desktop_settings', settings: themeSettings, box_id: targetBoxId });
 }
-export function clearSettingsForBox(targetBoxId) {
-    if (targetBoxId === get(currentBoxId)) {
-        ignoreNextSettingsUpdateForCurrentBox = true;
-    }
-    sendMessage({ type: 'clear_box_settings', box_id: targetBoxId });
-
-    // After clearing settings, the backend broadcasts the new box list. To prevent a
-    // race condition where the UI shows stale info (e.g. for the save button),
-    // we explicitly request the new settings for this box. This ensures the
-    // local settings cache (`allBoxSettings`) is updated promptly.
-    getDesktopSettings(targetBoxId);
-}
 export function updateShortcutTransform(id, x, y, scale) {
     sendMessage({ type: 'update_shortcut_transform', id, x, y, scale });
 }
@@ -192,6 +191,9 @@ export function getBackedWindows(box_id) {
 }
 export function getDesktopSettings(box_id) {
     sendMessage({ type: 'get_desktop_settings', box_id });
+}
+export function getBoxSpecificSettings(box_id) {
+    sendMessage({ type: 'get_box_specific_settings', box_id });
 }
 
 function setupViewSettingsPersistence() {
@@ -267,14 +269,9 @@ function attemptConnection() {
                     break;
                 case 'desktop_settings':
                     desktopSettingsResponse.set(msg);
-                    if (msg.settings) {
-                        allBoxSettings.update(s => ({...s, [msg.box_id]: msg.settings}));
-                    }
+                    // Do NOT update allBoxSettings here. It holds specific settings, not resolved ones.
                     if (msg.box_id === get(currentBoxId)) {
-                        if (ignoreNextSettingsUpdateForCurrentBox) {
-                            ignoreNextSettingsUpdateForCurrentBox = false; // Consume flag
-                            // Do not update active settings, preserving the user's "dirty" state.
-                        } else if (msg.settings && Object.keys(msg.settings).length > 0) {
+                        if (msg.settings && Object.keys(msg.settings).length > 0) {
                             // This will set the entire theme and also trigger the derived
                             // stores (desktopView, windowView) to update.
                             const fullSettings = mergeWithDefaults(msg.settings);
@@ -283,6 +280,12 @@ function attemptConnection() {
                              // Fallback if backend sends empty settings for some reason
                             desktopView.set({ panX: 0, panY: 0, zoom: 1.0 });
                         }
+                    }
+                    break;
+                case 'box_specific_settings_response':
+                    specificSettingsResponse.set(msg);
+                    if (msg.settings) {
+                        allBoxSettings.update(s => ({...s, [msg.box_id]: msg.settings}));
                     }
                     break;
                 case 'shortcut_list':

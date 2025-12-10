@@ -4,7 +4,7 @@
     import { windows } from '../windows.js';
     import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
     import { onDestroy } from 'svelte';
-    import { connectionStatus, boxes, saveSettingsToBox, getDesktopSettings, desktopSettingsResponse, clearSettingsForBox, allBoxSettings } from '../bridge.js';
+    import { connectionStatus, boxes, saveSettingsToBox, getDesktopSettings, getBoxSpecificSettings, desktopSettingsResponse, clearSettingsForBox, allBoxSettings } from '../bridge.js';
 
     export let id;
     export let groupId;
@@ -79,12 +79,13 @@
         }
     }
 
+
     // When the dropdown opens, fetch any missing settings for boxes that have them.
     $: if (showSaveLoadMenu && $boxes) {
         const cachedIds = Object.keys($allBoxSettings).map(Number);
         $boxes.forEach(box => {
             if (box.has_custom_settings && !cachedIds.includes(box.id)) {
-                getDesktopSettings(box.id);
+                getBoxSpecificSettings(box.id); // Changed
             }
         });
     }
