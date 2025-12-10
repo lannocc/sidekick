@@ -5,7 +5,7 @@
 <script>
     import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId } from './desktop.js';
+    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, skyCloakEnabled } from './desktop.js';
     import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow } from './bridge.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
@@ -774,10 +774,7 @@
     let desktopMiddleClickTimeout;
 
     function toggleSkyCloak() {
-        desktopSettings.update(s => {
-            s.sky.cloak.enabled = !s.sky.cloak.enabled;
-            return s;
-        });
+        skyCloakEnabled.update(v => !v);
     }
 
     function handleDesktopMiddleClick(event) {

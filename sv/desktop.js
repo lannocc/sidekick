@@ -34,7 +34,6 @@ const defaultSettings = {
             bgImage: '/skyboards.png',
             bgImageDisplayMode: 'cover',
             opacity: 0.8,
-            enabled: true,
         }
     },
     boxes: {
@@ -219,6 +218,11 @@ function loadSettings() {
             const saved = localStorage.getItem('sidekickDesktopSettings');
             if (saved) {
                 const parsed = JSON.parse(saved);
+                // The sky.cloak.enabled state is now managed by a separate store and not persisted.
+                // We ensure it's removed from any loaded settings.
+                if (parsed.sky && parsed.sky.cloak) {
+                    delete parsed.sky.cloak.enabled;
+                }
                 return mergeWithDefaults(parsed);
             }
         }
@@ -358,6 +362,9 @@ export const desktopInteraction = writable(false);
 
 // Store to track if a box is unfolded/expanded to manage global z-index contexts.
 export const activeBoxId = writable(null);
+
+// State for sky cloak. Not persisted in settings. Defaults to true on reload.
+export const skyCloakEnabled = writable(true);
 
 // --- Virtual Desktop / Nested Box State ---
 export const currentBoxId = writable(0);

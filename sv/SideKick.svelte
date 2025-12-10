@@ -7,7 +7,7 @@
     import Desktop from './Desktop.svelte';
     import Taskbar from './Taskbar.svelte';
     import { windows } from './windows.js';
-    import { dashActive, dashLayouts, dashCycleIndex, desktopSettings, activeBoxId } from './desktop.js';
+    import { dashActive, dashLayouts, dashCycleIndex, desktopSettings, activeBoxId, skyCloakEnabled } from './desktop.js';
     import { get } from 'svelte/store';
     import { initializeLocalConnection } from './bridge.js';
 
@@ -34,7 +34,7 @@
 
     $: cloakSettings = $desktopSettings.sky?.cloak;
     $: cloakStyle = cloakSettings ? generateBgStyle(cloakSettings) : '';
-    $: cloakOpacity = (cloakSettings?.enabled ?? false) ? (cloakSettings?.opacity ?? 0) : 0;
+    $: cloakOpacity = $skyCloakEnabled ? (cloakSettings?.opacity ?? 0) : 0;
 
     // Frame settings
     $: frameSettings = $desktopSettings.sky?.frame;
@@ -51,10 +51,7 @@
 
 
     function disableSkyCloak() {
-        desktopSettings.update(s => {
-            s.sky.cloak.enabled = false;
-            return s;
-        });
+        skyCloakEnabled.set(false);
     }
 
     function handleKeyDown(e) {

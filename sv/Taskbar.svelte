@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, newBoxesWindow } from './windows.js';
-    import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox } from './desktop.js';
+    import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled } from './desktop.js';
     import { connectionStatus, switchToBox, boxes } from './bridge.js';
     import Clock from './Clock.svelte';
     import { get } from 'svelte/store';
@@ -392,10 +392,7 @@
     function launchAsk(props = {}) { newAskWindow(props); showMenu = false; }
 
     function toggleSkyCloak() {
-        desktopSettings.update(s => {
-            s.sky.cloak.enabled = !s.sky.cloak.enabled;
-            return s;
-        });
+        skyCloakEnabled.update(v => !v);
     }
 
     let middleClickTimeout;
