@@ -1,14 +1,10 @@
-<!--
-  Copyright (C) 2025 LANNOCC
-  @%@~LICENSE~@%@
--->
 <script>
     import { get } from 'svelte/store';
     import { desktopSettings, windowSettings, currentBoxId, mergeWithDefaults } from '../desktop.js';
     import { windows } from '../windows.js';
     import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
     import { onDestroy } from 'svelte';
-    import { connectionStatus, boxes, saveSettingsToBox, getDesktopSettings, desktopSettingsResponse, clearSettingsForBox } from '../bridge.js';
+    import { connectionStatus, boxes, saveSettingsToBox, getDesktopSettings, desktopSettingsResponse, clearSettingsForBox, allBoxSettings } from '../bridge.js';
 
     export let id;
     export let groupId;
@@ -33,7 +29,6 @@
             return [];
         }
         
-        // Populate children arrays, ignoring any items that would be their own parent or lack a parent in the map
         for (const node of nodeMap.values()) {
             if (node.id === 0) continue; // Root is not a child
             const parent = nodeMap.get(node.parent_box_id);
@@ -42,7 +37,6 @@
             }
         }
 
-        // Sort all children arrays alphabetically by name.
         for (const node of nodeMap.values()) {
             if (node.children.length > 1) {
                 node.children.sort((a, b) => a.name.localeCompare(b.name));
@@ -58,7 +52,6 @@
             if (msg.settings && Object.keys(msg.settings).length > 0) {
                 const fullSettings = mergeWithDefaults(msg.settings);
                 desktopSettings.set(fullSettings);
-                // The reactive 'settings' variable will update automatically via its own subscription
             } else {
                 console.warn(`Loaded settings from box ${settingsToLoadBoxId} were empty.`);
             }
@@ -72,6 +65,29 @@
     });
 
     let showSaveLoadMenu = false;
+
+    // When the dropdown opens, fetch any missing settings for boxes that have them.
+    $: if (showSaveLoadMenu && $boxes) {
+        const cachedIds = Object.keys($allBoxSettings).map(Number);
+        $boxes.forEach(box => {
+            if (box.has_custom_settings && !cachedIds.includes(box.id)) {
+                getDesktopSettings(box.id);
+            }
+        });
+    }
+
+    function getThemePart(fullSettings) {
+        if (!fullSettings) return null;
+        const { panX, panY, zoom, windowPanX, windowPanY, windowZoom, ...themeSettings } = fullSettings;
+        return themeSettings;
+    }
+
+    function areThemesEqual(themeA, themeB) {
+        if (themeA === themeB) return true; // Handles same object or both null/undefined
+        if (!themeA || !themeB) return false;
+        if (Object.keys(themeA).length === 0 && Object.keys(themeB).length === 0) return true;
+        return JSON.stringify(themeA) === JSON.stringify(themeB);
+    }
 
     function handleLoad(boxId) {
         settingsToLoadBoxId = boxId;
@@ -587,21 +603,45 @@
 </style>
 
 {#snippet renderBox(box, depth)}
+    {@const hasCustomSettings = box.has_custom_settings}
+    {@const isReadyForCompare = $allBoxSettings.hasOwnProperty(box.id)}
+    
+    {@const targetBoxSettings = $allBoxSettings[box.id]}
+    {@const currentTheme = getThemePart(settings)}
+    {@const targetTheme = getThemePart(targetBoxSettings)}
+    {@const themesAreEqual = isReadyForCompare && areThemesEqual(currentTheme, targetTheme)}
+
     <div class="menu-item-row" style:padding-left={`${depth * 15 + 8}px`}>
         <button
             class="action-button"
             on:click|stopPropagation={() => handleClear(box.id)}
-            title={`Reset settings for ${box.name}`}
+            disabled={!hasCustomSettings}
+            title={!hasCustomSettings ? `${box.name} uses default settings` : `Reset settings for ${box.name}`}
         >
-            🗑️
+            🗑
         </button>
-        <button class="box-name-clickable" on:click={() => handleLoad(box.id)} style:font-weight={$currentBoxId === box.id ? 'bold' : 'normal'}>
+        <button 
+            class="box-name-clickable" 
+            on:click={() => handleLoad(box.id)} 
+            style:font-weight={$currentBoxId === box.id ? 'bold' : 'normal'}
+            disabled={!hasCustomSettings || themesAreEqual}
+            title={
+                !hasCustomSettings ? `${box.name} uses default settings` :
+                themesAreEqual ? `Current settings are already from ${box.name}` :
+                `Load settings from ${box.name}`
+            }
+        >
             {box.name}
         </button>
         <button
             class="action-button"
             on:click|stopPropagation={() => handleSave(box.id)}
-            title={`Save current settings to ${box.name}`}
+            disabled={!isReadyForCompare || themesAreEqual}
+            title={
+                !isReadyForCompare ? `Loading settings for ${box.name}...` :
+                themesAreEqual ? `${box.name} already has these settings` : 
+                `Save current settings to ${box.name}`
+            }
         >
             💾
         </button>

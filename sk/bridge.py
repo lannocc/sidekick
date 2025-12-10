@@ -89,6 +89,25 @@ DB_CONN = None
 CONNECTED_CLIENTS = set()
 # --------------------
 
+def _get_boxes_with_settings_info(cursor):
+    """Helper to fetch all boxes and annotate them with settings status."""
+    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio, parent_box_id FROM box ORDER BY name")
+    boxes_data = [dict(row) for row in cursor.fetchall()]
+    boxes_with_settings_info = []
+    for box in boxes_data:
+        box_id = box['id']
+        if box_id == 0:
+            box['has_custom_settings'] = True
+        else:
+            # A box has custom settings if it has any entry in 'config' or 'settings' tables.
+            cursor.execute("SELECT 1 FROM config WHERE box_id = ?", (box_id,))
+            has_theme = cursor.fetchone() is not None
+            cursor.execute("SELECT 1 FROM settings WHERE box_id = ?", (box_id,))
+            has_view = cursor.fetchone() is not None
+            box['has_custom_settings'] = has_theme or has_view
+        boxes_with_settings_info.append(box)
+    return boxes_with_settings_info
+
 def init_db():
     """Initializes the SQLite database for SKYBRIDGE."""
     global DB_CONN
@@ -195,6 +214,7 @@ def init_db():
     log.info("SKYBRIDGE database initialized.")
 
 
+
 async def broadcast_box_list():
     """Fetches all boxes and broadcasts them to all connected clients."""
     if not DB_CONN:
@@ -202,9 +222,7 @@ async def broadcast_box_list():
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio, parent_box_id FROM box ORDER BY name")
-    boxes = [dict(row) for row in cursor.fetchall()]
-
+    boxes = _get_boxes_with_settings_info(cursor)
     message = json.dumps({'type': 'box_list', 'boxes': boxes})
 
     if CONNECTED_CLIENTS:
@@ -565,6 +583,7 @@ async def websocket_handler(websocket):
                         (box_id, json.dumps(theme_blob))
                     )
                     DB_CONN.commit()
+                    await broadcast_box_list() # Broadcast to update has_custom_settings flag
                     await broadcast_settings(box_id)
                 
                 elif msg_type == 'update_view_settings':
@@ -579,7 +598,32 @@ async def websocket_handler(websocket):
                         )
                     DB_CONN.commit()
                     # Broadcast full settings so client stays in sync
+                    await broadcast_box_list() # Broadcast to update has_custom_settings flag
                     await broadcast_settings(box_id)
+
+                elif msg_type == 'clear_box_settings':
+                    box_id = msg.get('box_id')
+                    if box_id is None:
+                        continue
+                    
+                    print_action("Clear Settings", f"box={box_id}")
+                    cursor = DB_CONN.cursor()
+
+                    if box_id == 0:
+                        # Box 0 cannot be cleared, only reset to defaults
+                        default_settings = {'panX': 0, 'panY': 0, 'zoom': 1.0, 'windowPanX': 0, 'windowPanY': 0, 'windowZoom': 1.0}
+                        cursor.execute("INSERT OR REPLACE INTO config (box_id, theme) VALUES (?, ?)", (0, '{}'))
+                        for key, value in default_settings.items():
+                            cursor.execute("INSERT OR REPLACE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, key, json.dumps(value)))
+                    else:
+                        # For other boxes, clearing means deleting their specific settings to enable inheritance
+                        cursor.execute("DELETE FROM config WHERE box_id = ?", (box_id,))
+                        cursor.execute("DELETE FROM settings WHERE box_id = ?", (box_id,))
+                    
+                    DB_CONN.commit()
+                    
+                    await broadcast_box_list() # To update the has_custom_settings flag
+                    await broadcast_settings(box_id) # To push the new inherited settings to clients
 
                 # --- Desktop Shortcut Operations ---
                 elif msg_type == 'create_shortcut':
@@ -725,12 +769,12 @@ async def websocket_handler(websocket):
                     await websocket.send(json.dumps({'type': 'backed_window_list', 'windows': windows, 'box_id': box_id}))
 
 
+
                 # --- SKYBRIDGE Box Operations ---
                 elif msg_type == 'list_boxes':
                     print_action("List Boxes")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio, parent_box_id FROM box ORDER BY name")
-                    boxes = [dict(row) for row in cursor.fetchall()]
+                    boxes = _get_boxes_with_settings_info(cursor)
                     await websocket.send(json.dumps({'type': 'box_list', 'boxes': boxes}))
 
                 elif msg_type == 'create_box':

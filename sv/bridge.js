@@ -27,6 +27,7 @@ export const backedWindows = writable([]);
 export const shortcutListResponse = writable(null);
 export const backedWindowListResponse = writable(null);
 export const desktopSettingsResponse = writable(null);
+export const allBoxSettings = writable({}); // map of box_id -> settings object
 
 // --- Desktop Shortcuts Store ---
 const { subscribe: shortcutsSubscribe, set: shortcutsSet, update: shortcutsUpdate } = writable([]);
@@ -138,6 +139,7 @@ function updateViewSettings(viewSettings) {
     sendMessage({ type: 'update_view_settings', settings: viewSettings, box_id: get(currentBoxId) });
 }
 
+
 export function updateDesktopSettings(partialSettings) {
     const newSettings = { ...get(desktopSettings), ...partialSettings };
     desktopSettings.set(newSettings); // Update the store, which will trigger saves
@@ -151,18 +153,11 @@ export function saveSettingsToBox(targetBoxId) {
     sendMessage({ type: 'update_desktop_settings', settings: themeSettings, box_id: targetBoxId });
 }
 export function clearSettingsForBox(targetBoxId) {
-    // Clear theme settings by sending an empty object
-    sendMessage({ type: 'update_desktop_settings', settings: {}, box_id: targetBoxId });
+    sendMessage({ type: 'clear_box_settings', box_id: targetBoxId });
 
-    // Reset view settings to their defaults
-    const defaultViewSettings = {
-        panX: 0, panY: 0, zoom: 1.0,
-        windowPanX: 0, windowPanY: 0, windowZoom: 1.0,
-    };
-    sendMessage({ type: 'update_view_settings', settings: defaultViewSettings, box_id: targetBoxId });
-
-    // If the currently active box was just cleared, reload its settings
-    // to reflect the change immediately.
+    // If the currently active box was just cleared, the backend will broadcast
+    // the new settings state, which will be picked up by the onmessage handler.
+    // A direct fetch can also be done for immediacy if needed.
     if (targetBoxId === get(currentBoxId)) {
         getDesktopSettings(targetBoxId);
     }
@@ -269,6 +264,9 @@ function attemptConnection() {
                     break;
                 case 'desktop_settings':
                     desktopSettingsResponse.set(msg);
+                    if (msg.settings) {
+                        allBoxSettings.update(s => ({...s, [msg.box_id]: msg.settings}));
+                    }
                     if (msg.box_id === get(currentBoxId)) {
                         if (msg.settings && Object.keys(msg.settings).length > 0) {
                             // This will set the entire theme and also trigger the derived
@@ -304,7 +302,7 @@ function attemptConnection() {
                         const updatedBoxes = newBoxesFromBackend.map(b => {
                             const existingBox = currentBoxMap.get(b.id);
                             return {
-                                ...b, // name, type, context, x, y, scale, cover_panel_location from backend
+                                ...b, // name, type, context, x, y, scale, cover_panel_location, has_custom_settings from backend
                                 panels: existingBox ? existingBox.panels : {} // preserve panels
                             };
                         });
