@@ -8,6 +8,7 @@
     let selectedBoxId = null;
     let selectedBox = null;
     let nameInput = '';
+    let activeTab = 'general';
 
     // --- State for resizable panel ---
     let leftPanelWidth = 220;
@@ -66,6 +67,7 @@
         if (selectedBox) {
             nameInput = selectedBox.name;
         } else {
+            // If the selected box was deleted, fall back to the main desktop or the first available box
             selectedBoxId = $boxes.find(b => b.id === 0) ? 0 : ($boxes.length > 0 ? $boxes[0].id : null);
         }
     }
@@ -78,6 +80,9 @@
     });
 
     function handleSelectBox(id) {
+        if (selectedBoxId !== id) {
+            activeTab = 'general';
+        }
         selectedBoxId = id;
     }
 
@@ -327,6 +332,45 @@
         color: var(--text-color-light);
         font-style: italic;
     }
+
+    /* --- Tab Styles --- */
+    .tabs {
+        display: flex;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .tab-btn {
+        padding: 8px 16px;
+        cursor: pointer;
+        background: none;
+        border: none;
+        color: var(--text-color-light);
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px; /* Aligns with the container's border */
+        font-size: 0.95em;
+        transition: color 0.2s ease, border-color 0.2s ease;
+    }
+    .tab-btn:hover {
+        color: var(--text-color);
+    }
+    .tab-btn.active {
+        color: var(--accent-color, #88C0D0);
+        border-bottom-color: var(--accent-color, #88C0D0);
+        font-weight: bold;
+    }
+    .tab-content {
+        flex-grow: 1;
+    }
+    .tab-pane {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+    .tab-pane-placeholder {
+        padding: 16px;
+        color: var(--text-color-light);
+        font-style: italic;
+        text-align: center;
+    }
 </style>
 
 <div class="boxes-container" class:resizing={isResizing}>
@@ -373,22 +417,43 @@
                 <label for="box-name-input">Name</label>
                 <input id="box-name-input" type="text" bind:value={nameInput} on:blur={handleNameUpdate} disabled={selectedBox.id === 0} />
             </div>
-            <div class="details-group">
-                <label>ID</label>
-                <span>{selectedBox.id}</span>
+
+            <div class="tabs">
+                <button class="tab-btn" class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
+                <button class="tab-btn" class:active={activeTab === 'shortcuts'} on:click={() => activeTab = 'shortcuts'}>Shortcuts</button>
+                <button class="tab-btn" class:active={activeTab === 'boards'} on:click={() => activeTab = 'boards'}>Back Boards</button>
+                <button class="tab-btn" class:active={activeTab === 'settings'} on:click={() => activeTab = 'settings'}>Settings</button>
             </div>
-            <div class="details-group">
-                <label>Type</label>
-                <span>{selectedBox.type}</span>
+
+            <div class="tab-content">
+                {#if activeTab === 'general'}
+                    <div class="tab-pane">
+                        <div class="details-group">
+                            <label>ID</label>
+                            <span>{selectedBox.id}</span>
+                        </div>
+                        <div class="details-group">
+                            <label>Type</label>
+                            <span>{selectedBox.type}</span>
+                        </div>
+                        <div class="details-group">
+                            <label>Context Path</label>
+                            <span>{selectedBox.context}</span>
+                        </div>
+                        <div class="details-group">
+                            <label>Parent Box ID</label>
+                            <span>{selectedBox.parent_box_id ?? 'N/A'}</span>
+                        </div>
+                    </div>
+                {:else if activeTab === 'shortcuts'}
+                    <div class="tab-pane-placeholder">Shortcuts for this box will be listed here.</div>
+                {:else if activeTab === 'boards'}
+                    <div class="tab-pane-placeholder">Backed boards for this box will be listed here.</div>
+                {:else if activeTab === 'settings'}
+                    <div class="tab-pane-placeholder">Settings for this box will be listed here.</div>
+                {/if}
             </div>
-            <div class="details-group">
-                <label>Context Path</label>
-                <span>{selectedBox.context}</span>
-            </div>
-            <div class="details-group">
-                <label>Parent Box ID</label>
-                <span>{selectedBox.parent_box_id ?? 'N/A'}</span>
-            </div>
+
         {:else}
             <div class="no-selection">
                 Select a box to see its details.
