@@ -7,6 +7,7 @@ const URL = `ws://localhost:${PORT}`;
 let socket;
 let reconnectTimer;
 const RECONNECT_DELAY = 3000; // 3 seconds
+let ignoreNextSettingsUpdateForCurrentBox = false;
 
 export const connectionStatus = writable('disconnected'); // 'connecting', 'connected', 'disconnected', 'error'
 
@@ -153,12 +154,15 @@ export function saveSettingsToBox(targetBoxId) {
     sendMessage({ type: 'update_desktop_settings', settings: themeSettings, box_id: targetBoxId });
 }
 export function clearSettingsForBox(targetBoxId) {
+    if (targetBoxId === get(currentBoxId)) {
+        ignoreNextSettingsUpdateForCurrentBox = true;
+    }
     sendMessage({ type: 'clear_box_settings', box_id: targetBoxId });
 
-    // After clearing settings, the backend broadcasts the new state. However, to prevent
-    // a race condition where the UI updates with has_custom_settings=false before the
-    // broadcast arrives, we explicitly request the new settings. This ensures the
-    // local settings cache (`allBoxSettings`) is updated promptly, resolving the stuck UI.
+    // After clearing settings, the backend broadcasts the new box list. To prevent a
+    // race condition where the UI shows stale info (e.g. for the save button),
+    // we explicitly request the new settings for this box. This ensures the
+    // local settings cache (`allBoxSettings`) is updated promptly.
     getDesktopSettings(targetBoxId);
 }
 export function updateShortcutTransform(id, x, y, scale) {
@@ -267,7 +271,10 @@ function attemptConnection() {
                         allBoxSettings.update(s => ({...s, [msg.box_id]: msg.settings}));
                     }
                     if (msg.box_id === get(currentBoxId)) {
-                        if (msg.settings && Object.keys(msg.settings).length > 0) {
+                        if (ignoreNextSettingsUpdateForCurrentBox) {
+                            ignoreNextSettingsUpdateForCurrentBox = false; // Consume flag
+                            // Do not update active settings, preserving the user's "dirty" state.
+                        } else if (msg.settings && Object.keys(msg.settings).length > 0) {
                             // This will set the entire theme and also trigger the derived
                             // stores (desktopView, windowView) to update.
                             const fullSettings = mergeWithDefaults(msg.settings);

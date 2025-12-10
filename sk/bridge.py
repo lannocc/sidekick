@@ -97,7 +97,11 @@ def _get_boxes_with_settings_info(cursor):
     for box in boxes_data:
         box_id = box['id']
         if box_id == 0:
-            box['has_custom_settings'] = True
+            # The main desktop has custom settings if its theme config is not the default empty object.
+            # We ignore view settings for this check as they are always present and represent user state.
+            cursor.execute("SELECT theme FROM config WHERE box_id = 0")
+            config_row = cursor.fetchone()
+            box['has_custom_settings'] = config_row is not None and config_row['theme'] != '{}'
         else:
             # A box has custom settings if it has any entry in 'config' or 'settings' tables.
             cursor.execute("SELECT 1 FROM config WHERE box_id = ?", (box_id,))
@@ -623,7 +627,7 @@ async def websocket_handler(websocket):
                     DB_CONN.commit()
                     
                     await broadcast_box_list() # To update the has_custom_settings flag
-                    await broadcast_settings(box_id) # To push the new inherited settings to clients
+                    # await broadcast_settings(box_id) # To push the new inherited settings to clients
 
                 # --- Desktop Shortcut Operations ---
                 elif msg_type == 'create_shortcut':
