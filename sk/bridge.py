@@ -90,17 +90,101 @@ CONNECTED_CLIENTS = set()
 # --------------------
 
 def _run_migrations(cursor):
-    """Runs database migrations."""
+    """Runs database migrations for existing databases."""
     log.info("Checking for database migrations...")
 
-    # Migration: Add original_group_id to backed_window
-    # Check if the column exists first to make the migration idempotent.
+    # MIGRATION: Ensure default box with id=0 exists for FK constraints.
+    cursor.execute("INSERT OR IGNORE INTO box (id, name, type, context) VALUES (?, ?, ?, ?)",
+                   (0, 'Main Desktop', 'local', '.'))
+
+    # MIGRATION: Rename old tables if they exist.
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='desktop_shortcut'")
+    if cursor.fetchone():
+        log.info("Migrating: Renaming 'desktop_shortcut' to 'shortcut'.")
+        cursor.execute("ALTER TABLE desktop_shortcut RENAME TO shortcut")
+
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='desktop_settings'")
+    if cursor.fetchone():
+        log.info("Migrating: Renaming 'desktop_settings' to 'settings'.")
+        cursor.execute("ALTER TABLE desktop_settings RENAME TO settings")
+
+    # MIGRATION: Add 'box_id' to 'shortcut' table.
+    cursor.execute("PRAGMA table_info(shortcut)")
+    if 'box_id' not in {row['name'] for row in cursor.fetchall()}:
+        log.info("Applying migration: Adding 'box_id' to 'shortcut' table.")
+        cursor.execute("ALTER TABLE shortcut RENAME TO _shortcut_old")
+        cursor.execute("""
+            CREATE TABLE shortcut (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                box_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('file', 'dir')),
+                path TEXT NOT NULL,
+                x REAL NOT NULL,
+                y REAL NOT NULL,
+                scale REAL NOT NULL DEFAULT 1.0,
+                FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
+                UNIQUE(box_id, path)
+            );
+        """)
+        cursor.execute("INSERT INTO shortcut (id, box_id, name, type, path, x, y, scale) SELECT id, 0, name, type, path, x, y, scale FROM _shortcut_old")
+        cursor.execute("DROP TABLE _shortcut_old")
+        log.info("Migration successful.")
+
+    # MIGRATION: Add 'box_id' to 'settings' table.
+    cursor.execute("PRAGMA table_info(settings)")
+    if 'box_id' not in {row['name'] for row in cursor.fetchall()}:
+        log.info("Applying migration: Adding 'box_id' to 'settings' table.")
+        cursor.execute("ALTER TABLE settings RENAME TO _settings_old")
+        cursor.execute("""
+            CREATE TABLE settings (
+                box_id INTEGER NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY (box_id, key),
+                FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
+            );
+        """)
+        cursor.execute("INSERT INTO settings (box_id, key, value) SELECT 0, key, value FROM _settings_old")
+        cursor.execute("DROP TABLE _settings_old")
+        log.info("Migration successful.")
+
+
+    # MIGRATION: Add 'original_group_id' and 'box_id' to 'backed_window' table.
     cursor.execute("PRAGMA table_info(backed_window)")
-    columns = [row['name'] for row in cursor.fetchall()]
-    if 'original_group_id' not in columns:
+    bw_columns = {row['name'] for row in cursor.fetchall()}
+    if 'box_id' not in bw_columns:
+        log.info("Applying migration: Adding 'box_id' to 'backed_window' table.")
+        # Recreate the table to add the new column and foreign key.
+        cursor.execute("ALTER TABLE backed_window RENAME TO _backed_window_old")
+        cursor.execute("""
+            CREATE TABLE backed_window (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                box_id INTEGER NOT NULL,
+                config TEXT NOT NULL,
+                x REAL NOT NULL,
+                y REAL NOT NULL,
+                width REAL NOT NULL,
+                height REAL NOT NULL,
+                scale REAL NOT NULL DEFAULT 1.0,
+                z_index INTEGER NOT NULL DEFAULT 0,
+                original_group_id INTEGER,
+                FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
+            );
+        """)
+        # Dynamically build the column list for copying to handle old and newer schemas.
+        old_cols_list = ['id', 'config', 'x', 'y', 'width', 'height', 'scale', 'z_index', 'original_group_id']
+        old_cols_to_copy = [c for c in old_cols_list if c in bw_columns]
+        old_cols_str = ", ".join(old_cols_to_copy)
+        cursor.execute(f"INSERT INTO backed_window (box_id, {old_cols_str}) SELECT 0, {old_cols_str} FROM _backed_window_old")
+        cursor.execute("DROP TABLE _backed_window_old")
+        log.info("Migration successful.")
+    elif 'original_group_id' not in bw_columns:
+        # Handle case where box_id exists but original_group_id does not.
         log.info("Applying migration: Adding 'original_group_id' to 'backed_window' table.")
         cursor.execute("ALTER TABLE backed_window ADD COLUMN original_group_id INTEGER")
         log.info("Migration successful.")
+
 
 def init_db():
     """Initializes the SQLite database for SKYBRIDGE."""
@@ -114,7 +198,7 @@ def init_db():
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS box (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             type TEXT NOT NULL CHECK(type IN ('local', 'iosk')),
             context TEXT NOT NULL,
@@ -142,31 +226,38 @@ def init_db():
     """)
 
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS desktop_settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
+        CREATE TABLE IF NOT EXISTS settings (
+            box_id INTEGER NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            PRIMARY KEY (box_id, key),
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
         );
     """)
-    # Set default values if they don't exist
-    cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('panX', json.dumps(0)))
-    cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('panY', json.dumps(0)))
-    cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('zoom', json.dumps(1.0)))
+    # Set default values for the main desktop (box_id=0) if they don't exist
+    cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'panX', json.dumps(0)))
+    cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'panY', json.dumps(0)))
+    cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, 'zoom', json.dumps(1.0)))
 
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS desktop_shortcut (
+        CREATE TABLE IF NOT EXISTS shortcut (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            box_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             type TEXT NOT NULL CHECK(type IN ('file', 'dir')),
-            path TEXT NOT NULL UNIQUE,
+            path TEXT NOT NULL,
             x REAL NOT NULL,
             y REAL NOT NULL,
-            scale REAL NOT NULL DEFAULT 1.0
+            scale REAL NOT NULL DEFAULT 1.0,
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
+            UNIQUE(box_id, path)
         );
     """)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS backed_window (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            box_id INTEGER NOT NULL,
             config TEXT NOT NULL, -- JSON blob of window group
             x REAL NOT NULL,
             y REAL NOT NULL,
@@ -174,7 +265,8 @@ def init_db():
             height REAL NOT NULL,
             scale REAL NOT NULL DEFAULT 1.0,
             z_index INTEGER NOT NULL DEFAULT 0,
-            original_group_id INTEGER
+            original_group_id INTEGER,
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
         );
     """)
 
@@ -202,30 +294,30 @@ async def broadcast_box_list():
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
-async def broadcast_shortcut_list():
-    """Fetches all shortcuts and broadcasts them to all connected clients."""
+async def broadcast_shortcut_list(box_id):
+    """Fetches all shortcuts for a given box and broadcasts them."""
     if not DB_CONN:
         log.error("Database not connected, cannot broadcast shortcut list.")
         return
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, name, type, path, x, y, scale FROM desktop_shortcut")
+    cursor.execute("SELECT id, name, type, path, x, y, scale FROM shortcut WHERE box_id = ?", (box_id,))
     shortcuts = [dict(row) for row in cursor.fetchall()]
-    message = json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts})
+    message = json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts, 'box_id': box_id})
     if CONNECTED_CLIENTS:
-        log.info(f"Broadcasting shortcut_list to {len(CONNECTED_CLIENTS)} clients.")
+        log.info(f"Broadcasting shortcut_list for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
-async def broadcast_backed_window_list():
-    """Fetches all backed windows and broadcasts them to all connected clients."""
+async def broadcast_backed_window_list(box_id):
+    """Fetches all backed windows for a given box and broadcasts them."""
     if not DB_CONN:
         log.error("Database not connected, cannot broadcast backed window list.")
         return
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, config, x, y, width, height, scale, z_index, original_group_id FROM backed_window")
+    cursor.execute("SELECT id, config, x, y, width, height, scale, z_index, original_group_id FROM backed_window WHERE box_id = ?", (box_id,))
     windows = [dict(row) for row in cursor.fetchall()]
-    message = json.dumps({'type': 'backed_window_list', 'windows': windows})
+    message = json.dumps({'type': 'backed_window_list', 'windows': windows, 'box_id': box_id})
     if CONNECTED_CLIENTS:
-        log.info(f"Broadcasting backed_window_list to {len(CONNECTED_CLIENTS)} clients.")
+        log.info(f"Broadcasting backed_window_list for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
@@ -254,20 +346,20 @@ async def broadcast_box_config(box_id):
         log.info(f"Broadcasting box_config for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
-async def broadcast_desktop_settings():
-    """Fetches desktop settings and broadcasts them to all connected clients."""
+async def broadcast_settings(box_id):
+    """Fetches settings for a given box and broadcasts them."""
     if not DB_CONN:
         log.error("Database not connected, cannot broadcast desktop settings.")
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT key, value FROM desktop_settings")
+    cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (box_id,))
     settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
 
-    message = json.dumps({'type': 'desktop_settings', 'settings': settings})
+    message = json.dumps({'type': 'desktop_settings', 'settings': settings, 'box_id': box_id})
 
     if CONNECTED_CLIENTS:
-        log.info(f"Broadcasting desktop_settings to {len(CONNECTED_CLIENTS)} clients.")
+        log.info(f"Broadcasting desktop_settings for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
@@ -493,19 +585,17 @@ async def websocket_handler(websocket):
     active_terminals = {} # term_id -> {'pid': pid, 'fd': fd, 'task': task}
 
     try:
-        # Send initial desktop settings on connect
+        # Send initial state for the main desktop (box_id=0) for backward compatibility
         cursor = DB_CONN.cursor()
-        cursor.execute("SELECT key, value FROM desktop_settings")
+        cursor.execute("SELECT key, value FROM settings WHERE box_id = 0")
         settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
         await websocket.send(json.dumps({'type': 'desktop_settings', 'settings': settings}))
 
-        # Send initial shortcut list on connect
-        cursor.execute("SELECT id, name, type, path, x, y, scale FROM desktop_shortcut")
+        cursor.execute("SELECT id, name, type, path, x, y, scale FROM shortcut WHERE box_id = 0")
         shortcuts = [dict(row) for row in cursor.fetchall()]
         await websocket.send(json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts}))
 
-        # Send initial backed window list on connect
-        cursor.execute("SELECT id, config, x, y, width, height, scale, z_index, original_group_id FROM backed_window")
+        cursor.execute("SELECT id, config, x, y, width, height, scale, z_index, original_group_id FROM backed_window WHERE box_id = 0")
         backed_windows = [dict(row) for row in cursor.fetchall()]
         await websocket.send(json.dumps({'type': 'backed_window_list', 'windows': backed_windows}))
 
@@ -538,64 +628,72 @@ async def websocket_handler(websocket):
 
                 # --- Desktop Settings ---
                 elif msg_type == 'update_desktop_settings':
+                    box_id = msg.get('box_id', 0)
                     settings_to_update = msg.get('settings', {})
-                    print_action("Update Dsk Cfg", f"{settings_to_update}")
+                    print_action("Update Dsk Cfg", f"box={box_id}, {settings_to_update}")
                     cursor = DB_CONN.cursor()
                     for key, value in settings_to_update.items():
                         cursor.execute(
-                            "INSERT OR REPLACE INTO desktop_settings (key, value) VALUES (?, ?)",
-                            (key, json.dumps(value))
+                            "INSERT OR REPLACE INTO settings (box_id, key, value) VALUES (?, ?, ?)",
+                            (box_id, key, json.dumps(value))
                         )
                     DB_CONN.commit()
-                    await broadcast_desktop_settings()
+                    await broadcast_settings(box_id)
 
                 # --- Desktop Shortcut Operations ---
                 elif msg_type == 'create_shortcut':
-                    # FIX: Use 'shortcut_type' to avoid collision with the message 'type'
+                    box_id = msg.get('box_id', 0)
                     name, shortcut_type, path, x, y = msg['name'], msg['shortcut_type'], msg['path'], msg['x'], msg['y']
-                    print_action("Create Shortcut", f"path='{path}'")
+                    print_action("Create Shortcut", f"box={box_id}, path='{path}'")
                     cursor = DB_CONN.cursor()
                     cursor.execute("""
-                        INSERT INTO desktop_shortcut (name, type, path, x, y)
-                        VALUES (?, ?, ?, ?, ?)
-                        ON CONFLICT(path) DO UPDATE SET
+                        INSERT INTO shortcut (box_id, name, type, path, x, y)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(box_id, path) DO UPDATE SET
                             x = excluded.x,
                             y = excluded.y;
-                    """, (name, shortcut_type, path, x, y))
+                    """, (box_id, name, shortcut_type, path, x, y))
                     DB_CONN.commit()
-                    await broadcast_shortcut_list()
+                    await broadcast_shortcut_list(box_id)
 
                 elif msg_type == 'update_shortcut_transform':
                     shortcut_id, x, y, scale = msg['id'], msg['x'], msg['y'], msg.get('scale', 1.0)
                     print_action("Shortcut Xform", f"id={shortcut_id}, x={int(x)}, y={int(y)}, scale={scale:.2f}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute(
-                        "UPDATE desktop_shortcut SET x = ?, y = ?, scale = ? WHERE id = ?",
-                        (x, y, scale, shortcut_id)
-                    )
-                    DB_CONN.commit()
-                    await broadcast_shortcut_list()
+                    cursor.execute("SELECT box_id FROM shortcut WHERE id = ?", (shortcut_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        cursor.execute(
+                            "UPDATE shortcut SET x = ?, y = ?, scale = ? WHERE id = ?",
+                            (x, y, scale, shortcut_id)
+                        )
+                        DB_CONN.commit()
+                        await broadcast_shortcut_list(row['box_id'])
 
                 elif msg_type == 'delete_shortcut':
                     shortcut_id = msg['id']
                     print_action("Delete Shortcut", f"id={shortcut_id}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("DELETE FROM desktop_shortcut WHERE id = ?", (shortcut_id,))
-                    DB_CONN.commit()
-                    await broadcast_shortcut_list()
+                    cursor.execute("SELECT box_id FROM shortcut WHERE id = ?", (shortcut_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        cursor.execute("DELETE FROM shortcut WHERE id = ?", (shortcut_id,))
+                        DB_CONN.commit()
+                        await broadcast_shortcut_list(row['box_id'])
 
                 # --- Backed Window Operations ---
                 elif msg_type == 'create_backed_window':
+                    box_id = msg.get('box_id', 0)
                     config, x, y, w, h, scale = msg['config'], msg['x'], msg['y'], msg['width'], msg['height'], msg.get('scale', 1.0)
                     original_group_id = msg.get('original_group_id')
-                    print_action("Create BackWin", f"x={int(x)}, y={int(y)}")
+                    print_action("Create BackWin", f"box={box_id}, x={int(x)}, y={int(y)}")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
-                        "INSERT INTO backed_window (config, x, y, width, height, scale, original_group_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (config, x, y, w, h, scale, original_group_id)
+                        "INSERT INTO backed_window (box_id, config, x, y, width, height, scale, original_group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (box_id, config, x, y, w, h, scale, original_group_id)
                     )
                     DB_CONN.commit()
-                    await broadcast_backed_window_list()
+                    await broadcast_backed_window_list(box_id)
                 elif msg_type == 'update_backed_window_transform':
                     win_id, x, y, scale = msg['id'], msg['x'], msg['y'], msg.get('scale', 1.0)
                     config_json = msg.get('config')
@@ -604,25 +702,31 @@ async def websocket_handler(websocket):
                         action_details += ", config=updated"
                     print_action("BackWin Xform ", action_details)
                     cursor = DB_CONN.cursor()
-                    if config_json:
-                        cursor.execute(
-                            "UPDATE backed_window SET x = ?, y = ?, scale = ?, config = ? WHERE id = ?",
-                            (x, y, scale, config_json, win_id)
-                        )
-                    else:
-                        cursor.execute(
-                            "UPDATE backed_window SET x = ?, y = ?, scale = ? WHERE id = ?",
-                            (x, y, scale, win_id)
-                        )
-                    DB_CONN.commit()
-                    await broadcast_backed_window_list()
+                    cursor.execute("SELECT box_id FROM backed_window WHERE id = ?", (win_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        if config_json:
+                            cursor.execute(
+                                "UPDATE backed_window SET x = ?, y = ?, scale = ?, config = ? WHERE id = ?",
+                                (x, y, scale, config_json, win_id)
+                            )
+                        else:
+                            cursor.execute(
+                                "UPDATE backed_window SET x = ?, y = ?, scale = ? WHERE id = ?",
+                                (x, y, scale, win_id)
+                            )
+                        DB_CONN.commit()
+                        await broadcast_backed_window_list(row['box_id'])
                 elif msg_type == 'delete_backed_window':
                     win_id = msg['id']
                     print_action("Delete BackWin", f"id={win_id}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("DELETE FROM backed_window WHERE id = ?", (win_id,))
-                    DB_CONN.commit()
-                    await broadcast_backed_window_list()
+                    cursor.execute("SELECT box_id FROM backed_window WHERE id = ?", (win_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        cursor.execute("DELETE FROM backed_window WHERE id = ?", (win_id,))
+                        DB_CONN.commit()
+                        await broadcast_backed_window_list(row['box_id'])
 
 
                 # --- SKYBRIDGE Box Operations ---
