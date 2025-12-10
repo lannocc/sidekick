@@ -129,6 +129,30 @@
         };
     }
 
+    function getActiveTab(win) {
+        if (!win || !win.tabs) return null;
+        return win.tabs.find(t => t.id === win.activeTabId) || win.tabs[0];
+    }
+
+    const componentIconMap = {
+        'Settings': '⚙️',
+        'Calculator': '🧮',
+        'WebBrowser': '🌐',
+        'IoskConsole': '🖥️',
+        'Ask': '?',
+        'Boxes': '📦',
+        'LocalFileExplorer': '📁',
+        'LocalTerminal': '>_',
+        'IoskFileExplorer': '📁',
+        'IoskPrivateChat': '💬',
+        'LocalFileViewer': '📄',
+        'IoskFileViewer': '📄',
+        'IoskWatch': '👀',
+        'IoskUserInspector': '🕵️',
+        'NotificationCenter': '🔔',
+        'default': '🗔'
+    };
+
     function getActiveTabTitle(win) {
         if (!win || !win.tabs) return '...';
         const activeTab = win.tabs.find(t => t.id === win.activeTabId);
@@ -563,6 +587,19 @@
     .menu-item-close:hover {
         background-color: #e0443e;
     }
+    .menu-item-icon {
+        margin-right: 8px;
+        width: 16px;
+        height: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 16px;
+    }
+    img.menu-item-icon {
+        object-fit: contain;
+    }
     /* New button for navigating up box hierarchy */
     .menu-item-up {
         background-color: #ffbd2e;
@@ -586,7 +623,7 @@
     .menu-item-row:hover .menu-item {
         background-color: transparent;
     }
-    .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 10px 15px; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+    .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 10px 15px; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; }
     .menu-item:last-child { border-bottom: none; }
     .menu-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .menu-item:disabled { color: #7f8c8d; cursor: not-allowed; }
@@ -706,6 +743,7 @@
                                         showWindowsMenu = false;
                                     }
                                 }}>
+                                <img src="/skybox.png" alt="" class="menu-item-icon" />
                                 {box.name || 'Main Desktop'}
                             </button>
                         {:else}
@@ -713,13 +751,21 @@
                                 on:click={() => { if ($connectionStatus === 'connected') { switchToBox(parentBox.id); showWindowsMenu = false; } }} 
                                 disabled={$connectionStatus !== 'connected'}
                                 title="Return to {parentBox.name}">
-                                ←
+                                ⬑
                             </button>
                             <button type="button" class="menu-item"
                                 style="padding-left: {15 + (i - 1) * 15}px;"
                                 class:bold={isCurrentBox}
-                                disabled={!isCurrentBox}
-                                on:click={() => { if (isCurrentBox) handleCurrentBoxClick(); }}>
+                                disabled={!isCurrentBox && $connectionStatus !== 'connected'}
+                                on:click={() => {
+                                    if (isCurrentBox) {
+                                        handleCurrentBoxClick();
+                                    } else if ($connectionStatus === 'connected') {
+                                        switchToBox(box.id);
+                                        showWindowsMenu = false;
+                                    }
+                                }}>
+                                <img src="/skybox.png" alt="" class="menu-item-icon" />
                                 {box.name}
                             </button>
                         {/if}
@@ -731,11 +777,13 @@
                 {/if}
 
                 {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
+                    {@const activeTab = getActiveTab(win)}
                     <div class="menu-item-row">
                         <button class="menu-item-close" on:click={() => windows.removeWindow(win.id)} title="Close window">✕</button>
                         <button class="menu-item" 
                             class:bold={win.id === activeWindowId}
                             on:click={() => { if ($dashActive) dashActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
+                            {#if activeTab}<span class="menu-item-icon">{componentIconMap[activeTab.componentName] || componentIconMap.default}</span>{/if}
                             {getActiveTabTitle(win)}
                         </button>
                     </div>
