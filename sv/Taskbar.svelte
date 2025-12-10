@@ -4,9 +4,9 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter } from './windows.js';
+    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, newBoxesWindow } from './windows.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems } from './desktop.js';
-    import { createBox, connectionStatus } from './bridge.js';
+    import { connectionStatus } from './bridge.js';
     import Clock from './Clock.svelte';
     import { get } from 'svelte/store';
 
@@ -391,17 +391,6 @@
     function launchLocalFileExplorer(props = {}) { newLocalFileExplorer(props); showMenu = false; }
     function launchAsk(props = {}) { newAskWindow(props); showMenu = false; }
 
-    function newBox() {
-        const name = prompt("Enter a name for the new Box:", "My Project Box");
-        if (!name) return;
-
-        // For simplicity, this implementation only handles 'local' type boxes.
-        const context = prompt("Enter the local filesystem path for the Box:", "/home/user/project");
-        if (!context) return;
-
-        createBox(name, 'local', context);
-    }
-
     function toggleSkyCloak() {
         desktopSettings.update(s => {
             s.sky.cloak.enabled = !s.sky.cloak.enabled;
@@ -729,7 +718,7 @@
 
                 <!-- Bottom Row -->
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Ask">?</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBox(); showMenu = false; }} disabled={$connectionStatus !== 'connected'} title="New Box">📦</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBoxesWindow({ sourceEvent: e }); showMenu = false; }} disabled={$connectionStatus !== 'connected'} title="Boxes">📦</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Files">📁</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalTerminal({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Terminal">&gt;_</button>
             </div>

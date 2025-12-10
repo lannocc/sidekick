@@ -13,6 +13,7 @@ import Ask from './board/Ask.svelte';
 import IoskWatch from './board/IoskWatch.svelte';
 import IoskUserInspector from './board/IoskUserInspector.svelte';
 import NotificationCenter from './board/NotificationCenter.svelte';
+import Boxes from './board/Boxes.svelte';
 import { TASKBAR_HEIGHT, desktopSettings, windowSettings, notificationHistory, unreadNoticeCount, desktopView, windowView } from './desktop.js';
 import { createBackedWindow, deleteBackedWindow, createBox, boxes, desktopShortcuts, backedWindows } from './bridge.js';
 
@@ -57,6 +58,7 @@ export const componentMap = {
     'IoskWatch': IoskWatch,
     'IoskUserInspector': IoskUserInspector,
     'NotificationCenter': NotificationCenter,
+    'Boxes': Boxes,
 };
 
 export function getComponentType(component) {
@@ -1133,6 +1135,22 @@ export function newNotificationCenter(props = {}) {
 
     windows.addWindow(NotificationCenter, { title: 'Notifications', width: 475, height: 475, ...props });
 }
+export function newBoxesWindow(props = {}) {
+    const allWindows = get(windows);
+    const existingBoxesTab = allWindows.flatMap(g => g.tabs).find(t =>
+        t.componentName === 'Boxes'
+    );
+
+    if (existingBoxesTab) {
+        const group = allWindows.find(g => g.tabs.some(t => t.id === existingBoxesTab.id));
+        if (group.minimized) windows.toggleMinimize(group.id);
+        else windows.focusWindow(group.id);
+        windows.setActiveTab(group.id, existingBoxesTab.id);
+        return;
+    }
+
+    windows.addWindow(Boxes, { title: 'Boxes', width: 600, height: 400, ...props });
+}
 export function newIoskFileExplorer(consoleTabId, consoleTitle, props = {}) {
     const title = `Files - ${consoleTitle || `Console ${consoleTabId}`}`;
     const explorerSettings = get(windowSettings)['IoskFileExplorer'];
@@ -1319,5 +1337,5 @@ export function newBox(props = {}) {
         if (!found) candidatePos = startPos; // Fallback if no spot is found
     }
     
-    createBox(name, 'local', context, aspectRatio, candidatePos.x, candidatePos.y);
+    createBox(name, 'local', context, { aspectRatio, screenX: candidatePos.x * zoom + panX, screenY: candidatePos.y * zoom + panY + TASKBAR_HEIGHT });
 }
