@@ -226,6 +226,7 @@
         background-color: var(--item-hover-bg);
     }
     .box-list-item.selected {
+        font-weight: bold;
         background-color: var(--item-selected-bg);
     }
     .box-list-item.current { /* Style for the active desktop box */
@@ -497,7 +498,7 @@
         {#if selectedBox}
             <div class="details-group">
                 <label for="box-name-input">Name</label>
-                <input id="box-name-input" type="text" bind:value={nameInput} on:blur={handleNameUpdate} disabled={selectedBox.id === 0} />
+                <input id="box-name-input" type="text" bind:value={nameInput} on:blur={handleNameUpdate} />
             </div>
 
             <div class="tabs">
