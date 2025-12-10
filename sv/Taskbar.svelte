@@ -19,6 +19,10 @@
     let screenWidth;
     let menuBackgroundStyle = '';
 
+    // For box hierarchy and active item highlighting
+    let boxHierarchy = [];
+    let activeWindowId = null;
+
     $: tbSettings = $desktopSettings.sky?.frame;
     $: tbHeight = tbSettings?.height || 40;
 
@@ -30,6 +34,33 @@
         } else {
             menuBackgroundStyle = `background-color: ${tbSettings.bgColor};`;
         }
+    }
+
+    $: {
+        // Calculate box hierarchy path
+        const path = [];
+        if ($boxes.length > 0) {
+            const boxMap = new Map($boxes.map(b => [b.id, b]));
+            let current = boxMap.get($currentBoxId);
+            while (current) {
+                path.unshift(current);
+                current = boxMap.get(current.parent_box_id);
+            }
+            // Ensure root is present if it's not the start of the path
+            if (path.length === 0) {
+                 const rootBox = boxMap.get(0);
+                 if (rootBox) path.push(rootBox);
+            } else if (path[0].id !== 0) {
+                 const rootBox = boxMap.get(0);
+                 if (rootBox && !path.find(p => p.id === 0)) {
+                     path.unshift(rootBox);
+                 }
+            }
+        }
+        boxHierarchy = path;
+
+        // Find active window
+        activeWindowId = ($windows.find(w => w.isActive))?.id;
     }
 
     function generateBgStyle(bgSettings) {
@@ -519,6 +550,22 @@
     .menu-item-close:hover {
         background-color: #e0443e;
     }
+    /* New button for navigating up box hierarchy */
+    .menu-item-up {
+        background-color: #ffbd2e;
+        border: none;
+        color: #333;
+        cursor: pointer;
+        padding: 0 12px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2em;
+    }
+    .menu-item-up:hover {
+        background-color: #e0a320;
+    }
     .menu-item-row .menu-item {
         border-bottom: none;
         flex-grow: 1;
@@ -530,6 +577,14 @@
     .menu-item:last-child { border-bottom: none; }
     .menu-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .menu-item:disabled { color: #7f8c8d; cursor: not-allowed; }
+    /* New style for bolding active items */
+    .menu-item.bold {
+        font-weight: bold;
+    }
+    .menu-item.bold:disabled {
+        color: var(--taskbar-text);
+        opacity: 1;
+    }
     .start-menu .menu-item {
         position: relative;
         padding: 0;
@@ -587,14 +642,13 @@
     .close-all-row .menu-item {
         color: #e74c3c;
         font-weight: bold;
+        flex-grow: 1;
     }
     .close-all-row:hover {
         background-color: #c0392b;
-        color: white;
     }
-    /* When hovering the entire "Close All" row, highlight the 'x' button too */
-    .close-all-row:hover .menu-item-close {
-        background-color: #e0443e;
+    .close-all-row:hover .menu-item {
+        color: white;
     }
     .start-button, .windows-list-button { position: relative; }
     .start-button::after, .windows-list-button::after { content: ''; position: absolute; bottom: 0px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
@@ -621,29 +675,35 @@
         <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>✕</button>
         <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">&mdash;</button>
         {#if showWindowsMenu}
-            {@const mainBox = $boxes.find(b => b.id === 0)}
             <div class="windows-menu" style={menuBackgroundStyle}>
-                <div class="menu-item-row">
-                    <button class="menu-item" 
-                        disabled={$connectionStatus !== 'connected' || $currentBoxId === 0}
-                        on:click={() => { if ($connectionStatus === 'connected') { switchToBox(0); showWindowsMenu = false; } }}>
-                        {mainBox ? mainBox.name : 'Main Desktop Box'}
-                    </button>
-                </div>
-
-                {#if $currentBoxId !== 0 && $currentBox}
+                {#each boxHierarchy as box, i (box.id)}
+                    {@const isCurrentBox = box.id === $currentBoxId}
+                    {@const parentBox = i > 0 ? boxHierarchy[i-1] : null}
                     <div class="menu-item-row">
-                        <button class="menu-item-close" 
-                            on:click={() => { if ($connectionStatus === 'connected') { switchToBox(0); showWindowsMenu = false; } }} 
-                            disabled={$connectionStatus !== 'connected'}
-                            title="Return to Main Desktop">
-                            ✕
-                        </button>
-                        <button class="menu-item" disabled>
-                            {$currentBox.name}
-                        </button>
+                        {#if i === 0}
+                            <button class="menu-item" 
+                                style="padding-left: 15px;"
+                                class:bold={isCurrentBox}
+                                disabled={$connectionStatus !== 'connected' || isCurrentBox}
+                                on:click={() => { if ($connectionStatus === 'connected') { switchToBox(box.id); showWindowsMenu = false; } }}>
+                                {box.name || 'Main Desktop'}
+                            </button>
+                        {:else}
+                            <button type="button" class="menu-item-up" 
+                                on:click={() => { if ($connectionStatus === 'connected') { switchToBox(parentBox.id); showWindowsMenu = false; } }} 
+                                disabled={$connectionStatus !== 'connected'}
+                                title="Return to {parentBox.name}">
+                                ←
+                            </button>
+                            <button type="button" class="menu-item"
+                                style="padding-left: {15 + (i - 1) * 15}px;"
+                                class:bold={isCurrentBox}
+                                disabled>
+                                {box.name}
+                            </button>
+                        {/if}
                     </div>
-                {/if}
+                {/each}
 
                 {#if $windows.length > 0}
                     <div class="menu-separator"></div>
@@ -652,7 +712,9 @@
                 {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
                     <div class="menu-item-row">
                         <button class="menu-item-close" on:click={() => windows.removeWindow(win.id)} title="Close window">✕</button>
-                        <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
+                        <button class="menu-item" 
+                            class:bold={win.id === activeWindowId}
+                            on:click={() => { if ($dashActive) dashActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
                             {getActiveTabTitle(win)}
                         </button>
                     </div>
@@ -661,7 +723,6 @@
                 {/each}
                 {#if $windows.length > 0}
                     <div class="menu-item-row close-all-row" on:click={handleCloseAllClick}>
-                        <button type="button" class="menu-item-close">✕</button>
                         <button type="button" class="menu-item">Close All Windows</button>
                     </div>
                 {/if}
