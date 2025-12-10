@@ -410,6 +410,19 @@
         }
     }
 
+    function handleCurrentBoxClick() {
+        const allWindows = get(windows);
+        // If there are any windows that are not minimized, minimize all. Otherwise, restore all.
+        const shouldMinimize = allWindows.some(w => !w.minimized);
+
+        if (shouldMinimize) {
+            windows.minimizeAllWindows();
+        } else {
+            windows.restoreAllWindows();
+        }
+        showWindowsMenu = false;
+    }
+
     function handleWindowClick(event) {
         if (showMenu && startButton && !startButton.contains(event.target)) showMenu = false;
         if (showWindowsMenu && windowsButton && !windowsButton.contains(event.target)) showWindowsMenu = false;
@@ -684,8 +697,15 @@
                             <button class="menu-item" 
                                 style="padding-left: 15px;"
                                 class:bold={isCurrentBox}
-                                disabled={$connectionStatus !== 'connected' || isCurrentBox}
-                                on:click={() => { if ($connectionStatus === 'connected') { switchToBox(box.id); showWindowsMenu = false; } }}>
+                                disabled={!isCurrentBox && $connectionStatus !== 'connected'}
+                                on:click={() => {
+                                    if (isCurrentBox) {
+                                        handleCurrentBoxClick();
+                                    } else if ($connectionStatus === 'connected') {
+                                        switchToBox(box.id);
+                                        showWindowsMenu = false;
+                                    }
+                                }}>
                                 {box.name || 'Main Desktop'}
                             </button>
                         {:else}
@@ -698,7 +718,8 @@
                             <button type="button" class="menu-item"
                                 style="padding-left: {15 + (i - 1) * 15}px;"
                                 class:bold={isCurrentBox}
-                                disabled>
+                                disabled={!isCurrentBox}
+                                on:click={() => { if (isCurrentBox) handleCurrentBoxClick(); }}>
                                 {box.name}
                             </button>
                         {/if}
