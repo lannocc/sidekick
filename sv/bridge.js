@@ -150,6 +150,23 @@ export function saveSettingsToBox(targetBoxId) {
     const { panX, panY, zoom, windowPanX, windowPanY, windowZoom, ...themeSettings } = fullSettings;
     sendMessage({ type: 'update_desktop_settings', settings: themeSettings, box_id: targetBoxId });
 }
+export function clearSettingsForBox(targetBoxId) {
+    // Clear theme settings by sending an empty object
+    sendMessage({ type: 'update_desktop_settings', settings: {}, box_id: targetBoxId });
+
+    // Reset view settings to their defaults
+    const defaultViewSettings = {
+        panX: 0, panY: 0, zoom: 1.0,
+        windowPanX: 0, windowPanY: 0, windowZoom: 1.0,
+    };
+    sendMessage({ type: 'update_view_settings', settings: defaultViewSettings, box_id: targetBoxId });
+
+    // If the currently active box was just cleared, reload its settings
+    // to reflect the change immediately.
+    if (targetBoxId === get(currentBoxId)) {
+        getDesktopSettings(targetBoxId);
+    }
+}
 export function updateShortcutTransform(id, x, y, scale) {
     sendMessage({ type: 'update_shortcut_transform', id, x, y, scale });
 }

@@ -8,7 +8,7 @@
     import { windows } from '../windows.js';
     import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
     import { onDestroy } from 'svelte';
-    import { connectionStatus, boxes, saveSettingsToBox, getDesktopSettings, desktopSettingsResponse } from '../bridge.js';
+    import { connectionStatus, boxes, saveSettingsToBox, getDesktopSettings, desktopSettingsResponse, clearSettingsForBox } from '../bridge.js';
 
     export let id;
     export let groupId;
@@ -49,6 +49,20 @@
     function handleSave(boxId) {
         saveSettingsToBox(boxId);
         showSaveLoadMenu = false;
+    }
+
+    function handleClear(boxId) {
+        const box = get(boxes).find(b => b.id === boxId);
+        if (!box) return;
+        // Main Desktop (id=0) is protected from being cleared via the UI.
+        if (box.id === 0) {
+            console.warn("Attempted to clear settings for Main Desktop, which is disallowed.");
+            return;
+        }
+
+        if (confirm(`Are you sure you want to reset all theme and view settings for "${box.name}"? This cannot be undone.`)) {
+            clearSettingsForBox(boxId);
+        }
     }
 
     let activeTab = 'general';
@@ -358,7 +372,7 @@
         border-radius: 4px;
         box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         z-index: 10;
-        min-width: 200px;
+        min-width: 220px;
         padding: 5px 0;
     }
     .menu-header {
@@ -369,23 +383,59 @@
         color: var(--taskbar-text);
         opacity: 0.7;
     }
-    .menu-item {
-        padding: 8px 15px;
-        cursor: pointer;
-        background: none;
-        border: none;
-        width: 100%;
-        text-align: left;
-        color: var(--taskbar-text);
-        font-size: 13px;
-    }
-    .menu-item:hover {
-        background-color: var(--taskbar-button-hover-bg);
-    }
     .menu-divider {
         height: 1px;
         background-color: var(--border-color);
         margin: 5px 0;
+    }
+
+    .menu-item-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 2px 8px;
+        transition: background-color 0.15s ease;
+    }
+    .menu-item-row:hover {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+    .box-name-clickable {
+        flex-grow: 1;
+        padding: 6px 8px;
+        cursor: pointer;
+        text-align: left;
+        background: none;
+        border: none;
+        color: var(--taskbar-text);
+        font-size: 13px;
+        border-radius: 3px;
+    }
+    .box-name-clickable:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .action-button {
+        background: none;
+        border: 1px solid transparent;
+        color: var(--taskbar-text);
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        line-height: 1;
+        flex-shrink: 0;
+    }
+    .action-button:hover:not(:disabled) {
+        background-color: var(--taskbar-button-hover-bg);
+        border-color: var(--border-color);
+    }
+    .action-button:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
     }
 
     h2 {
@@ -522,24 +572,34 @@
                 class="menu-button"
                 on:click={() => showSaveLoadMenu = !showSaveLoadMenu}
                 disabled={$connectionStatus !== 'connected'}
-                title={$connectionStatus !== 'connected' ? 'SKYBRIDGE connection required' : 'Load/Save Settings'}
+                title={$connectionStatus !== 'connected' ? 'SKYBRIDGE connection required' : 'Manage Box Settings'}
             >
                 <img src="/skybox.png" alt="menu" />
             </button>
             {#if showSaveLoadMenu && $connectionStatus === 'connected'}
                 <div class="dropdown-menu">
-                    <div class="menu-header">Load From Box</div>
+                    <div class="menu-header">Manage Box Settings</div>
                     {#each $boxes as box (box.id)}
-                        <button class="menu-item" on:click={() => handleLoad(box.id)} style:font-weight={$currentBoxId === box.id ? 'bold' : 'normal'}>
-                            {box.name}
-                        </button>
-                    {/each}
-                    <div class="menu-divider"></div>
-                    <div class="menu-header">Save To Box</div>
-                    {#each $boxes as box (box.id)}
-                         <button class="menu-item" on:click={() => handleSave(box.id)} style:font-weight={$currentBoxId === box.id ? 'bold' : 'normal'}>
-                            {box.name}
-                        </button>
+                        <div class="menu-item-row">
+                            <button
+                                class="action-button"
+                                on:click|stopPropagation={() => handleClear(box.id)}
+                                disabled={box.id === 0}
+                                title={box.id === 0 ? 'Cannot reset Main Desktop' : `Reset settings for ${box.name}`}
+                            >
+                                🗑️
+                            </button>
+                            <button class="box-name-clickable" on:click={() => handleLoad(box.id)} style:font-weight={$currentBoxId === box.id ? 'bold' : 'normal'}>
+                                {box.name}
+                            </button>
+                            <button
+                                class="action-button"
+                                on:click|stopPropagation={() => handleSave(box.id)}
+                                title={`Save current settings to ${box.name}`}
+                            >
+                                💾
+                            </button>
+                        </div>
                     {/each}
                 </div>
             {/if}
