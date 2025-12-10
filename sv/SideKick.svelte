@@ -7,9 +7,24 @@
     import Desktop from './Desktop.svelte';
     import Taskbar from './Taskbar.svelte';
     import { windows } from './windows.js';
-    import { dashActive, dashLayouts, dashCycleIndex, desktopSettings, activeBoxId, skyCloakEnabled } from './desktop.js';
+    import { dashActive, dashLayouts, dashCycleIndex, desktopSettings, activeBoxId, skyCloakEnabled, currentBoxId } from './desktop.js';
     import { get } from 'svelte/store';
     import { initializeLocalConnection } from './bridge.js';
+
+    // --- NEW: Box switching effect logic ---
+    let boxSwitchKey = 0;
+    let isFirstRun = true;
+
+    $: {
+        // This reactive block runs whenever currentBoxId changes.
+        if ($currentBoxId !== undefined && !isFirstRun) {
+            // Increment the key to force re-rendering of the animation element.
+            boxSwitchKey += 1;
+        }
+        if ($currentBoxId !== undefined) {
+            isFirstRun = false;
+        }
+    }
 
     function generateBgStyle(bgSettings) {
         if (!bgSettings) return '';
@@ -195,6 +210,33 @@
         transition: opacity 0.3s ease-in-out;
     }
 
+    /* --- NEW: Box switching effect --- */
+    @keyframes box-switch-flash {
+        0% {
+            opacity: 0;
+            backdrop-filter: blur(0px) brightness(1);
+        }
+        50% {
+            opacity: 0.25;
+            background-color: #88C0D0; /* A light blue from the Nord theme */
+            backdrop-filter: blur(4px) brightness(1.2);
+        }
+        100% {
+            opacity: 0;
+            backdrop-filter: blur(0px) brightness(1);
+        }
+    }
+    .box-switch-effect {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 31000; /* Above sky-cloak */
+        pointer-events: none;
+        animation: box-switch-flash 0.4s ease-in-out;
+    }
+
     /* --- GLOBAL SCROLLBAR STYLES --- */
     :global(*), :global(*::before), :global(*::after) {
         /* For Firefox */
@@ -228,6 +270,13 @@
     on:contextmenu|preventDefault={disableSkyCloak}
     on:wheel|preventDefault={disableSkyCloak}
 ></div>
+
+<!-- NEW: Box switching effect overlay -->
+{#if boxSwitchKey > 0}
+    {#key boxSwitchKey}
+        <div class="box-switch-effect"></div>
+    {/key}
+{/if}
 
 <div class="sk-container" on:contextmenu|preventDefault>
     <div class="top-frame" style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity};">
