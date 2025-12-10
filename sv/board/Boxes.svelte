@@ -1,25 +1,76 @@
 <!-- sv/board/Boxes.svelte -->
 <script>
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { boxes, updateBox, deleteBox } from '../bridge.js';
+    import { currentBoxId } from '../desktop.js';
     import { newBox as createNewBoxEntity } from '../windows.js';
 
     let selectedBoxId = null;
     let selectedBox = null;
     let nameInput = '';
 
-    // When boxes store updates, if we have a selected id, find the full object.
+    // --- State for resizable panel ---
+    let leftPanelWidth = 220;
+    let isResizing = false;
+
+    // --- State and logic for tree view ---
+    let boxTree = [];
+    let flatBoxList = [];
+    let expanded = { 0: true }; // Root is expanded by default
+
+    function toggleExpand(boxId) {
+        expanded[boxId] = !expanded[boxId];
+    }
+
+    // Rebuild the tree structure when the source box list changes
+    $: if ($boxes && $boxes.length > 0) {
+        const buildTree = (parentId) => {
+            return $boxes
+                .filter(box => box.parent_box_id === parentId)
+                .map(box => ({
+                    ...box,
+                    children: buildTree(box.id)
+                }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+        };
+
+        const mainDesktop = $boxes.find(b => b.id === 0);
+        if (mainDesktop) {
+            boxTree = [{
+                ...mainDesktop,
+                children: buildTree(0)
+            }];
+        } else {
+            boxTree = [];
+        }
+    }
+
+    // Flatten the tree for rendering, respecting expanded state
+    $: {
+        const flatten = (nodes, level = 0) => {
+            let result = [];
+            for (const node of nodes) {
+                result.push({ ...node, level });
+                if (node.children && node.children.length > 0 && expanded[node.id]) {
+                    result.push(...flatten(node.children, level + 1));
+                }
+            }
+            return result;
+        }
+        flatBoxList = flatten(boxTree);
+    }
+
+    // When boxes store updates, update the selected box object
     $: if ($boxes && selectedBoxId !== null) {
         selectedBox = $boxes.find(b => b.id === selectedBoxId);
         if (selectedBox) {
             nameInput = selectedBox.name;
         } else {
-            // The selected box was deleted, select another one (defaulting to main desktop).
             selectedBoxId = $boxes.find(b => b.id === 0) ? 0 : ($boxes.length > 0 ? $boxes[0].id : null);
         }
     }
 
-    // Initialize selection on mount, defaulting to the main desktop (id=0).
+    // Initialize selection on mount
     onMount(() => {
         if ($boxes.length > 0 && selectedBoxId === null) {
             selectedBoxId = 0;
@@ -36,10 +87,10 @@
         }
     }
 
-    function handleDeleteBox(id, name) {
-        if (id === 0) return; // Should be prevented by UI anyway
-        if (confirm(`Are you sure you want to delete the box "${name}"? This cannot be undone.`)) {
-            deleteBox(id);
+    function handleDeleteSelectedBox() {
+        if (!selectedBox || selectedBox.id === 0) return;
+        if (confirm(`Are you sure you want to delete the box "${selectedBox.name}"? This cannot be undone.`)) {
+            deleteBox(selectedBox.id);
         }
     }
 
@@ -50,43 +101,110 @@
         const context = prompt("Enter the local filesystem path for the Box:", "/home/user/project");
         if (!context) return;
         
-        // This function from windows.js does the geometry calculation and calls the bridge
-        createNewBoxEntity({ name, context, sourceEvent: event });
+        // Create new boxes inside the currently selected box.
+        const parent_box_id = selectedBoxId ?? 0;
+        createNewBoxEntity({ name, context, sourceEvent: event, parent_box_id });
     }
+
+    // --- Resizer logic ---
+    function onMouseDown(event) {
+        isResizing = true;
+    }
+    
+    function onMouseMove(event) {
+        if (isResizing) {
+            leftPanelWidth += event.movementX;
+            if (leftPanelWidth < 150) leftPanelWidth = 150; // Min width
+            if (leftPanelWidth > 600) leftPanelWidth = 600; // Max width
+        }
+    }
+
+    function onMouseUp() {
+        isResizing = false;
+    }
+
+    onMount(() => {
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+    });
+
+    onDestroy(() => {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+    });
 </script>
 
 <style>
     .boxes-container {
         display: flex;
         height: 100%;
-        background-color: transparent; /* Changed */
+        background-color: transparent;
         color: var(--text-color);
         position: relative;
     }
+    .boxes-container.resizing {
+        cursor: col-resize;
+        user-select: none;
+    }
     .left-panel {
-        width: 200px;
+        width: 200px; /* Default, will be overridden by style prop */
         min-width: 150px;
+        max-width: 600px;
         border-right: 1px solid var(--border-color);
         display: flex;
         flex-direction: column;
         overflow-y: auto;
-        background-color: hsla(0, 0%, 50%, 0.15); /* Added */
-        border-radius: 8px 0 0 8px; /* Added */
+        background-color: hsla(0, 0%, 50%, 0.15);
+        border-radius: 8px 0 0 8px;
+        flex-shrink: 0;
     }
+    .resizer {
+        width: 5px;
+        cursor: col-resize;
+        background: transparent;
+        flex-shrink: 0;
+        position: relative;
+    }
+    .resizer:hover, .boxes-container.resizing .resizer {
+        background-color: var(--item-selected-bg);
+    }
+
     .box-list-item {
         display: flex;
         align-items: center;
-        padding: 8px;
+        padding: 8px 8px 8px 0; /* Adjusted padding */
         cursor: pointer;
         border-bottom: 1px solid var(--border-color-light);
         gap: 8px;
+        flex-shrink: 0;
+        border-left: 3px solid transparent;
     }
     .box-list-item:hover {
         background-color: var(--item-hover-bg);
     }
     .box-list-item.selected {
         background-color: var(--item-selected-bg);
-        font-weight: bold;
+    }
+    .box-list-item.current { /* Style for the active desktop box */
+        border-left-color: var(--accent-color, #88C0D0);
+    }
+
+    .tree-toggle, .tree-toggle-placeholder {
+        width: 24px;
+        height: 24px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        color: var(--text-color-light);
+        font-family: monospace;
+        font-size: 14px;
+        cursor: pointer;
+    }
+    .tree-toggle:hover {
+        color: var(--text-color);
     }
     .box-icon {
         width: 24px;
@@ -99,44 +217,16 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    .delete-btn-placeholder { /* Added for alignment */
-        width: 24px;
-        height: 24px;
-        flex-shrink: 0;
-    }
-    .delete-btn {
-        background: none;
-        border: none;
-        color: #e74c3c;
-        cursor: pointer;
-        font-size: 16px;
-        line-height: 1;
-        visibility: hidden; /* Hide by default */
-        border-radius: 50%;
-        /* Sizing for alignment */
-        width: 24px;
-        height: 24px;
-        padding: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-    }
-    .box-list-item:hover .delete-btn {
-        visibility: visible; /* Show on hover */
-    }
-    .delete-btn:hover {
-        color: white;
-        background-color: #c0392b;
-    }
+    
     .right-panel {
         flex-grow: 1;
         padding: 16px;
-        padding-top: 64px; /* Space for the absolute positioned button */
+        padding-top: 64px;
         display: flex;
         flex-direction: column;
         gap: 16px;
         overflow-y: auto;
+        position: relative; /* For child positioning */
     }
     .details-group {
         display: flex;
@@ -147,7 +237,6 @@
         font-size: 0.9em;
         color: var(--text-color-light);
     }
-    /* Split rule for visual distinction */
     .details-group input {
         padding: 8px;
         background-color: var(--input-bg);
@@ -158,14 +247,16 @@
     }
     .details-group span {
         padding: 8px;
-        background-color: transparent; /* Changed */
-        border: 1px solid transparent; /* Changed */
+        background-color: transparent;
+        border: 1px solid transparent;
         border-radius: 4px;
-        color: var(--text-color-light); /* Changed */
+        color: var(--text-color-light);
         font-size: 1em;
         font-family: monospace;
         word-break: break-all;
     }
+
+    /* --- Buttons --- */
     .new-box-btn {
         position: absolute;
         top: 12px;
@@ -185,12 +276,12 @@
     .new-box-btn:hover {
         background-color: var(--button-hover-bg);
     }
-    .new-box-icon { /* Added */
+    .new-box-icon {
         width: 24px;
         height: 24px;
         opacity: 0.9;
     }
-    .plus-badge { /* Added */
+    .plus-badge {
         position: absolute;
         bottom: -2px;
         right: -2px;
@@ -207,6 +298,27 @@
         justify-content: center;
         border: 2px solid var(--window-bg);
     }
+    .delete-box-btn {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background-color: #c0392b;
+        color: white;
+        border: 1px solid #e74c3c;
+        border-radius: 8px;
+        cursor: pointer;
+        z-index: 10;
+        font-weight: bold;
+    }
+    .delete-box-btn:hover {
+        background-color: #e74c3c;
+    }
+
     .no-selection {
         display: flex;
         align-items: center;
@@ -217,38 +329,49 @@
     }
 </style>
 
-<div class="boxes-container">
+<div class="boxes-container" class:resizing={isResizing}>
     <button class="new-box-btn" on:click={handleNewBox} title="New Box">
         <img src="/skybox.png" alt="Box" class="new-box-icon" />
         <span class="plus-badge">+</span>
     </button>
     
-    <div class="left-panel">
-        {#each $boxes.sort((a, b) => a.id - b.id) as box (box.id)}
+    <div class="left-panel" style:width="{leftPanelWidth}px">
+        {#each flatBoxList as box (box.id)}
             <div 
                 class="box-list-item" 
                 class:selected={box.id === selectedBoxId}
+                class:current={box.id === $currentBoxId}
                 on:click={() => handleSelectBox(box.id)}
                 title={box.name}
+                style:padding-left="{box.level * 20 + 8}px"
             >
-                {#if box.id !== 0}
-                    <button class="delete-btn" title="Delete Box" on:click|stopPropagation={() => handleDeleteBox(box.id, box.name)}>
-                        ✕
+                {#if box.children && box.children.length > 0}
+                    <button class="tree-toggle" on:click|stopPropagation={() => toggleExpand(box.id)}>
+                        {expanded[box.id] ? '▼' : '►'}
                     </button>
                 {:else}
-                    <div class="delete-btn-placeholder"></div>
+                    <div class="tree-toggle-placeholder"></div>
                 {/if}
+
                 <img src="/skybox.png" alt="Box" class="box-icon" />
                 <span class="box-name">{box.name}</span>
             </div>
         {/each}
     </div>
 
+    <div class="resizer" on:mousedown={onMouseDown}></div>
+
     <div class="right-panel">
+        {#if selectedBox && selectedBox.id !== 0}
+            <button class="delete-box-btn" on:click={handleDeleteSelectedBox} title="Delete Selected Box">
+                Delete Box
+            </button>
+        {/if}
+
         {#if selectedBox}
             <div class="details-group">
                 <label for="box-name-input">Name</label>
-                <input id="box-name-input" type="text" bind:value={nameInput} on:blur={handleNameUpdate} />
+                <input id="box-name-input" type="text" bind:value={nameInput} on:blur={handleNameUpdate} disabled={selectedBox.id === 0} />
             </div>
             <div class="details-group">
                 <label>ID</label>
@@ -261,6 +384,10 @@
             <div class="details-group">
                 <label>Context Path</label>
                 <span>{selectedBox.context}</span>
+            </div>
+            <div class="details-group">
+                <label>Parent Box ID</label>
+                <span>{selectedBox.parent_box_id ?? 'N/A'}</span>
             </div>
         {:else}
             <div class="no-selection">
