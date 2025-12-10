@@ -1655,6 +1655,7 @@
     .context-menu button:disabled {
         color: var(--text-color-light);
         cursor: not-allowed;
+        opacity: 0.5;
     }
 
     .desktop-content {
@@ -1974,8 +1975,8 @@
 
     {#if contextMenu.visible && !wasPanning}
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
-            <button on:click={handleNewBoxClick} disabled={$connectionStatus !== 'connected'}>New Box</button>
-            <button on:click={handleNewShortcutClick} disabled={$connectionStatus !== 'connected'}>New Shortcut</button>
+            <button on:click={handleNewBoxClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Box</button>
+            <button on:click={handleNewShortcutClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Shortcut</button>
             <div class="context-menu-separator"></div>
             <button on:click={openSettingsMenu}>Settings...</button>
         </div>
