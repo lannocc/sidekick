@@ -101,11 +101,15 @@ def _run_migrations(cursor):
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='desktop_shortcut'")
     if cursor.fetchone():
         log.info("Migrating: Renaming 'desktop_shortcut' to 'shortcut'.")
+        # Drop the empty placeholder table created by `init_db` to allow the rename.
+        cursor.execute("DROP TABLE IF EXISTS shortcut")
         cursor.execute("ALTER TABLE desktop_shortcut RENAME TO shortcut")
 
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='desktop_settings'")
     if cursor.fetchone():
         log.info("Migrating: Renaming 'desktop_settings' to 'settings'.")
+        # Drop the empty placeholder table created by `init_db` to allow the rename.
+        cursor.execute("DROP TABLE IF EXISTS settings")
         cursor.execute("ALTER TABLE desktop_settings RENAME TO settings")
 
     # MIGRATION: Add 'box_id' to 'shortcut' table.
