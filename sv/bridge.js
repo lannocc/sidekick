@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import { desktopView, TASKBAR_HEIGHT } from './desktop.js';
+import { desktopView, TASKBAR_HEIGHT, currentBoxId } from './desktop.js';
 
 const PORT = 4210;
 const URL = `ws://localhost:${PORT}`;
@@ -27,6 +27,7 @@ export const backedWindows = writable([]);
 const { subscribe: shortcutsSubscribe, set: shortcutsSet, update: shortcutsUpdate } = writable([]);
 export const desktopShortcuts = {
     subscribe: shortcutsSubscribe,
+    set: shortcutsSet, // Expose set for clearing on box switch
     update: shortcutsUpdate,
     add: (shortcut) => {
         // FIX: The original implementation had a key collision on 'type'.
@@ -36,6 +37,7 @@ export const desktopShortcuts = {
         sendMessage({
             type: 'create_shortcut',
             shortcut_type: shortcutType,
+            box_id: get(currentBoxId),
             ...rest
         });
     },
@@ -61,7 +63,21 @@ export function sendMessage(message) {
     processQueue();
 }
 
-export function createBox(name, box_type, context, { aspectRatio, screenX, screenY } = {}) {
+export function switchToBox(boxId) {
+    console.log(`Switching to box ${boxId}`);
+    currentBoxId.set(boxId);
+
+    // Clear out old content to avoid flicker/stale data
+    desktopShortcuts.set([]);
+    backedWindows.set([]);
+
+    // Request new content for the new virtual desktop
+    sendMessage({ type: 'get_desktop_settings', box_id: boxId });
+    sendMessage({ type: 'get_shortcut_list', box_id: boxId });
+    sendMessage({ type: 'get_backed_window_list', box_id: boxId });
+}
+
+export function createBox(name, box_type, context, { aspectRatio, screenX, screenY, parent_box_id } = {}) {
     let finalAspectRatio = aspectRatio;
     if (finalAspectRatio == null) { // Checks for both null and undefined
         const desktopHeight = window.innerHeight - TASKBAR_HEIGHT;
@@ -84,7 +100,7 @@ export function createBox(name, box_type, context, { aspectRatio, screenX, scree
         worldY = (((window.innerHeight - TASKBAR_HEIGHT) / 2) - panY) / zoom - (boxHeight / 2);
     }
 
-    sendMessage({ type: 'create_box', name, box_type, context, aspect_ratio: finalAspectRatio, x: worldX, y: worldY });
+    sendMessage({ type: 'create_box', name, box_type, context, aspect_ratio: finalAspectRatio, x: worldX, y: worldY, parent_box_id });
 }
 export function updateBox(id, name) {
     sendMessage({ type: 'update_box', id, name });
@@ -113,14 +129,14 @@ export function setBoxCover(box_id, location) {
     sendMessage({ type: 'set_box_cover', box_id, location });
 }
 export function updateDesktopSettings(settings) {
-    sendMessage({ type: 'update_desktop_settings', settings });
+    sendMessage({ type: 'update_desktop_settings', settings, box_id: get(currentBoxId) });
 }
 export function updateShortcutTransform(id, x, y, scale) {
     sendMessage({ type: 'update_shortcut_transform', id, x, y, scale });
 }
 
 export function createBackedWindow(config, x, y, width, height, scale = 1.0, originalGroupId) {
-    sendMessage({ type: 'create_backed_window', config, x, y, width, height, scale, original_group_id: originalGroupId });
+    sendMessage({ type: 'create_backed_window', config, x, y, width, height, scale, original_group_id: originalGroupId, box_id: get(currentBoxId) });
 }
 export function updateBackedWindowTransform(id, x, y, scale, config) {
     const message = { type: 'update_backed_window_transform', id, x, y, scale };
@@ -145,6 +161,7 @@ function attemptConnection() {
     socket.onopen = () => {
         connectionStatus.set('connected');
         sendMessage({ type: 'list_boxes' });
+        switchToBox(0); // Load the main desktop content
         processQueue(); // Send any messages that were were queued
         if (reconnectTimer) {
             clearTimeout(reconnectTimer);
@@ -184,17 +201,23 @@ function attemptConnection() {
                     askStatsResponse.set({ ...msg, timestamp: Date.now() });
                     break;
                 case 'desktop_settings':
-                    desktopView.set(msg.settings || { panX: 0, panY: 0, zoom: 1.0 });
+                    if (msg.box_id === get(currentBoxId)) {
+                        desktopView.set(msg.settings || { panX: 0, panY: 0, zoom: 1.0 });
+                    }
                     break;
                 case 'shortcut_list':
-                    shortcutsSet(msg.shortcuts || []);
+                    if (msg.box_id === get(currentBoxId)) {
+                        shortcutsSet(msg.shortcuts || []);
+                    }
                     break;
                 case 'backed_window_list':
-                    const windows = (msg.windows || []).map(w => ({
-                        ...w,
-                        config: JSON.parse(w.config)
-                    }));
-                    backedWindows.set(windows);
+                    if (msg.box_id === get(currentBoxId)) {
+                        const windows = (msg.windows || []).map(w => ({
+                            ...w,
+                            config: JSON.parse(w.config)
+                        }));
+                        backedWindows.set(windows);
+                    }
                     break;
                 case 'box_list':
                     const newBoxesFromBackend = msg.boxes;

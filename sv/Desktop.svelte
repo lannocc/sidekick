@@ -5,7 +5,7 @@
 <script>
     import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId } from './desktop.js';
+    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId } from './desktop.js';
     import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow } from './bridge.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
@@ -84,9 +84,11 @@
         }
     }
 
+    $: displayableBoxes = $boxes.filter(b => b.parent_box_id === $currentBoxId);
+
     $: isDesktopEmpty = allRenderableWindows.length === 0 && 
                         ($desktopShortcuts || []).length === 0 && 
-                        ($boxes || []).length === 0;
+                        (displayableBoxes || []).length === 0;
 
     // --- View Control Mode ---
     let viewControlMode = 'both'; // 'back', 'both', 'front'
@@ -215,7 +217,7 @@
                 height: unscaledHeight * scale
             };
         }),
-        ...($boxes || []).map(b => {
+        ...(displayableBoxes || []).map(b => {
             const BASE_WIDTH = 180;
             const scale = b.scale ?? 1.0;
             const dynamicAspectRatio = (desktopHeight > 0 && desktopWidth > 0) ? desktopHeight / desktopWidth : 0;
@@ -1811,7 +1813,7 @@
                 {/each}
             </div>
             <div class="boxes-layer">
-                {#each $boxes as box (box.id)}
+                {#each displayableBoxes as box (box.id)}
                     <Box {box} on:scale={e => handleItemScaleRequest({ detail: { ...e.detail, type: 'box' } })}/>
                 {/each}
             </div>

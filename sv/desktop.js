@@ -1,4 +1,5 @@
-import { writable, get } from 'svelte/store';
+import { writable, get, derived } from 'svelte/store';
+import { boxes } from './bridge.js';
 
 export const TASKBAR_HEIGHT = 40; // Height of the taskbar in pixels
 
@@ -334,6 +335,13 @@ export const desktopInteraction = writable(false);
 
 // Store to track if a box is unfolded/expanded to manage global z-index contexts.
 export const activeBoxId = writable(null);
+
+// --- Virtual Desktop / Nested Box State ---
+export const currentBoxId = writable(0);
+export const currentBox = derived(
+    [currentBoxId, boxes],
+    ([$currentBoxId, $boxes]) => $boxes.find(b => b.id === $currentBoxId) || null
+);
 
 // New stores for Notification Center
 export const notificationHistory = writable([]);

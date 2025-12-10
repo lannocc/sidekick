@@ -6,7 +6,7 @@
     import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
-    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover } from './bridge.js';
+    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover, switchToBox } from './bridge.js';
     import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId } from './desktop.js';
     import Panel from './Panel.svelte';
 
@@ -517,10 +517,11 @@
     }
 
     function handleCenterPanelDoubleClick() {
-        if (box.type === 'local' && box.context) {
-            isUnfolded = false;
-            newLocalFileExplorer({ initialPath: box.context, title: `Files - ${box.name}` });
-        }
+        isUnfolded = false;
+        // Short delay to allow fold animation to start before switching contexts
+        setTimeout(() => {
+            switchToBox(box.id);
+        }, 100);
     }
 
     function handleSidePanelClick(event, loc_x, loc_y, isAvailableSlot, parent) {
