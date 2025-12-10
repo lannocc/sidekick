@@ -112,6 +112,13 @@ def _run_migrations(cursor):
         cursor.execute("DROP TABLE IF EXISTS settings")
         cursor.execute("ALTER TABLE desktop_settings RENAME TO settings")
 
+    # MIGRATION: Rename 'backed_window' to 'board'.
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='backed_window'")
+    if cursor.fetchone():
+        log.info("Migrating: Renaming 'backed_window' to 'board'.")
+        cursor.execute("DROP TABLE IF EXISTS board")
+        cursor.execute("ALTER TABLE backed_window RENAME TO board")
+
     # MIGRATION: Add 'box_id' to 'shortcut' table.
     cursor.execute("PRAGMA table_info(shortcut)")
     if 'box_id' not in {row['name'] for row in cursor.fetchall()}:
@@ -154,15 +161,15 @@ def _run_migrations(cursor):
         log.info("Migration successful.")
 
 
-    # MIGRATION: Add 'original_group_id' and 'box_id' to 'backed_window' table.
-    cursor.execute("PRAGMA table_info(backed_window)")
+    # MIGRATION: Add 'original_group_id' and 'box_id' to 'board' table.
+    cursor.execute("PRAGMA table_info(board)")
     bw_columns = {row['name'] for row in cursor.fetchall()}
     if 'box_id' not in bw_columns:
-        log.info("Applying migration: Adding 'box_id' to 'backed_window' table.")
+        log.info("Applying migration: Adding 'box_id' to 'board' table.")
         # Recreate the table to add the new column and foreign key.
-        cursor.execute("ALTER TABLE backed_window RENAME TO _backed_window_old")
+        cursor.execute("ALTER TABLE board RENAME TO _board_old")
         cursor.execute("""
-            CREATE TABLE backed_window (
+            CREATE TABLE board (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 box_id INTEGER NOT NULL,
                 config TEXT NOT NULL,
@@ -180,13 +187,13 @@ def _run_migrations(cursor):
         old_cols_list = ['id', 'config', 'x', 'y', 'width', 'height', 'scale', 'z_index', 'original_group_id']
         old_cols_to_copy = [c for c in old_cols_list if c in bw_columns]
         old_cols_str = ", ".join(old_cols_to_copy)
-        cursor.execute(f"INSERT INTO backed_window (box_id, {old_cols_str}) SELECT 0, {old_cols_str} FROM _backed_window_old")
-        cursor.execute("DROP TABLE _backed_window_old")
+        cursor.execute(f"INSERT INTO board (box_id, {old_cols_str}) SELECT 0, {old_cols_str} FROM _board_old")
+        cursor.execute("DROP TABLE _board_old")
         log.info("Migration successful.")
     elif 'original_group_id' not in bw_columns:
         # Handle case where box_id exists but original_group_id does not.
-        log.info("Applying migration: Adding 'original_group_id' to 'backed_window' table.")
-        cursor.execute("ALTER TABLE backed_window ADD COLUMN original_group_id INTEGER")
+        log.info("Applying migration: Adding 'original_group_id' to 'board' table.")
+        cursor.execute("ALTER TABLE board ADD COLUMN original_group_id INTEGER")
         log.info("Migration successful.")
 
 
@@ -255,7 +262,7 @@ def init_db():
     """)
 
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS backed_window (
+        CREATE TABLE IF NOT EXISTS board (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             box_id INTEGER NOT NULL,
             config TEXT NOT NULL, -- JSON blob of window group
@@ -320,7 +327,7 @@ async def broadcast_backed_window_list(box_id):
         log.error("Database not connected, cannot broadcast backed window list.")
         return
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, config, x, y, width, height, scale, z_index, original_group_id FROM backed_window WHERE box_id = ?", (box_id,))
+    cursor.execute("SELECT id, config, x, y, width, height, scale, z_index, original_group_id FROM board WHERE box_id = ?", (box_id,))
     windows = [dict(row) for row in cursor.fetchall()]
     message = json.dumps({'type': 'backed_window_list', 'windows': windows, 'box_id': box_id})
     if CONNECTED_CLIENTS:
@@ -602,7 +609,7 @@ async def websocket_handler(websocket):
         shortcuts = [dict(row) for row in cursor.fetchall()]
         await websocket.send(json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts}))
 
-        cursor.execute("SELECT id, config, x, y, width, height, scale, z_index, original_group_id FROM backed_window WHERE box_id = 0")
+        cursor.execute("SELECT id, config, x, y, width, height, scale, z_index, original_group_id FROM board WHERE box_id = 0")
         backed_windows = [dict(row) for row in cursor.fetchall()]
         await websocket.send(json.dumps({'type': 'backed_window_list', 'windows': backed_windows}))
 
@@ -696,7 +703,7 @@ async def websocket_handler(websocket):
                     print_action("Create BackWin", f"box={box_id}, x={int(x)}, y={int(y)}")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
-                        "INSERT INTO backed_window (box_id, config, x, y, width, height, scale, original_group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO board (box_id, config, x, y, width, height, scale, original_group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                         (box_id, config, x, y, w, h, scale, original_group_id)
                     )
                     DB_CONN.commit()
@@ -709,17 +716,17 @@ async def websocket_handler(websocket):
                         action_details += ", config=updated"
                     print_action("BackWin Xform ", action_details)
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT box_id FROM backed_window WHERE id = ?", (win_id,))
+                    cursor.execute("SELECT box_id FROM board WHERE id = ?", (win_id,))
                     row = cursor.fetchone()
                     if row:
                         if config_json:
                             cursor.execute(
-                                "UPDATE backed_window SET x = ?, y = ?, scale = ?, config = ? WHERE id = ?",
+                                "UPDATE board SET x = ?, y = ?, scale = ?, config = ? WHERE id = ?",
                                 (x, y, scale, config_json, win_id)
                             )
                         else:
                             cursor.execute(
-                                "UPDATE backed_window SET x = ?, y = ?, scale = ? WHERE id = ?",
+                                "UPDATE board SET x = ?, y = ?, scale = ? WHERE id = ?",
                                 (x, y, scale, win_id)
                             )
                         DB_CONN.commit()
@@ -728,10 +735,10 @@ async def websocket_handler(websocket):
                     win_id = msg['id']
                     print_action("Delete BackWin", f"id={win_id}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT box_id FROM backed_window WHERE id = ?", (win_id,))
+                    cursor.execute("SELECT box_id FROM board WHERE id = ?", (win_id,))
                     row = cursor.fetchone()
                     if row:
-                        cursor.execute("DELETE FROM backed_window WHERE id = ?", (win_id,))
+                        cursor.execute("DELETE FROM board WHERE id = ?", (win_id,))
                         DB_CONN.commit()
                         await broadcast_backed_window_list(row['box_id'])
 
@@ -1021,3 +1028,4 @@ def main(args):
             DB_CONN.close()
             log.info("Database connection closed.")
         print_stopped_message()
+
