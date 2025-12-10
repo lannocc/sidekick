@@ -6,7 +6,7 @@
     import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, skyCloakEnabled } from './desktop.js';
-    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow } from './bridge.js';
+    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox } from './bridge.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import Shortcut from './Shortcut.svelte';
@@ -194,6 +194,54 @@
     function openSettingsMenu() {
         closeContextMenu();
         newSettings({ sourceEvent: contextMenu.sourceEvent });
+    }
+
+    function handleNewBoxClick() {
+        closeContextMenu();
+        const name = prompt("Enter a name for the new Box:", "New Box");
+        if (!name) return;
+
+        const context = prompt("Enter the local filesystem path for the Box:", "/");
+        if (context === null) return; // User cancelled
+
+        const event = contextMenu.sourceEvent;
+        createBox(name, 'local', context, {
+            screenX: event.clientX,
+            screenY: event.clientY,
+            parent_box_id: get(currentBoxId)
+        });
+    }
+
+    function handleNewShortcutClick() {
+        closeContextMenu();
+        const name = prompt("Enter a name for the shortcut:", "My Shortcut");
+        if (!name) return;
+
+        let type = prompt("Enter shortcut type ('file' or 'dir'):", "dir")?.toLowerCase().trim();
+        if (type !== 'file' && type !== 'dir') {
+            alert("Invalid type. Please enter 'file' or 'dir'.");
+            return;
+        }
+
+        const path = prompt(`Enter the path for the ${type}:`, "/");
+        if (path === null) return; // User cancelled
+
+        const event = contextMenu.sourceEvent;
+        const { panX, panY, zoom } = get(desktopView);
+
+        // Adjust for icon size so it's centered on cursor
+        const iconWidth = 80 / 2;
+        const iconHeight = 64 / 2;
+        const worldX = ((event.clientX - panX) / zoom) - iconWidth;
+        const worldY = (((event.clientY - taskbarHeight) - panY) / zoom) - iconHeight;
+
+        desktopShortcuts.add({
+            name,
+            type,
+            path,
+            x: worldX,
+            y: worldY
+        });
     }
 
     // --- Bird's Eye View & Fit/Center Logic ---
@@ -1584,6 +1632,12 @@
         min-width: 120px;
     }
 
+    .context-menu-separator {
+        height: 1px;
+        background-color: var(--border-color);
+        margin: 4px 0;
+    }
+
     .context-menu button {
         background: none;
         border: none;
@@ -1594,8 +1648,13 @@
         font-size: 14px;
     }
 
-    .context-menu button:hover {
+    .context-menu button:not(:disabled):hover {
         background-color: var(--taskbar-button-hover-bg);
+    }
+
+    .context-menu button:disabled {
+        color: var(--text-color-light);
+        cursor: not-allowed;
     }
 
     .desktop-content {
@@ -1915,6 +1974,9 @@
 
     {#if contextMenu.visible && !wasPanning}
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
+            <button on:click={handleNewBoxClick} disabled={$connectionStatus !== 'connected'}>New Box</button>
+            <button on:click={handleNewShortcutClick} disabled={$connectionStatus !== 'connected'}>New Shortcut</button>
+            <div class="context-menu-separator"></div>
             <button on:click={openSettingsMenu}>Settings...</button>
         </div>
     {/if}
