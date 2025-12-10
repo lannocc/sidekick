@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import { desktopSettings, desktopView, TASKBAR_HEIGHT, currentBoxId } from './desktop.js';
+import { desktopSettings, desktopView, TASKBAR_HEIGHT, currentBoxId, mergeWithDefaults } from './desktop.js';
 
 const PORT = 4210;
 const URL = `ws://localhost:${PORT}`;
@@ -227,7 +227,8 @@ function attemptConnection() {
                         if (msg.settings && Object.keys(msg.settings).length > 0) {
                             // This will set the entire theme and also trigger the derived
                             // stores (desktopView, windowView) to update.
-                            desktopSettings.set(msg.settings);
+                            const fullSettings = mergeWithDefaults(msg.settings);
+                            desktopSettings.set(fullSettings);
                         } else {
                              // Fallback if backend sends empty settings for some reason
                             desktopView.set({ panX: 0, panY: 0, zoom: 1.0 });

@@ -4,7 +4,7 @@
 -->
 <script>
     import { get } from 'svelte/store';
-    import { desktopSettings, windowSettings, currentBoxId } from '../desktop.js';
+    import { desktopSettings, windowSettings, currentBoxId, mergeWithDefaults } from '../desktop.js';
     import { windows } from '../windows.js';
     import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
     import { onDestroy } from 'svelte';
@@ -23,7 +23,8 @@
     const unsubscribeResponse = desktopSettingsResponse.subscribe(msg => {
         if (msg && msg.box_id === settingsToLoadBoxId) {
             if (msg.settings && Object.keys(msg.settings).length > 0) {
-                desktopSettings.set(msg.settings);
+                const fullSettings = mergeWithDefaults(msg.settings);
+                desktopSettings.set(fullSettings);
                 // The reactive 'settings' variable will update automatically via its own subscription
             } else {
                 console.warn(`Loaded settings from box ${settingsToLoadBoxId} were empty.`);
