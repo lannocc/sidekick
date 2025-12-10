@@ -87,11 +87,8 @@ export function switchToBox(boxId) {
 
 export function clearSettingsForBox(targetBoxId) {
     sendMessage({ type: 'clear_box_settings', box_id: targetBoxId });
-
-    // After clearing, the backend will broadcast the new box_list and the new resolved settings.
-    // To prevent a race condition for UI that depends on specific settings (like the Save/Load menu),
-    // we also explicitly request the now-empty specific settings for this box to update our local cache.
-    getBoxSpecificSettings(targetBoxId);
+    // The backend will now broadcast the updated (empty) specific settings for this box,
+    // which keeps our local `allBoxSettings` cache in sync automatically.
 }
 
 
@@ -369,3 +366,4 @@ function attemptConnection() {
 export function initializeLocalConnection() {
     attemptConnection();
 }
+

@@ -80,12 +80,12 @@
     }
 
 
-    // When the dropdown opens, fetch any missing settings for boxes that have them.
+    // When the dropdown opens, fetch any missing specific settings for all boxes.
     $: if (showSaveLoadMenu && $boxes) {
         const cachedIds = Object.keys($allBoxSettings).map(Number);
         $boxes.forEach(box => {
-            if (box.has_custom_settings && !cachedIds.includes(box.id)) {
-                getBoxSpecificSettings(box.id); // Changed
+            if (!cachedIds.includes(box.id)) {
+                getBoxSpecificSettings(box.id);
             }
         });
     }

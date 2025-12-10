@@ -612,7 +612,29 @@ async def websocket_handler(websocket):
                     )
                     DB_CONN.commit()
                     await broadcast_box_list() # Broadcast to update has_custom_settings flag
-                    #await broadcast_settings(box_id)
+                    
+                    # After saving, broadcast the new specific settings for this box to keep client caches in sync.
+                    # Get view settings
+                    cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (box_id,))
+                    view_settings = {}
+                    for row in cursor.fetchall():
+                        try:
+                            view_settings[row['key']] = json.loads(row['value'])
+                        except (json.JSONDecodeError, TypeError):
+                            view_settings[row['key']] = row['value']
+
+                    # Get theme config
+                    cursor.execute("SELECT theme FROM config WHERE box_id = ?", (box_id,))
+                    theme_row = cursor.fetchone()
+                    theme_settings = json.loads(theme_row['theme']) if theme_row and theme_row['theme'] else {}
+
+                    specific_settings = {**theme_settings, **view_settings}
+                    
+                    response_message = json.dumps({'type': 'box_specific_settings_response', 'settings': specific_settings, 'box_id': box_id})
+                    if CONNECTED_CLIENTS:
+                        log.info(f"Broadcasting updated specific settings for box {box_id}.")
+                        await asyncio.gather(*[client.send(response_message) for client in CONNECTED_CLIENTS])
+
                 
                 elif msg_type == 'update_view_settings':
                     box_id = msg.get('box_id', 0)
@@ -651,7 +673,13 @@ async def websocket_handler(websocket):
                     DB_CONN.commit()
                     
                     await broadcast_box_list() # To update the has_custom_settings flag
-                    #await broadcast_settings(box_id) # To push the new inherited settings to clients
+                    
+                    # Also broadcast the new (empty) specific settings for the cleared box.
+                    message = json.dumps({'type': 'box_specific_settings_response', 'settings': {}, 'box_id': box_id})
+                    if CONNECTED_CLIENTS:
+                        log.info(f"Broadcasting cleared specific settings for box {box_id}.")
+                        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
+
 
                 # --- Desktop Shortcut Operations ---
                 elif msg_type == 'create_shortcut':
@@ -1083,4 +1111,3 @@ def main(args):
             DB_CONN.close()
             log.info("Database connection closed.")
         print_stopped_message()
-
