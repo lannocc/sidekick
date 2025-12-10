@@ -19,6 +19,39 @@
         settings = JSON.parse(JSON.stringify(value));
     });
 
+    let boxTree = [];
+    $: boxTree = buildBoxTree($boxes);
+
+    function buildBoxTree(boxes) {
+        if (!boxes || boxes.length === 0) return [];
+
+        const nodeMap = new Map(boxes.map(box => [box.id, { ...box, children: [] }]));
+
+        const root = nodeMap.get(0);
+        if (!root) {
+            console.warn("Main Desktop (id=0) not found in boxes list.");
+            return [];
+        }
+        
+        // Populate children arrays, ignoring any items that would be their own parent or lack a parent in the map
+        for (const node of nodeMap.values()) {
+            if (node.id === 0) continue; // Root is not a child
+            const parent = nodeMap.get(node.parent_box_id);
+            if (parent) {
+                parent.children.push(node);
+            }
+        }
+
+        // Sort all children arrays alphabetically by name.
+        for (const node of nodeMap.values()) {
+            if (node.children.length > 1) {
+                node.children.sort((a, b) => a.name.localeCompare(b.name));
+            }
+        }
+
+        return [root]; // Return as an array containing the root
+    }
+
     let settingsToLoadBoxId = null;
     const unsubscribeResponse = desktopSettingsResponse.subscribe(msg => {
         if (msg && msg.box_id === settingsToLoadBoxId) {
@@ -54,11 +87,6 @@
     function handleClear(boxId) {
         const box = get(boxes).find(b => b.id === boxId);
         if (!box) return;
-        // Main Desktop (id=0) is protected from being cleared via the UI.
-        if (box.id === 0) {
-            console.warn("Attempted to clear settings for Main Desktop, which is disallowed.");
-            return;
-        }
 
         if (confirm(`Are you sure you want to reset all theme and view settings for "${box.name}"? This cannot be undone.`)) {
             clearSettingsForBox(boxId);
@@ -558,6 +586,33 @@
     .modal-content .save-button:hover { background-color: #1a9c2a; }
 </style>
 
+{#snippet renderBox(box, depth)}
+    <div class="menu-item-row" style:padding-left={`${depth * 15 + 8}px`}>
+        <button
+            class="action-button"
+            on:click|stopPropagation={() => handleClear(box.id)}
+            title={`Reset settings for ${box.name}`}
+        >
+            🗑️
+        </button>
+        <button class="box-name-clickable" on:click={() => handleLoad(box.id)} style:font-weight={$currentBoxId === box.id ? 'bold' : 'normal'}>
+            {box.name}
+        </button>
+        <button
+            class="action-button"
+            on:click|stopPropagation={() => handleSave(box.id)}
+            title={`Save current settings to ${box.name}`}
+        >
+            💾
+        </button>
+    </div>
+    {#if box.children && box.children.length > 0}
+        {#each box.children as child (child.id)}
+            {@render renderBox(child, depth + 1)}
+        {/each}
+    {/if}
+{/snippet}
+
 <div class="settings-container">
     <div class="tabs-container">
         <div class="tabs">
@@ -579,27 +634,8 @@
             {#if showSaveLoadMenu && $connectionStatus === 'connected'}
                 <div class="dropdown-menu">
                     <div class="menu-header">Manage Box Settings</div>
-                    {#each $boxes as box (box.id)}
-                        <div class="menu-item-row">
-                            <button
-                                class="action-button"
-                                on:click|stopPropagation={() => handleClear(box.id)}
-                                disabled={box.id === 0}
-                                title={box.id === 0 ? 'Cannot reset Main Desktop' : `Reset settings for ${box.name}`}
-                            >
-                                🗑️
-                            </button>
-                            <button class="box-name-clickable" on:click={() => handleLoad(box.id)} style:font-weight={$currentBoxId === box.id ? 'bold' : 'normal'}>
-                                {box.name}
-                            </button>
-                            <button
-                                class="action-button"
-                                on:click|stopPropagation={() => handleSave(box.id)}
-                                title={`Save current settings to ${box.name}`}
-                            >
-                                💾
-                            </button>
-                        </div>
+                    {#each boxTree as box (box.id)}
+                        {@render renderBox(box, 0)}
                     {/each}
                 </div>
             {/if}
