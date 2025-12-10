@@ -65,6 +65,19 @@
     });
 
     let showSaveLoadMenu = false;
+    let menuWrapperEl;
+
+    function handleClickOutside(event) {
+        if (showSaveLoadMenu && menuWrapperEl && !menuWrapperEl.contains(event.target)) {
+            showSaveLoadMenu = false;
+        }
+    }
+
+    function handleKeydown(event) {
+        if (showSaveLoadMenu && event.key === 'Escape') {
+            showSaveLoadMenu = false;
+        }
+    }
 
     // When the dropdown opens, fetch any missing settings for boxes that have them.
     $: if (showSaveLoadMenu && $boxes) {
@@ -390,6 +403,8 @@
     }
 </script>
 
+<svelte:window on:click={handleClickOutside} on:keydown={handleKeydown} />
+
 <style>
     .settings-container {
         padding: 10px;
@@ -530,8 +545,12 @@
         font-size: 13px;
         border-radius: 3px;
     }
-    .box-name-clickable:hover {
+    .box-name-clickable:hover:not(:disabled) {
         background-color: var(--taskbar-button-hover-bg);
+    }
+    .box-name-clickable:disabled {
+        opacity: 0.5;
+        cursor: default;
     }
     .action-button {
         background: none;
@@ -763,7 +782,7 @@
                 📥
             </button>
             
-            <div style="position: relative;">
+            <div style="position: relative;" bind:this={menuWrapperEl}>
                 <button 
                     class="menu-button"
                     on:click={() => showSaveLoadMenu = !showSaveLoadMenu}
