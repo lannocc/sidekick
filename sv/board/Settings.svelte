@@ -754,6 +754,14 @@
                 📤
             </button>
             <input type="file" accept=".json,.theme" style="display: none;" on:change={handleLoadFromFile} bind:this={fileInputEl} />
+
+            <button
+                class="menu-button"
+                on:click={handleSaveToFile}
+                title="Save current settings to JSON file"
+            >
+                📥
+            </button>
             
             <div style="position: relative;">
                 <button 
@@ -773,14 +781,6 @@
                     </div>
                 {/if}
             </div>
-
-            <button
-                class="menu-button"
-                on:click={handleSaveToFile}
-                title="Save current settings to JSON file"
-            >
-                📥
-            </button>
         </div>
     </div>
 
