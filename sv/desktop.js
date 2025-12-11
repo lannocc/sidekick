@@ -51,8 +51,8 @@ const defaultSettings = {
             bgGradientStart: '#111111',
             bgGradientEnd: '#222222',
             bgImage: '/skyboards.png',
-            bgImageDisplayMode: 'cover',
-            opacity: 0.8,
+            bgImageDisplayMode: 'stretch',
+            opacity: 1,
         }
     },
     boxes: {
