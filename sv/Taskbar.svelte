@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, newBoxesWindow } from './windows.js';
-    import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled } from './desktop.js';
+    import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled, componentIconMap } from './desktop.js';
     import { connectionStatus, switchToBox, boxes } from './bridge.js';
     import Clock from './Clock.svelte';
     import { get } from 'svelte/store';
@@ -133,25 +133,6 @@
         if (!win || !win.tabs) return null;
         return win.tabs.find(t => t.id === win.activeTabId) || win.tabs[0];
     }
-
-    const componentIconMap = {
-        'Settings': '⚙️',
-        'Calculator': '🧮',
-        'WebBrowser': '🌐',
-        'IoskConsole': '🖥️',
-        'Ask': '?',
-        'Boxes': '📦',
-        'LocalFileExplorer': '📁',
-        'LocalTerminal': '>_',
-        'IoskFileExplorer': '📁',
-        'IoskPrivateChat': '💬',
-        'LocalFileViewer': '📄',
-        'IoskFileViewer': '📄',
-        'IoskWatch': '👀',
-        'IoskUserInspector': '🕵️',
-        'NotificationCenter': '🔔',
-        'default': '🗔'
-    };
 
     function getActiveTabTitle(win) {
         if (!win || !win.tabs) return '...';

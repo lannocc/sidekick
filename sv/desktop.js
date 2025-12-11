@@ -3,6 +3,25 @@ import { boxes } from './bridge.js';
 
 export const TASKBAR_HEIGHT = 40; // Height of the taskbar in pixels
 
+export const componentIconMap = {
+    'Settings': '⚙️',
+    'Calculator': '🧮',
+    'WebBrowser': '🌐',
+    'IoskConsole': '🖥️',
+    'Ask': '?',
+    'Boxes': '📦',
+    'LocalFileExplorer': '📁',
+    'LocalTerminal': '>_',
+    'IoskFileExplorer': '📁',
+    'IoskPrivateChat': '💬',
+    'LocalFileViewer': '📄',
+    'IoskFileViewer': '📄',
+    'IoskWatch': '👀',
+    'IoskUserInspector': '🕵️',
+    'NotificationCenter': '🔔',
+    'default': '🗔'
+};
+
 // Define defaults as a standalone object
 const defaultSettings = {
     sky: {
