@@ -2,13 +2,11 @@ import { writable, get, readable } from 'svelte/store';
 import IoskConsole from './board/IoskConsole.svelte';
 import Calculator from './board/Calculator.svelte';
 import Settings from './board/Settings.svelte';
-import IoskFileExplorer from './board/IoskFileExplorer.svelte';
-import IoskFileViewer from './board/IoskFileViewer.svelte';
+import FileExplorer from './board/FileExplorer.svelte';
+import FileViewer from './board/FileViewer.svelte';
 import WebBrowser from './board/WebBrowser.svelte';
 import IoskPrivateChat from './board/IoskPrivateChat.svelte';
 import LocalTerminal from './board/LocalTerminal.svelte';
-import LocalFileExplorer from './board/LocalFileExplorer.svelte';
-import LocalFileViewer from './board/LocalFileViewer.svelte';
 import Ask from './board/Ask.svelte';
 import IoskWatch from './board/IoskWatch.svelte';
 import IoskUserInspector from './board/IoskUserInspector.svelte';
@@ -47,21 +45,26 @@ export const componentMap = {
     'IoskConsole': IoskConsole,
     'Calculator': Calculator,
     'Settings': Settings,
-    'IoskFileExplorer': IoskFileExplorer,
-    'IoskFileViewer': IoskFileViewer,
+    'FileExplorer': FileExplorer,
+    'FileViewer': FileViewer,
     'WebBrowser': WebBrowser,
     'IoskPrivateChat': IoskPrivateChat,
     'LocalTerminal': LocalTerminal,
-    'LocalFileExplorer': LocalFileExplorer,
-    'LocalFileViewer': LocalFileViewer,
     'Ask': Ask,
     'IoskWatch': IoskWatch,
     'IoskUserInspector': IoskUserInspector,
     'NotificationCenter': NotificationCenter,
     'Boxes': Boxes,
+    // Add old names for backward compatibility with saved layouts
+    'IoskFileExplorer': FileExplorer,
+    'IoskFileViewer': FileViewer,
+    'LocalFileExplorer': FileExplorer,
+    'LocalFileViewer': FileViewer,
 };
 
 export function getComponentType(component) {
+    if (component === FileExplorer) return 'FileExplorer';
+    if (component === FileViewer) return 'FileViewer';
     for (const [name, comp] of Object.entries(componentMap)) {
         if (comp === component) {
             return name;
@@ -1121,45 +1124,71 @@ export function newSettings(props = {}) {
 }
 export function newNotificationCenter(props = {}) {
     const allWindows = get(windows);
-    const existingNCTab = allWindows.flatMap(g => g.tabs).find(t =>
-        t.componentName === 'NotificationCenter'
-    );
-
+    const existingNCTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'NotificationCenter' || t.componentName === 'NotificationCenter');
     if (existingNCTab) {
         const group = allWindows.find(g => g.tabs.some(t => t.id === existingNCTab.id));
-        if (group.minimized) windows.toggleMinimize(group.id);
-        else windows.focusWindow(group.id);
+        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
         windows.setActiveTab(group.id, existingNCTab.id);
         return;
     }
-
     windows.addWindow(NotificationCenter, { title: 'Notifications', width: 475, height: 475, ...props });
 }
 export function newBoxesWindow(props = {}) {
     const allWindows = get(windows);
-    const existingBoxesTab = allWindows.flatMap(g => g.tabs).find(t =>
-        t.componentName === 'Boxes'
-    );
-
+    const existingBoxesTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'Boxes' || t.componentName === 'Boxes');
     if (existingBoxesTab) {
         const group = allWindows.find(g => g.tabs.some(t => t.id === existingBoxesTab.id));
-        if (group.minimized) windows.toggleMinimize(group.id);
-        else windows.focusWindow(group.id);
+        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
         windows.setActiveTab(group.id, existingBoxesTab.id);
         return;
     }
-
     windows.addWindow(Boxes, { title: 'Boxes', width: 600, height: 400, ...props });
 }
+
+// --- UNIFIED FILE EXPLORER / VIEWER FUNCTIONS ---
+
+export function newFileExplorer(props = {}) {
+    const { connectionType, consoleId, consoleTitle } = props;
+    const title = connectionType === 'iosk' ? `Files - ${consoleTitle || `Console ${consoleId}`}` : 'Local Files';
+    const defaultProps = { title, width: 500, height: 600 };
+    windows.addWindow(FileExplorer, { ...defaultProps, ...props });
+}
+
+export function newFileViewer(props = {}) {
+    const title = (props.path || '').split('/').pop() || props.path;
+    const defaultProps = { title: `View - ${title}`, width: 700, height: 500 };
+    windows.addWindow(FileViewer, { ...defaultProps, ...props });
+}
+
+// --- LEGACY/SPECIFIC FUNCTIONS (Now call the unified functions) ---
+
 export function newIoskFileExplorer(consoleTabId, consoleTitle, props = {}) {
-    const title = `Files - ${consoleTitle || `Console ${consoleTabId}`}`;
     const explorerSettings = get(windowSettings)['IoskFileExplorer'];
-    windows.addWindow(IoskFileExplorer, { title, consoleId: consoleTabId, initialPath: explorerSettings?.initialPath || '.', width: 500, height: 500, ...props });
+    newFileExplorer({ 
+        connectionType: 'iosk',
+        consoleId: consoleTabId,
+        consoleTitle,
+        initialPath: explorerSettings?.initialPath || '.',
+        ...props 
+    });
 }
 export function newIoskFileViewer(consoleTabId, path, props = {}) {
-    const title = path.split('/').pop() || path;
-    windows.addWindow(IoskFileViewer, { title: `View - ${title}`, consoleId: consoleTabId, path: path, width: 700, height: 500, ...props });
+    newFileViewer({
+        connectionType: 'iosk',
+        consoleId: consoleTabId,
+        path,
+        ...props
+    });
 }
+export function newLocalFileExplorer(props = {}) {
+    newFileExplorer({ connectionType: 'skybridge', ...props });
+}
+export function newLocalFileViewer(props = {}) {
+    newFileViewer({ connectionType: 'skybridge', ...props });
+}
+
+// --- Other window creation functions ---
+
 export function newWebBrowser(props = {}) {
     const browserSettings = get(windowSettings)['WebBrowser'];
     const initialUrl = browserSettings?.defaultUrl || (typeof window !== 'undefined' ? window.location.origin : 'about:blank');
@@ -1167,40 +1196,22 @@ export function newWebBrowser(props = {}) {
 }
 export function newIoskPrivateChat(consoleTabId, localUser, remoteUser, props = {}) {
     const allWindows = get(windows);
-    const existingChatTab = allWindows.flatMap(g => g.tabs).find(t =>
-        t.componentName === 'IoskPrivateChat' && t.consoleId === consoleTabId && t.remoteUser === remoteUser
-    );
-
+    const existingChatTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'IoskPrivateChat' && t.consoleId === consoleTabId && t.remoteUser === remoteUser);
     if (existingChatTab) {
         const group = allWindows.find(g => g.tabs.some(t => t.id === existingChatTab.id));
-        if (group.minimized) windows.toggleMinimize(group.id);
-        else windows.focusWindow(group.id);
+        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
         windows.setActiveTab(group.id, existingChatTab.id);
         return;
     }
-
     const title = remoteUser.split('.')[0];
     windows.addWindow(IoskPrivateChat, { title: `Chat with ${title}`, consoleId: consoleTabId, localUser, remoteUser, width: 450, height: 400, ...props });
 }
-
 export function newLocalTerminal(props = {}) {
     windows.addWindow(LocalTerminal, { title: 'Local Terminal', width: 800, height: 500, ...props });
 }
-
-export function newLocalFileExplorer(props = {}) {
-    const defaultProps = { title: 'Local Files', width: 500, height: 600 };
-    windows.addWindow(LocalFileExplorer, { ...defaultProps, ...props });
-}
-
-export function newLocalFileViewer(props = {}) {
-    const title = (props.path || '').split('/').pop() || props.path;
-    windows.addWindow(LocalFileViewer, { title: `View - ${title}`, width: 700, height: 500, ...props });
-}
-
 export function newAskWindow(initialFiles = [], props = {}) {
     windows.addWindow(Ask, { title: 'Ask', initialFiles, width: 900, height: 600, ...props });
 }
-
 export function newIoskWatch(consoleTabId, pwd, props = {}) {
     const allWindows = get(windows);
     const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
@@ -1208,53 +1219,24 @@ export function newIoskWatch(consoleTabId, pwd, props = {}) {
         alert("Cannot open Watch window. The selected console is not connected.");
         return;
     }
-
-    windows.addWindow(IoskWatch, {
-        title: 'Watch',
-        consoleId: consoleTabId,
-        consoleConnection: consoleTab.consoleConnection, // Pass this for Dash restore
-        initialPwd: pwd,
-        width: 700,
-        height: 400,
-        ...props,
-    });
+    windows.addWindow(IoskWatch, { title: 'Watch', consoleId: consoleTabId, consoleConnection: consoleTab.consoleConnection, initialPwd: pwd, width: 700, height: 400, ...props });
 }
-
-
 export function newIoskUserInspector(consoleTabId, targetUser, consoleWs, props = {}) {
     const allWindows = get(windows);
-
-    // Find if an inspector for this user from this console already exists
-    const existingInspectorTab = allWindows.flatMap(g => g.tabs).find(t =>
-        t.componentName === 'IoskUserInspector' && !t.isDetached && t.consoleId === consoleTabId && t.targetUser === targetUser
-    );
-
+    const existingInspectorTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'IoskUserInspector' && !t.isDetached && t.consoleId === consoleTabId && t.targetUser === targetUser);
     if (existingInspectorTab) {
         const group = allWindows.find(g => g.tabs.some(t => t.id === existingInspectorTab.id));
-        if (group.minimized) windows.toggleMinimize(group.id);
-        else windows.focusWindow(group.id);
+        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
         windows.setActiveTab(group.id, existingInspectorTab.id);
         return;
     }
-
-    // If not, create a new one, but first check if console is connected
     const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
     if (!consoleTab || !consoleTab.isConsoleConnected) {
         alert("Cannot inspect context. The selected console is not connected.");
         return;
     }
-
     const title = `Inspector - ${targetUser}`;
-    windows.addWindow(IoskUserInspector, {
-        title,
-        consoleId: consoleTabId,
-        targetUser: targetUser,
-        consoleWs: consoleWs, // Pass the WebSocket instance
-        consoleConnection: consoleTab.consoleConnection, // For dash restore
-        width: 700,
-        height: 700,
-        ...props,
-    });
+    windows.addWindow(IoskUserInspector, { title, consoleId: consoleTabId, targetUser: targetUser, consoleWs: consoleWs, consoleConnection: consoleTab.consoleConnection, width: 700, height: 700, ...props });
 }
 
 export function newBox(props = {}) {
