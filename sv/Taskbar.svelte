@@ -854,7 +854,7 @@
         </button>
     </div>
     <div class="taskbar-right" bind:this={rightSectionEl}>
-        <button class="quick-launch-button" on:click|stopPropagation={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">&#9632;</button>
+        <button class="quick-launch-button" on:click|stopPropagation={(e) => { if ($dashActive) dashActive.set(false); /*launchIosk({ sourceEvent: e });*/ }} title="Coming Soon...">&#9632;</button>
         <button class="start-button" class:connected={$connectionStatus === 'connected'} bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }} title="SKYBOARD Menu"><img src="/favicon.png" alt="SKYBOARDS"></button>
         {#if showMenu}
             <div class="start-menu" style={menuBackgroundStyle}>
