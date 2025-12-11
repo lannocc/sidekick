@@ -659,17 +659,8 @@ async def websocket_handler(websocket):
                     print_action("Clear Settings", f"box={box_id}")
                     cursor = DB_CONN.cursor()
 
-                    if box_id == 0:
-                        # Box 0 cannot be cleared, only reset to defaults
-                        default_settings = {'panX': 0, 'panY': 0, 'zoom': 1.0, 'windowPanX': 0, 'windowPanY': 0, 'windowZoom': 1.0}
-                        cursor.execute("INSERT OR REPLACE INTO config (box_id, theme) VALUES (?, ?)", (0, '{}'))
-                        for key, value in default_settings.items():
-                            cursor.execute("INSERT OR REPLACE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, key, json.dumps(value)))
-                    else:
-                        # For other boxes, clearing means deleting their specific settings to enable inheritance
-                        cursor.execute("DELETE FROM config WHERE box_id = ?", (box_id,))
-                        cursor.execute("DELETE FROM settings WHERE box_id = ?", (box_id,))
-                    
+                    cursor.execute("DELETE FROM config WHERE box_id = ?", (box_id,))
+                    cursor.execute("DELETE FROM settings WHERE box_id = ?", (box_id,))
                     DB_CONN.commit()
                     
                     await broadcast_box_list() # To update the has_custom_settings flag
