@@ -862,7 +862,7 @@ async def websocket_handler(websocket):
                         "tabs": [
                             {
                                 "originalId": 1,
-                                "componentType": "LocalFileExplorer",
+                                "componentName": "LocalFileExplorer",
                                 "title": f"Files - {name}",
                                 "initialPath": context
                             }
@@ -882,7 +882,7 @@ async def websocket_handler(websocket):
                         "tabs": [
                             {
                                 "originalId": 1,
-                                "componentType": "LocalTerminal",
+                                "componentName": "LocalTerminal",
                                 "title": f"Terminal - {name}",
                                 "initialPath": context
                             }

@@ -92,12 +92,12 @@
             <div class="mini-content">
                 {#if group.tabs.length === 1}
                     <span class="panel-icon single-window-icon">
-                        {getIcon(group.tabs[0].componentName)}
+                        {getIcon(group.tabs[0].componentName || group.tabs[0].componentType)}
                     </span>
                 {:else}
                     {#each group.tabs as tab (tab.originalId)}
                         <span class="panel-icon multi-window-icon" title={tab.title}>
-                            {getIcon(tab.componentName)}
+                            {getIcon(tab.componentName || tab.componentType)}
                         </span>
                     {/each}
                 {/if}
@@ -118,7 +118,7 @@
                     </div>
                     {#if activeTab}
                         <div class="preview-window-icon" style:font-size="{(Math.min(group.width, group.height) * previewScale * 0.4)}px">
-                             {getIcon(activeTab.componentName)}
+                             {getIcon(activeTab.componentName || activeTab.componentType)}
                         </div>
                     {/if}
                 </div>
@@ -126,3 +126,4 @@
         </div>
     {/if}
 </div>
+
