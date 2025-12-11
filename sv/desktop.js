@@ -17,9 +17,9 @@ const defaultSettings = {
         },
         frame: {
             bgType: 'color',
-            bgColor: '#2c3e50',
-            bgGradientStart: '#2c3e50',
-            bgGradientEnd: '#46627f',
+            bgColor: '#283645',
+            bgGradientStart: '#283645',
+            bgGradientEnd: '#415a74',
             bgImage: '',
             bgImageDisplayMode: 'cover',
             opacity: 1.0,
@@ -28,8 +28,8 @@ const defaultSettings = {
         },
         cloak: {
             bgType: 'image',
-            bgColor: '#000000',
-            bgGradientStart: '#000000',
+            bgColor: '#101010',
+            bgGradientStart: '#111111',
             bgGradientEnd: '#222222',
             bgImage: '/skyboards.png',
             bgImageDisplayMode: 'cover',
@@ -39,7 +39,7 @@ const defaultSettings = {
     boxes: {
         scene: {
             active: {
-                bgType: 'color', bgColor: '#434C5E', bgGradientStart: '', bgGradientEnd: '', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
+                bgType: 'color', bgColor: '#4a5468', bgGradientStart: '', bgGradientEnd: '', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
             },
             inactive: {
                 bgType: 'color', bgColor: '#434C5E', bgGradientStart: '', bgGradientEnd: '', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.9,
@@ -48,7 +48,7 @@ const defaultSettings = {
         frame: {
             active: {
                 bgType: 'gradient', bgColor: '', bgGradientStart: '#88C0D0', bgGradientEnd: '#81A1C1', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, width: 2,
-                shadowEnabled: true, shadowX: 0, shadowY: 0, shadowBlur: 8, shadowSpread: 1, shadowColor: '#88C0D0', shadowInset: false,
+                shadowEnabled: true, shadowX: 0, shadowY: 0, shadowBlur: 8, shadowSpread: 1, shadowColor: '#88C0D090', shadowInset: false,
             },
             inactive: {
                 bgType: 'color', bgColor: '#4C566A', bgGradientStart: '', bgGradientEnd: '', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, width: 2,
@@ -57,7 +57,7 @@ const defaultSettings = {
         },
         cloak: {
             inactive: {
-                bgType: 'image', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '/skybox.png', bgImageDisplayMode: 'cover', opacity: 1.0,
+                bgType: 'image', bgColor: '#121212', bgGradientStart: '#131313', bgGradientEnd: '#232323', bgImage: '/skybox.png', bgImageDisplayMode: 'cover', opacity: 1.0,
             }
         }
     },
@@ -65,65 +65,65 @@ const defaultSettings = {
         normal: {
             scene: {
                 active: {
-                    bgType: 'color', bgColor: '#2d3436', bgGradientStart: '#2d3436', bgGradientEnd: '#454e50', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
+                    bgType: 'color', bgColor: '#333b3d', bgGradientStart: '#333b3d', bgGradientEnd: '#454e50', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
                 },
                 inactive: {
-                    bgType: 'color', bgColor: '#2d3436', bgGradientStart: '#2d3436', bgGradientEnd: '#454e50', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
+                    bgType: 'color', bgColor: '#2d3436', bgGradientStart: '#2d3436', bgGradientEnd: '#444d4f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.95,
                 },
             },
             frame: {
                 active: {
-                    bgType: 'color', bgColor: '#2c3e50', bgGradientStart: '#2c3e50', bgGradientEnd: '#46627f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 30, width: 0,
+                    bgType: 'color', bgColor: '#35485f', bgGradientStart: '#35485f', bgGradientEnd: '#506d8b', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 30, width: 0,
                     shadowEnabled: true, shadowX: 0, shadowY: 5, shadowBlur: 15, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.3)', shadowInset: false,
                 },
                 inactive: {
-                    bgType: 'color', bgColor: '#2c3e50', bgGradientStart: '#2c3e50', bgGradientEnd: '#46627f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 30, width: 0,
+                    bgType: 'color', bgColor: '#2b3d4f', bgGradientStart: '#2b3d4f', bgGradientEnd: '#45617e', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 30, width: 0,
                     shadowEnabled: true, shadowX: 0, shadowY: 2, shadowBlur: 8, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.2)', shadowInset: false,
                 },
             },
             cloak: {
                 active: {
-                    bgType: 'image', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '/skyboard.png', bgImageDisplayMode: 'cover', opacity: 1.0,
+                    bgType: 'image', bgColor: '#141414', bgGradientStart: '#151515', bgGradientEnd: '#242424', bgImage: '/skyboard.png', bgImageDisplayMode: 'stretch', opacity: 1.0,
                 },
                 inactive: {
-                    bgType: 'image', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '/skyboard.png', bgImageDisplayMode: 'cover', opacity: 0.77,
+                    bgType: 'image', bgColor: '#161616', bgGradientStart: '#171717', bgGradientEnd: '#252525', bgImage: '/skyboard.png', bgImageDisplayMode: 'stretch', opacity: 0.77,
                 },
             },
         },
         back: {
             scene: {
                 active: {
-                    bgType: 'color', bgColor: '#3b4252', bgGradientStart: '#3b4252', bgGradientEnd: '#4c566a', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
+                    bgType: 'color', bgColor: '#414859', bgGradientStart: '#414859', bgGradientEnd: '#4c566a', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
                 },
                 inactive: {
-                    bgType: 'color', bgColor: '#3b4252', bgGradientStart: '#3b4252', bgGradientEnd: '#4c566a', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
+                    bgType: 'color', bgColor: '#3b4252', bgGradientStart: '#3b4252', bgGradientEnd: '#4b5569', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
                 },
             },
             frame: {
                 active: {
-                    bgType: 'color', bgColor: '#34495e', bgGradientStart: '#34495e', bgGradientEnd: '#4a637f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 0, width: 0,
-                    shadowEnabled: false, shadowX: 0, shadowY: 5, shadowBlur: 15, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.3)', shadowInset: false,
+                    bgType: 'color', bgColor: '#3a506a', bgGradientStart: '#3a506a', bgGradientEnd: '#4a637f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 0, width: 0,
+                    shadowEnabled: true, shadowX: 0, shadowY: 5, shadowBlur: 15, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.35)', shadowInset: false,
                 },
                 inactive: {
-                    bgType: 'color', bgColor: '#34495e', bgGradientStart: '#34495e', bgGradientEnd: '#4a637f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 0, width: 0,
-                    shadowEnabled: false, shadowX: 0, shadowY: 2, shadowBlur: 8, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.2)', shadowInset: false,
+                    bgType: 'color', bgColor: '#32475c', bgGradientStart: '#32475c', bgGradientEnd: '#49627e', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 0, width: 0,
+                    shadowEnabled: false, shadowX: 0, shadowY: 2, shadowBlur: 8, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.15)', shadowInset: false,
                 },
             },
             cloak: {
                 active: {
-                    bgType: 'color', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
+                    bgType: 'color', bgColor: '#181818', bgGradientStart: '#181818', bgGradientEnd: '#262626', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
                 },
                 inactive: {
-                    bgType: 'color', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
+                    bgType: 'color', bgColor: '#1a1a1a', bgGradientStart: '#1a1a1a', bgGradientEnd: '#272727', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
                 },
             },
         }
     },
-    focusFollowsMouse: false,
+    focusFollowsMouse: true,
     focusDelay: 420,
     ioskUrl: 'ws://localhost:4209',
     ioskUsername: 'root',
-    chimeType: 'beep.wav', // filename from assets, 'none', or 'custom'
+    chimeType: 'three_tones.wav', // filename from assets, 'none', or 'custom'
     chimeUrl: '',          // URL for custom chime
     noticeDefaults: {
         enabled: true,
