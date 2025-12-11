@@ -12,7 +12,8 @@
     let previewScale = 1;
     let previewDesktop = { width: 0, height: 0, top: 0, left: 0 };
 
-    $: if (board_type === 'dash' && board_config && containerEl) {
+    //$: if (board_type === 'dash' && board_config && containerEl) {
+    $: if (board_config && containerEl) {
         const savedDesktopWidth = board_config.desktop?.width || 1920;
         const savedDesktopHeight = board_config.desktop?.height || 1080;
         const scaleX = containerEl.clientWidth / savedDesktopWidth;
@@ -52,13 +53,12 @@
         overflow: hidden;
     }
     .panel-icon {
-        opacity: 0.6;
+        opacity: 0.9;
+        text-shadow: 4px 4px 6px black;
     }
     .single-window-icon {
-        font-size: 3em;
     }
     .multi-window-icon {
-        font-size: 1.5em;
     }
 
     /* Mini Dash Styles (from Dash.svelte) */
@@ -91,12 +91,12 @@
             </div>
             <div class="mini-content">
                 {#if group.tabs.length === 1}
-                    <span class="panel-icon single-window-icon">
+                    <span class="panel-icon single-window-icon" style:font-size="{(Math.min(group.width, group.height) * previewScale)}px">
                         {getIcon(group.tabs[0].componentName || group.tabs[0].componentType)}
                     </span>
                 {:else}
                     {#each group.tabs as tab (tab.originalId)}
-                        <span class="panel-icon multi-window-icon" title={tab.title}>
+                        <span class="panel-icon multi-window-icon" title={tab.title} style:font-size="{(Math.min(group.width, group.height) * previewScale * 0.6)}px">
                             {getIcon(tab.componentName || tab.componentType)}
                         </span>
                     {/each}
@@ -117,7 +117,7 @@
                         {/each}
                     </div>
                     {#if activeTab}
-                        <div class="preview-window-icon" style:font-size="{(Math.min(group.width, group.height) * previewScale * 0.4)}px">
+                        <div class="preview-window-icon" style:font-size="{(Math.min(group.width, group.height) * previewScale * 0.6)}px">
                              {getIcon(activeTab.componentName || activeTab.componentType)}
                         </div>
                     {/if}
