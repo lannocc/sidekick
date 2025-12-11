@@ -155,7 +155,7 @@
     }
 
     function handleDragStart(event, item) {
-        if (!item || item.name === '..') {
+        if (connectionType !== 'skybridge' || !item || item.name === '..') {
             event.preventDefault();
             return;
         }
@@ -279,11 +279,16 @@
 
         if (item.type === 'file') {
             const filePath = (supportsRecursive && (nestedView || columnsEnabled)) ? item.path : (currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`);
-            newFileViewer({ connectionType, consoleId, path: filePath });
+            if (pickerTargetId) {
+                fileSelection.set({ targetId: pickerTargetId, path: filePath });
+                windows.removeWindow(groupId);
+            } else {
+                newFileViewer({ connectionType, consoleId, path: filePath, groupId });
+            }
         } else if (item.type === 'dir') {
             const canNavigate = (item.name === '..' || !nestedView || columnsEnabled || (nestedView && viewMode === 'tiles'));
             if (canNavigate || !supportsRecursive) {
-                if (isWatching) toggleWatch();
+                if (isWatching) toggleWatch(); // Stop watching old path before navigating
                 let newPath;
                 if (item.name === '..') {
                     if (currentPath === '/') return;
@@ -303,12 +308,10 @@
             columnsContainer.scrollLeft += event.deltaY;
         }
     }
-    // ... pan handlers (handlePanStart, Move, End) are unchanged ...
     function handlePanStart(event) { if (event.button !== 1 || !columnsContainer) return; event.preventDefault(); isPanning = true; columnsContainer.style.cursor = 'grabbing'; columnsContainer.style.userSelect = 'none'; panStartX = event.clientX; panScrollLeftStart = columnsContainer.scrollLeft; panStartY = event.clientY; scrollableColumns = []; const els = columnsContainer.querySelectorAll('.column-content'); els.forEach(el => { if (el.scrollHeight > el.clientHeight) scrollableColumns.push({ element: el, initialScrollTop: el.scrollTop }); }); window.addEventListener('mousemove', handlePanMove); window.addEventListener('mouseup', handlePanEnd); }
     function handlePanMove(event) { if (!isPanning) return; const dx = event.clientX - panStartX; columnsContainer.scrollLeft = panScrollLeftStart - dx; const dy = event.clientY - panStartY; scrollableColumns.forEach(({ element, initialScrollTop }) => { element.scrollTop = initialScrollTop - dy; }); }
     function handlePanEnd(event) { if (event.button !== 1 || !isPanning) return; isPanning = false; columnsContainer.style.cursor = 'grab'; columnsContainer.style.userSelect = 'auto'; scrollableColumns = []; window.removeEventListener('mousemove', handlePanMove); window.removeEventListener('mouseup', handlePanEnd); }
     function getMaxExpandedDepth(node) { if (!node.children || node.children.length === 0) return 0; function findMax(currentNode, currentLevel) { if (!expandedNodes.has(currentNode.path) || !currentNode.children || currentNode.children.length === 0) return currentLevel; let maxChildLevel = currentLevel; for (const child of currentNode.children) { const childMaxLevel = findMax(child, currentLevel + 1); if (childMaxLevel > maxChildLevel) maxChildLevel = childMaxLevel; } return maxChildLevel; } let maxDepth = 0; for (const child of node.children) { const childMaxDepth = findMax(child, 0); if (childMaxDepth > maxDepth) maxDepth = childMaxDepth; } return maxDepth; }
-
 
     onMount(() => {
         fsAdapter = createFsAdapter({ connectionType, consoleId, requesterId: id });
@@ -364,6 +367,7 @@
                 } else {
                     items = finalListing;
                 }
+                errorMessage = '';
             }
         });
 
@@ -398,17 +402,12 @@
 </script>
 
 <style>
-    /* ... (All styles from IoskFileExplorer.svelte) ... */
-    /* --- ADDED Styles from LocalFileExplorer --- */
-    .context-menu { position: fixed; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 10001; display: flex; flex-direction: column; padding: 4px 0; min-width: 120px; }
-    .context-menu button { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; font-size: 14px; }
-    .context-menu button:hover { background-color: var(--taskbar-button-hover-bg); }
-    .path-bar button { background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--taskbar-text); padding: 2px 8px; border-radius: 3px; cursor: pointer; margin-left: 10px; flex-shrink: 0; }
-    .path-bar button:hover { background-color: var(--taskbar-button-hover-bg); }
-    /* ... (All existing IoskFileExplorer styles go here) ... */
     .explorer-container { display: flex; flex-direction: column; height: 100%; font-family: monospace; background-color: var(--console-bg); color: var(--console-text); font-size: 14px; user-select: none; }
     .path-bar { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
     .path-bar .path-text { flex-grow: 1; overflow-x: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .path-bar .right-controls { display: flex; align-items: center; }
+    .path-bar button { background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--taskbar-text); padding: 2px 8px; border-radius: 3px; cursor: pointer; margin-left: 10px; flex-shrink: 0; }
+    .path-bar button:hover { background-color: var(--taskbar-button-hover-bg); }
     .controls-group { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: 10px; flex-wrap: wrap; justify-content: flex-end; }
     .view-mode-selector, .color-mode-selector { display: flex; background: var(--taskbar-button-bg); border-radius: 3px; border: 1px solid var(--border-color); overflow: hidden; }
     .color-mode-selector { padding: 2px 5px; gap: 8px; font-size: 12px; }
@@ -467,6 +466,9 @@
     .item.new, .column-content-item.new { animation: green-flash-list 1.5s ease-out; }
     .item.modified, .column-content-item.modified { animation: blue-flash-list 1.5s ease-out; }
     .item.removed, .column-content-item.removed { animation: red-flash-list 1s ease-out forwards; pointer-events: none; }
+    .context-menu { position: fixed; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 10001; display: flex; flex-direction: column; padding: 4px 0; min-width: 120px; }
+    .context-menu button { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; font-size: 14px; }
+    .context-menu button:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
     .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
     .modal-content h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
@@ -482,12 +484,11 @@
     .modal-content .save-button:hover { background-color: #1a9c2a; }
 </style>
 
-<!-- Main template structure -->
 {#if !treeNode}
 <div class="explorer-container">
     <div class="path-bar">
         <span class="path-text" title={currentPath}>{currentPath}</span>
-        <div style="display: flex; align-items: center;">
+        <div class="right-controls">
             {#if pickerTargetId}
                 <button on:click={selectCurrentPath}>Select Current Folder</button>
             {/if}
@@ -496,23 +497,17 @@
                     <label title="Color by file type"><input type="radio" bind:group={colorMode} value={'type'}> Type</label>
                     <label title="Color by modification time"><input type="radio" bind:group={colorMode} value={'age'}> Age</label>
                 </div>
-                {#if supportsRecursive}
                 <div class="view-mode-selector">
-                    <button class="view-button" class:active={columnsEnabled} on:click={() => toggleWithRefetch('columns')} title="Toggle Columns View">◫</button>
+                    <button class="view-button" class:active={columnsEnabled} on:click={() => toggleWithRefetch('columns')} title="Toggle Columns View" disabled={!supportsRecursive}>◫</button>
                 </div>
-                {/if}
                 <div class="view-mode-selector">
                     <button class="view-button" class:active={viewMode === 'list'} on:click={() => switchViewMode('list')} title="List View">☰</button>
                     <button class="view-button" class:active={viewMode === 'tiles'} on:click={() => switchViewMode('tiles')} title="Tiles View">⊞</button>
                 </div>
-                {#if supportsRecursive}
-                <button class="watch-button" class:active={nestedView} on:click={() => toggleWithRefetch('nested')} title="Toggle Nested View">Nested</button>
-                {/if}
-                {#if supportsWatch}
-                <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates">
+                 <button class="watch-button" class:active={nestedView} on:click={() => toggleWithRefetch('nested')} title="Toggle Nested View" disabled={!supportsRecursive}>Nested</button>
+                 <button class="watch-button" class:active={isWatching} on:click={toggleWatch} title="Watch for live updates" disabled={!supportsWatch}>
                     {isWatching ? 'Watching' : 'Watch'} 👀
                 </button>
-                {/if}
             </div>
         </div>
     </div>
@@ -520,21 +515,134 @@
         <div class="error-message">{errorMessage}</div>
     {/if}
 
-    <!-- ... (The entire complex template logic from IoskFileExplorer.svelte with added event handlers) ... -->
-    <!-- ... (This part is very long, but the key is adding handlers to clickable/draggable elements) -->
-    <!-- Example for flat list view item -->
-    <div class="item-list">
-        {#each items as item (item.name)}
-            <div class="item" on:click={() => handleItemClick(item)} on:contextmenu={e => handleRightClick(e, item)} draggable="true" on:dragstart={e => handleDragStart(e, item)} title={item.name} style="color: {getTileColor(item, colorMode)}" class:new={itemChangeStatus[item.name] === 'new'} class:modified={itemChangeStatus[item.name] === 'modified'} class:removed={itemChangeStatus[item.name] === 'removed'}>
-                <span class="item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
-                <span class="item-name">{item.name}</span>
-                <span class="item-size">{#if item.type === 'file' && item.size >= 0}{item.size}{/if}</span>
+    {#if columnsEnabled && supportsRecursive}
+        <div class="columns-view" bind:this={columnsContainer} on:mousedown={handlePanStart} on:wheel={handleWheelScroll} class:tile-mode={viewMode === 'tiles'}>
+            {#if currentPath !== '/' || columnFiles.length > 0}
+                <div class="column files-column">
+                    <div class="column-header" on:click={currentPath !== '/' ? () => handleItemClick({name: '..', type: 'dir'}) : undefined} on:contextmenu={e => handleRightClick(e, {name: '..', type: 'dir'})} title={currentPath !== '/' ? 'Parent Directory' : 'Root Directory'} style:background-color={getTileColor({name: '..', type: 'dir'}, colorMode)} style:cursor={currentPath !== '/' ? 'pointer' : 'default'}>
+                        <span class="column-item-icon">🗂️</span>
+                        <span class="column-item-name">{currentPath}</span>
+                        <span class="column-header-nav-up">{#if currentPath !== '/'}..{/if}</span>
+                    </div>
+                    <div class="column-content">
+                        {#if viewMode === 'list'}
+                             {#each columnFiles as file (file.path)}
+                                <div class="column-content-item" on:click={() => handleItemClick(file)} on:contextmenu={e => handleRightClick(e, file)} draggable={connectionType === 'skybridge'} on:dragstart={e => handleDragStart(e, file)} title={file.name} style="color: {getTileColor(file, colorMode)}" class:new={itemChangeStatus[file.path] === 'new'} class:modified={itemChangeStatus[file.path] === 'modified'} class:removed={itemChangeStatus[file.path] === 'removed'}>
+                                    <span class="column-item-icon">📄</span>
+                                    <span class="column-item-name">{file.name}</span>
+                                </div>
+                            {/each}
+                        {:else}
+                            {#each columnFiles as file (file.path)}
+                                <div class="tile-item nested-tile" on:click={() => handleItemClick(file)} on:contextmenu={e => handleRightClick(e, file)} draggable={connectionType === 'skybridge'} on:dragstart={e => handleDragStart(e, file)} title={file.name} style:background-color={getTileColor(file, colorMode)} class:new={itemChangeStatus[file.path] === 'new'} class:modified={itemChangeStatus[file.path] === 'modified'} class:removed={itemChangeStatus[file.path] === 'removed'}>
+                                    <div class="tile-icon">📄</div>
+                                    <div class="tile-name">{file.name}</div>
+                                </div>
+                            {/each}
+                        {/if}
+                    </div>
+                </div>
+            {/if}
+            {#each columnDirs as item (item.path)}
+                {@const isNestedListColumn = nestedView && viewMode === 'list'}
+                {@const maxDepth = isNestedListColumn ? getMaxExpandedDepth(item) : 0}
+                {@const columnWidth = 160 + maxDepth * 20}
+                <div class="column" style={isNestedListColumn ? `flex-basis: ${columnWidth}px;` : ''}>
+                    <div class="column-header" on:click={() => handleItemClick(item)} on:contextmenu={e => handleRightClick(e, item)} draggable={connectionType === 'skybridge'} on:dragstart={e => handleDragStart(e, item)} title={item.name} style:background-color={getTileColor(item, colorMode)}>
+                        <span class="column-item-icon">🗂️</span>
+                        <span class="column-item-name">{item.name}</span>
+                    </div>
+                    {#if item.type === 'dir' && item.children && item.children.length > 0}
+                        <div class="column-content">
+                             {#if nestedView}
+                                {#each item.children as child (child.path)}
+                                    <svelte:self treeNode={child} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} {handleRightClick} {handleDragStart} {connectionType}/>
+                                {/each}
+                             {:else}
+                                {#if viewMode === 'list'}
+                                    {#each item.children as child (child.path)}
+                                        <div class="column-content-item" on:click={() => handleItemClick(child)} on:contextmenu={e => handleRightClick(e, child)} draggable={connectionType === 'skybridge'} on:dragstart={e => handleDragStart(e, child)} title={child.name} style="color: {getTileColor(child, colorMode)}" class:new={itemChangeStatus[child.path] === 'new'} class:modified={itemChangeStatus[child.path] === 'modified'} class:removed={itemChangeStatus[child.path] === 'removed'}>
+                                            <span class="column-item-icon">{child.type === 'dir' ? '🗂️' : '📄'}</span>
+                                            <span class="column-item-name">{child.name}</span>
+                                        </div>
+                                    {/each}
+                                {:else}
+                                    {#each item.children as child (child.path)}
+                                        <div class="tile-item nested-tile" on:click={() => handleItemClick(child)} on:contextmenu={e => handleRightClick(e, child)} draggable={connectionType === 'skybridge'} on:dragstart={e => handleDragStart(e, child)} title={child.name} style:background-color={getTileColor(child, colorMode)} class:new={itemChangeStatus[child.path] === 'new'} class:modified={itemChangeStatus[child.path] === 'modified'} class:removed={itemChangeStatus[child.path] === 'removed'}>
+                                            <div class="tile-icon">{child.type === 'dir' ? '🗂️' : '📄'}</div>
+                                            <div class="tile-name">{child.name}</div>
+                                        </div>
+                                    {/each}
+                                {/if}
+                             {/if}
+                        </div>
+                    {/if}
+                </div>
+            {/each}
+        </div>
+    {:else}
+        {#if viewMode === 'list'}
+            <div class="item-list">
+                {#if nestedView && supportsRecursive}
+                    {#if currentPath !== '/'}
+                        <div class="item" on:click={() => handleItemClick({name: '..', type: 'dir'})} on:contextmenu={e => handleRightClick(e, {name: '..', type: 'dir'})} title="Parent Directory">
+                            <span class="item-icon">🗂️</span>
+                            <span class="item-name">..</span>
+                        </div>
+                    {/if}
+                    {#each treeItems as item (item.path)}
+                        <svelte:self treeNode={item} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} {handleRightClick} {handleDragStart} {connectionType}/>
+                    {/each}
+                {:else}
+                    {#each items as item (item.name)}
+                        <div class="item" on:click={() => handleItemClick(item)} on:contextmenu={e => handleRightClick(e, item)} draggable={connectionType === 'skybridge'} on:dragstart={e => handleDragStart(e, item)} title={item.name} style="color: {getTileColor(item, colorMode)}" class:new={itemChangeStatus[item.name] === 'new'} class:modified={itemChangeStatus[item.name] === 'modified'} class:removed={itemChangeStatus[item.name] === 'removed'}>
+                            <span class="item-icon">{item.type === 'dir' ? '🗂️' : '📄'}</span>
+                            <span class="item-name">{item.name}</span>
+                            <span class="item-size">{#if item.type === 'file' && item.size >= 0}{item.size}{/if}</span>
+                        </div>
+                    {/each}
+                {/if}
             </div>
-        {/each}
-    </div>
+        {:else if viewMode === 'tiles'}
+            <div class="tile-grid">
+                {#if nestedView && supportsRecursive}
+                    {#if currentPath !== '/'}
+                        <div class="tile-item" on:click={() => handleItemClick({name: '..', type: 'dir'})} on:contextmenu={e => handleRightClick(e, {name: '..', type: 'dir'})} title="Parent Directory" style:background-color={getTileColor({name: '..', type: 'dir'}, colorMode)}>
+                            <div class="tile-icon">🗂️</div>
+                            <div class="tile-name">..</div>
+                        </div>
+                    {/if}
+                     {#each treeItems as item (item.path)}
+                        {#if item.type === 'file'}
+                             <div class="tile-item" on:click={() => handleItemClick(item)} on:contextmenu={e => handleRightClick(e, item)} draggable={connectionType === 'skybridge'} on:dragstart={e => handleDragStart(e, item)} title={item.name} style:background-color={getTileColor(item, colorMode)} class:new={itemChangeStatus[item.path] === 'new'} class:modified={itemChangeStatus[item.path] === 'modified'} class:removed={itemChangeStatus[item.path] === 'removed'}>
+                                <div class="tile-icon">📄</div>
+                                <div class="tile-name">{item.name}</div>
+                            </div>
+                        {:else if item.type === 'dir'}
+                            <div class="nested-dir-container" on:contextmenu={e => handleRightClick(e, item)} draggable={connectionType === 'skybridge'} on:dragstart={e => handleDragStart(e, item)} title={item.name} style:border-color={getTileColor(item, colorMode)} class:new={itemChangeStatus[item.path] === 'new'} class:modified={itemChangeStatus[item.path] === 'modified'} class:removed={itemChangeStatus[item.path] === 'removed'}>
+                                <div class="nested-dir-name" style:background-color={getTileColor(item, colorMode)} style:cursor="pointer" on:click={() => handleItemClick(item)}>{item.name}</div>
+                                <div class="nested-dir-content-grid">
+                                    {#if item.children && item.children.length > 0}
+                                        {#each item.children as child (child.path)}
+                                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} {handleRightClick} {handleDragStart} {connectionType}/>
+                                        {/each}
+                                    {/if}
+                                </div>
+                            </div>
+                        {/if}
+                     {/each}
+                {:else}
+                    {#each items as item (item.name)}
+                        <div class="tile-item" on:click={() => handleItemClick(item)} on:contextmenu={e => handleRightClick(e, item)} draggable={connectionType === 'skybridge'} on:dragstart={e => handleDragStart(e, item)} title={item.name} style:background-color={getTileColor(item, colorMode)} class:new={itemChangeStatus[item.name] === 'new'} class:modified={itemChangeStatus[item.name] === 'modified'} class:removed={itemChangeStatus[item.name] === 'removed'}>
+                            <div class="tile-icon">{item.type === 'file' ? '📄' : '🗂️'}</div>
+                            <div class="tile-name">{item.name}</div>
+                        </div>
+                    {/each}
+                {/if}
+            </div>
+        {/if}
+    {/if}
 
-    <!-- ... (And so on for all other view modes) -->
-    
     {#if contextMenu.visible}
     <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
         <button on:click={onAsk}>Ask...</button>
@@ -556,5 +664,43 @@
     </WindowSettingsModal>
 </div>
 {:else}
-    <!-- ... Recursive part is also long, just need to add the event handlers ... -->
+    {#if viewMode === 'list'}
+        <div class="tree-node-container" style="--level: {treeLevel}">
+            <div class="item tree-item" on:click={() => { if (treeNode.type === 'dir') toggleNode(treeNode.path); else handleItemClick(treeNode); }} on:contextmenu={e => handleRightClick(e, treeNode)} draggable={connectionType === 'skybridge'} on:dragstart={e => handleDragStart(e, treeNode)} style="color: {getTileColor(treeNode, colorMode)}" class:new={itemChangeStatus[treeNode.path] === 'new'} class:modified={itemChangeStatus[treeNode.path] === 'modified'} class:removed={itemChangeStatus[treeNode.path] === 'removed'}>
+                <span class="tree-node-expander">
+                    {#if treeNode.type === 'dir' && treeNode.children.length > 0}
+                        {expandedNodes.has(treeNode.path) ? '▼' : '►'}
+                    {/if}
+                </span>
+                <span class="item-icon">{treeNode.type === 'dir' ? '🗂️' : '📄'}</span>
+                <span class="item-name">{treeNode.name}</span>
+                 {#if !(columnsEnabled && nestedView)}
+                     <span class="item-size">{#if treeNode.type === 'file' && treeNode.size >= 0}{treeNode.size}{/if}</span>
+                 {/if}
+            </div>
+            {#if treeNode.children && treeNode.children.length > 0 && expandedNodes.has(treeNode.path)}
+                {#each treeNode.children as child}
+                    <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} {handleRightClick} {handleDragStart} {connectionType}/>
+                {/each}
+            {/if}
+        </div>
+    {:else if viewMode === 'tiles'}
+        {#if treeNode.type === 'file'}
+            <div class="tile-item nested-tile" on:click={() => handleItemClick(treeNode)} on:contextmenu={e => handleRightClick(e, treeNode)} draggable={connectionType === 'skybridge'} on:dragstart={e => handleDragStart(e, treeNode)} title={treeNode.name} style:background-color={getTileColor(treeNode, colorMode)} class:new={itemChangeStatus[treeNode.path] === 'new'} class:modified={itemChangeStatus[treeNode.path] === 'modified'} class:removed={itemChangeStatus[treeNode.path] === 'removed'}>
+                <div class="tile-icon">📄</div>
+                <div class="tile-name">{treeNode.name}</div>
+            </div>
+        {:else if treeNode.type === 'dir'}
+            <div class="nested-dir-container" on:contextmenu={e => handleRightClick(e, treeNode)} draggable={connectionType === 'skybridge'} on:dragstart={e => handleDragStart(e, treeNode)} title={treeNode.name} style:border-color={getTileColor(treeNode, colorMode)} class:new={itemChangeStatus[treeNode.path] === 'new'} class:modified={itemChangeStatus[treeNode.path] === 'modified'} class:removed={itemChangeStatus[treeNode.path] === 'removed'}>
+                <div class="nested-dir-name" style:background-color={getTileColor(treeNode, colorMode)} style:cursor="pointer" on:click={() => handleItemClick(treeNode)}>{treeNode.name}</div>
+                <div class="nested-dir-content-grid">
+                    {#if treeNode.children && treeNode.children.length > 0}
+                        {#each treeNode.children as child (child.path)}
+                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} {handleRightClick} {handleDragStart} {connectionType}/>
+                        {/each}
+                    {/if}
+                </div>
+            </div>
+        {/if}
+    {/if}
 {/if}

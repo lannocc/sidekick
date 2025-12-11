@@ -53,7 +53,7 @@
     $: fileExtension = getFileExtension(path);
     $: isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(fileExtension);
     $: isMarkdown = ['md', 'markdown'].includes(fileExtension);
-    $: isSourceCode = ['py', 'html', 'js', 'css', 'svelte'].includes(fileExtension);
+    $: isSourceCode = ['py', 'html', 'js', 'css', 'svelte', 'c', 'cpp', 'sh', 'json', 'yml', 'xml', 'log'].includes(fileExtension);
     $: isAnsiText = !isBinary && !isImage && !isMarkdown && !isSourceCode;
     $: canRender = (isImage && isBinary) || (isMarkdown && !isBinary) || (isSourceCode && !isBinary) || isAnsiText;
 
@@ -129,20 +129,25 @@
                 if (data.error) {
                     errorMessage = data.error;
                 } else if (data.content_b64 != null) {
+                    errorMessage = ''; // Clear previous errors on success
                     isBinary = data.is_binary;
                     total_size = data.total_size;
-                    if (data.length === -1 || (isImage && connectionType === 'skybridge')) {
+                    
+                    if (data.length === -1 || isImage) {
                         content_b64 = data.content_b64;
                     }
+                    
                     try {
-                        const rawString = atob(data.content_b64);
+                        const rawString = decodeURIComponent(escape(atob(data.content_b64))); // UTF-8 safe atob
                         const newBytes = new Uint8Array(rawString.length);
                         for (let i = 0; i < rawString.length; i++) newBytes[i] = rawString.charCodeAt(i);
+                        
                         const combinedBytes = new Uint8Array(content_bytes.length + newBytes.length);
                         combinedBytes.set(content_bytes);
                         combinedBytes.set(newBytes, content_bytes.length);
                         content_bytes = combinedBytes;
                         loaded_size = content_bytes.length;
+                        
                         if (!isBinary) content_text = new TextDecoder().decode(content_bytes);
                     } catch (e) {
                         errorMessage = "Error decoding file content.";
@@ -174,9 +179,11 @@
     });
 
     function getFileExtension(filename) { return filename.slice((filename.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase(); }
+    function formatHex(value) { return value.toString(16).padStart(2, '0').toUpperCase(); }
+    function isPrintable(byte) { return byte >= 32 && byte <= 126; }
 
     $: if (id !== undefined && groupId !== undefined) {
-        windows.updateTabProps(groupId, id, { canRender, mode, consoleId });
+        windows.updateTabProps(groupId, id, { canRender, mode, consoleId, path });
     }
 
     $: if (mode === 'rendered' && isSourceCode && content_text) {
@@ -194,7 +201,6 @@
 </script>
 
 <style>
-    /* ... (All styles from IoskFileViewer.svelte are unchanged) ... */
     .viewer-container { display: flex; flex-direction: column; height: 100%; font-family: monospace; background-color: var(--console-bg); color: var(--console-text); font-size: 14px; user-select: text; }
     .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); flex-shrink: 0; user-select: none; }
     .toolbar-path { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -232,10 +238,32 @@
         {:else if errorMessage}
             <div class="status-message error-message">{errorMessage}</div>
         {:else if content_bytes.length > 0}
-            <!-- Raw vs Rendered logic is unchanged -->
             {#if mode === 'raw' || !canRender}
-                <!-- Hex viewer for binary, text for non-binary -->
-            {:else if mode === 'rendered' && canRender}
+                {#if isBinary}
+                    <div class="hex-viewer">
+                        <table>
+                            <tbody>
+                                {#each Array(Math.ceil(content_bytes.length / 16)) as _, i}
+                                    {@const slice = content_bytes.slice(i * 16, (i + 1) * 16)}
+                                    <tr>
+                                        <td class="offset">{(i * 16).toString(16).padStart(8, '0')}</td>
+                                        {#each Array(16) as __, j}
+                                            <td>{j < slice.length ? formatHex(slice[j]) : ''}</td>
+                                        {/each}
+                                        <td class="ascii">
+                                            {#each slice as byte}
+                                                {isPrintable(byte) ? String.fromCharCode(byte) : '.'}
+                                            {/each}
+                                        </td>
+                                    </tr>
+                                {/each}
+                            </tbody>
+                        </table>
+                    </div>
+                {:else}
+                    {content_text}
+                {/if}
+            {:else if mode === 'rendered'}
                 {#if isImage} <div class="rendered-image-container"><img class="rendered-image" src="data:image/{fileExtension};base64,{content_b64}" alt={path}></div>
                 {:else if isMarkdown} <div class="rendered-markdown">{@html marked(content_text)}</div>
                 {:else if isSourceCode} <pre class="rendered-code"><code class="language-{fileExtension} hljs">{@html highlighted_html}</code></pre>

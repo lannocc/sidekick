@@ -1,140 +1,142 @@
 import { writable } from 'svelte/store';
-import { fileSystemRequests, fileSystemResponses, fileSystemWatchEvents, fileSystemTailEvents } from './iosk.js';
-import { sendMessage, fsListResponse, fsReadResponse, fsError } from '../bridge.js';
+import { 
+    fileSystemRequests, 
+    fileSystemResponses, 
+    fileSystemWatchEvents, 
+    fileSystemTailEvents 
+} from './iosk.js';
+import { 
+    sendMessage, 
+    fsListResponse, 
+    fsReadResponse, 
+    fsError 
+} from '../bridge.js';
 
 export function createFsAdapter({ connectionType, consoleId, requesterId }) {
-    // Stores for the component to subscribe to.
+    // Public stores for components to subscribe to
     const listResponse = writable(null);
     const readResponse = writable(null);
     const watchEvent = writable(null);
     const tailEvent = writable(null);
-    const errorResponse = writable(null);
 
-    let unsubscribeIoskResponses, unsubscribeIoskWatch, unsubscribeIoskTail;
-    let unsubscribeBridgeList, unsubscribeBridgeRead, unsubscribeBridgeError;
+    // Internal list of unsubscribe functions for cleanup
+    let unsubscribers = [];
 
     if (connectionType === 'iosk') {
-        unsubscribeIoskResponses = fileSystemResponses.subscribe(msg => {
+        unsubscribers.push(fileSystemResponses.subscribe(msg => {
             if (msg && msg.requesterId === requesterId) {
                 if (msg.data.type === 'fs_list_response') {
-                    // Normalize the iosk response structure to match the local one.
-                    listResponse.set({
-                        path: msg.data.path,
-                        entries: msg.data.listing,
-                        error: msg.data.error,
-                    });
+                    listResponse.set({ path: msg.data.path, entries: msg.data.listing, error: msg.data.error });
                 } else if (msg.data.type === 'fs_read_response') {
-                    readResponse.set(msg.data);
+                    readResponse.set(msg.data); // Forward the whole data object
                 }
             }
-        });
-        unsubscribeIoskWatch = fileSystemWatchEvents.subscribe(msg => {
-            if (msg && msg.consoleId === consoleId) {
-                watchEvent.set(msg.data);
+        }));
+
+        unsubscribers.push(fileSystemWatchEvents.subscribe(event => {
+            if (event && event.consoleId === consoleId) {
+                watchEvent.set(event.data);
             }
-        });
-        unsubscribeIoskTail = fileSystemTailEvents.subscribe(msg => {
-            if (msg && msg.consoleId === consoleId) {
-                tailEvent.set(msg.data);
+        }));
+
+        unsubscribers.push(fileSystemTailEvents.subscribe(event => {
+            if (event && event.consoleId === consoleId) {
+                tailEvent.set(event.data);
             }
-        });
+        }));
+
     } else { // 'skybridge'
-        unsubscribeBridgeList = fsListResponse.subscribe(msg => listResponse.set(msg));
-        unsubscribeBridgeRead = fsReadResponse.subscribe(msg => {
-            // Normalize the simple skybridge response to the richer iosk format.
+        unsubscribers.push(fsListResponse.subscribe(msg => {
             if (msg) {
+                // Normalize to the common format
+                listResponse.set({ path: msg.path, entries: msg.entries, error: null });
+            }
+        }));
+
+        unsubscribers.push(fsReadResponse.subscribe(msg => {
+            if (msg) {
+                // Normalize the skybridge response to match the more detailed iosk format
                 try {
-                    const content_b64 = btoa(unescape(encodeURIComponent(msg.content || '')));
+                    const content_b64 = btoa(unescape(encodeURIComponent(msg.content))); // UTF-8 safe btoa
                     readResponse.set({
                         path: msg.path,
-                        content_b64: content_b64,
-                        is_binary: false, // skybridge does not yet support binary files.
-                        total_size: content_b64.length,
-                        length: content_b64.length,
+                        content_b64,
+                        is_binary: false, // skybridge backend doesn't detect this; assume text.
+                        total_size: msg.content.length,
+                        offset: 0,
+                        length: -1, // Indicates full file content was sent
                         error: null,
                     });
                 } catch (e) {
-                     errorResponse.set({ path: msg.path, error: 'Failed to decode file content.' });
+                    console.error(`Encoding failed for path ${msg.path}:`, e);
+                    readResponse.set({
+                        path: msg.path,
+                        error: "Could not encode file content for display."
+                    });
                 }
             }
-        });
-        unsubscribeBridgeError = fsError.subscribe(msg => {
-            // Forward errors to both readResponse (for viewer) and the general error store.
-             if (msg) {
-                readResponse.set({ error: msg.error, path: msg.path });
-                errorResponse.set(msg);
-             }
-        });
+        }));
+
+        unsubscribers.push(fsError.subscribe(err => {
+            if (err) {
+                // Bridge provides a single error stream. We update both responses.
+                // The component can filter by the path property to see if it's relevant.
+                listResponse.set({ path: err.path, error: err.error, entries: [] });
+                readResponse.set({ path: err.path, error: err.error });
+            }
+        }));
     }
 
-    // Return the public API for the component to use.
+    // Return the public API for the component to use
     return {
-        // Response stores
         listResponse,
         readResponse,
         watchEvent,
         tailEvent,
-        errorResponse,
 
-        // Action methods
-        requestPath: (path, recursive, honor_skignore) => {
+        requestPath: (path, recursive = false, honor_skignore = false) => {
             if (connectionType === 'iosk') {
-                fileSystemRequests.set({
-                    consoleId,
-                    requesterId,
-                    command: { type: 'fs_list', path, recursive, honor_skignore }
-                });
+                const command = { type: 'fs_list', path, recursive, honor_skignore };
+                fileSystemRequests.set({ consoleId, requesterId, command, timestamp: Date.now() });
             } else {
-                // skybridge doesn't support recursive yet, so ignore the flag.
                 sendMessage({ type: 'fs_list', path });
             }
         },
 
         readFile: (path, offset = 0, length = -1) => {
             if (connectionType === 'iosk') {
-                fileSystemRequests.set({
-                    consoleId,
-                    requesterId,
-                    command: { type: 'fs_read', path, offset, length }
-                });
+                const command = { type: 'fs_read', path, offset, length };
+                fileSystemRequests.set({ consoleId, requesterId, command, timestamp: Date.now() });
             } else {
-                // skybridge doesn't support offset/length yet.
+                // skybridge doesn't support chunking; always request the whole file.
                 sendMessage({ type: 'fs_read', path });
             }
         },
 
         watch: (path) => {
-             if (connectionType === 'iosk') {
-                fileSystemRequests.set({ consoleId, command: { type: 'fs_watch_start', path } });
+            if (connectionType === 'iosk') {
+                fileSystemRequests.set({ consoleId, command: { type: 'fs_watch_start', path }, timestamp: Date.now() });
             }
         },
-
         unwatch: (path) => {
              if (connectionType === 'iosk') {
-                fileSystemRequests.set({ consoleId, command: { type: 'fs_watch_stop', path } });
+                fileSystemRequests.set({ consoleId, command: { type: 'fs_watch_stop', path }, timestamp: Date.now() });
             }
         },
-        
+
         tail: (path) => {
-            if (connectionType === 'iosk') {
-                fileSystemRequests.set({ consoleId, command: { type: 'fs_tail_start', path } });
+             if (connectionType === 'iosk') {
+                fileSystemRequests.set({ consoleId, command: { type: 'fs_tail_start', path }, timestamp: Date.now() });
             }
         },
-
         untail: (path) => {
-            if (connectionType === 'iosk') {
-                fileSystemRequests.set({ consoleId, command: { type: 'fs_tail_stop', path } });
+             if (connectionType === 'iosk') {
+                fileSystemRequests.set({ consoleId, command: { type: 'fs_tail_stop', path }, timestamp: Date.now() });
             }
         },
 
-        // Cleanup function for Svelte's onDestroy hook.
         destroy: () => {
-            if (unsubscribeIoskResponses) unsubscribeIoskResponses();
-            if (unsubscribeIoskWatch) unsubscribeIoskWatch();
-            if (unsubscribeIoskTail) unsubscribeIoskTail();
-            if (unsubscribeBridgeList) unsubscribeBridgeList();
-            if (unsubscribeBridgeRead) unsubscribeBridgeRead();
-            if (unsubscribeBridgeError) unsubscribeBridgeError();
+            unsubscribers.forEach(unsub => unsub());
         }
     };
 }
