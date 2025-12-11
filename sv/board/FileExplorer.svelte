@@ -5,11 +5,11 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { createFsAdapter } from './fs_adapter.js';
+    import { createFsAdapter } from '../fs_adapter.js';
     import { windows, activeConsoles, newFileViewer, newAskWindow } from '../windows.js';
     import { windowSettings, windowView, TASKBAR_HEIGHT } from '../desktop.js';
     import { connectionStatus, createBox } from '../bridge.js';
-    import { fileSelection } from './iosk.js';
+    import { fileSelection } from '../iosk.js';
     import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
 
     // --- Component Props & State ---

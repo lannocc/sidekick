@@ -5,10 +5,10 @@
 <script>
     import { onMount, onDestroy, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { createFsAdapter } from './fs_adapter.js';
+    import { createFsAdapter } from '../fs_adapter.js';
     import { marked } from 'marked';
     import { windows, activeConsoles } from '../windows.js';
-    import { parseAnsi } from './ansi.js';
+    import { parseAnsi } from '../ansi.js';
     import hljs from 'highlight.js/lib/core';
     import javascript from 'highlight.js/lib/languages/javascript';
     import python from 'highlight.js/lib/languages/python';

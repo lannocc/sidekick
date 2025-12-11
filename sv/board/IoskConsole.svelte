@@ -6,13 +6,13 @@
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
     import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch, newIoskUserInspector } from '../windows.js';
-    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents, contextUpdates } from './iosk.js';
+    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents, contextUpdates } from '../iosk.js';
     import { desktopSettings, windowSettings } from '../desktop.js';
     import RoomsMenu from './popup/RoomsMenu.svelte';
     import AttachMenu from './popup/AttachMenu.svelte';
     import UserContextMenu from './popup/UserContextMenu.svelte';
     import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
-    import { parseAnsi, stripAnsi } from './ansi.js';
+    import { parseAnsi, stripAnsi } from '../ansi.js';
 
     export let id; // Unique ID from the window manager
     export let groupId;

@@ -7,7 +7,7 @@
     import { get } from 'svelte/store';
     import { sendMessage, askOutput, askError, askExit, connectionStatus, askStatsResponse } from '../bridge.js';
     import { newLocalFileExplorer, windows } from '../windows.js';
-    import { fileSelection } from './iosk.js';
+    import { fileSelection } from '../iosk.js';
 
     export let id; // tab id
     export let groupId;

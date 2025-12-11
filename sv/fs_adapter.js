@@ -10,7 +10,7 @@ import {
     fsListResponse, 
     fsReadResponse, 
     fsError 
-} from '../bridge.js';
+} from './bridge.js';
 
 export function createFsAdapter({ connectionType, consoleId, requesterId }) {
     // Public stores for components to subscribe to
