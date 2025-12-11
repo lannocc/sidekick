@@ -193,6 +193,14 @@
     }
     // --- End new handlers ---
 
+    let isThemeDefault;
+    $: if (settings) {
+        const currentTheme = getThemePart(settings);
+        const defaultTheme = getThemePart(mergeWithDefaults({}));
+        isThemeDefault = areThemesEqual(currentTheme, defaultTheme);
+    }
+
+
     let activeTab = 'general';
     let activeSkySubTab = 'scene';
     let activeWindowDetailTab = 'scene';
@@ -762,7 +770,8 @@
             <button
                 class="menu-button"
                 on:click={handleResetSettings}
-                title="Reset current settings to default"
+                title={isThemeDefault ? 'Current theme is already default' : 'Reset current settings to default'}
+                disabled={isThemeDefault}
             >
                 ↩️
             </button>
