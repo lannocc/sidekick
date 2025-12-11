@@ -6,7 +6,7 @@
     import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
-    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover, switchToBox } from './bridge.js';
+    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover, switchToBox, allBoxSettings, getBoxSpecificSettings } from './bridge.js';
     import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId } from './desktop.js';
     import Panel from './Panel.svelte';
 
@@ -30,6 +30,11 @@
     // --- Unfold State ---
     let isUnfolded = false;
     let hoveredPanelKey = null; // Key ('x_y') of the currently hovered panel
+
+    // When unfolding, fetch specific settings if needed
+    $: if (isUnfolded && box.has_custom_settings && !$allBoxSettings[box.id]) {
+        getBoxSpecificSettings(box.id);
+    }
 
     $: if (isExpanded) {
         activeBoxId.set(box.id);
@@ -76,6 +81,19 @@
     $: sceneSettings = $desktopSettings.boxes?.scene?.[state];
     $: sceneStyle = generateBgStyle(sceneSettings);
     $: sceneOpacity = sceneSettings?.opacity ?? 1.0;
+
+    // This is the specific style for side panels of boxes with custom settings.
+    $: sidePanelSceneSettings = (() => {
+        const boxSpecificSettings = $allBoxSettings[box.id];
+        if (box.has_custom_settings && boxSpecificSettings?.sky?.scene) {
+            return boxSpecificSettings.sky.scene;
+        }
+        return null; // Fallback
+    })();
+
+    $: sidePanelSceneStyle = sidePanelSceneSettings ? generateBgStyle(sidePanelSceneSettings) : sceneStyle;
+    $: sidePanelSceneOpacity = sidePanelSceneSettings ? (sidePanelSceneSettings.opacity ?? 1.0) : sceneOpacity;
+
 
     // Cloak uses 'inactive' settings since it's only visible when the box is folded/inactive
     $: cloakSettings = $desktopSettings.boxes?.cloak?.inactive;
@@ -957,7 +975,7 @@
                 <div class="middle-row">
                     <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
                     <div class="content-area-wrapper" class:drop-target={isDropTarget(panel.loc_x, panel.loc_y)}>
-                        <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
+                        <div class="panel-scene" style:background={sidePanelSceneStyle} style:opacity={sidePanelSceneOpacity}>
                             <Panel board_type={panel.board_type} board_config={panel.board_config} />
                         </div>
                     </div>
@@ -989,7 +1007,7 @@
                 <div class="middle-row">
                     <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
                     <div class="content-area-wrapper" class:drop-target={isDropTarget(slot.x, slot.y)}>
-                        <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity} />
+                        <div class="panel-scene" style:background={sidePanelSceneStyle} style:opacity={sidePanelSceneOpacity} />
                     </div>
                     <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
                 </div>
