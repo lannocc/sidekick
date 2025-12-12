@@ -5,7 +5,7 @@ import Settings from './board/Settings.svelte';
 import FileExplorer from './board/FileExplorer.svelte';
 import FileViewer from './board/FileViewer.svelte';
 import WebBrowser from './board/WebBrowser.svelte';
-import Webcam from './board/Webcam.svelte';
+import Camera from './board/Camera.svelte';
 import IoskPrivateChat from './board/IoskPrivateChat.svelte';
 import LocalTerminal from './board/LocalTerminal.svelte';
 import Ask from './board/Ask.svelte';
@@ -49,7 +49,7 @@ export const componentMap = {
     'FileExplorer': FileExplorer,
     'FileViewer': FileViewer,
     'WebBrowser': WebBrowser,
-    'Webcam': Webcam,
+    'Camera': Camera,
     'IoskPrivateChat': IoskPrivateChat,
     'LocalTerminal': LocalTerminal,
     'Ask': Ask,
@@ -1121,8 +1121,8 @@ export function newIoskConnection(props = {}) {
 export function newCalculator(props = {}) {
     windows.addWindow(Calculator, { title: 'Calculator', width: 320, height: 450, ...props });
 }
-export function newWebcam(props = {}) {
-    windows.addWindow(Webcam, { title: 'Webcam', width: 640, height: 480, ...props });
+export function newCamera(props = {}) {
+    windows.addWindow(Camera, { title: 'Camera', width: 640, height: 480, ...props });
 }
 export function newSettings(props = {}) {
     windows.addWindow(Settings, { title: 'Settings', width: 420, height: 711, ...props });

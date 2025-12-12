@@ -19,7 +19,7 @@ export const componentIconMap = {
     'IoskWatch': '👀',
     'IoskUserInspector': '🕵️',
     'NotificationCenter': '🔔',
-    'Webcam': '📸',
+    'Camera': '📸',
     'default': '🗔'
 };
 

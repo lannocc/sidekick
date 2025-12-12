@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, newBoxesWindow, newWebcam } from './windows.js';
+    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, newBoxesWindow, newCamera } from './windows.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled, componentIconMap } from './desktop.js';
     import { connectionStatus, switchToBox, boxes } from './bridge.js';
     import Clock from './Clock.svelte';
@@ -845,7 +845,7 @@
                 <!-- Top Row -->
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchSettings({ sourceEvent: e }); }} title="Settings">⚙️</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchCalculator({ sourceEvent: e }); }} title="Calculator">🧮</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebcam({ sourceEvent: e }); showMenu = false; }} title="Webcam">📸</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newCamera({ sourceEvent: e }); showMenu = false; }} title="Camera">📸</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebBrowser({ sourceEvent: e }); showMenu = false; }} title="Web Browser">🌐</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">
                     🖥️
