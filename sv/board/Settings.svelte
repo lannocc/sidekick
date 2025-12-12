@@ -201,7 +201,7 @@
     }
 
 
-    let activeTab = 'general';
+    let activeTab = 'sky';
     let activeSkySubTab = 'scene';
     let activeWindowDetailTab = 'scene';
     let activeBackBoardDetailTab = 'scene';
