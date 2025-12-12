@@ -1046,7 +1046,7 @@
                     clearTimeout(backedWindowMiddleClickTimeout.get(id));
                     backedWindowMiddleClickTimeout.delete(id);
                 }
-                startItemDrag(event, itemEl);
+                handleDesktopPanStart(event);
             };
 
             const onUp = () => {
