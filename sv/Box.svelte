@@ -6,9 +6,9 @@
     import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
-    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover } from './local.js';
-    import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings } from './desktop.js';
-    import Board from './Board.svelte';
+    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover, switchToBox, allBoxSettings, getBoxSpecificSettings } from './bridge.js';
+    import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId } from './desktop.js';
+    import Panel from './Panel.svelte';
 
     export let box;
 
@@ -26,33 +26,80 @@
     $: coverPanelLocation = box.cover_panel_location;
     $: canSetCover = !coverPanelLocation;
     $: isSelected = $selectedItems.has(`box-${box.id}`);
-    $: maxWindowZ = Math.max(100, ...$windows.map(w => w.zIndex));
 
-    let backgroundStyle = '';
-    $: {
-        let style = 'var(--window-bg)'; // Default fallback
-        if ($desktopSettings && $desktopSettings.boxes) {
-            const bg = $desktopSettings.boxes;
-            if (bg.bgType === 'gradient') {
-                style = `linear-gradient(45deg, ${bg.bgGradientStart} 0%, ${bg.bgGradientEnd} 100%)`;
-            } else if (bg.bgType === 'color') {
-                style = bg.bgColor;
-            } else if (bg.bgType === 'image' && bg.bgImage) {
-                let size = 'cover';
-                let repeat = 'no-repeat';
-                let position = 'center center';
+    // --- Unfold State ---
+    let isUnfolded = false;
+    let hoveredPanelKey = null; // Key ('x_y') of the currently hovered panel
 
-                switch (bg.bgImageDisplayMode) {
-                    case 'contain': size = 'contain'; break;
-                    case 'stretch': size = '100% 100%'; break;
-                    case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
-                    case 'cover': default: break;
-                }
-                style = `url('${bg.bgImage}') ${position} / ${size} ${repeat}`;
-            }
-        }
-        backgroundStyle = style;
+    // When unfolding, fetch specific settings if needed
+    $: if (isUnfolded && box.has_custom_settings && !$allBoxSettings[box.id]) {
+        getBoxSpecificSettings(box.id);
     }
+
+    $: if (isExpanded) {
+        activeBoxId.set(box.id);
+    } else if (get(activeBoxId) === box.id) {
+        activeBoxId.set(null);
+    }
+    onDestroy(() => {
+        if (get(activeBoxId) === box.id) {
+            activeBoxId.set(null);
+        }
+    });
+
+    $: isMenuOpen = contextMenu.visible || panelContextMenu.visible || showPanelPicker;
+    $: isExpanded = isUnfolded || isMenuOpen;
+
+    // --- Style Generation ---
+    function generateBgStyle(bgSettings) {
+        if (!bgSettings) return null;
+        if (bgSettings.bgType === 'gradient') return `linear-gradient(45deg, ${bgSettings.bgGradientStart} 0%, ${bgSettings.bgGradientEnd} 100%)`;
+        if (bgSettings.bgType === 'color') return bgSettings.bgColor;
+        if (bgSettings.bgType === 'image' && bgSettings.bgImage) {
+            let size = 'cover', repeat = 'no-repeat', position = 'center center';
+            switch (bgSettings.bgImageDisplayMode) {
+                case 'contain': size = 'contain'; break;
+                case 'stretch': size = '100% 100%'; break;
+                case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
+                case 'cover': default: break;
+            }
+            return `url('${bgSettings.bgImage}') ${position} / ${size} ${repeat}`;
+        }
+        return null;
+    }
+
+    $: state = isExpanded ? 'active' : 'inactive';
+
+    $: frameSettings = $desktopSettings.boxes?.frame?.[state];
+    $: frameStyle = generateBgStyle(frameSettings);
+    $: frameWidth = frameSettings?.width ?? 0; // This is the box's internal frame width. It's correct to keep this name.
+    $: frameOpacity = frameSettings?.opacity ?? 1.0;
+    $: boxShadowStyle = frameSettings?.shadowEnabled
+        ? `${frameSettings.shadowInset ? 'inset ' : ''}${frameSettings.shadowX}px ${frameSettings.shadowY}px ${frameSettings.shadowBlur}px ${frameSettings.shadowSpread}px ${frameSettings.shadowColor}`
+        : 'none';
+
+    $: sceneSettings = $desktopSettings.boxes?.scene?.[state];
+    $: sceneStyle = generateBgStyle(sceneSettings);
+    $: sceneOpacity = sceneSettings?.opacity ?? 1.0;
+
+    // This is the specific style for side panels of boxes with custom settings.
+    $: sidePanelSceneSettings = (() => {
+        const boxSpecificSettings = $allBoxSettings[box.id];
+        if (box.has_custom_settings && boxSpecificSettings?.sky?.scene) {
+            return boxSpecificSettings.sky.scene;
+        }
+        return null; // Fallback
+    })();
+
+    $: sidePanelSceneStyle = sidePanelSceneSettings ? generateBgStyle(sidePanelSceneSettings) : sceneStyle;
+    $: sidePanelSceneOpacity = sidePanelSceneSettings ? (sidePanelSceneSettings.opacity ?? 1.0) : sceneOpacity;
+
+
+    // Cloak uses 'inactive' settings since it's only visible when the box is folded/inactive
+    $: cloakSettings = $desktopSettings.boxes?.cloak?.inactive;
+    $: cloakStyle = generateBgStyle(cloakSettings);
+    $: cloakOpacity = cloakSettings?.opacity ?? 1.0;
+
 
     // --- Panel Grid Logic ---
     $: panels = box.panels || {};
@@ -173,23 +220,33 @@
 
     let innerWidth, innerHeight;
     const BASE_WIDTH = 180;
-    // The dynamic calculation becomes a fallback for older boxes without a stored ratio.
-    $: dynamicAspectRatio = (innerHeight > 0 && innerWidth > 0) ? (innerHeight - TASKBAR_HEIGHT) / innerWidth : 0;
+
+    $: taskbarHeight = $desktopSettings.sky?.frame?.height ?? TASKBAR_HEIGHT;
+    // --- FIX START ---
+    // Renamed to avoid conflict with the box's own internal `frameWidth`
+    $: desktopSideFrameWidth = $desktopSettings.sky?.frame?.width ?? 0;
+
+    // The dynamic calculation becomes a fallback for older boxes without a stored ratio
+    // Corrected to use the actual desktop area width
+    $: dynamicAspectRatio = (innerHeight > 0 && innerWidth > 0) ? (innerHeight - taskbarHeight) / (innerWidth - 2 * desktopSideFrameWidth) : 0;
+    // --- FIX END ---
     $: aspectRatio = box.aspect_ratio ?? dynamicAspectRatio;
 
     $: boxWidth = BASE_WIDTH * scale;
     $: boxHeight = BASE_WIDTH * aspectRatio * scale;
 
     let boxEl;
+
+    // --- Positioning Logic ---
+    $: transform = `translate(${$desktopView.panX}px, ${$desktopView.panY}px) scale(${$desktopView.zoom}) translate(${x}px, ${y}px)`;
+    $: fixedTop = isExpanded ? (y * $desktopView.zoom) + $desktopView.panY + taskbarHeight : null;
+    // --- FIX START ---
+    // Use the correctly-named desktop side frame width for positioning
+    $: fixedLeft = isExpanded ? (x * $desktopView.zoom) + $desktopView.panX + desktopSideFrameWidth : null;
+    // --- FIX END ---
+
     let saveTransformTimeout;
     let clickTimeout = null;
-
-    // --- Unfold State ---
-    let isUnfolded = false;
-    let hoveredPanelKey = null; // Key ('x_y') of the currently hovered panel
-
-    $: isMenuOpen = contextMenu.visible || panelContextMenu.visible || showBoardPicker;
-    $: isExpanded = isUnfolded || isMenuOpen;
 
     // When the box is no longer expanded (closed AND menus are closed),
     // also clear the specific panel key to hide available slots.
@@ -240,7 +297,6 @@
         }
     }
     function closeContextMenu() {
-        contextMenu.visible = false;
     }
     function closePanelContextMenu() {
         panelContextMenu.visible = false;
@@ -254,7 +310,7 @@
         const clickedInsideComponent = boxEl?.contains(event.target) ||
             (contextMenu.visible && event.target.closest('.context-menu')) ||
             (panelContextMenu.visible && event.target.closest('.context-menu')) ||
-            (showBoardPicker && event.target.closest('.board-picker'));
+            (showPanelPicker && event.target.closest('.panel-picker'));
 
         if (!clickedInsideComponent && !clickedOnAnotherBox) {
             if (isUnfolded) {
@@ -267,20 +323,8 @@
             if (panelContextMenu.visible) {
                 closePanelContextMenu();
             }
-            if (showBoardPicker) {
-                showBoardPicker = false;
-            }
-        }
-    }
-
-    function handleKeyDown(event) {
-        if (event.key === 'Escape') {
-            if (contextMenu.visible) {
-                closeContextMenu();
-            } else if (panelContextMenu.visible) {
-                closePanelContextMenu();
-            } else if (showBoardPicker) {
-                showBoardPicker = false;
+            if (showPanelPicker) {
+                showPanelPicker = false;
             } else if (isUnfolded) {
                 isUnfolded = false;
             }
@@ -291,12 +335,24 @@
         updateUnfoldDirection(); // Set initial direction
         window.addEventListener('click', handleWindowClick, true); // Use capture phase
         window.addEventListener('keydown', handleKeyDown);
+        return () => { // Svelte's onDestroy is implicitly called by this return
+            window.removeEventListener('click', handleWindowClick, true);
+            window.removeEventListener('keydown', handleKeyDown);
+            if (clickTimeout) clearTimeout(clickTimeout);
+            if (get(activeBoxId) === box.id) {
+                activeBoxId.set(null);
+            }
+        };
     });
-    onDestroy(() => {
-        window.removeEventListener('click', handleWindowClick, true); // Use capture phase
-        window.removeEventListener('keydown', handleKeyDown);
-        if (clickTimeout) clearTimeout(clickTimeout);
-    });
+
+    function handleKeyDown(event) {
+        if (event.key === 'Escape') {
+            if (contextMenu.visible) closeContextMenu();
+            else if (panelContextMenu.visible) closePanelContextMenu();
+            else if (showPanelPicker) showPanelPicker = false;
+            else if (isUnfolded) isUnfolded = false;
+        }
+    }
 
     // --- Context Menu Actions ---
     function renameBox() {
@@ -361,8 +417,8 @@
     }
 
     function setCoverImageFromPicker() {
-        const { location, parent } = boardPickerProps; // location is {x, y}
-        showBoardPicker = false;
+        const { location, parent } = panelPickerProps; // location is {x, y}
+        showPanelPicker = false;
         isUnfolded = false;
 
         const url = prompt("Enter URL for cover image:");
@@ -446,9 +502,9 @@
         }
     }
 
-    // --- Board Picker State & Logic ---
-    let showBoardPicker = false;
-    let boardPickerProps = {}; // { location: {x,y}, parent: {x,y}, clientX, clientY }
+    // --- Panel Picker State & Logic ---
+    let showPanelPicker = false;
+    let panelPickerProps = {}; // { location: {x,y}, parent: {x,y}, clientX, clientY }
 
     function getActiveTabTitle(win) {
         if (!win || !win.tabs) return '...';
@@ -457,19 +513,19 @@
     }
 
     function selectWindow(group) {
-        const { location, parent } = boardPickerProps; // location is {x, y}
+        const { location, parent } = panelPickerProps; // location is {x, y}
         const board_config = generateBoardConfigFromWindow(group);
         const board_type = group.tabs.length > 1 ? 'tabs' : 'window';
         savePanelConfig(box.id, location.x, location.y, board_type, board_config, parent);
         windows.removeWindow(group.id);
-        showBoardPicker = false;
+        showPanelPicker = false;
         isUnfolded = false;
     }
 
     function selectDash(layout) {
-        const { location, parent } = boardPickerProps; // location is {x, y}
+        const { location, parent } = panelPickerProps; // location is {x, y}
         savePanelConfig(box.id, location.x, location.y, 'dash', layout, parent);
-        showBoardPicker = false;
+        showPanelPicker = false;
         isUnfolded = false;
     }
 
@@ -479,10 +535,11 @@
     }
 
     function handleCenterPanelDoubleClick() {
-        if (box.type === 'local' && box.context) {
-            isUnfolded = false;
-            newLocalFileExplorer({ initialPath: box.context, title: `Files - ${box.name}` });
-        }
+        isUnfolded = false;
+        // Short delay to allow fold animation to start before switching contexts
+        setTimeout(() => {
+            switchToBox(box.id);
+        }, 100);
     }
 
     function handleSidePanelClick(event, loc_x, loc_y, isAvailableSlot, parent) {
@@ -491,8 +548,8 @@
             return;
         }
 
-        if (showBoardPicker) {
-            showBoardPicker = false;
+        if (showPanelPicker) {
+            showPanelPicker = false;
             return;
         }
 
@@ -502,13 +559,13 @@
         if (isAvailableSlot || !panelConfig || panelConfig.board_type === 'empty') {
             event.stopPropagation();
             const { panX, panY, zoom } = get(desktopView);
-            boardPickerProps = {
+            panelPickerProps = {
                 location: { x: loc_x, y: loc_y },
                 parent: parent,
                 clientX: (event.clientX - panX) / zoom,
                 clientY: (event.clientY - 40 - panY) / zoom,
             };
-            showBoardPicker = true;
+            showPanelPicker = true;
         } else {
             const { board_type, board_config } = panelConfig;
 
@@ -550,6 +607,8 @@
         return target?.boxId === box.id && target?.location?.x === loc_x && target?.location?.y === loc_y;
     }
 
+    $: zIndex = isExpanded ? 21000 : ($activeBoxId === box.id ? 21000 : ($activeBoxId !== null ? 0 : 10));
+
 </script>
 
 <style>
@@ -557,7 +616,8 @@
         position: absolute;
         cursor: pointer;
         user-select: none;
-        transition: z-index 0s 0.3s, border-color 0.2s ease-in-out, opacity 0.3s ease-in-out; /* Delay z-index change until after animation */
+        transition: z-index 0s 0.3s, border-color 0.2s ease-in-out; /* Delay z-index change until after animation */
+        transform-origin: 0 0;
         border: 1px solid transparent;
         border-radius: 7px; /* A bit larger than panel's 6px */
     }
@@ -573,13 +633,47 @@
         transition-delay: 0s;
     }
 
+    .box-cloak {
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        z-index: 4;
+        transition: opacity 0.3s ease-in-out;
+        cursor: pointer;
+        box-sizing: border-box;
+    }
+    .box.is-unfolded .box-cloak {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .box-cloak-scene {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
+    }
+    .box-cloak-content {
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 5px;
+        color: var(--title-bar-text);
+        text-align: center;
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
+    }
+
     .box-cover {
         position: absolute;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
-        z-index: 4; /* On top of the center panel */
+        z-index: 5; /* On top of the default cloak */
         border-radius: 6px;
         overflow: hidden;
         opacity: 1;
@@ -604,30 +698,56 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: var(--window-bg);
-        background-position: center;
-        background-size: cover;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
         box-sizing: border-box;
         transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
         color: var(--title-bar-text);
         text-align: center;
-        padding: 5px;
     }
-    .panel.drop-target {
-        border-color: #3498db;
-        box-shadow: 0 0 15px 5px rgba(52, 152, 219, 0.6);
-    }
-
-    .center {
-        z-index: 3;
+    .panel-scene {
+        width: 100%;
+        height: 100%;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
+    }
+
+    .center {
+        z-index: 3;
         cursor: pointer;
+    }
+
+    /* --- NEW FRAME STYLES --- */
+    .box-frame {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        border-radius: 6px;
+        overflow: hidden;
+        background: transparent;
+        transition: box-shadow 0.3s ease-in-out;
+    }
+    .top-frame, .bottom-frame, .side-frame {
+        flex-shrink: 0;
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out, width 0.3s ease-in-out, height 0.3s ease-in-out;
+    }
+    .middle-row {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: row;
+        overflow: hidden;
+    }
+    .content-area-wrapper {
+        flex-grow: 1;
+        position: relative;
+        overflow: hidden;
+    }
+    .content-area-wrapper.drop-target {
+        outline: 2px solid #3498db;
+        outline-offset: -2px;
     }
 
     /* All side panels start hidden and scaled down */
@@ -658,7 +778,7 @@
 
     /* Unfold EXISTING side panels on click */
     .box.is-unfolded .panel:not(.center):not(.is-empty) {
-        opacity: 1;
+        opacity: var(--frame-opacity);
         transform: var(--pos-transform, translate(0,0));
         pointer-events: auto;
         transition-delay: var(--unfold-delay, 0s);
@@ -666,7 +786,7 @@
 
     /* Make VISIBLE empty slots interactive */
     .box.is-unfolded .panel.is-empty.is-visible {
-        opacity: 1;
+        opacity: var(--frame-opacity);
         pointer-events: auto;
         transition-delay: var(--unfold-delay, 0s);
     }
@@ -715,7 +835,7 @@
         border: 1px solid var(--border-color);
         border-radius: 4px;
         box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        z-index: 10001;
+        z-index: 23000;
         display: flex;
         flex-direction: column;
         padding: 4px 0;
@@ -742,13 +862,13 @@
     .context-menu .delete { color: #e74c3c; }
     .context-menu .delete:hover { background-color: #c0392b; color: white; }
 
-    .board-picker {
+    .panel-picker {
         position: fixed;
         background-color: var(--window-bg);
         border: 1px solid var(--border-color);
         border-radius: 4px;
         box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        z-index: 10001;
+        z-index: 23000;
         display: flex;
         flex-direction: column;
         padding: 4px 0;
@@ -787,21 +907,48 @@
 
 <div
     class="box"
-    class:is-unfolded={isExpanded}
+    class:is-unfolded={isUnfolded}
     class:selected={isSelected}
     data-id={box.id}
     data-type="box"
     bind:this={boxEl}
-    style:left="{x}px"
-    style:top="{y}px"
-    style:width="{boxWidth}px"
-    style:height="{boxHeight}px"
-    style:z-index={isExpanded ? maxWindowZ + 1 : 10}
-    style:opacity={isExpanded ? ($desktopSettings.boxes?.activeOpacity ?? 1.0) : ($desktopSettings.boxes?.inactiveOpacity ?? 0.8)}
+    style:position={isExpanded ? 'fixed' : null}
+    style:top={isExpanded ? `${fixedTop}px` : null}
+    style:left={isExpanded ? `${fixedLeft}px` : null}
+    style:width="{isExpanded ? boxWidth * $desktopView.zoom : boxWidth}px"
+    style:height="{isExpanded ? boxHeight * $desktopView.zoom : boxHeight}px"
+    style:transform={isExpanded ? 'none' : transform}
+    style:z-index={zIndex}
     on:wheel={handleWheel}
     on:scale
 >
-    <!-- Box Cover Image (dissolves on unfold) -->
+    <!-- Default Cloak (visible when folded) -->
+    {#if !coverImageUrl}
+    <div 
+        class="box-cloak" 
+        on:click={e => handlePanelClick(e, 0, 0)}
+        on:contextmenu={e => handlePanelRightClick(e, 0, 0)}
+    >
+        <div class="box-frame" style:box-shadow={boxShadowStyle}>
+            <div class="top-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+            <div class="middle-row">
+                <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                <div class="content-area-wrapper">
+                    <div class="box-cloak-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
+                    </div>
+                    <div class="box-cloak-content" style:background={cloakStyle} style:opacity={cloakOpacity}>
+                        <div class="box-name">{box.name}</div>
+                        <div class="box-context" title={box.context}>{box.context}</div>
+                    </div>
+                </div>
+                <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+            </div>
+            <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+        </div>
+    </div>
+    {/if}
+
+    <!-- User-defined Cover Image (also visible when folded) -->
     {#if coverImageUrl}
         <div class="box-cover" on:click={(e) => handlePanelClick(e, 0, 0)}>
             <img src={coverImageUrl} alt="{box.name} cover" class="cover-image" />
@@ -813,16 +960,29 @@
         {@const parent = {x: panel.parent_loc_x, y: panel.parent_loc_y}}
         <div
             class="panel"
-            style={`--pos-transform: translateX(${panel.loc_x * 105}%) translateY(${panel.loc_y * 105}%); --unfold-delay: ${(panel.distance - 1) * 75}ms; background: ${backgroundStyle};`}
+            style:--pos-transform="translateX({panel.loc_x * 105}%) translateY({panel.loc_y * 105}%)"
+            style:--unfold-delay="{(panel.distance - 1) * 75}ms"
+            style:--frame-opacity={frameOpacity}
             on:click={e => handlePanelClick(e, panel.loc_x, panel.loc_y)}
             on:contextmenu={e => handlePanelRightClick(e, panel.loc_x, panel.loc_y)}
-            class:drop-target={isDropTarget(panel.loc_x, panel.loc_y)}
             on:mouseenter={() => handlePanelMouseEnter(panel.loc_x, panel.loc_y)}
             on:mouseleave={() => handlePanelMouseLeave(panel.loc_x, panel.loc_y)}
             on:dragover={handleDragOver}
             on:drop={e => handleDrop(e, panel.loc_x, panel.loc_y, parent)}
         >
-            <Board board_type={panel.board_type} board_config={panel.board_config} />
+            <div class="box-frame" style:box-shadow={boxShadowStyle}>
+                <div class="top-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                <div class="middle-row">
+                    <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                    <div class="content-area-wrapper" class:drop-target={isDropTarget(panel.loc_x, panel.loc_y)}>
+                        <div class="panel-scene" style:background={sidePanelSceneStyle} style:opacity={sidePanelSceneOpacity}>
+                            <Panel board_type={panel.board_type} board_config={panel.board_config} />
+                        </div>
+                    </div>
+                    <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                </div>
+                <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+            </div>
         </div>
     {/each}
 
@@ -832,25 +992,60 @@
         <div
             class="panel is-empty from-{slot.from}"
             class:is-visible={hoveredPanelKey === parentKey}
-            style={`--pos-transform: translateX(${slot.x * 105}%) translateY(${slot.y * 105}%); --unfold-delay: ${(slot.distance - 1) * 75}ms; background: ${backgroundStyle};`}
+            style:--pos-transform="translateX({slot.x * 105}%) translateY({slot.y * 105}%)"
+            style:--unfold-delay="{(slot.distance - 1) * 75}ms"
+            style:--frame-opacity={frameOpacity}
             on:click={e => handlePanelClick(e, slot.x, slot.y, true, slot.parent)}
             on:contextmenu|preventDefault|stopPropagation
-            class:drop-target={isDropTarget(slot.x, slot.y)}
             on:mouseenter={() => handlePanelMouseEnter(slot.x, slot.y)}
             on:mouseleave={() => handlePanelMouseLeave(slot.x, slot.y)}
             on:dragover={handleDragOver}
             on:drop={e => handleDrop(e, slot.x, slot.y, slot.parent)}
-        />
+        >
+            <div class="box-frame" style:box-shadow={boxShadowStyle}>
+                <div class="top-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                <div class="middle-row">
+                    <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                    <div class="content-area-wrapper" class:drop-target={isDropTarget(slot.x, slot.y)}>
+                        <div class="panel-scene" style:background={sidePanelSceneStyle} style:opacity={sidePanelSceneOpacity} />
+                    </div>
+                    <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                </div>
+                <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+            </div>
+        </div>
     {/each}
 
     <!-- Center Panel with Content -->
-    <div class="panel center" style:background={backgroundStyle} on:click={e => handlePanelClick(e, 0, 0, false, null)} on:contextmenu={e => handlePanelRightClick(e, 0, 0)} class:drop-target={isDropTarget(0, 0)} on:mouseenter={() => handlePanelMouseEnter(0, 0)} on:mouseleave={() => handlePanelMouseLeave(0, 0)} on:dragover={handleDragOver} on:drop={e => handleDrop(e, 0, 0, null)}>
-        {#if centerPanel}
-            <Board board_type={centerPanel.board_type} board_config={centerPanel.board_config} />
-        {:else}
-            <div class="box-name">{box.name}</div>
-            <div class="box-context" title={box.context}>{box.context}</div>
-        {/if}
+    <div 
+        class="panel center" 
+        style:opacity={isUnfolded ? 1 : 0}
+        style:pointer-events={isUnfolded ? 'auto' : 'none'}
+        on:click={e => handlePanelClick(e, 0, 0, false, null)} 
+        on:contextmenu={e => handlePanelRightClick(e, 0, 0)} 
+        on:mouseenter={() => handlePanelMouseEnter(0, 0)} 
+        on:mouseleave={() => handlePanelMouseLeave(0, 0)} 
+        on:dragover={handleDragOver} 
+        on:drop={e => handleDrop(e, 0, 0, null)}
+    >
+        <div class="box-frame" style:box-shadow={boxShadowStyle}>
+            <div class="top-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+            <div class="middle-row">
+                <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+                <div class="content-area-wrapper" class:drop-target={isDropTarget(0, 0)}>
+                    <div class="panel-scene" style:background={sceneStyle} style:opacity={sceneOpacity}>
+                        {#if centerPanel}
+                            <Panel board_type={centerPanel.board_type} board_config={centerPanel.board_config} />
+                        {:else}
+                            <div class="box-name">{box.name}</div>
+                            <div class="box-context" title={box.context}>{box.context}</div>
+                        {/if}
+                    </div>
+                </div>
+                <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+            </div>
+            <div class="bottom-frame" style="height: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
+        </div>
     </div>
 </div>
 
@@ -875,9 +1070,9 @@
     </div>
 {/if}
 
-<!-- Board Picker UI -->
-{#if showBoardPicker}
-    <div class="board-picker" style:top="{boardPickerProps.clientY}px" style:left="{boardPickerProps.clientX}px" on:click|stopPropagation>
+<!-- Panel Picker UI -->
+{#if showPanelPicker}
+    <div class="panel-picker" style:top="{panelPickerProps.clientY}px" style:left="{panelPickerProps.clientX}px" on:click|stopPropagation>
         {#if !coverPanelLocation}
             <button class="picker-item" on:click={setCoverImageFromPicker}>
                 Set Cover Image...

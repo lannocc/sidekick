@@ -4,75 +4,111 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows } from './windows.js';
+    import { windows } from '../windows.js';
 
     export let isActive;
     export let id;
     export let groupId;
 
-    let display = '0';
-    let currentInput = '';
-    let previousInput = '';
-    let operator = null;
-    let lastOperand = '';
-    let lastOperator = null;
-    let calculationDone = false;
+    // --- State Management ---
+    // These props are used for initialization when the component is created/restored.
+    export let display = '0';
+    export let currentInput = '';
+    export let previousInput = '';
+    export let operator = null;
+    export let lastOperand = '';
+    export let lastOperator = null;
+    export let calculationDone = false;
+
+    // Local state variables that hold the actual, live state of the calculator.
+    // They are initialized from the props once.
+    let localDisplay, localCurrentInput, localPreviousInput, localOperator, localLastOperand, localLastOperator, localCalculationDone;
+
+    // This reactive block synchronizes the component's internal state with its
+    // props. This is crucial for when the component instance is preserved (e.g.,
+    // during a back/unback transition) and its state needs to be restored from
+    // the new props. It runs initially and whenever the props change.
+    $: {
+        localDisplay = display;
+        localCurrentInput = currentInput;
+        localPreviousInput = previousInput;
+        localOperator = operator;
+        localLastOperand = lastOperand;
+        localLastOperator = lastOperator;
+        localCalculationDone = calculationDone;
+    }
+
+    // This function is called by the window manager to save the component's state.
+    // It now returns the local state, not the initial props.
+    export function getState() {
+        return {
+            display: localDisplay,
+            currentInput: localCurrentInput,
+            previousInput: localPreviousInput,
+            operator: localOperator,
+            lastOperand: localLastOperand,
+            lastOperator: localLastOperator,
+            calculationDone: localCalculationDone,
+        };
+    }
+    // --- End State Management ---
+
     let calculatorEl;
 
     function clear() {
-        display = '0';
-        currentInput = '';
-        previousInput = '';
-        operator = null;
-        lastOperand = '';
-        lastOperator = null;
-        calculationDone = false;
+        localDisplay = '0';
+        localCurrentInput = '';
+        localPreviousInput = '';
+        localOperator = null;
+        localLastOperand = '';
+        localLastOperator = null;
+        localCalculationDone = false;
     }
 
     function backspace() {
-        if (display === 'Error') {
+        if (localDisplay === 'Error') {
             clear();
             return;
         }
-        if (currentInput.length > 0) {
-            currentInput = currentInput.slice(0, -1);
-            display = currentInput === '' ? '0' : currentInput;
+        if (localCurrentInput.length > 0) {
+            localCurrentInput = localCurrentInput.slice(0, -1);
+            localDisplay = localCurrentInput === '' ? '0' : localCurrentInput;
         }
     }
 
     function appendNumber(num) {
-        if (calculationDone) {
-            currentInput = '';
-            calculationDone = false;
+        if (localCalculationDone) {
+            localCurrentInput = '';
+            localCalculationDone = false;
         }
-        if (currentInput === '0' && num === '0') return;
-        if (currentInput === '0' && num !== '0') currentInput = '';
-        currentInput += num;
-        display = currentInput;
+        if (localCurrentInput === '0' && num === '0') return;
+        if (localCurrentInput === '0' && num !== '0') localCurrentInput = '';
+        localCurrentInput += num;
+        localDisplay = localCurrentInput;
     }
 
     function appendDecimal() {
-        if (calculationDone) {
-            currentInput = '';
-            calculationDone = false;
+        if (localCalculationDone) {
+            localCurrentInput = '';
+            localCalculationDone = false;
         }
-        if (currentInput.includes('.')) return;
-        if (currentInput === '') currentInput = '0';
-        currentInput += '.';
-        display = currentInput;
+        if (localCurrentInput.includes('.')) return;
+        if (localCurrentInput === '') localCurrentInput = '0';
+        localCurrentInput += '.';
+        localDisplay = localCurrentInput;
     }
 
     function chooseOperator(op) {
-        calculationDone = false;
-        if (currentInput === '' && previousInput === '') return;
-        if (currentInput !== '') {
-            if (previousInput !== '') {
+        localCalculationDone = false;
+        if (localCurrentInput === '' && localPreviousInput === '') return;
+        if (localCurrentInput !== '') {
+            if (localPreviousInput !== '') {
                 calculate();
             }
-            previousInput = display; // Use display in case it's a result
-            currentInput = '';
+            localPreviousInput = localDisplay; // Use display in case it's a result
+            localCurrentInput = '';
         }
-        operator = op;
+        localOperator = op;
     }
 
     function calculate() {
@@ -80,27 +116,27 @@
         let prev, curr, op;
         let calculationString;
 
-        if (operator) { // Normal calculation
-            if (previousInput === '') return;
+        if (localOperator) { // Normal calculation
+            if (localPreviousInput === '') return;
             // Handle "5 * =" case
-            if (currentInput === '') {
-                currentInput = previousInput;
+            if (localCurrentInput === '') {
+                localCurrentInput = localPreviousInput;
             }
-            prev = parseFloat(previousInput);
-            curr = parseFloat(currentInput);
-            op = operator;
-            calculationString = `${previousInput} ${op} ${currentInput}`;
+            prev = parseFloat(localPreviousInput);
+            curr = parseFloat(localCurrentInput);
+            op = localOperator;
+            calculationString = `${localPreviousInput} ${op} ${localCurrentInput}`;
 
-            lastOperand = currentInput;
-            lastOperator = op;
+            localLastOperand = localCurrentInput;
+            localLastOperator = op;
 
-        } else if (lastOperator) { // Repeated calculation
-            if (currentInput === '' || lastOperand === '') return;
-            prev = parseFloat(currentInput);
-            curr = parseFloat(lastOperand);
-            op = lastOperator;
-            calculationString = `${currentInput} ${op} ${lastOperand}`;
-            previousInput = currentInput; 
+        } else if (localLastOperator) { // Repeated calculation
+            if (localCurrentInput === '' || localLastOperand === '') return;
+            prev = parseFloat(localCurrentInput);
+            curr = parseFloat(localLastOperand);
+            op = localLastOperator;
+            calculationString = `${localCurrentInput} ${op} ${localLastOperand}`;
+            localPreviousInput = localCurrentInput; 
         } else {
             return; // Nothing to do
         }
@@ -121,23 +157,23 @@
             }
 
             if (result === 'Error') {
-                 display = 'Error';
+                 localDisplay = 'Error';
             } else {
-                display = String(parseFloat(result.toPrecision(12)));
+                localDisplay = String(parseFloat(result.toPrecision(12)));
             }
 
             if (groupId && id && calculationString) {
-                windows.notifyActivity(groupId, id, { summary: `${calculationString} = ${display}` }, true);
+                windows.notifyActivity(groupId, id, { summary: `${calculationString} = ${localDisplay}` }, true);
             }
 
         } catch (e) {
-            display = 'Error';
+            localDisplay = 'Error';
         }
 
-        currentInput = display !== 'Error' ? display : '';
-        previousInput = '';
-        operator = null;
-        calculationDone = true;
+        localCurrentInput = localDisplay !== 'Error' ? localDisplay : '';
+        localPreviousInput = '';
+        localOperator = null;
+        localCalculationDone = true;
     }
 
     function handleKeydown(e) {
@@ -280,7 +316,7 @@
 </style>
 
 <div class="calculator" bind:this={calculatorEl}>
-    <div class="display">{display}</div>
+    <div class="display">{localDisplay}</div>
     <div class="buttons">
         <button class="btn clear" on:click={clear} data-key="C">C</button>
         <button class="btn" on:click={backspace} data-key="Backspace">⌫</button>

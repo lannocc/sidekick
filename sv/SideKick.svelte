@@ -7,9 +7,32 @@
     import Desktop from './Desktop.svelte';
     import Taskbar from './Taskbar.svelte';
     import { windows } from './windows.js';
-    import { dashActive, dashLayouts, dashCycleIndex, desktopSettings } from './desktop.js';
+    import { dashActive, dashLayouts, dashCycleIndex, desktopSettings, activeBoxId, skyCloakEnabled, currentBoxId, currentBox } from './desktop.js';
     import { get } from 'svelte/store';
-    import { initializeLocalConnection } from './local.js';
+    import { initializeLocalConnection, connectionStatus } from './bridge.js';
+
+    // --- NEW: Title update logic ---
+    let title = 'SKYBOARD';
+    $: if ($connectionStatus === 'connected' && $currentBox) {
+        title = `${$currentBox.name} | SKYBOARD`;
+    } else {
+        title = 'SKYBOARD';
+    }
+
+    // --- NEW: Box switching effect logic ---
+    let boxSwitchKey = 0;
+    let isFirstRun = true;
+
+    $: {
+        // This reactive block runs whenever currentBoxId changes.
+        if ($currentBoxId !== undefined && !isFirstRun) {
+            // Increment the key to force re-rendering of the animation element.
+            boxSwitchKey += 1;
+        }
+        if ($currentBoxId !== undefined) {
+            isFirstRun = false;
+        }
+    }
 
     function generateBgStyle(bgSettings) {
         if (!bgSettings) return '';
@@ -34,7 +57,7 @@
 
     $: cloakSettings = $desktopSettings.sky?.cloak;
     $: cloakStyle = cloakSettings ? generateBgStyle(cloakSettings) : '';
-    $: cloakOpacity = cloakSettings?.opacity ?? 0;
+    $: cloakOpacity = $skyCloakEnabled ? (cloakSettings?.opacity ?? 0) : 0;
 
     // Frame settings
     $: frameSettings = $desktopSettings.sky?.frame;
@@ -43,18 +66,19 @@
     $: frameHeight = frameSettings?.height ?? 40;
     $: frameWidth = frameSettings?.width ?? 0;
 
+    // --- NEW: Derive root scrollbar colors from sky settings ---
+    $: skySceneSettings = $desktopSettings.sky?.scene;
+    $: skyFrameSettings = $desktopSettings.sky?.frame;
+    $: rootScrollbarTrackColor = (skySceneSettings?.bgType === 'color' ? skySceneSettings.bgColor : skySceneSettings?.bgGradientStart) || '#2c3e50';
+    $: rootScrollbarThumbColor = (skyFrameSettings?.bgType === 'color' ? skyFrameSettings.bgColor : skyFrameSettings?.bgGradientStart) || '#46627f';
+
+
     function disableSkyCloak() {
-        desktopSettings.update(s => {
-            if (s.sky.cloak.opacity > 0) {
-                s.sky.cloak.lastOpacity = s.sky.cloak.opacity;
-                s.sky.cloak.opacity = 0;
-            }
-            return s;
-        });
+        skyCloakEnabled.set(false);
     }
 
     function handleKeyDown(e) {
-        if ($desktopSettings.sky?.cloak?.opacity > 0) {
+        if (cloakOpacity > 0) {
             e.preventDefault();
             e.stopPropagation();
             disableSkyCloak();
@@ -151,6 +175,16 @@
     });
 </script>
 
+<svelte:head>
+    <title>{title}</title>
+    <style>
+        :root {
+            --scrollbar-track-bg: {rootScrollbarTrackColor};
+            --scrollbar-thumb-bg: {rootScrollbarThumbColor};
+        }
+    </style>
+</svelte:head>
+
 <style>
     .sk-container {
         display: flex;
@@ -166,7 +200,6 @@
     .desktop-wrapper {
         flex-grow: 1;
         display: flex;
-        overflow: hidden;
     }
     .desktop-area {
         flex-grow: 1;
@@ -185,6 +218,57 @@
         pointer-events: none;
         transition: opacity 0.3s ease-in-out;
     }
+
+    /* --- NEW: Box switching effect --- */
+    @keyframes box-switch-flash {
+        0% {
+            opacity: 0;
+            backdrop-filter: blur(0px) brightness(1);
+        }
+        50% {
+            opacity: 0.25;
+            background-color: #88C0D0; /* A light blue from the Nord theme */
+            backdrop-filter: blur(4px) brightness(1.2);
+        }
+        100% {
+            opacity: 0;
+            backdrop-filter: blur(0px) brightness(1);
+        }
+    }
+    .box-switch-effect {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 31000; /* Above sky-cloak */
+        pointer-events: none;
+        animation: box-switch-flash 0.4s ease-in-out;
+    }
+
+    /* --- GLOBAL SCROLLBAR STYLES --- */
+    :global(*), :global(*::before), :global(*::after) {
+        /* For Firefox */
+        scrollbar-width: thin;
+        scrollbar-color: var(--scrollbar-thumb-bg, #46627f) var(--scrollbar-track-bg, #2c3e50);
+    }
+    :global(::-webkit-scrollbar) {
+        width: 12px;
+        height: 12px;
+    }
+    :global(::-webkit-scrollbar-track) {
+        background: var(--scrollbar-track-bg, #2c3e50);
+    }
+    :global(::-webkit-scrollbar-thumb) {
+        background-color: var(--scrollbar-thumb-bg, #46627f);
+        border-radius: 6px;
+        border: 3px solid transparent;
+        background-clip: content-box;
+    }
+    :global(::-webkit-scrollbar-thumb:hover) {
+        background-color: var(--scrollbar-thumb-bg, #46627f);
+        filter: brightness(1.2);
+    }
 </style>
 
 <div
@@ -196,11 +280,18 @@
     on:wheel|preventDefault={disableSkyCloak}
 ></div>
 
+<!-- NEW: Box switching effect overlay -->
+{#if boxSwitchKey > 0}
+    {#key boxSwitchKey}
+        <div class="box-switch-effect"></div>
+    {/key}
+{/if}
+
 <div class="sk-container" on:contextmenu|preventDefault>
     <div class="top-frame" style="height: {frameHeight}px; background: {frameStyle}; opacity: {frameOpacity};">
         <Taskbar />
     </div>
-    <div class="desktop-wrapper">
+    <div class="desktop-wrapper" style="overflow: hidden;">
         <div class="side-frame" style="width: {frameWidth}px; background: {frameStyle}; opacity: {frameOpacity};"></div>
         <div class="desktop-area">
             <Desktop />

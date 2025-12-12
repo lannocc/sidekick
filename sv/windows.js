@@ -1,20 +1,20 @@
 import { writable, get, readable } from 'svelte/store';
-import IoskConsole from './IoskConsole.svelte';
-import Calculator from './Calculator.svelte';
-import Settings from './Settings.svelte';
-import IoskFileExplorer from './IoskFileExplorer.svelte';
-import IoskFileViewer from './IoskFileViewer.svelte';
-import WebBrowser from './WebBrowser.svelte';
-import IoskPrivateChat from './IoskPrivateChat.svelte';
-import LocalTerminal from './LocalTerminal.svelte';
-import LocalFileExplorer from './LocalFileExplorer.svelte';
-import LocalFileViewer from './LocalFileViewer.svelte';
-import Ask from './Ask.svelte';
-import IoskWatch from './IoskWatch.svelte';
-import IoskUserInspector from './IoskUserInspector.svelte';
-import NotificationCenter from './NotificationCenter.svelte';
+import IoskConsole from './board/IoskConsole.svelte';
+import Calculator from './board/Calculator.svelte';
+import Settings from './board/Settings.svelte';
+import FileExplorer from './board/FileExplorer.svelte';
+import FileViewer from './board/FileViewer.svelte';
+import WebBrowser from './board/WebBrowser.svelte';
+import Camera from './board/Camera.svelte';
+import IoskPrivateChat from './board/IoskPrivateChat.svelte';
+import LocalTerminal from './board/LocalTerminal.svelte';
+import Ask from './board/Ask.svelte';
+import IoskWatch from './board/IoskWatch.svelte';
+import IoskUserInspector from './board/IoskUserInspector.svelte';
+import NotificationCenter from './board/NotificationCenter.svelte';
+import Boxes from './board/Boxes.svelte';
 import { TASKBAR_HEIGHT, desktopSettings, windowSettings, notificationHistory, unreadNoticeCount, desktopView, windowView } from './desktop.js';
-import { createBackedWindow, deleteBackedWindow, createBox, boxes, desktopShortcuts, backedWindows } from './local.js';
+import { createBackedWindow, deleteBackedWindow, createBox, boxes, desktopShortcuts, backedWindows } from './bridge.js';
 
 let windowGroupIdCounter = 0;
 let tabIdCounter = 0;
@@ -28,25 +28,45 @@ export const dragState = writable(null);
 // Store for requesting a drag/resize action from another component
 export const dragRequest = writable(null);
 
+export const instanceRegistry = {
+    instances: new Map(),
+    register(tabId, instance) {
+        this.instances.set(tabId, instance);
+    },
+    unregister(tabId) {
+        this.instances.delete(tabId);
+    },
+    get(tabId) {
+        return this.instances.get(tabId);
+    }
+};
+
 // Map component type strings to actual components for restoring layouts
 export const componentMap = {
     'IoskConsole': IoskConsole,
     'Calculator': Calculator,
     'Settings': Settings,
-    'IoskFileExplorer': IoskFileExplorer,
-    'IoskFileViewer': IoskFileViewer,
+    'FileExplorer': FileExplorer,
+    'FileViewer': FileViewer,
     'WebBrowser': WebBrowser,
+    'Camera': Camera,
     'IoskPrivateChat': IoskPrivateChat,
     'LocalTerminal': LocalTerminal,
-    'LocalFileExplorer': LocalFileExplorer,
-    'LocalFileViewer': LocalFileViewer,
     'Ask': Ask,
     'IoskWatch': IoskWatch,
     'IoskUserInspector': IoskUserInspector,
     'NotificationCenter': NotificationCenter,
+    'Boxes': Boxes,
+    // Add old names for backward compatibility with saved layouts
+    'IoskFileExplorer': FileExplorer,
+    'IoskFileViewer': FileViewer,
+    'LocalFileExplorer': FileExplorer,
+    'LocalFileViewer': FileViewer,
 };
 
 export function getComponentType(component) {
+    if (component === FileExplorer) return 'FileExplorer';
+    if (component === FileViewer) return 'FileViewer';
     for (const [name, comp] of Object.entries(componentMap)) {
         if (comp === component) {
             return name;
@@ -66,6 +86,9 @@ function findTabById(groups, tabId) {
 
 export function generateBoardConfigFromWindow(group, allWindows) {
     const layoutTabs = group.tabs.map(tab => {
+        const instance = instanceRegistry.get(tab.id); // Get component instance
+        // Get state from the live instance if possible, otherwise use the initial state from the tab object
+        const currentState = instance && typeof instance.getState === 'function' ? instance.getState() : (tab.initialState || {});
         const associatedConsole = findTabById(allWindows, tab.consoleId);
         return {
             originalId: tab.id,
@@ -81,7 +104,7 @@ export function generateBoardConfigFromWindow(group, allWindows) {
             initialCommand: tab.initialCommand,
             initialPwd: tab.initialPwd,
             initialInterval: tab.initialInterval,
-            initialState: tab.initialState,
+            initialState: { ...(tab.initialState || {}), ...currentState }, // Merge current state
             consoleId: tab.consoleId, // Keep for remapping
         };
     });
@@ -233,13 +256,13 @@ function createWindowManager() {
             const newTabs = groupData.tabs.map(tabData => {
                 const component = componentMap[tabData.componentType];
                 if (!component) return null;
-                const { componentType, originalId, ...props } = tabData;
+                const { componentType, originalId, initialState, ...props } = tabData;
                 const allWindowSettings = get(windowSettings);
                 const componentSettings = allWindowSettings[tabData.componentType];
                 const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
                 const newTabId = ++tabIdCounter;
                 idMap.set(originalId, newTabId);
-                return { id: newTabId, component, componentName: tabData.componentType, ...props, zoom: props.zoom ?? defaultZoom, originalId };
+                return { id: newTabId, component, componentName: tabData.componentType, ...props, ...(initialState || {}), zoom: props.zoom ?? defaultZoom, originalId };
             }).filter(Boolean);
 
             if (newTabs.length === 0) continue;
@@ -439,19 +462,21 @@ function createWindowManager() {
         });
     };
 
-    const removeWindow = (groupId) => {
+    const removeWindow = (groupId, { force = false } = {}) => {
         update(currentWindows => {
-            const group = currentWindows.find(g => g.id === groupId);
-            if (!group) return currentWindows;
+            if (!force) {
+                const group = currentWindows.find(g => g.id === groupId);
+                if (!group) return currentWindows;
 
-            // Check if any tab requires confirmation
-            for (const tab of group.tabs) {
-                 if (tab.component === IoskConsole && tab.isConsoleConnected) {
-                    if (!confirm(`Console "${tab.title}" has an active connection. Are you sure you want to close it?`)) {
-                        return currentWindows;
+                // Check if any tab requires confirmation
+                for (const tab of group.tabs) {
+                     if (tab.component === IoskConsole && tab.isConsoleConnected) {
+                        if (!confirm(`Console "${tab.title}" has an active connection. Are you sure you want to close it?`)) {
+                            return currentWindows;
+                        }
+                        // Only need to confirm once for the whole group
+                        break;
                     }
-                    // Only need to confirm once for the whole group
-                    break;
                 }
             }
             return currentWindows.filter(g => g.id !== groupId);
@@ -732,24 +757,34 @@ function createWindowManager() {
             const component = componentMap[tabData.componentType];
             if (!component) return null;
 
-            const { componentType, ...props } = tabData;
+            const { componentType, initialState, ...props } = tabData;
+
+            // *** MODIFICATION 1 START ***
+            // Use originalId to preserve the component instance across front/back transitions.
+            // This prevents components like IoskConsole from being destroyed and re-created.
+            const newTabId = tabData.originalId || ++tabIdCounter;
+            if (newTabId > tabIdCounter) {
+                tabIdCounter = newTabId; // Keep the global counter ahead of restored IDs.
+            }
+            // *** MODIFICATION 1 END ***
 
             const allWindowSettings = get(windowSettings);
             const componentSettings = allWindowSettings[tabData.componentType];
             const defaultZoom = componentSettings?.defaultZoom ?? 1.0;
 
             return {
-                id: ++tabIdCounter,
+                id: newTabId, // Use the preserved or new ID
                 component,
                 componentName: tabData.componentType,
                 ...props,
+                ...(initialState || {}),
                 zoom: props.zoom ?? defaultZoom,
             };
         }).filter(Boolean);
 
         if (tabs.length === 0) return;
 
-        const activeTabInNewGroup = tabs.find(t => t.originalId === groupData.activeTabId);
+        const activeTabInNewGroup = tabs.find(t => t.id === groupData.activeTabId);
         const newActiveTabId = activeTabInNewGroup ? activeTabInNewGroup.id : (tabs[0] ? tabs[0].id : null);
 
         // Clean up originalId from tabs
@@ -760,10 +795,11 @@ function createWindowManager() {
             const maxZ = updatedWindows.reduce((max, w) => Math.max(max, w.zIndex), 99);
 
             const newGroup = {
-                id: ++windowGroupIdCounter,
+                id: groupData.id || ++windowGroupIdCounter,
                 x: groupData.x, y: groupData.y, width: groupData.width, height: groupData.height,
                 minimized: false,
                 maximized: groupData.maximized,
+                cloaked: groupData.cloaked ?? false,
                 isActive: true,
                 zIndex: maxZ + 1,
                 prevX: groupData.x, prevY: groupData.y, prevWidth: groupData.width, prevHeight: groupData.height,
@@ -867,7 +903,6 @@ function createWindowManager() {
     };
 
     const unbackWindow = (backedWindow) => {
-        // Get current view states for coordinate transformation
         const dv = get(desktopView);
         const wv = get(windowView);
 
@@ -876,41 +911,54 @@ function createWindowManager() {
             return;
         }
 
-        // Get the visual dimensions of the backed window on the back layer, accounting for scale
+        // *** MODIFICATION 2 START ***
+        // Before restoring, get the live, current state from the component instance
+        // instead of using the stale state saved when the window was first backed.
+        const liveConfig = JSON.parse(JSON.stringify(backedWindow.config));
+        liveConfig.tabs.forEach(tabData => {
+            // The key in instanceRegistry is the original tab ID, which is preserved.
+            const instance = instanceRegistry.get(tabData.originalId);
+            if (instance && typeof instance.getState === 'function') {
+                tabData.initialState = instance.getState();
+            }
+        });
+        // *** MODIFICATION 2 END ***
+
         const scale = backedWindow.scale || 1.0;
         const backedVisualWidth = backedWindow.width * scale;
         const backedVisualHeight = backedWindow.height * scale;
-
-        // Calculate the midpoint of the backed window in back-layer world coordinates
         const backWorldMidX = backedWindow.x + backedVisualWidth / 2;
         const backWorldMidY = backedWindow.y + backedVisualHeight / 2;
-        
-        // Transform this midpoint into front-layer world coordinates
         const frontWorldMidX = ((backWorldMidX * dv.zoom) + dv.panX - wv.panX) / wv.zoom;
         const frontWorldMidY = ((backWorldMidY * dv.zoom) + dv.panY - wv.panY) / wv.zoom;
-        
-        // Calculate the new dimensions for the restored window. The world-space size is adjusted
-        // by the zoom factor change, which makes it visually larger/smaller as requested.
         const zoomFactor = wv.zoom / dv.zoom;
         const restoredWindowWidth = backedVisualWidth * zoomFactor;
         const restoredWindowHeight = backedVisualHeight * zoomFactor;
-
-        // Calculate the new top-left (x, y) for the restored window in front-layer world coordinates
         const newX = frontWorldMidX - restoredWindowWidth / 2;
         const newY = frontWorldMidY - restoredWindowHeight / 2;
-        
-        deleteBackedWindow(backedWindow.id);
-        
-        // Update the config with the new, transformed size before restoring.
-        const newConfig = { ...backedWindow.config };
+
+        const newConfig = { ...liveConfig };
         newConfig.width = restoredWindowWidth;
         newConfig.height = restoredWindowHeight;
-        
-        restoreWindow({ 
-            ...newConfig, 
-            x: newX, 
-            y: newY, 
+
+        // This flow still destroys the old component and creates a new one.
+        // We call restoreWindow first, which adds to the `windows` store.
+        // Then we call deleteBackedWindow, which removes from the `backedWindows` store.
+        // The key is that Desktop.svelte will now render BOTH from a single combined list,
+        // using the same component (<Window>) and a persistent ID.
+        restoreWindow({
+            ...newConfig,
+            x: newX,
+            y: newY,
+            // We need to carry over the ID to prevent re-creation
+            id: backedWindow.originalGroupId || backedWindow.id,
         });
+
+        // Synchronously remove the window from the local store to prevent key duplication errors
+        // before the backend has a chance to respond and broadcast the new list.
+        backedWindows.update(bws => bws.filter(bw => bw.id !== backedWindow.id));
+
+        deleteBackedWindow(backedWindow.id);
     };
 
     // --- Sentinel Implementation ---
@@ -997,6 +1045,15 @@ function createWindowManager() {
         });
     };
 
+    const unfocusAllWindows = () => {
+        update(windows => {
+            if (windows.some(w => w.isActive)) {
+                return windows.map(w => ({ ...w, isActive: false }));
+            }
+            return windows;
+        });
+    };
+
     return {
         subscribe,
         addWindow,
@@ -1023,6 +1080,7 @@ function createWindowManager() {
         restoreLayout,
         notifyActivity,
         unbackWindow,
+        unfocusAllWindows,
     };
 }
 
@@ -1047,19 +1105,6 @@ export const activeConsoles = readable(new Map(), set => {
     return () => unsubscribe();
 });
 
-export const instanceRegistry = {
-    instances: new Map(),
-    register(tabId, instance) {
-        this.instances.set(tabId, instance);
-    },
-    unregister(tabId) {
-        this.instances.delete(tabId);
-    },
-    get(tabId) {
-        return this.instances.get(tabId);
-    }
-};
-
 
 // --- Window Creation Functions ---
 
@@ -1078,34 +1123,79 @@ export function newIoskConnection(props = {}) {
 export function newCalculator(props = {}) {
     windows.addWindow(Calculator, { title: 'Calculator', width: 320, height: 450, ...props });
 }
+export function newCamera(props = {}) {
+    windows.addWindow(Camera, { title: 'Camera', width: 640, height: 480, ...props });
+}
 export function newSettings(props = {}) {
     windows.addWindow(Settings, { title: 'Settings', width: 420, height: 711, ...props });
 }
 export function newNotificationCenter(props = {}) {
     const allWindows = get(windows);
-    const existingNCTab = allWindows.flatMap(g => g.tabs).find(t =>
-        t.componentName === 'NotificationCenter'
-    );
-
+    const existingNCTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'NotificationCenter' || t.componentName === 'NotificationCenter');
     if (existingNCTab) {
         const group = allWindows.find(g => g.tabs.some(t => t.id === existingNCTab.id));
-        if (group.minimized) windows.toggleMinimize(group.id);
-        else windows.focusWindow(group.id);
+        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
         windows.setActiveTab(group.id, existingNCTab.id);
         return;
     }
-
     windows.addWindow(NotificationCenter, { title: 'Notifications', width: 475, height: 475, ...props });
 }
+export function newBoxesWindow(props = {}) {
+    const allWindows = get(windows);
+    const existingBoxesTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'Boxes' || t.componentName === 'Boxes');
+    if (existingBoxesTab) {
+        const group = allWindows.find(g => g.tabs.some(t => t.id === existingBoxesTab.id));
+        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
+        windows.setActiveTab(group.id, existingBoxesTab.id);
+        return;
+    }
+    windows.addWindow(Boxes, { title: 'Boxes', width: 600, height: 400, ...props });
+}
+
+// --- UNIFIED FILE EXPLORER / VIEWER FUNCTIONS ---
+
+export function newFileExplorer(props = {}) {
+    const { connectionType, consoleId, consoleTitle } = props;
+    const title = connectionType === 'iosk' ? `Files - ${consoleTitle || `Console ${consoleId}`}` : 'Local Files';
+    const defaultProps = { title, width: 500, height: 600 };
+    windows.addWindow(FileExplorer, { ...defaultProps, ...props });
+}
+
+export function newFileViewer(props = {}) {
+    const title = (props.path || '').split('/').pop() || props.path;
+    const defaultProps = { title: `View - ${title}`, width: 700, height: 500 };
+    windows.addWindow(FileViewer, { ...defaultProps, ...props });
+}
+
+// --- LEGACY/SPECIFIC FUNCTIONS (Now call the unified functions) ---
+
 export function newIoskFileExplorer(consoleTabId, consoleTitle, props = {}) {
-    const title = `Files - ${consoleTitle || `Console ${consoleTabId}`}`;
     const explorerSettings = get(windowSettings)['IoskFileExplorer'];
-    windows.addWindow(IoskFileExplorer, { title, consoleId: consoleTabId, initialPath: explorerSettings?.initialPath || '.', width: 500, height: 500, ...props });
+    newFileExplorer({ 
+        connectionType: 'iosk',
+        consoleId: consoleTabId,
+        consoleTitle,
+        initialPath: explorerSettings?.initialPath || '.',
+        ...props 
+    });
 }
 export function newIoskFileViewer(consoleTabId, path, props = {}) {
-    const title = path.split('/').pop() || path;
-    windows.addWindow(IoskFileViewer, { title: `View - ${title}`, consoleId: consoleTabId, path: path, width: 700, height: 500, ...props });
+    newFileViewer({
+        connectionType: 'iosk',
+        consoleId: consoleTabId,
+        path,
+        ...props
+    });
 }
+export function newLocalFileExplorer(props = {}) {
+    newFileExplorer({ connectionType: 'skybridge', ...props });
+}
+export function newLocalFileViewer(props = {}) {
+    newFileViewer({ connectionType: 'skybridge', ...props });
+}
+
+// --- Other window creation functions ---
+
 export function newWebBrowser(props = {}) {
     const browserSettings = get(windowSettings)['WebBrowser'];
     const initialUrl = browserSettings?.defaultUrl || (typeof window !== 'undefined' ? window.location.origin : 'about:blank');
@@ -1113,40 +1203,22 @@ export function newWebBrowser(props = {}) {
 }
 export function newIoskPrivateChat(consoleTabId, localUser, remoteUser, props = {}) {
     const allWindows = get(windows);
-    const existingChatTab = allWindows.flatMap(g => g.tabs).find(t =>
-        t.componentName === 'IoskPrivateChat' && t.consoleId === consoleTabId && t.remoteUser === remoteUser
-    );
-
+    const existingChatTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'IoskPrivateChat' && t.consoleId === consoleTabId && t.remoteUser === remoteUser);
     if (existingChatTab) {
         const group = allWindows.find(g => g.tabs.some(t => t.id === existingChatTab.id));
-        if (group.minimized) windows.toggleMinimize(group.id);
-        else windows.focusWindow(group.id);
+        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
         windows.setActiveTab(group.id, existingChatTab.id);
         return;
     }
-
     const title = remoteUser.split('.')[0];
     windows.addWindow(IoskPrivateChat, { title: `Chat with ${title}`, consoleId: consoleTabId, localUser, remoteUser, width: 450, height: 400, ...props });
 }
-
 export function newLocalTerminal(props = {}) {
     windows.addWindow(LocalTerminal, { title: 'Local Terminal', width: 800, height: 500, ...props });
 }
-
-export function newLocalFileExplorer(props = {}) {
-    const defaultProps = { title: 'Local Files', width: 500, height: 600 };
-    windows.addWindow(LocalFileExplorer, { ...defaultProps, ...props });
-}
-
-export function newLocalFileViewer(props = {}) {
-    const title = (props.path || '').split('/').pop() || props.path;
-    windows.addWindow(LocalFileViewer, { title: `View - ${title}`, width: 700, height: 500, ...props });
-}
-
 export function newAskWindow(initialFiles = [], props = {}) {
     windows.addWindow(Ask, { title: 'Ask', initialFiles, width: 900, height: 600, ...props });
 }
-
 export function newIoskWatch(consoleTabId, pwd, props = {}) {
     const allWindows = get(windows);
     const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
@@ -1154,53 +1226,24 @@ export function newIoskWatch(consoleTabId, pwd, props = {}) {
         alert("Cannot open Watch window. The selected console is not connected.");
         return;
     }
-
-    windows.addWindow(IoskWatch, {
-        title: 'Watch',
-        consoleId: consoleTabId,
-        consoleConnection: consoleTab.consoleConnection, // Pass this for Dash restore
-        initialPwd: pwd,
-        width: 700,
-        height: 400,
-        ...props,
-    });
+    windows.addWindow(IoskWatch, { title: 'Watch', consoleId: consoleTabId, consoleConnection: consoleTab.consoleConnection, initialPwd: pwd, width: 700, height: 400, ...props });
 }
-
-
 export function newIoskUserInspector(consoleTabId, targetUser, consoleWs, props = {}) {
     const allWindows = get(windows);
-
-    // Find if an inspector for this user from this console already exists
-    const existingInspectorTab = allWindows.flatMap(g => g.tabs).find(t =>
-        t.componentName === 'IoskUserInspector' && !t.isDetached && t.consoleId === consoleTabId && t.targetUser === targetUser
-    );
-
+    const existingInspectorTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'IoskUserInspector' && !t.isDetached && t.consoleId === consoleTabId && t.targetUser === targetUser);
     if (existingInspectorTab) {
         const group = allWindows.find(g => g.tabs.some(t => t.id === existingInspectorTab.id));
-        if (group.minimized) windows.toggleMinimize(group.id);
-        else windows.focusWindow(group.id);
+        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
         windows.setActiveTab(group.id, existingInspectorTab.id);
         return;
     }
-
-    // If not, create a new one, but first check if console is connected
     const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
     if (!consoleTab || !consoleTab.isConsoleConnected) {
         alert("Cannot inspect context. The selected console is not connected.");
         return;
     }
-
     const title = `Inspector - ${targetUser}`;
-    windows.addWindow(IoskUserInspector, {
-        title,
-        consoleId: consoleTabId,
-        targetUser: targetUser,
-        consoleWs: consoleWs, // Pass the WebSocket instance
-        consoleConnection: consoleTab.consoleConnection, // For dash restore
-        width: 700,
-        height: 700,
-        ...props,
-    });
+    windows.addWindow(IoskUserInspector, { title, consoleId: consoleTabId, targetUser: targetUser, consoleWs: consoleWs, consoleConnection: consoleTab.consoleConnection, width: 700, height: 700, ...props });
 }
 
 export function newBox(props = {}) {
@@ -1283,5 +1326,5 @@ export function newBox(props = {}) {
         if (!found) candidatePos = startPos; // Fallback if no spot is found
     }
     
-    createBox(name, 'local', context, aspectRatio, candidatePos.x, candidatePos.y);
+    createBox(name, 'local', context, { aspectRatio, screenX: candidatePos.x * zoom + panX, screenY: candidatePos.y * zoom + panY + TASKBAR_HEIGHT });
 }

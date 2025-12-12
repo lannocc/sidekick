@@ -1,211 +1,256 @@
-import { writable, get } from 'svelte/store';
+import { writable, get, derived } from 'svelte/store';
+import { boxes } from './bridge.js';
 
 export const TASKBAR_HEIGHT = 40; // Height of the taskbar in pixels
 
-// Function to load settings from localStorage, or return defaults
-function loadSettings() {
-    const defaults = {
-        sky: {
-            scene: {
-                bgType: 'gradient', // 'gradient', 'color', 'image'
-                bgColor: '#34495e',
-                bgGradientStart: '#2c3e50',
-                bgGradientEnd: '#46627f',
-                bgImage: '',
-                bgImageDisplayMode: 'cover', // 'cover', 'contain', 'stretch', 'tile'
-                opacity: 1.0,
-            },
-            frame: {
-                bgType: 'color',
-                bgColor: '#2c3e50',
-                bgGradientStart: '#2c3e50',
-                bgGradientEnd: '#46627f',
-                bgImage: '',
-                bgImageDisplayMode: 'cover',
-                opacity: 1.0,
-                height: 40,
-                width: 0,
-            },
-            cloak: {
-                bgType: 'color',
-                bgColor: '#000000',
-                bgGradientStart: '#000000',
-                bgGradientEnd: '#222222',
-                bgImage: '',
-                bgImageDisplayMode: 'cover',
-                opacity: 0.0,
-                lastOpacity: 0.8, // ADD THIS LINE to store the last active opacity
-            }
+export const componentIconMap = {
+    'Settings': '⚙️',
+    'Calculator': '🧮',
+    'WebBrowser': '🌐',
+    'IoskConsole': '🖥️',
+    'Ask': '?',
+    'Boxes': '📦',
+    'LocalFileExplorer': '📁',
+    'LocalTerminal': '>_',
+    'IoskFileExplorer': '📁',
+    'IoskPrivateChat': '💬',
+    'LocalFileViewer': '📄',
+    'IoskFileViewer': '📄',
+    'IoskWatch': '👀',
+    'IoskUserInspector': '🕵️',
+    'NotificationCenter': '🔔',
+    'Camera': '📸',
+    'default': '🗔'
+};
+
+// Define defaults as a standalone object
+const defaultSettings = {
+    sky: {
+        scene: {
+            bgType: 'gradient', // 'gradient', 'color', 'image'
+            bgColor: '#34495e',
+            bgGradientStart: '#2c3e50',
+            bgGradientEnd: '#46627f',
+            bgImage: '',
+            bgImageDisplayMode: 'cover', // 'cover', 'contain', 'stretch', 'tile'
+            opacity: 1.0,
         },
-        boxes: {
+        frame: {
             bgType: 'color',
-            bgColor: '#3b4252',
-            bgGradientStart: '#3b4252',
-            bgGradientEnd: '#4c566a',
+            bgColor: '#283645',
+            bgGradientStart: '#283645',
+            bgGradientEnd: '#415a74',
             bgImage: '',
             bgImageDisplayMode: 'cover',
-            inactiveOpacity: 0.8,
-            activeOpacity: 1.0,
+            opacity: 1.0,
+            height: 40,
+            width: 0,
         },
-        windows: {
-            normal: {
-                scene: {
-                    active: {
-                        bgType: 'color', bgColor: '#2d3436', bgGradientStart: '#2d3436', bgGradientEnd: '#454e50', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
-                    },
-                    inactive: {
-                        bgType: 'color', bgColor: '#2d3436', bgGradientStart: '#2d3436', bgGradientEnd: '#454e50', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
-                    },
-                },
-                frame: {
-                    active: {
-                        bgType: 'color', bgColor: '#2c3e50', bgGradientStart: '#2c3e50', bgGradientEnd: '#46627f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 30, width: 0,
-                        shadowEnabled: true, shadowX: 0, shadowY: 5, shadowBlur: 15, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.3)', shadowInset: false,
-                    },
-                    inactive: {
-                        bgType: 'color', bgColor: '#2c3e50', bgGradientStart: '#2c3e50', bgGradientEnd: '#46627f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 30, width: 0,
-                        shadowEnabled: true, shadowX: 0, shadowY: 2, shadowBlur: 8, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.2)', shadowInset: false,
-                    },
-                },
-                cloak: {
-                    active: {
-                        bgType: 'color', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
-                    },
-                    inactive: {
-                        bgType: 'color', bgColor: '#000000', bgGradientStart: '#000000', bgGradientEnd: '#222222', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
-                    },
-                },
+        cloak: {
+            bgType: 'image',
+            bgColor: '#101010',
+            bgGradientStart: '#111111',
+            bgGradientEnd: '#222222',
+            bgImage: '/skyboards.png',
+            bgImageDisplayMode: 'stretch',
+            opacity: 1,
+        }
+    },
+    boxes: {
+        scene: {
+            active: {
+                bgType: 'color', bgColor: '#4a5468', bgGradientStart: '', bgGradientEnd: '', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
             },
-            back: {
-                bgType: 'color',
-                bgColor: '#3b4252',
-                bgGradientStart: '#3b4252',
-                bgGradientEnd: '#4c566a',
-                bgImage: '',
-                bgImageDisplayMode: 'cover',
-                inactiveOpacity: 0.8,
-                activeOpacity: 1.0,
+            inactive: {
+                bgType: 'color', bgColor: '#434C5E', bgGradientStart: '', bgGradientEnd: '', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.9,
             }
         },
-        focusFollowsMouse: false,
-        focusDelay: 420,
-        ioskUrl: 'ws://localhost:4209',
-        ioskUsername: 'root',
-        chimeType: 'beep.wav', // filename from assets, 'none', or 'custom'
-        chimeUrl: '',          // URL for custom chime
-        noticeDefaults: {
+        frame: {
+            active: {
+                bgType: 'gradient', bgColor: '', bgGradientStart: '#88C0D0', bgGradientEnd: '#81A1C1', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, width: 2,
+                shadowEnabled: true, shadowX: 0, shadowY: 0, shadowBlur: 8, shadowSpread: 1, shadowColor: '#88C0D090', shadowInset: false,
+            },
+            inactive: {
+                bgType: 'color', bgColor: '#4C566A', bgGradientStart: '', bgGradientEnd: '', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, width: 2,
+                shadowEnabled: false, shadowX: 0, shadowY: 0, shadowBlur: 0, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0)', shadowInset: false,
+            }
+        },
+        cloak: {
+            inactive: {
+                bgType: 'image', bgColor: '#121212', bgGradientStart: '#131313', bgGradientEnd: '#232323', bgImage: '/skybox.png', bgImageDisplayMode: 'cover', opacity: 1.0,
+            }
+        }
+    },
+    windows: {
+        normal: {
+            scene: {
+                active: {
+                    bgType: 'color', bgColor: '#333b3d', bgGradientStart: '#333b3d', bgGradientEnd: '#454e50', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
+                },
+                inactive: {
+                    bgType: 'color', bgColor: '#2d3436', bgGradientStart: '#2d3436', bgGradientEnd: '#444d4f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.95,
+                },
+            },
+            frame: {
+                active: {
+                    bgType: 'color', bgColor: '#35485f', bgGradientStart: '#35485f', bgGradientEnd: '#506d8b', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 30, width: 0,
+                    shadowEnabled: true, shadowX: 0, shadowY: 5, shadowBlur: 15, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.3)', shadowInset: false,
+                },
+                inactive: {
+                    bgType: 'color', bgColor: '#2b3d4f', bgGradientStart: '#2b3d4f', bgGradientEnd: '#45617e', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 30, width: 0,
+                    shadowEnabled: true, shadowX: 0, shadowY: 2, shadowBlur: 8, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.2)', shadowInset: false,
+                },
+            },
+            cloak: {
+                active: {
+                    bgType: 'image', bgColor: '#141414', bgGradientStart: '#151515', bgGradientEnd: '#242424', bgImage: '/skyboard.png', bgImageDisplayMode: 'stretch', opacity: 1.0,
+                },
+                inactive: {
+                    bgType: 'image', bgColor: '#161616', bgGradientStart: '#171717', bgGradientEnd: '#252525', bgImage: '/skyboard.png', bgImageDisplayMode: 'stretch', opacity: 0.77,
+                },
+            },
+        },
+        back: {
+            scene: {
+                active: {
+                    bgType: 'color', bgColor: '#414859', bgGradientStart: '#414859', bgGradientEnd: '#4c566a', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
+                },
+                inactive: {
+                    bgType: 'color', bgColor: '#3b4252', bgGradientStart: '#3b4252', bgGradientEnd: '#4b5569', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
+                },
+            },
+            frame: {
+                active: {
+                    bgType: 'color', bgColor: '#3a506a', bgGradientStart: '#3a506a', bgGradientEnd: '#4a637f', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 0, width: 0,
+                    shadowEnabled: true, shadowX: 0, shadowY: 5, shadowBlur: 15, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.35)', shadowInset: false,
+                },
+                inactive: {
+                    bgType: 'color', bgColor: '#32475c', bgGradientStart: '#32475c', bgGradientEnd: '#49627e', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0, height: 0, width: 0,
+                    shadowEnabled: false, shadowX: 0, shadowY: 2, shadowBlur: 8, shadowSpread: 0, shadowColor: 'rgba(0,0,0,0.15)', shadowInset: false,
+                },
+            },
+            cloak: {
+                active: {
+                    bgType: 'color', bgColor: '#181818', bgGradientStart: '#181818', bgGradientEnd: '#262626', bgImage: '', bgImageDisplayMode: 'cover', opacity: 1.0,
+                },
+                inactive: {
+                    bgType: 'color', bgColor: '#1a1a1a', bgGradientStart: '#1a1a1a', bgGradientEnd: '#272727', bgImage: '', bgImageDisplayMode: 'cover', opacity: 0.8,
+                },
+            },
+        }
+    },
+    focusFollowsMouse: true,
+    focusDelay: 420,
+    ioskUrl: 'ws://localhost:4209',
+    ioskUsername: 'root',
+    chimeType: 'three_tones.wav', // filename from assets, 'none', or 'custom'
+    chimeUrl: '',          // URL for custom chime
+    noticeDefaults: {
+        enabled: true,
+        visual: {
             enabled: true,
-            visual: {
-                enabled: true,
-                color: '#f39c12', // Default: Orange
-                duration: 1200,   // ms
-            },
-            audio: {
-                enabled: true,
-                sound: 'ding.wav', // Default: Ding
-                url: '',
-            }
+            color: '#f39c12', // Default: Orange
+            duration: 1200,   // ms
         },
-        panX: 0,
-        panY: 0,
-        zoom: 1.0,
-        // Add settings for the front (window) layer view
-        windowPanX: 0,
-        windowPanY: 0,
-        windowZoom: 1.0
-    };
+        audio: {
+            enabled: true,
+            sound: 'ding.wav', // Default: Ding
+            url: '',
+        }
+    },
+    panX: 0,
+    panY: 0,
+    zoom: 1.0,
+    // Add settings for the front (window) layer view
+    windowPanX: 0,
+    windowPanY: 0,
+    windowZoom: 1.0
+};
 
+// Function to merge a partial settings object with the defaults to ensure a complete object.
+export function mergeWithDefaults(parsed) {
+    if (!parsed) return { ...defaultSettings };
+    const defaults = defaultSettings;
+
+    // Merge with defaults, handling nested objects
+    const settings = { ...defaults, ...parsed };
+    settings.sky = {
+        scene: { ...defaults.sky.scene, ...(parsed.sky?.scene || {}) },
+        frame: { ...defaults.sky.frame, ...(parsed.sky?.frame || {}) },
+        cloak: { ...defaults.sky.cloak, ...(parsed.sky?.cloak || {}) },
+    };
+    settings.boxes = {
+        scene: {
+            active: { ...defaults.boxes.scene.active, ...(parsed.boxes?.scene?.active || {}) },
+            inactive: { ...defaults.boxes.scene.inactive, ...(parsed.boxes?.scene?.inactive || {}) }
+        },
+        frame: {
+            active: { ...defaults.boxes.frame.active, ...(parsed.boxes?.frame?.active || {}) },
+            inactive: { ...defaults.boxes.frame.inactive, ...(parsed.boxes?.frame?.inactive || {}) }
+        },
+        cloak: {
+            inactive: { ...defaults.boxes.cloak.inactive, ...(parsed.boxes?.cloak?.inactive || {}) }
+        },
+    };
+    settings.windows = {
+        normal: {
+            scene: {
+                active: { ...defaults.windows.normal.scene.active, ...(parsed.windows?.normal?.scene?.active || {}) },
+                inactive: { ...defaults.windows.normal.scene.inactive, ...(parsed.windows?.normal?.scene?.inactive || {}) }
+            },
+            frame: {
+                active: { ...defaults.windows.normal.frame.active, ...(parsed.windows?.normal?.frame?.active || {}) },
+                inactive: { ...defaults.windows.normal.frame.inactive, ...(parsed.windows?.normal?.frame?.inactive || {}) }
+            },
+            cloak: {
+                active: { ...defaults.windows.normal.cloak.active, ...(parsed.windows?.normal?.cloak?.active || {}) },
+                inactive: { ...defaults.windows.normal.cloak.inactive, ...(parsed.windows?.normal?.cloak?.inactive || {}) }
+            },
+        },
+        back: {
+            scene: {
+                active: { ...defaults.windows.back.scene.active, ...(parsed.windows?.back?.scene?.active || {}) },
+                inactive: { ...defaults.windows.back.scene.inactive, ...(parsed.windows?.back?.scene?.inactive || {}) }
+            },
+            frame: {
+                active: { ...defaults.windows.back.frame.active, ...(parsed.windows?.back?.frame?.active || {}) },
+                inactive: { ...defaults.windows.back.frame.inactive, ...(parsed.windows?.back?.frame?.inactive || {}) }
+            },
+            cloak: {
+                active: { ...defaults.windows.back.cloak.active, ...(parsed.windows?.back?.cloak?.active || {}) },
+                inactive: { ...defaults.windows.back.cloak.inactive, ...(parsed.windows?.back?.cloak?.inactive || {}) }
+            },
+        }
+    };
+    settings.noticeDefaults = {
+        ...defaults.noticeDefaults,
+        ...(parsed.noticeDefaults || {}),
+        visual: { ...defaults.noticeDefaults.visual, ...(parsed.noticeDefaults?.visual || {}) },
+        audio: { ...defaults.noticeDefaults.audio, ...(parsed.noticeDefaults?.audio || {}) },
+    };
+    return settings;
+}
+
+// Function to load settings from localStorage, or return defaults
+function loadSettings() {
     try {
         if (typeof localStorage !== 'undefined') {
             const saved = localStorage.getItem('sidekickDesktopSettings');
             if (saved) {
                 const parsed = JSON.parse(saved);
-
-                // Migration for old background/taskbar settings into new sky object
-                if (parsed.background || parsed.taskbar || parsed.bgType) {
-                    if (!parsed.sky) parsed.sky = {};
-                    if (!parsed.sky.scene) {
-                        if (parsed.background) {
-                            parsed.sky.scene = parsed.background;
-                        } else if (parsed.bgType) { // Handle very old flat structure
-                            parsed.sky.scene = {
-                                bgType: parsed.bgType,
-                                bgColor: parsed.bgColor,
-                                bgGradientStart: parsed.bgGradientStart,
-                                bgGradientEnd: parsed.bgGradientEnd,
-                                bgImage: parsed.bgImage,
-                                bgImageDisplayMode: parsed.bgImageDisplayMode,
-                            };
-                        }
-                    }
-                    if (!parsed.sky.frame && parsed.taskbar) {
-                        parsed.sky.frame = parsed.taskbar;
-                    }
-                    delete parsed.background;
-                    delete parsed.taskbar;
-                    ['bgType', 'bgColor', 'bgGradientStart', 'bgGradientEnd', 'bgImage', 'bgImageDisplayMode'].forEach(k => delete parsed[k]);
+                // The sky.cloak.enabled state is now managed by a separate store and not persisted.
+                // We ensure it's removed from any loaded settings.
+                if (parsed.sky && parsed.sky.cloak) {
+                    delete parsed.sky.cloak.enabled;
                 }
-
-                // Migration for windows.normal settings
-                if (parsed.windows?.normal?.cover) {
-                    if (!parsed.windows.normal.frame) parsed.windows.normal.frame = {};
-                    const coverSettings = { ...parsed.windows.normal.cover };
-                    parsed.windows.normal.frame.active = { ...coverSettings, opacity: coverSettings.activeOpacity ?? 1.0 };
-                    parsed.windows.normal.frame.inactive = { ...coverSettings, opacity: coverSettings.inactiveOpacity ?? 1.0 };
-                    delete parsed.windows.normal.frame.active.activeOpacity;
-                    delete parsed.windows.normal.frame.active.inactiveOpacity;
-                    delete parsed.windows.normal.frame.inactive.activeOpacity;
-                    delete parsed.windows.normal.frame.inactive.inactiveOpacity;
-                    delete parsed.windows.normal.cover;
-                }
-                if (parsed.windows?.normal?.scene && !parsed.windows.normal.scene.active) {
-                    const oldScene = parsed.windows.normal.scene;
-                    parsed.windows.normal.scene = {
-                        active: { ...oldScene, opacity: 1.0 },
-                        inactive: { ...oldScene, opacity: 1.0 }
-                    };
-                }
-
-
-                // Merge with defaults, handling nested objects
-                const settings = { ...defaults, ...parsed };
-                settings.sky = {
-                    scene: { ...defaults.sky.scene, ...(parsed.sky?.scene || {}) },
-                    frame: { ...defaults.sky.frame, ...(parsed.sky?.frame || {}) },
-                    cloak: { ...defaults.sky.cloak, ...(parsed.sky?.cloak || {}) },
-                };
-                settings.boxes = { ...defaults.boxes, ...(parsed.boxes || {}) };
-                settings.windows = {
-                    normal: {
-                        scene: {
-                            active: { ...defaults.windows.normal.scene.active, ...(parsed.windows?.normal?.scene?.active || {}) },
-                            inactive: { ...defaults.windows.normal.scene.inactive, ...(parsed.windows?.normal?.scene?.inactive || {}) }
-                        },
-                        frame: {
-                            active: { ...defaults.windows.normal.frame.active, ...(parsed.windows?.normal?.frame?.active || {}) },
-                            inactive: { ...defaults.windows.normal.frame.inactive, ...(parsed.windows?.normal?.frame?.inactive || {}) }
-                        },
-                        cloak: {
-                            active: { ...defaults.windows.normal.cloak.active, ...(parsed.windows?.normal?.cloak?.active || {}) },
-                            inactive: { ...defaults.windows.normal.cloak.inactive, ...(parsed.windows?.normal?.cloak?.inactive || {}) }
-                        },
-                    },
-                    back: { ...defaults.windows.back, ...(parsed.windows?.back || {}) }
-                };
-                settings.noticeDefaults = {
-                    ...defaults.noticeDefaults,
-                    ...(parsed.noticeDefaults || {}),
-                    visual: { ...defaults.noticeDefaults.visual, ...(parsed.noticeDefaults?.visual || {}) },
-                    audio: { ...defaults.noticeDefaults.audio, ...(parsed.noticeDefaults?.audio || {}) },
-                };
-                return settings;
+                return mergeWithDefaults(parsed);
             }
         }
     } catch (e) {
         console.error("Could not load settings from localStorage", e);
     }
     // Return defaults if nothing is saved or an error occurs
-    return defaults;
+    return { ...defaultSettings };
 }
 
 // Function to load dash layouts from localStorage
@@ -293,8 +338,23 @@ export const desktopView = writable({ panX: 0, panY: 0, zoom: 1.0 });
 // New store for FRONT layer (windows) pan and zoom. Synced with localStorage.
 export const windowView = writable({ panX: 0, panY: 0, zoom: 1.0 });
 
-// Initialize windowView from localStorage and subscribe to save its changes.
+// Initialize view stores from the main settings store and set up two-way binding.
 const initialSettings = get(desktopSettings);
+
+desktopView.set({
+    panX: initialSettings.panX || 0,
+    panY: initialSettings.panY || 0,
+    zoom: initialSettings.zoom || 1.0
+});
+desktopView.subscribe(value => {
+    desktopSettings.update(settings => ({
+        ...settings,
+        panX: value.panX,
+        panY: value.panY,
+        zoom: value.zoom
+    }));
+});
+
 windowView.set({
     panX: initialSettings.windowPanX || 0,
     panY: initialSettings.windowPanY || 0,
@@ -320,6 +380,18 @@ export const wasDraggingItems = writable(false);
 // This is used to immediately disable pointer events on other layers to prevent unintended hover/focus effects.
 export const desktopInteraction = writable(false);
 
+// Store to track if a box is unfolded/expanded to manage global z-index contexts.
+export const activeBoxId = writable(null);
+
+// State for sky cloak. Not persisted in settings. Defaults to true on reload.
+export const skyCloakEnabled = writable(true);
+
+// --- Virtual Desktop / Nested Box State ---
+export const currentBoxId = writable(0);
+export const currentBox = derived(
+    [currentBoxId, boxes],
+    ([$currentBoxId, $boxes]) => $boxes.find(b => b.id === $currentBoxId) || null
+);
 
 // New stores for Notification Center
 export const notificationHistory = writable([]);

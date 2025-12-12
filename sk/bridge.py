@@ -13,6 +13,7 @@ from datetime import datetime
 from . import config
 from .util import get_directory_tree_as_text, get_directory_contents_as_text
 from binaryornot.check import is_binary
+import base64
 
 # pty is not available on Windows
 if platform.system() != 'Windows':
@@ -55,9 +56,9 @@ def print_action(action, details=""):
 def print_startup_banner():
     """Prints a colorful startup banner."""
     if not sys.stdout.isatty():
-        log.info(f"Starting Skybox Local Server on ws://{HOST}:{PORT}")
+        log.info(f"Starting SKYBRIDGE Local Server on ws://{HOST}:{PORT}")
         return
-    print(f"\n{Colors.BOLD}{Colors.GREEN}--- Skybox Local Server ---{Colors.RESET}")
+    print(f"\n{Colors.BOLD}{Colors.GREEN}--- SKYBRIDGE Local Server ---{Colors.RESET}")
     print(f"{Colors.CYAN}  Listening on: ws://{HOST}:{PORT}{Colors.RESET}")
     print(f"{Colors.YELLOW}  Press Ctrl+C to stop the server.{Colors.RESET}\n")
 
@@ -83,17 +84,90 @@ HOST = '127.0.0.1'
 
 ENCODING = tiktoken.get_encoding('cl100k_base')
 running_asks = {}
+WATCHERS = {} # path -> {'clients': set(), 'task': asyncio.Task, 'state': dict}
+TAILERS = {}   # path -> {'clients': set(), 'task': asyncio.Task}
 
-# --- Skybox Globals ---
+
+# --- SKYBRIDGE Globals ---
 DB_CONN = None
 CONNECTED_CLIENTS = set()
 # --------------------
 
+def get_resolved_settings_sync(box_id, cursor):
+    """
+    Fetches the fully resolved settings for a box by traversing its parent chain.
+    Settings from children override settings from parents.
+    """
+    box_ids_to_check = []
+    current_id = box_id
+    
+    # Build the chain of inheritance from child up to the root (box 0)
+    # Use a set to prevent infinite loops on malformed data, though FKs should prevent this.
+    seen_ids = set()
+    while current_id is not None and current_id not in seen_ids:
+        box_ids_to_check.append(current_id)
+        seen_ids.add(current_id)
+        if current_id == 0:
+            break
+        cursor.execute("SELECT parent_box_id FROM box WHERE id = ?", (current_id,))
+        row = cursor.fetchone()
+        current_id = row['parent_box_id'] if row else None
+        
+    resolved_settings = {}
+    
+    # Iterate from the root down to the child, merging settings.
+    for current_box_id in reversed(box_ids_to_check):
+        # Get theme config
+        cursor.execute("SELECT theme FROM config WHERE box_id = ?", (current_box_id,))
+        theme_row = cursor.fetchone()
+        theme_settings = json.loads(theme_row['theme']) if theme_row and theme_row['theme'] else {}
+        
+        # Get view settings
+        cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (current_box_id,))
+        view_settings = {}
+        for row in cursor.fetchall():
+            try:
+                view_settings[row['key']] = json.loads(row['value'])
+            except (json.JSONDecodeError, TypeError):
+                view_settings[row['key']] = row['value']
+        
+        # Merge theme and view for the current level
+        current_level_settings = {**theme_settings, **view_settings}
+        
+        # Update the resolved settings. Keys in current_level_settings will
+        # overwrite keys from parent levels.
+        resolved_settings.update(current_level_settings)
+        
+    return resolved_settings
+
+def _get_boxes_with_settings_info(cursor):
+    """Helper to fetch all boxes and annotate them with settings status."""
+    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio, parent_box_id FROM box ORDER BY name")
+    boxes_data = [dict(row) for row in cursor.fetchall()]
+    boxes_with_settings_info = []
+    for box in boxes_data:
+        box_id = box['id']
+        if box_id == 0:
+            # The main desktop has custom settings if its theme config is not the default empty object.
+            # We ignore view settings for this check as they are always present and represent user state.
+            cursor.execute("SELECT theme FROM config WHERE box_id = 0")
+            config_row = cursor.fetchone()
+            box['has_custom_settings'] = config_row is not None and config_row['theme'] != '{}'
+        else:
+            # A box has custom settings if it has any entry in 'config' or 'settings' tables.
+            cursor.execute("SELECT 1 FROM config WHERE box_id = ?", (box_id,))
+            has_theme = cursor.fetchone() is not None
+            cursor.execute("SELECT 1 FROM settings WHERE box_id = ?", (box_id,))
+            has_view = cursor.fetchone() is not None
+            box['has_custom_settings'] = has_theme or has_view
+        boxes_with_settings_info.append(box)
+    return boxes_with_settings_info
+
 def init_db():
-    """Initializes the SQLite database for Skybox."""
+    """Initializes the SQLite database for SKYBRIDGE."""
     global DB_CONN
-    db_path = os.path.join(config.DIRS.user_data_dir, 'skybox.db')
-    log.info(f"Using Skybox database at {db_path}")
+    db_path = os.path.join(config.DIRS.user_data_dir, 'skybridge.db')
+    log.info(f"Using SKYBRIDGE database at {db_path}")
     DB_CONN = sqlite3.connect(db_path)
     DB_CONN.row_factory = sqlite3.Row  # Makes rows dict-like
     DB_CONN.execute("PRAGMA foreign_keys = ON;") # Enforce foreign key constraints
@@ -101,15 +175,17 @@ def init_db():
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS box (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             type TEXT NOT NULL CHECK(type IN ('local', 'iosk')),
             context TEXT NOT NULL,
+            parent_box_id INTEGER,
             x INTEGER DEFAULT 100,
             y INTEGER DEFAULT 100,
             scale REAL DEFAULT 1.0,
             cover_panel_location TEXT,
-            aspect_ratio REAL
+            aspect_ratio REAL,
+            FOREIGN KEY(parent_box_id) REFERENCES box(id) ON DELETE CASCADE
         );
     """)
 
@@ -128,44 +204,71 @@ def init_db():
         );
     """)
 
+    # Schema for settings table (pan/zoom, etc.) - key/value store
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS desktop_settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
+        CREATE TABLE IF NOT EXISTS settings (
+            box_id INTEGER NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT,
+            PRIMARY KEY (box_id, key),
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
         );
     """)
-    # Set default values if they don't exist
-    cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('panX', json.dumps(0)))
-    cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('panY', json.dumps(0)))
-    cursor.execute("INSERT OR IGNORE INTO desktop_settings (key, value) VALUES (?, ?)", ('zoom', json.dumps(1.0)))
+
+    # New schema for config table (theming, etc.) - single JSON blob
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS config (
+            box_id INTEGER PRIMARY KEY,
+            theme TEXT NOT NULL,
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
+        );
+    """)
 
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS desktop_shortcut (
+        CREATE TABLE IF NOT EXISTS shortcut (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            box_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             type TEXT NOT NULL CHECK(type IN ('file', 'dir')),
-            path TEXT NOT NULL UNIQUE,
+            path TEXT NOT NULL,
             x REAL NOT NULL,
             y REAL NOT NULL,
-            scale REAL NOT NULL DEFAULT 1.0
+            scale REAL NOT NULL DEFAULT 1.0,
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE,
+            UNIQUE(box_id, path)
         );
     """)
 
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS backed_window (
+        CREATE TABLE IF NOT EXISTS board (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            box_id INTEGER NOT NULL,
             config TEXT NOT NULL, -- JSON blob of window group
             x REAL NOT NULL,
             y REAL NOT NULL,
             width REAL NOT NULL,
             height REAL NOT NULL,
             scale REAL NOT NULL DEFAULT 1.0,
-            z_index INTEGER NOT NULL DEFAULT 0
+            z_index INTEGER NOT NULL DEFAULT 0,
+            original_group_id INTEGER,
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
         );
     """)
 
+    # For new databases, create the default 'Main Desktop' box with id=0.
+    # This is required for foreign key constraints and default settings.
+    cursor.execute("INSERT OR IGNORE INTO box (id, name, type, context) VALUES (?, ?, ?, ?)",
+                   (0, 'Main Desktop', 'local', '.'))
+
+    # Set default values for the main desktop (box_id=0) if they don't exist
+    default_settings = {'panX': 0, 'panY': 0, 'zoom': 1.0, 'windowPanX': 0, 'windowPanY': 0, 'windowZoom': 1.0}
+    for key, value in default_settings.items():
+        cursor.execute("INSERT OR IGNORE INTO settings (box_id, key, value) VALUES (?, ?, ?)", (0, key, json.dumps(value)))
+
     DB_CONN.commit()
-    log.info("Skybox database initialized.")
+    log.info("SKYBRIDGE database initialized.")
+
+
 
 async def broadcast_box_list():
     """Fetches all boxes and broadcasts them to all connected clients."""
@@ -174,9 +277,7 @@ async def broadcast_box_list():
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio FROM box ORDER BY name")
-    boxes = [dict(row) for row in cursor.fetchall()]
-
+    boxes = _get_boxes_with_settings_info(cursor)
     message = json.dumps({'type': 'box_list', 'boxes': boxes})
 
     if CONNECTED_CLIENTS:
@@ -185,30 +286,30 @@ async def broadcast_box_list():
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
-async def broadcast_shortcut_list():
-    """Fetches all shortcuts and broadcasts them to all connected clients."""
+async def broadcast_shortcut_list(box_id):
+    """Fetches all shortcuts for a given box and broadcasts them."""
     if not DB_CONN:
         log.error("Database not connected, cannot broadcast shortcut list.")
         return
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, name, type, path, x, y, scale FROM desktop_shortcut")
+    cursor.execute("SELECT id, name, type, path, x, y, scale FROM shortcut WHERE box_id = ?", (box_id,))
     shortcuts = [dict(row) for row in cursor.fetchall()]
-    message = json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts})
+    message = json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts, 'box_id': box_id})
     if CONNECTED_CLIENTS:
-        log.info(f"Broadcasting shortcut_list to {len(CONNECTED_CLIENTS)} clients.")
+        log.info(f"Broadcasting shortcut_list for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
-async def broadcast_backed_window_list():
-    """Fetches all backed windows and broadcasts them to all connected clients."""
+async def broadcast_backed_window_list(box_id):
+    """Fetches all backed windows for a given box and broadcasts them."""
     if not DB_CONN:
         log.error("Database not connected, cannot broadcast backed window list.")
         return
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT id, config, x, y, width, height, scale, z_index FROM backed_window")
+    cursor.execute("SELECT id, config, x, y, width, height, scale, z_index, original_group_id FROM board WHERE box_id = ?", (box_id,))
     windows = [dict(row) for row in cursor.fetchall()]
-    message = json.dumps({'type': 'backed_window_list', 'windows': windows})
+    message = json.dumps({'type': 'backed_window_list', 'windows': windows, 'box_id': box_id})
     if CONNECTED_CLIENTS:
-        log.info(f"Broadcasting backed_window_list to {len(CONNECTED_CLIENTS)} clients.")
+        log.info(f"Broadcasting backed_window_list for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
@@ -237,20 +338,21 @@ async def broadcast_box_config(box_id):
         log.info(f"Broadcasting box_config for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
-async def broadcast_desktop_settings():
-    """Fetches desktop settings and broadcasts them to all connected clients."""
+
+
+async def broadcast_settings(box_id):
+    """Fetches resolved settings for a given box and broadcasts them."""
     if not DB_CONN:
         log.error("Database not connected, cannot broadcast desktop settings.")
         return
 
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT key, value FROM desktop_settings")
-    settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
-
-    message = json.dumps({'type': 'desktop_settings', 'settings': settings})
+    settings = get_resolved_settings_sync(box_id, cursor)
+    
+    message = json.dumps({'type': 'desktop_settings', 'settings': settings, 'box_id': box_id})
 
     if CONNECTED_CLIENTS:
-        log.info(f"Broadcasting desktop_settings to {len(CONNECTED_CLIENTS)} clients.")
+        log.info(f"Broadcasting desktop_settings for box {box_id} to {len(CONNECTED_CLIENTS)} clients.")
         await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
 
 
@@ -337,43 +439,114 @@ async def handle_sk_ask(websocket, msg):
             del running_asks[ask_id]
 
 
-async def handle_fs_list(path):
+async def handle_fs_list(path, recursive=False, requester_id=None):
     """Handles the fs_list request."""
     try:
         abs_path = os.path.abspath(path)
 
         if not os.path.isdir(abs_path):
-            return {'type': 'fs_error', 'path': path, 'error': 'Not a directory or does not exist'}
+            response = {'type': 'fs_error', 'path': path, 'error': 'Not a directory or does not exist'}
+            if requester_id is not None:
+                response['requester_id'] = requester_id
+            return response
 
         entries = []
-        for name in sorted(os.listdir(abs_path)):
-            try:
-                full_path = os.path.join(abs_path, name)
-                stat = os.stat(full_path)
-                entry_type = 'dir' if os.path.isdir(full_path) else 'file'
-                entries.append({'name': name, 'type': entry_type, 'size': stat.st_size})
-            except OSError:
-                continue
-        return {'type': 'fs_list_response', 'path': path, 'entries': entries}
+        if recursive:
+            for root, dirs, files in os.walk(abs_path, topdown=True):
+                for name in sorted(dirs):
+                    try:
+                        full_path = os.path.join(root, name)
+                        stat = os.stat(full_path)
+                        entries.append({
+                            'name': name,
+                            'path': full_path.replace(os.sep, '/'),
+                            'type': 'dir',
+                            'size': stat.st_size,
+                            'mtime': stat.st_mtime
+                        })
+                    except OSError:
+                        continue
+                for name in sorted(files):
+                    try:
+                        full_path = os.path.join(root, name)
+                        stat = os.stat(full_path)
+                        entries.append({
+                            'name': name,
+                            'path': full_path.replace(os.sep, '/'),
+                            'type': 'file',
+                            'size': stat.st_size,
+                            'mtime': stat.st_mtime
+                        })
+                    except OSError:
+                        continue
+        else:
+            for name in sorted(os.listdir(abs_path)):
+                try:
+                    full_path = os.path.join(abs_path, name)
+                    stat = os.stat(full_path)
+                    entry_type = 'dir' if os.path.isdir(full_path) else 'file'
+                    entries.append({
+                        'name': name,
+                        'path': full_path.replace(os.sep, '/'),
+                        'type': entry_type,
+                        'size': stat.st_size,
+                        'mtime': stat.st_mtime
+                    })
+                except OSError:
+                    continue
+        
+        # Return the normalized absolute path, as the frontend uses this
+        # for tree building and navigation state.
+        norm_path = abs_path.replace(os.sep, '/')
+        response = {'type': 'fs_list_response', 'path': norm_path, 'entries': entries}
+        if requester_id is not None:
+            response['requester_id'] = requester_id
+        return response
     except Exception as e:
         log.error(f"Error listing path {path}: {e}")
-        return {'type': 'fs_error', 'path': path, 'error': str(e)}
+        response = {'type': 'fs_error', 'path': path, 'error': str(e)}
+        if requester_id is not None:
+            response['requester_id'] = requester_id
+        return response
 
 
-async def handle_fs_read(path):
-    """Handles the fs_read request."""
+async def handle_fs_read(path, offset=0, length=-1, requester_id=None):
+    """Handles the fs_read request, supporting binary files and chunking."""
+    response = {'type': 'fs_read_response', 'path': path}
+    if requester_id is not None:
+        response['requester_id'] = requester_id
+    
     try:
         abs_path = os.path.abspath(path)
 
         if not os.path.isfile(abs_path):
-            return {'type': 'fs_error', 'path': path, 'error': 'Not a file or does not exist'}
+            response['type'] = 'fs_error'
+            response['error'] = 'Not a file or does not exist'
+            return response
 
-        with open(abs_path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-        return {'type': 'fs_read_response', 'path': path, 'content': content}
+        total_size = os.path.getsize(abs_path)
+        is_bin = is_binary(abs_path)
+        
+        with open(abs_path, 'rb') as f:
+            f.seek(offset)
+            if length == -1:
+                content_bytes = f.read()
+            else:
+                content_bytes = f.read(length)
+
+        response.update({
+            'content_b64': base64.b64encode(content_bytes).decode('utf-8'),
+            'is_binary': is_bin,
+            'total_size': total_size,
+            'offset': offset,
+            'length': len(content_bytes) if length != -1 else -1,
+        })
+        return response
     except Exception as e:
         log.error(f"Error reading path {path}: {e}")
-        return {'type': 'fs_error', 'path': path, 'error': str(e)}
+        response['type'] = 'fs_error'
+        response['error'] = str(e)
+        return response
 
 
 def _get_formatted_file_content(full_path):
@@ -469,6 +642,87 @@ async def pty_reader(pty_master_fd, websocket, term_id):
                 pass # Client may have disconnected in the meantime.
 
 
+async def directory_watcher_task(path):
+    """Polls a directory for changes and notifies clients."""
+    log.info(f"Starting watcher for: {path}")
+    abs_path = os.path.abspath(path)
+    
+    try:
+        current_state = {f: os.path.getmtime(os.path.join(abs_path, f)) for f in os.listdir(abs_path)}
+        WATCHERS[path]['state'] = current_state
+
+        while path in WATCHERS and WATCHERS[path]['clients']:
+            await asyncio.sleep(2)
+            
+            if not os.path.isdir(abs_path):
+                event_data = {'type': 'fs_watch_event', 'path': path, 'event_type': 'deleted', 'entry_name': os.path.basename(path), 'is_dir': True}
+                clients = list(WATCHERS[path]['clients'])
+                if clients:
+                    await asyncio.gather(*[client.send(json.dumps(event_data)) for client in clients])
+                break
+
+            new_state = {f: os.path.getmtime(os.path.join(abs_path, f)) for f in os.listdir(abs_path)}
+            
+            old_files, new_files = set(current_state.keys()), set(new_state.keys())
+            created, deleted = new_files - old_files, old_files - new_files
+            
+            events = []
+            for f in created:
+                events.append({'path': path, 'event_type': 'created', 'entry_name': f, 'is_dir': os.path.isdir(os.path.join(abs_path, f))})
+            for f in deleted:
+                events.append({'path': path, 'event_type': 'deleted', 'entry_name': f, 'is_dir': False})
+            for f in old_files.intersection(new_files):
+                if new_state[f] > current_state[f]:
+                    events.append({'path': path, 'event_type': 'modified', 'entry_name': f, 'is_dir': os.path.isdir(os.path.join(abs_path, f))})
+            
+            if events:
+                clients = list(WATCHERS[path]['clients'])
+                if clients:
+                    for event in events:
+                        await asyncio.gather(*[client.send(json.dumps({'type': 'fs_watch_event', **event})) for client in clients])
+
+            current_state = new_state
+            WATCHERS[path]['state'] = current_state
+    except Exception as e:
+        log.error(f"Error in watcher for {path}: {e}")
+    finally:
+        if path in WATCHERS:
+            del WATCHERS[path]
+        log.info(f"Stopping watcher for: {path}")
+
+
+async def file_tailer_task(path):
+    """Polls a file for new content and sends it to clients."""
+    log.info(f"Starting tailer for: {path}")
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            f.seek(0, os.SEEK_END)
+            while path in TAILERS and TAILERS[path]['clients']:
+                line = f.readline()
+                if line:
+                    clients = list(TAILERS[path]['clients'])
+                    if clients:
+                        await asyncio.gather(*[client.send(json.dumps({'type': 'fs_tail_event', 'path': path, 'data': line})) for client in clients])
+                else:
+                    await asyncio.sleep(0.1)
+    except FileNotFoundError:
+        log.warning(f"File to tail not found: {path}")
+        if path in TAILERS:
+            clients = list(TAILERS[path]['clients'])
+            if clients:
+                await asyncio.gather(*[client.send(json.dumps({'type': 'fs_tail_event', 'path': path, 'error': 'File not found'})) for client in clients])
+    except Exception as e:
+        log.error(f"Error in tailer for {path}: {e}")
+        if path in TAILERS:
+            clients = list(TAILERS[path]['clients'])
+            if clients:
+                await asyncio.gather(*[client.send(json.dumps({'type': 'fs_tail_event', 'path': path, 'error': str(e)})) for client in clients])
+    finally:
+        if path in TAILERS:
+            del TAILERS[path]
+        log.info(f"Stopping tailer for: {path}")
+
+
 async def websocket_handler(websocket):
     """Main handler for each WebSocket connection."""
     log.info(f"Client connected from {websocket.remote_address}")
@@ -476,23 +730,6 @@ async def websocket_handler(websocket):
     active_terminals = {} # term_id -> {'pid': pid, 'fd': fd, 'task': task}
 
     try:
-        # Send initial desktop settings on connect
-        cursor = DB_CONN.cursor()
-        cursor.execute("SELECT key, value FROM desktop_settings")
-        settings = {row['key']: json.loads(row['value']) for row in cursor.fetchall()}
-        await websocket.send(json.dumps({'type': 'desktop_settings', 'settings': settings}))
-
-        # Send initial shortcut list on connect
-        cursor.execute("SELECT id, name, type, path, x, y, scale FROM desktop_shortcut")
-        shortcuts = [dict(row) for row in cursor.fetchall()]
-        await websocket.send(json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts}))
-
-        # Send initial backed window list on connect
-        cursor.execute("SELECT id, config, x, y, width, height, scale, z_index FROM backed_window")
-        backed_windows = [dict(row) for row in cursor.fetchall()]
-        await websocket.send(json.dumps({'type': 'backed_window_list', 'windows': backed_windows}))
-
-
         async for message in websocket:
             try:
                 msg = json.loads(message)
@@ -501,14 +738,49 @@ async def websocket_handler(websocket):
                 # --- Filesystem Operations ---
                 if msg_type == 'fs_list':
                     path = msg.get('path', '.')
-                    print_action("FS List", f"path='{path}'")
-                    response = await handle_fs_list(path)
+                    recursive = msg.get('recursive', False)
+                    requester_id = msg.get('requester_id')
+                    print_action("FS List", f"path='{path}', recursive={recursive}, id={requester_id}")
+                    response = await handle_fs_list(path, recursive, requester_id)
                     await websocket.send(json.dumps(response))
                 elif msg_type == 'fs_read':
                     path = msg.get('path')
-                    print_action("FS Read", f"path='{path}'")
-                    response = await handle_fs_read(path)
+                    offset = msg.get('offset', 0)
+                    length = msg.get('length', -1)
+                    requester_id = msg.get('requester_id')
+                    print_action("FS Read", f"path='{path}', offset={offset}, len={length}, id={requester_id}")
+                    response = await handle_fs_read(path, offset, length, requester_id)
                     await websocket.send(json.dumps(response))
+
+                # --- Filesystem Advanced Operations ---
+                elif msg_type == 'fs_watch_start':
+                    path = msg.get('path')
+                    print_action("FS Watch Start", f"path='{path}'")
+                    if path not in WATCHERS:
+                        task = asyncio.create_task(directory_watcher_task(path))
+                        WATCHERS[path] = {'clients': set(), 'task': task, 'state': {}}
+                    WATCHERS[path]['clients'].add(websocket)
+                elif msg_type == 'fs_watch_stop':
+                    path = msg.get('path')
+                    print_action("FS Watch Stop", f"path='{path}'")
+                    if path in WATCHERS and websocket in WATCHERS[path]['clients']:
+                        WATCHERS[path]['clients'].remove(websocket)
+                        if not WATCHERS[path]['clients']:
+                            WATCHERS[path]['task'].cancel()
+                elif msg_type == 'fs_tail_start':
+                    path = msg.get('path')
+                    print_action("FS Tail Start", f"path='{path}'")
+                    if path not in TAILERS:
+                        task = asyncio.create_task(file_tailer_task(path))
+                        TAILERS[path] = {'clients': set(), 'task': task}
+                    TAILERS[path]['clients'].add(websocket)
+                elif msg_type == 'fs_tail_stop':
+                    path = msg.get('path')
+                    print_action("FS Tail Stop", f"path='{path}'")
+                    if path in TAILERS and websocket in TAILERS[path]['clients']:
+                        TAILERS[path]['clients'].remove(websocket)
+                        if not TAILERS[path]['clients']:
+                            TAILERS[path]['task'].cancel()
 
                 # --- Ask Operations ---
                 elif msg_type == 'sk_ask':
@@ -521,88 +793,234 @@ async def websocket_handler(websocket):
 
                 # --- Desktop Settings ---
                 elif msg_type == 'update_desktop_settings':
-                    settings_to_update = msg.get('settings', {})
-                    print_action("Update Dsk Cfg", f"{settings_to_update}")
+                    box_id = msg.get('box_id', 0)
+                    theme_blob = msg.get('settings', {})
+                    print_action("Update Theme", f"box={box_id}")
                     cursor = DB_CONN.cursor()
-                    for key, value in settings_to_update.items():
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO config (box_id, theme) VALUES (?, ?)",
+                        (box_id, json.dumps(theme_blob))
+                    )
+                    DB_CONN.commit()
+                    await broadcast_box_list() # Broadcast to update has_custom_settings flag
+                    
+                    # After saving, broadcast the new specific settings for this box to keep client caches in sync.
+                    # Get view settings
+                    cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (box_id,))
+                    view_settings = {}
+                    for row in cursor.fetchall():
+                        try:
+                            view_settings[row['key']] = json.loads(row['value'])
+                        except (json.JSONDecodeError, TypeError):
+                            view_settings[row['key']] = row['value']
+
+                    # Get theme config
+                    cursor.execute("SELECT theme FROM config WHERE box_id = ?", (box_id,))
+                    theme_row = cursor.fetchone()
+                    theme_settings = json.loads(theme_row['theme']) if theme_row and theme_row['theme'] else {}
+
+                    specific_settings = {**theme_settings, **view_settings}
+                    
+                    response_message = json.dumps({'type': 'box_specific_settings_response', 'settings': specific_settings, 'box_id': box_id})
+                    if CONNECTED_CLIENTS:
+                        log.info(f"Broadcasting updated specific settings for box {box_id}.")
+                        await asyncio.gather(*[client.send(response_message) for client in CONNECTED_CLIENTS])
+
+                
+                elif msg_type == 'update_view_settings':
+                    box_id = msg.get('box_id', 0)
+                    view_settings = msg.get('settings', {})
+                    print_action("Update View", f"box={box_id}, keys={list(view_settings.keys())}")
+                    cursor = DB_CONN.cursor()
+                    for key, value in view_settings.items():
                         cursor.execute(
-                            "INSERT OR REPLACE INTO desktop_settings (key, value) VALUES (?, ?)",
-                            (key, json.dumps(value))
+                            "INSERT OR REPLACE INTO settings (box_id, key, value) VALUES (?, ?, ?)",
+                            (box_id, key, json.dumps(value))
                         )
                     DB_CONN.commit()
-                    await broadcast_desktop_settings()
+                    # Broadcast full settings so client stays in sync
+                    await broadcast_box_list() # Broadcast to update has_custom_settings flag
+                    #await broadcast_settings(box_id)
+
+                elif msg_type == 'clear_box_settings':
+                    box_id = msg.get('box_id')
+                    if box_id is None:
+                        continue
+                    
+                    print_action("Clear Settings", f"box={box_id}")
+                    cursor = DB_CONN.cursor()
+
+                    cursor.execute("DELETE FROM config WHERE box_id = ?", (box_id,))
+                    cursor.execute("DELETE FROM settings WHERE box_id = ?", (box_id,))
+                    DB_CONN.commit()
+                    
+                    await broadcast_box_list() # To update the has_custom_settings flag
+                    
+                    # Also broadcast the new (empty) specific settings for the cleared box.
+                    message = json.dumps({'type': 'box_specific_settings_response', 'settings': {}, 'box_id': box_id})
+                    if CONNECTED_CLIENTS:
+                        log.info(f"Broadcasting cleared specific settings for box {box_id}.")
+                        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
+
 
                 # --- Desktop Shortcut Operations ---
                 elif msg_type == 'create_shortcut':
-                    # FIX: Use 'shortcut_type' to avoid collision with the message 'type'
+                    box_id = msg.get('box_id', 0)
                     name, shortcut_type, path, x, y = msg['name'], msg['shortcut_type'], msg['path'], msg['x'], msg['y']
-                    print_action("Create Shortcut", f"path='{path}'")
+                    print_action("Create Shortcut", f"box={box_id}, path='{path}'")
                     cursor = DB_CONN.cursor()
                     cursor.execute("""
-                        INSERT INTO desktop_shortcut (name, type, path, x, y)
-                        VALUES (?, ?, ?, ?, ?)
-                        ON CONFLICT(path) DO UPDATE SET
+                        INSERT INTO shortcut (box_id, name, type, path, x, y)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(box_id, path) DO UPDATE SET
                             x = excluded.x,
                             y = excluded.y;
-                    """, (name, shortcut_type, path, x, y))
+                    """, (box_id, name, shortcut_type, path, x, y))
                     DB_CONN.commit()
-                    await broadcast_shortcut_list()
+                    await broadcast_shortcut_list(box_id)
 
                 elif msg_type == 'update_shortcut_transform':
                     shortcut_id, x, y, scale = msg['id'], msg['x'], msg['y'], msg.get('scale', 1.0)
                     print_action("Shortcut Xform", f"id={shortcut_id}, x={int(x)}, y={int(y)}, scale={scale:.2f}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute(
-                        "UPDATE desktop_shortcut SET x = ?, y = ?, scale = ? WHERE id = ?",
-                        (x, y, scale, shortcut_id)
-                    )
-                    DB_CONN.commit()
-                    await broadcast_shortcut_list()
+                    cursor.execute("SELECT box_id FROM shortcut WHERE id = ?", (shortcut_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        cursor.execute(
+                            "UPDATE shortcut SET x = ?, y = ?, scale = ? WHERE id = ?",
+                            (x, y, scale, shortcut_id)
+                        )
+                        DB_CONN.commit()
+                        await broadcast_shortcut_list(row['box_id'])
 
                 elif msg_type == 'delete_shortcut':
                     shortcut_id = msg['id']
                     print_action("Delete Shortcut", f"id={shortcut_id}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("DELETE FROM desktop_shortcut WHERE id = ?", (shortcut_id,))
-                    DB_CONN.commit()
-                    await broadcast_shortcut_list()
+                    cursor.execute("SELECT box_id FROM shortcut WHERE id = ?", (shortcut_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        cursor.execute("DELETE FROM shortcut WHERE id = ?", (shortcut_id,))
+                        DB_CONN.commit()
+                        await broadcast_shortcut_list(row['box_id'])
 
                 # --- Backed Window Operations ---
                 elif msg_type == 'create_backed_window':
+                    box_id = msg.get('box_id', 0)
                     config, x, y, w, h, scale = msg['config'], msg['x'], msg['y'], msg['width'], msg['height'], msg.get('scale', 1.0)
-                    print_action("Create BackedWin", f"x={int(x)}, y={int(y)}")
+                    original_group_id = msg.get('original_group_id')
+                    print_action("Create BackWin", f"box={box_id}, x={int(x)}, y={int(y)}")
                     cursor = DB_CONN.cursor()
+
+                    # MODIFICATION: Ensure original_group_id is unique for this box_id by deleting any stale entries.
+                    # This is more robust than nullifying the ID.
+                    if original_group_id is not None:
+                        cursor.execute(
+                            "DELETE FROM board WHERE box_id = ? AND original_group_id = ?",
+                            (box_id, original_group_id)
+                        )
+
                     cursor.execute(
-                        "INSERT INTO backed_window (config, x, y, width, height, scale) VALUES (?, ?, ?, ?, ?, ?)",
-                        (config, x, y, w, h, scale)
+                        "INSERT INTO board (box_id, config, x, y, width, height, scale, original_group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (box_id, config, x, y, w, h, scale, original_group_id)
                     )
                     DB_CONN.commit()
-                    await broadcast_backed_window_list()
+                    await broadcast_backed_window_list(box_id)
                 elif msg_type == 'update_backed_window_transform':
                     win_id, x, y, scale = msg['id'], msg['x'], msg['y'], msg.get('scale', 1.0)
-                    print_action("BackedWin Xform", f"id={win_id}, x={int(x)}, y={int(y)}, scale={scale:.2f}")
+                    config_json = msg.get('config')
+                    action_details = f"id={win_id}, x={int(x)}, y={int(y)}, scale={scale:.2f}"
+                    if config_json:
+                        action_details += ", config=updated"
+                    print_action("BackWin Xform ", action_details)
                     cursor = DB_CONN.cursor()
-                    cursor.execute(
-                        "UPDATE backed_window SET x = ?, y = ?, scale = ? WHERE id = ?",
-                        (x, y, scale, win_id)
-                    )
-                    DB_CONN.commit()
-                    await broadcast_backed_window_list()
+                    cursor.execute("SELECT box_id FROM board WHERE id = ?", (win_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        if config_json:
+                            cursor.execute(
+                                "UPDATE board SET x = ?, y = ?, scale = ?, config = ? WHERE id = ?",
+                                (x, y, scale, config_json, win_id)
+                            )
+                        else:
+                            cursor.execute(
+                                "UPDATE board SET x = ?, y = ?, scale = ? WHERE id = ?",
+                                (x, y, scale, win_id)
+                            )
+                        DB_CONN.commit()
+                        await broadcast_backed_window_list(row['box_id'])
                 elif msg_type == 'delete_backed_window':
                     win_id = msg['id']
-                    print_action("Delete BackedWin", f"id={win_id}")
+                    print_action("Delete BackWin", f"id={win_id}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("DELETE FROM backed_window WHERE id = ?", (win_id,))
-                    DB_CONN.commit()
-                    await broadcast_backed_window_list()
+                    cursor.execute("SELECT box_id FROM board WHERE id = ?", (win_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        cursor.execute("DELETE FROM board WHERE id = ?", (win_id,))
+                        DB_CONN.commit()
+                        await broadcast_backed_window_list(row['box_id'])
 
 
-                # --- Skybox Box Operations ---
+                # --- Getters for Box Contents ---
+                elif msg_type == 'get_desktop_settings':
+                    box_id = msg.get('box_id', 0)
+                    print_action("Get Dsk Set", f"box={box_id}")
+                    cursor = DB_CONN.cursor()
+                    
+                    settings = get_resolved_settings_sync(box_id, cursor)
+
+                    # Ensure defaults exist if config is partial/missing
+                    if 'panX' not in settings: settings['panX'] = 0
+                    if 'panY' not in settings: settings['panY'] = 0
+                    if 'zoom' not in settings: settings['zoom'] = 1.0
+                    await websocket.send(json.dumps({'type': 'desktop_settings', 'settings': settings, 'box_id': box_id}))
+
+                elif msg_type == 'get_box_specific_settings':
+                    box_id = msg.get('box_id', 0)
+                    print_action("Get Box Spec Set", f"box={box_id}")
+                    cursor = DB_CONN.cursor()
+                    
+                    # Get view settings
+                    cursor.execute("SELECT key, value FROM settings WHERE box_id = ?", (box_id,))
+                    view_settings = {}
+                    for row in cursor.fetchall():
+                        try:
+                            view_settings[row['key']] = json.loads(row['value'])
+                        except (json.JSONDecodeError, TypeError):
+                            view_settings[row['key']] = row['value']
+
+                    # Get theme config
+                    cursor.execute("SELECT theme FROM config WHERE box_id = ?", (box_id,))
+                    theme_row = cursor.fetchone()
+                    theme_settings = json.loads(theme_row['theme']) if theme_row and theme_row['theme'] else {}
+
+                    specific_settings = {**theme_settings, **view_settings}
+                    
+                    await websocket.send(json.dumps({'type': 'box_specific_settings_response', 'settings': specific_settings, 'box_id': box_id}))
+
+                elif msg_type == 'get_shortcut_list':
+                    box_id = msg.get('box_id', 0)
+                    print_action("Get Shortcuts", f"box={box_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("SELECT id, name, type, path, x, y, scale FROM shortcut WHERE box_id = ?", (box_id,))
+                    shortcuts = [dict(row) for row in cursor.fetchall()]
+                    await websocket.send(json.dumps({'type': 'shortcut_list', 'shortcuts': shortcuts, 'box_id': box_id}))
+
+                elif msg_type == 'get_backed_window_list':
+                    box_id = msg.get('box_id', 0)
+                    print_action("Get BackWins", f"box={box_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("SELECT id, config, x, y, width, height, scale, z_index, original_group_id FROM board WHERE box_id = ?", (box_id,))
+                    windows = [dict(row) for row in cursor.fetchall()]
+                    await websocket.send(json.dumps({'type': 'backed_window_list', 'windows': windows, 'box_id': box_id}))
+
+
+
+                # --- SKYBRIDGE Box Operations ---
                 elif msg_type == 'list_boxes':
                     print_action("List Boxes")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT id, name, type, context, x, y, scale, cover_panel_location, aspect_ratio FROM box ORDER BY name")
-                    boxes = [dict(row) for row in cursor.fetchall()]
+                    boxes = _get_boxes_with_settings_info(cursor)
                     await websocket.send(json.dumps({'type': 'box_list', 'boxes': boxes}))
 
                 elif msg_type == 'create_box':
@@ -612,12 +1030,14 @@ async def websocket_handler(websocket):
                     aspect_ratio = msg.get('aspect_ratio')
                     x = msg.get('x')
                     y = msg.get('y')
+                    parent_box_id = msg.get('parent_box_id', 0)
                     pos_str = f"pos=({int(x)},{int(y)})" if x is not None and y is not None else "pos=default"
-                    print_action("Create Box", f"name='{name}', type='{box_type}', ratio={aspect_ratio:.2f}, {pos_str}")
+                    ratio_str = f"{aspect_ratio:.2f}" if aspect_ratio is not None else "N/A"
+                    print_action("Create Box", f"name='{name}', parent={parent_box_id}, type='{box_type}', ratio={ratio_str}, {pos_str}")
                     cursor = DB_CONN.cursor()
                     cursor.execute(
-                        "INSERT INTO box (name, type, context, aspect_ratio, x, y) VALUES (?, ?, ?, ?, ?, ?)",
-                        (name, box_type, context, aspect_ratio, x, y)
+                        "INSERT INTO box (name, type, context, aspect_ratio, x, y, parent_box_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (name, box_type, context, aspect_ratio, x, y, parent_box_id)
                     )
                     new_id = cursor.lastrowid
 
@@ -631,7 +1051,7 @@ async def websocket_handler(websocket):
                         "tabs": [
                             {
                                 "originalId": 1,
-                                "componentType": "LocalFileExplorer",
+                                "componentName": "LocalFileExplorer",
                                 "title": f"Files - {name}",
                                 "initialPath": context
                             }
@@ -651,7 +1071,7 @@ async def websocket_handler(websocket):
                         "tabs": [
                             {
                                 "originalId": 1,
-                                "componentType": "LocalTerminal",
+                                "componentName": "LocalTerminal",
                                 "title": f"Terminal - {name}",
                                 "initialPath": context
                             }
@@ -710,7 +1130,7 @@ async def websocket_handler(websocket):
                     DB_CONN.commit()
                     await broadcast_box_list()
 
-                # --- Skybox Panel/Board Operations ---
+                # --- SKYBRIDGE Panel/Board Operations ---
                 elif msg_type == 'get_box_config':
                     box_id = msg.get('id')
                     print_action("Get Box Cfg", f"id={box_id}")
@@ -845,6 +1265,21 @@ async def websocket_handler(websocket):
         log.info("Client disconnected.")
     finally:
         CONNECTED_CLIENTS.remove(websocket)
+        
+        # Disconnect client from any watchers and cancel tasks if no clients left
+        for path, data in list(WATCHERS.items()):
+            if websocket in data['clients']:
+                data['clients'].remove(websocket)
+            if not data['clients']:
+                data['task'].cancel()
+        
+        # Disconnect client from any tailers and cancel tasks if no clients left
+        for path, data in list(TAILERS.items()):
+            if websocket in data['clients']:
+                data['clients'].remove(websocket)
+            if not data['clients']:
+                data['task'].cancel()
+
         if active_terminals:
             log.info(f"Cleaning up {len(active_terminals)} PTY resources for disconnected client.")
             for term_id, term_session in active_terminals.items():

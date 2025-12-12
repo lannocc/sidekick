@@ -5,9 +5,9 @@
 <script>
     import { onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { parseAnsi } from './ansi.js'
-    import { contextUpdates } from './iosk.js';
-    import { windows } from './windows.js';
+    import { parseAnsi } from '../ansi.js'
+    import { contextUpdates } from '../iosk.js';
+    import { windows } from '../windows.js';
     import IoskUserInspector from './IoskUserInspector.svelte';
 
     // --- Component Props ---

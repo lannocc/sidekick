@@ -8,17 +8,16 @@
     import { get } from 'svelte/store';
     import { onMount, onDestroy } from 'svelte';
 
-    import IoskConsole from './IoskConsole.svelte';
-    import Calculator from './Calculator.svelte';
-    import Settings from './Settings.svelte';
-    import IoskFileExplorer from './IoskFileExplorer.svelte';
-    import IoskFileViewer from './IoskFileViewer.svelte';
-    import WebBrowser from './WebBrowser.svelte';
-    import IoskPrivateChat from './IoskPrivateChat.svelte';
-    import LocalTerminal from './LocalTerminal.svelte';
-    import LocalFileExplorer from './LocalFileExplorer.svelte';
-    import Ask from './Ask.svelte';
-    import IoskWatch from './IoskWatch.svelte';
+    import IoskConsole from './board/IoskConsole.svelte';
+    import Calculator from './board/Calculator.svelte';
+    import Settings from './board/Settings.svelte';
+    import FileExplorer from './board/FileExplorer.svelte';
+    import FileViewer from './board/FileViewer.svelte';
+    import WebBrowser from './board/WebBrowser.svelte';
+    import IoskPrivateChat from './board/IoskPrivateChat.svelte';
+    import LocalTerminal from './board/LocalTerminal.svelte';
+    import Ask from './board/Ask.svelte';
+    import IoskWatch from './board/IoskWatch.svelte';
 
     let isLayoutDirty = true;
     let lastSavedLayoutSnapshot = '';
@@ -149,12 +148,11 @@
         if (component === IoskConsole) return 'IoskConsole';
         if (component === Calculator) return 'Calculator';
         if (component === Settings) return 'Settings';
-        if (component === IoskFileExplorer) return 'IoskFileExplorer';
-        if (component === IoskFileViewer) return 'IoskFileViewer';
+        if (component === FileExplorer) return 'FileExplorer';
+        if (component === FileViewer) return 'FileViewer';
         if (component === WebBrowser) return 'WebBrowser';
         if (component === IoskPrivateChat) return 'IoskPrivateChat';
         if (component === LocalTerminal) return 'LocalTerminal';
-        if (component === LocalFileExplorer) return 'LocalFileExplorer';
         if (component === Ask) return 'Ask';
         if (component === IoskWatch) return 'IoskWatch';
         return 'Unknown';
@@ -292,7 +290,7 @@
 <div class="dash-dialog">
     <div class="dash-header">
         <div class="header-controls left">
-            <button class="control-button cancel" on:click={handleCancelDash} title="Cancel and Close All Windows">&times;</button>
+            <button class="control-button cancel" on:click={handleCancelDash} title="Close All Windows">&times;</button>
             <button class="control-button" on:click={handleMinimizeDash} title="Show Desktop">_</button>
         </div>
         <h1 class="dash-title">Dash</h1>

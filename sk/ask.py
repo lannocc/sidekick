@@ -3,15 +3,11 @@
 
 from . import config
 from .ai import AIClient
-from .util import get_md_code_block, print_flush as print
-
-import tiktoken
+from .util import get_md_code_block, print_flush as print, count_tokens
 
 import sys
 import time
 import threading
-
-ENCODING = tiktoken.get_encoding('cl100k_base')
 
 
 def ask_question(prompt=None, file=None, attachment_content="", mdlang=None,
@@ -24,7 +20,7 @@ def ask_question(prompt=None, file=None, attachment_content="", mdlang=None,
 
     if attachment_content:
         attachment_bytes = len(attachment_content.encode('utf-8'))
-        attachment_tokens = len(ENCODING.encode(attachment_content))
+        attachment_tokens = count_tokens(attachment_content, use_openai=use_openai)
         if not quiet:
             print(f'SUBTOTAL Bytes: {attachment_bytes:,}')
             print(f'SUBTOTAL Tokens: {attachment_tokens:,}')
@@ -51,7 +47,7 @@ def ask_question(prompt=None, file=None, attachment_content="", mdlang=None,
 
     full_text = attachment_content + prompt
     total_bytes = len(full_text.encode('utf-8'))
-    total_tokens = len(ENCODING.encode(full_text))
+    total_tokens = count_tokens(full_text, use_openai=use_openai)
 
     if work_file:
         try:
@@ -126,7 +122,7 @@ def ask_question(prompt=None, file=None, attachment_content="", mdlang=None,
     turnaround_time = end_time - start_time
 
     output_bytes = len(answer.encode('utf-8'))
-    output_tokens = len(ENCODING.encode(answer))
+    output_tokens = count_tokens(answer, use_openai=use_openai)
 
     if work_file:
         try:
@@ -203,4 +199,3 @@ def _display_timer(stop_event, timeout):
         print(f"{timer_str.ljust(80)}\r", end='', flush=True)
         time.sleep(0.2)
     print(" " * 80 + "\r", end='', flush=True) # Clear the line when done
-

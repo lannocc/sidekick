@@ -1,6 +1,6 @@
 # Proposal: Networked Filesystem Operations
 
-**Status**: Proposed
+**Status**: Partially Implemented
 
 ### Introduction
 

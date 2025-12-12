@@ -3,17 +3,76 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState } from './windows.js';
+    import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction } from './desktop.js';
-    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow } from './local.js';
+    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, skyCloakEnabled } from './desktop.js';
+    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox, resolveAssetDataUrl, generateBgStyle } from './bridge.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import Shortcut from './Shortcut.svelte';
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
-    import { connectionStatus } from './local.js';
+    import { connectionStatus } from './bridge.js';
     import { fade } from 'svelte/transition';
+    import InstanceRegistrar from './InstanceRegistrar.svelte';
+
+    // *** MODIFICATION START ***
+    // Create a single derived store for all window-like entities to render.
+    // This is the key to preserving component instances across front/back transitions.
+    $: allRenderableWindows = (() => {
+        const frontWindows = $windows.map(w => ({ ...w, isBacked: false, scale: 1.0 }));
+
+        // Initialize seenKeys with all keys from front windows to detect collisions between front/back layers.
+        const seenKeys = new Set(frontWindows.map(w => w.id));
+
+        const mappedBackedWindows = ($backedWindows || []).map(bw => {
+            const config = bw.config;
+            // The preferred key is originalGroupId for component persistence, otherwise the db id.
+            let persistentId = bw.originalGroupId != null ? bw.originalGroupId : bw.id;
+
+            // During a transition, a window can briefly exist in both the front and back stores
+            // within the same Svelte tick. If a front window exists with the same persistent key,
+            // we temporarily ignore the backed version to avoid a key collision in the #each block.
+            // Svelte will then process the removal of the front window in the same tick, and on the
+            // next computation of this store, the backed window will appear correctly without collision.
+            // This allows Svelte to see it as a property update on the same component instance.
+            if (seenKeys.has(persistentId)) {
+                return null;
+            }
+
+            seenKeys.add(persistentId);
+
+            return {
+                ...config,
+                // Explicitly override with live data from the backed window record
+                x: bw.x,
+                y: bw.y,
+                scale: bw.scale || 1.0,
+                zIndex: bw.z_index || 1,
+
+                // Set derived/unified properties
+                id: persistentId,
+                isActive: interactiveBackedWindowId === persistentId,
+                originalBackedId: bw.id,
+                isBacked: true,
+                tabs: config.tabs.map(t => {
+                    // Spread the saved state from initialState onto the tab object itself,
+                    // making it consistent with how windows are restored.
+                    const tabProps = { ...t, ...(t.initialState || {}) };
+                    tabProps.component = componentMap[t.componentType];
+                    tabProps.id = t.originalId;
+                    return tabProps;
+                }),
+                notice: null, // Backed windows don't have notices for now
+                minimized: false, // Backed windows can't be minimized
+                // Pass the full backed window object for the context menu
+                backedWindowObject: bw,
+            };
+        }).filter(Boolean);
+
+        return [...frontWindows, ...mappedBackedWindows];
+    })();
+    // *** MODIFICATION END ***
 
     const initialSettings = get(desktopSettings);
     desktopView.set({
@@ -26,6 +85,9 @@
     let innerWidth, innerHeight, desktopWidth, desktopHeight;
     let totalContentBounds;
     let desktopEl;
+    let backedComponentInstances = {};
+    let backedWindowMiddleClickTimeout = new Map();
+    let backedWindowLeftClickTimeout = new Map();
 
     let taskbarHeight;
     $: taskbarHeight = $desktopSettings.sky?.frame?.height ?? TASKBAR_HEIGHT;
@@ -33,10 +95,18 @@
     // --- Backed Window Interaction State ---
     let interactiveBackedWindowId = null;
 
-    $: isDesktopEmpty = $windows.length === 0 && 
-                        ($desktopShortcuts || []).length === 0 && 
-                        ($boxes || []).length === 0 && 
-                        ($backedWindows || []).length === 0;
+    // If a front window becomes active, deactivate the backed window.
+    $: if ($windows.some(w => w.isActive)) {
+        if (interactiveBackedWindowId !== null) {
+            interactiveBackedWindowId = null;
+        }
+    }
+
+    $: displayableBoxes = $boxes.filter(b => b.parent_box_id === $currentBoxId);
+
+    $: isDesktopEmpty = allRenderableWindows.length === 0 &&
+                        ($desktopShortcuts || []).length === 0 &&
+                        (displayableBoxes || []).length === 0;
 
     // --- View Control Mode ---
     let viewControlMode = 'both'; // 'back', 'both', 'front'
@@ -93,32 +163,27 @@
         closeBackedWindowContextMenu();
     }
 
-    function generateBgStyle(bgSettings) {
-        if (!bgSettings) return null;
-        if (bgSettings.bgType === 'gradient') {
-            return `linear-gradient(45deg, ${bgSettings.bgGradientStart} 0%, ${bgSettings.bgGradientEnd} 100%)`;
-        } else if (bgSettings.bgType === 'color') {
-            return bgSettings.bgColor;
-        } else if (bgSettings.bgType === 'image' && bgSettings.bgImage) {
-            let size = 'cover';
-            let repeat = 'no-repeat';
-            let position = 'center center';
-
-            switch (bgSettings.bgImageDisplayMode) {
-                case 'contain': size = 'contain'; break;
-                case 'stretch': size = '100% 100%'; break;
-                case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
-                case 'cover': default: break;
-            }
-            return `url('${bgSettings.bgImage}') ${position} / ${size} ${repeat}`;
-        }
-        return null;
-    }
+    let resolvedBgImageUrl = null;
 
     $: sceneSettings = $desktopSettings.sky?.scene;
-    $: backgroundStyle = generateBgStyle(sceneSettings);
+
+    $: {
+        if (sceneSettings?.bgType === 'image' && sceneSettings?.bgImage) {
+            const urlToLoad = sceneSettings.bgImage;
+            resolveAssetDataUrl(urlToLoad).then(url => {
+                // Prevent race condition if user quickly changes selection
+                if (get(desktopSettings).sky.scene.bgImage === urlToLoad) {
+                    resolvedBgImageUrl = url;
+                }
+            });
+        } else {
+            resolvedBgImageUrl = null;
+        }
+    }
+
+    $: backgroundStyle = generateBgStyle(sceneSettings, resolvedBgImageUrl);
     $: sceneOpacity = sceneSettings?.opacity ?? 1.0;
-    $: backWindowBgStyle = generateBgStyle($desktopSettings.windows?.back);
+    $: backWindowBgStyle = generateBgStyle($desktopSettings.windows?.back, null); // Second param not needed here
     $: backWindowSettings = $desktopSettings.windows?.back;
 
     function handleRightClick(event) {
@@ -144,13 +209,66 @@
         newSettings({ sourceEvent: contextMenu.sourceEvent });
     }
 
+    function handleNewBoxClick() {
+        closeContextMenu();
+        const name = prompt("Enter a name for the new Box:", "New Box");
+        if (!name) return;
+
+        const context = prompt("Enter the local filesystem path for the Box:", "/");
+        if (context === null) return; // User cancelled
+
+        const event = contextMenu.sourceEvent;
+        createBox(name, 'local', context, {
+            screenX: event.clientX,
+            screenY: event.clientY,
+            parent_box_id: get(currentBoxId)
+        });
+    }
+
+    function handleNewShortcutClick() {
+        closeContextMenu();
+        const name = prompt("Enter a name for the shortcut:", "My Shortcut");
+        if (!name) return;
+
+        let type = prompt("Enter shortcut type ('file' or 'dir'):", "dir")?.toLowerCase().trim();
+        if (type !== 'file' && type !== 'dir') {
+            alert("Invalid type. Please enter 'file' or 'dir'.");
+            return;
+        }
+
+        const path = prompt(`Enter the path for the ${type}:`, "/");
+        if (path === null) return; // User cancelled
+
+        const event = contextMenu.sourceEvent;
+        const { panX, panY, zoom } = get(desktopView);
+
+        // Adjust for icon size so it's centered on cursor
+        const iconWidth = 80 / 2;
+        const iconHeight = 64 / 2;
+        const worldX = ((event.clientX - panX) / zoom) - iconWidth;
+        const worldY = (((event.clientY - taskbarHeight) - panY) / zoom) - iconHeight;
+
+        desktopShortcuts.add({
+            name,
+            type,
+            path,
+            x: worldX,
+            y: worldY
+        });
+    }
+
     // --- Bird's Eye View & Fit/Center Logic ---
     $: allItems = [
-        ...$windows.filter(w => !w.maximized).map(w => ({ ...w, type: 'window' })), // Filter out maximized windows and add type
+        ...allRenderableWindows.filter(w => !w.maximized).map(w => ({
+            ...w,
+            type: w.isBacked ? 'backed_window' : 'window',
+            baseWidth: w.width, // for backed_window compatibility
+            baseHeight: w.height,
+            width: w.width * (w.scale || 1.0),
+            height: w.height * (w.scale || 1.0)
+        })),
         ...($desktopShortcuts || []).map(s => {
             const scale = s.scale || 1.0;
-            // Use rendered dimensions if available, otherwise fallback to a default.
-            // The 90px width comes from 80px width + 4px*2 padding + 1px*2 border in Shortcut.svelte CSS
             const unscaledWidth = s.renderWidth || 90;
             const unscaledHeight = s.renderHeight || 90;
             return {
@@ -160,17 +278,13 @@
                 height: unscaledHeight * scale
             };
         }),
-        ...($boxes || []).map(b => {
+        ...(displayableBoxes || []).map(b => {
             const BASE_WIDTH = 180;
             const scale = b.scale ?? 1.0;
-
-            // Use stored aspect ratio if available, otherwise calculate dynamically as a fallback.
             const dynamicAspectRatio = (desktopHeight > 0 && desktopWidth > 0) ? desktopHeight / desktopWidth : 0;
             const aspectRatio = b.aspect_ratio ?? dynamicAspectRatio;
-
             const boxWidth = BASE_WIDTH * scale;
             const boxHeight = BASE_WIDTH * aspectRatio * scale;
-
             return {
                 ...b,
                 width: boxWidth,
@@ -178,17 +292,6 @@
                 type: 'box',
             };
         }),
-        ...($backedWindows || []).map(bw => {
-            const scale = bw.scale || 1.0;
-            return {
-                ...bw,
-                type: 'backed_window',
-                baseWidth: bw.width,
-                baseHeight: bw.height,
-                width: bw.width * scale,
-                height: bw.height * scale
-            };
-        })
     ];
 
     $: relativeDesktopZoom = $windowView.zoom !== 0 ? $desktopView.zoom / $windowView.zoom : 1;
@@ -199,10 +302,7 @@
         } else if (displayViewControlMode === 'front') {
             return allItems.filter(item => item.type === 'window');
         } else { // 'both' mode
-            // Normalize back layer items into the front layer's coordinate space for the minimap
             const frontItems = allItems.filter(item => item.type === 'window');
-
-            // Calculate relative pan offset in front layer's world space
             const relativePanX = $windowView.zoom > 0 ? ($desktopView.panX - $windowView.panX) / $windowView.zoom : 0;
             const relativePanY = $windowView.zoom > 0 ? ($desktopView.panY - $windowView.panY) / $windowView.zoom : 0;
 
@@ -401,7 +501,7 @@
         if (displayViewControlMode === 'both') {
             const currentWindowView = get(windowView);
             const currentDesktopView = get(desktopView);
-            
+
             // We can only preserve the relation if window zoom is not zero.
             if (currentWindowView.zoom !== 0) {
                 // targetFitView is calculated for the combined view in the front-layer's coordinate space.
@@ -415,7 +515,7 @@
                 const newDesktopZoom = targetView.zoom * relativeZoom;
                 const newDesktopPanX = (relativePanX * targetView.zoom) + targetView.panX;
                 const newDesktopPanY = (relativePanY * targetView.zoom) + targetView.panY;
-                
+
                 const newDesktopView = {
                     zoom: newDesktopZoom,
                     panX: newDesktopPanX,
@@ -641,7 +741,7 @@
                 } else if (item.type === 'shortcut') {
                     updateShortcutTransform(item.id, item.x, item.y, item.scale || 1.0);
                 } else if (item.type === 'backed_window') {
-                    updateBackedWindowTransform(item.id, item.x, item.y, item.scale);
+                    updateBackedWindowTransform(item.originalBackedId || item.id, item.x, item.y, item.scale);
                 }
             });
 
@@ -705,7 +805,7 @@
     let isSelecting = false;
     let isDraggingItems = false;
     let selectionRect = { visible: false, x1: 0, y1: 0, x2: 0, y2: 0 };
-    let dragStartData = { mouse: { x: 0, y: 0 }, items: new Map() };
+    let dragStartData = { mouse: { x: 0, y: 0 }, items: new Map(), button: 0 };
     let dragStartItemStates = [];
     let pushedItemsOriginalPositions = new Map();
 
@@ -735,15 +835,7 @@
     let desktopMiddleClickTimeout;
 
     function toggleSkyCloak() {
-        desktopSettings.update(s => {
-            if (s.sky.cloak.opacity > 0) {
-                s.sky.cloak.lastOpacity = s.sky.cloak.opacity;
-                s.sky.cloak.opacity = 0;
-            } else {
-                s.sky.cloak.opacity = s.sky.cloak.lastOpacity || 0.8;
-            }
-            return s;
-        });
+        skyCloakEnabled.update(v => !v);
     }
 
     function handleDesktopMiddleClick(event) {
@@ -756,7 +848,7 @@
             toggleSkyCloak();
             return;
         }
-        
+
         // Set a timeout to clear the double-click state. If another click
         // arrives before this, it's a double-click.
         desktopMiddleClickTimeout = setTimeout(() => {
@@ -778,78 +870,83 @@
         window.addEventListener('mouseup', onUp, { once: true });
     }
 
-
+    // --- MODIFICATION START: Updated Global Mouse Down Handler ---
     function handleGlobalMouseDown(event) {
-        const targetIsBackedWindow = event.target.closest('.backed-window');
-        if (!targetIsBackedWindow) {
+        if (event.target.closest('.window-wrapper:not(.backed)')) {
+            // A click landed on a front window. Window.svelte's handlers run first.
+            // If it was a middle click that Window.svelte decided not to handle (e.g., no scrollable content),
+            // the event will bubble here. In that case, we treat it as a desktop pan.
+            if (event.button === 1) {
+                handleDesktopMiddleClick(event);
+            }
+            // For any click on a front window, we don't want the logic below (unfocusing, etc) to run.
+            // Window.svelte is responsible for its own focus management.
+            return;
+        }
+
+        const targetItemEl = event.target.closest('.shortcut, .box, .window-wrapper.backed');
+
+        // Clicking anything other than a front window (and not a middle click)
+        // should clear front window focus.
+        if (event.button !== 1) {
+            windows.unfocusAllWindows();
+        }
+
+        // If we're not clicking on a backed window itself (and not a middle click),
+        // clear the active backed window.
+        if (event.button !== 1 && (!targetItemEl || targetItemEl.dataset.type !== 'backed_window')) {
             interactiveBackedWindowId = null;
         }
 
-        const targetItemEl = event.target.closest('.shortcut, .box, .backed-window');
-
         if (targetItemEl) {
             handleItemMouseDown(event, targetItemEl);
-        } else if (event.target.classList.contains('desktop-background')) {
-            if (event.button === 1) { // Middle mouse for panning
-                handleDesktopMiddleClick(event);
-            } else if (event.button === 0) { // Left mouse for selection
-                handleMarqueeSelectStart(event);
+        } else {
+            // This is a click on the desktop background.
+            if (event.target.classList.contains('desktop-background')) {
+                if (event.button === 1) { // Middle mouse for panning
+                    handleDesktopMiddleClick(event);
+                } else if (event.button === 0) { // Left mouse for selection
+                    handleMarqueeSelectStart(event);
+                }
             }
         }
     }
+    // --- MODIFICATION END ---
 
-    function handleItemMouseDown(event, itemEl) {
+    function startItemDrag(event, itemEl) {
         const id = itemEl.dataset.id;
         const type = itemEl.dataset.type;
         const uniqueId = `${type}-${id}`;
-        const isInteractive = type === 'backed_window' && parseInt(id, 10) === interactiveBackedWindowId;
 
-        // This action should work regardless of interactive state
-        if (type === 'backed_window' && event.shiftKey && event.button === 1) { // Shift + Middle click
-            event.preventDefault();
-            event.stopPropagation();
-            const backedWindow = $backedWindows.find(bw => String(bw.id) === id);
-            if (backedWindow) {
-                windows.unbackWindow(backedWindow);
-            }
+        if (event.button !== 0 && event.button !== 1) {
+            desktopInteraction.set(false);
             return;
         }
 
-        // If the window is already interactive, let its content handle the event.
-        if (isInteractive) {
-            return;
-        }
-
-        // --- From here, we know it's a desktop-level interaction ---
-        desktopInteraction.set(true);
-
-        if (event.button !== 0) {
-            desktopInteraction.set(false); // Reset and exit, as mouseup handler won't be attached.
-            return;
-        }
-
-        event.preventDefault(); // Prevent text selection, etc.
+        event.preventDefault();
         event.stopPropagation();
 
-        // Update selection with unique IDs
-        if (event.ctrlKey) {
-            selectedItems.update(s => {
-                const newSet = new Set(s); // Create a new set to ensure reactivity
-                if (newSet.has(uniqueId)) {
-                    newSet.delete(uniqueId);
-                } else {
-                    newSet.add(uniqueId);
-                }
-                return newSet;
-            });
-        } else if (!get(selectedItems).has(uniqueId)) {
-            selectedItems.set(new Set([uniqueId]));
+        if (event.button === 0) {
+            if (event.ctrlKey) {
+                selectedItems.update(s => {
+                    const newSet = new Set(s);
+                    if (newSet.has(uniqueId)) {
+                        newSet.delete(uniqueId);
+                    } else {
+                        newSet.add(uniqueId);
+                    }
+                    return newSet;
+                });
+            } else if (!get(selectedItems).has(uniqueId)) {
+                selectedItems.set(new Set([uniqueId]));
+            }
         }
 
-        // Prepare for dragging
+        dragStartData.button = event.button;
+
         isDraggingItems = true;
-        dragStartItemStates = allItems.map(i => ({ ...i })); // Capture initial state of all items
-        pushedItemsOriginalPositions.clear(); // Reset pushed items map
+        dragStartItemStates = allItems.map(i => ({ ...i }));
+        pushedItemsOriginalPositions.clear();
 
         const { panX, panY, zoom } = get(desktopView);
         dragStartData.mouse = {
@@ -858,16 +955,111 @@
         };
 
         dragStartData.items.clear();
-        get(selectedItems).forEach(selUniqueId => {
-            const [itemType, itemId] = selUniqueId.split('-');
-            const item = allItems.find(i => i.type === itemType && String(i.id) === itemId);
+
+        if (event.button === 0) {
+            get(selectedItems).forEach(selUniqueId => {
+                const [itemType, itemId] = selUniqueId.split('-');
+                const item = allItems.find(i => i.type === itemType && String(i.id) === itemId);
+                if (item) {
+                    dragStartData.items.set(selUniqueId, { x: item.x, y: item.y, type: item.type, scale: item.scale });
+                }
+            });
+        } else { // event.button === 1
+            const item = allItems.find(i => i.type === type && String(i.id) === id);
             if (item) {
-                dragStartData.items.set(selUniqueId, { x: item.x, y: item.y, type: item.type, scale: item.scale });
+                dragStartData.items.set(uniqueId, { x: item.x, y: item.y, type: item.type, scale: item.scale });
             }
-        });
+        }
 
         window.addEventListener('mousemove', handleItemDragMove);
         window.addEventListener('mouseup', handleItemDragEnd, { once: true });
+    }
+
+    function handleItemMouseDown(event, itemEl) {
+        const id = itemEl.dataset.id;
+        const type = itemEl.dataset.type;
+        const isInteractive = type === 'backed_window' && parseInt(id, 10) === interactiveBackedWindowId;
+
+        if (type === 'backed_window' && event.shiftKey && event.button === 1) {
+            event.preventDefault();
+            event.stopPropagation();
+            const backedWindow = $backedWindows.find(bw => (bw.originalGroupId || bw.id) == id);
+            if (backedWindow) {
+                windows.unbackWindow(backedWindow);
+            }
+            return;
+        }
+
+        const backedWindowItem = (type === 'backed_window') ? $backedWindows.find(bw => (bw.originalGroupId || bw.id) == id) : null;
+        const isCloaked = backedWindowItem ? backedWindowItem.config.cloaked : false;
+
+        if (type === 'backed_window' && event.button === 1) {
+            if (backedWindowMiddleClickTimeout.has(id)) {
+                clearTimeout(backedWindowMiddleClickTimeout.get(id));
+                backedWindowMiddleClickTimeout.delete(id);
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (backedWindowItem) {
+                    const newConfig = { ...backedWindowItem.config, cloaked: !isCloaked };
+                    updateBackedWindowTransform(backedWindowItem.id, backedWindowItem.x, backedWindowItem.y, backedWindowItem.scale, newConfig);
+                }
+                return;
+            }
+            const timeoutId = setTimeout(() => backedWindowMiddleClickTimeout.delete(id), 250);
+            backedWindowMiddleClickTimeout.set(id, timeoutId);
+        }
+
+        if (isInteractive && isCloaked && event.button === 0) {
+            if (backedWindowLeftClickTimeout.has(id)) {
+                clearTimeout(backedWindowLeftClickTimeout.get(id));
+                backedWindowLeftClickTimeout.delete(id);
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (backedWindowItem) {
+                    const newConfig = { ...backedWindowItem.config, cloaked: false };
+                    updateBackedWindowTransform(backedWindowItem.id, backedWindowItem.x, backedWindowItem.y, backedWindowItem.scale, newConfig);
+                }
+                return;
+            }
+            const timeoutId = setTimeout(() => backedWindowLeftClickTimeout.delete(id), 250);
+            backedWindowLeftClickTimeout.set(id, timeoutId);
+        }
+
+        const isTitleBarClick = !!event.target.closest('.title-bar');
+        if (isInteractive && event.button !== 1) {
+            if (!isCloaked && !isTitleBarClick) return;
+        }
+
+        desktopInteraction.set(true);
+
+        // For middle-click, use "drag-on-move" pattern to prevent choppiness from browser interference.
+        if (event.button === 1) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const onMove = () => {
+                window.removeEventListener('mouseup', onUp); // A drag has started, the real dragEnd handler will take over.
+                if (backedWindowMiddleClickTimeout.has(id)) {
+                    clearTimeout(backedWindowMiddleClickTimeout.get(id));
+                    backedWindowMiddleClickTimeout.delete(id);
+                }
+                handleDesktopPanStart(event);
+            };
+
+            const onUp = () => {
+                window.removeEventListener('mousemove', onMove);
+                desktopInteraction.set(false); // It was just a click, reset state.
+            };
+
+            window.addEventListener('mousemove', onMove, { once: true });
+            window.addEventListener('mouseup', onUp, { once: true });
+            return;
+        }
+
+        // For left-click, start the drag immediately.
+        startItemDrag(event, itemEl);
     }
 
     function resolveCollisions(frameItems, activeItemIds, startStates, pushedItemsMap) {
@@ -938,7 +1130,7 @@
                         // The remaining case is !hasAMoved && !hasBMoved (two static, overlapping items).
                         continue;
                     }
-                    
+
                     const pushedUniqueId = `${pushed.type}-${pushed.id}`;
                     if (!pushedItemsMap.has(pushedUniqueId)) {
                         pushedItemsMap.set(pushedUniqueId, { x: pushed.x, y: pushed.y });
@@ -978,7 +1170,7 @@
                 } else if (item.type === 'shortcut') {
                     newShortcutPositions.set(idStr, pos);
                 } else if (item.type === 'backed_window') {
-                    newBackedWindowPositions.set(idStr, pos);
+                    newBackedWindowPositions.set(String(item.originalBackedId || item.id), pos);
                 }
             }
         });
@@ -998,7 +1190,11 @@
         if (!isDraggingItems) return;
 
         if (!get(wasDraggingItems)) {
-            // On first move, set the dragging flag and cursor
+            // On first move, cancel any pending double-click actions and set the dragging flag/cursor
+            backedWindowMiddleClickTimeout.forEach(timeout => clearTimeout(timeout));
+            backedWindowMiddleClickTimeout.clear();
+            backedWindowLeftClickTimeout.forEach(timeout => clearTimeout(timeout));
+            backedWindowLeftClickTimeout.clear();
             document.body.classList.add('is-dragging-item');
             wasDraggingItems.set(true);
         }
@@ -1053,15 +1249,16 @@
                 } else if (item.type === 'shortcut') {
                     updateShortcutTransform(item.id, item.x, item.y, item.scale || 1.0);
                 } else if (item.type === 'backed_window') {
-                    updateBackedWindowTransform(item.id, item.x, item.y, item.scale);
+                    updateBackedWindowTransform(item.originalBackedId || item.id, item.x, item.y, item.scale);
                 }
             });
-        } else {
-            // This was a click, not a drag. Check if the clicked item was a backed window.
+        } else if (dragStartData.button === 0) {
+            // This was a click (not a drag), and it was a left-click. Activate the window.
             const selected = [...dragStartData.items.keys()];
             if (selected.length === 1 && selected[0].startsWith('backed_window-')) {
                 const [_, idStr] = selected[0].split('-');
                 interactiveBackedWindowId = parseInt(idStr, 10);
+                windows.unfocusAllWindows();
             }
         }
 
@@ -1279,9 +1476,10 @@
     }
 
     function handleBackRequest(windowToBack) {
-        // 1. Generate config for the new backed window
+        // 1. Generate config for the new backed window, capturing live state
         const config = generateBoardConfigFromWindow(windowToBack, get(windows));
-        const configStr = JSON.stringify(config);
+        const frontWindow = get(windows).find(w => w.id === windowToBack.id);
+        config.cloaked = frontWindow ? frontWindow.cloaked : false;
 
         // Get view states for coordinate transformation
         const wv = $windowView;
@@ -1300,59 +1498,86 @@
         const backWorldMidX = ((frontWorldMidX * wv.zoom) + wv.panX - dv.panX) / dv.zoom;
         const backWorldMidY = ((frontWorldMidY * wv.zoom) + wv.panY - dv.panY) / dv.zoom;
 
-        // Calculate the new dimensions for the backed window. The world-space size is adjusted
-        // by the zoom factor change, which makes it visually larger/smaller as requested.
         const zoomFactor = dv.zoom / wv.zoom;
         const newWidth = windowToBack.width * zoomFactor;
         const newHeight = windowToBack.height * zoomFactor;
 
-        // Calculate the new top-left position for the backed window by offsetting from its new midpoint
         const newX = backWorldMidX - newWidth / 2;
         const newY = backWorldMidY - newHeight / 2;
 
+        // Create a representation of the item as it will exist on the back layer
         const tempNewItem = {
-            id: 'new', // Temporary ID
+            id: windowToBack.id, // Use the same ID to allow Svelte to transition the component
             type: 'backed_window',
             x: newX, y: newY,
             width: newWidth, height: newHeight,
-            baseWidth: newWidth, // The initial width before any user scaling on the back layer
+            baseWidth: newWidth, // for scaling
             baseHeight: newHeight,
             scale: 1.0,
-            config: configStr,
+            config: config, // Use the live config object, not a string
         };
 
         // 2. Prepare for collision resolution
-        let frameItems = [...allItems.filter(i => i.type !== 'window'), tempNewItem];
-        const activeItemIds = new Set(['backed_window-new']);
-        const startStates = frameItems.map(i => ({ ...i, config: i.config ? JSON.parse(JSON.stringify(i.config)) : undefined }));
+        let frameItems = [...allItems.filter(i => i.type !== 'window' && i.id !== windowToBack.id), tempNewItem];
+        const activeItemIds = new Set([`backed_window-${windowToBack.id}`]);
+        const startStates = frameItems.map(i => ({ ...i }));
         const pushedItemsMap = new Map();
 
         // 3. Resolve collisions
         const updatedFrameItems = resolveCollisions(frameItems, activeItemIds, startStates, pushedItemsMap);
 
-        // 4. Persist changes
-        const itemsToUpdate = new Set([...activeItemIds, ...pushedItemsMap.keys()]);
-        updatedFrameItems.forEach(item => {
-            const uniqueId = `${item.type}-${item.id}`;
-            if (!itemsToUpdate.has(uniqueId)) return;
+        const backedItem = updatedFrameItems.find(item => item.id === windowToBack.id);
+        if (!backedItem) {
+            console.error("Could not find item to back after collision resolution.");
+            return;
+        }
 
-            if (item.id === 'new') {
-                createBackedWindow(item.config, item.x, item.y, item.width, item.height, item.scale);
-            } else {
-                if (item.type === 'box') {
-                    updateBoxTransform(item.id, item.x, item.y, item.scale);
-                } else if (item.type === 'shortcut') {
-                    updateShortcutTransform(item.id, item.x, item.y, item.scale || 1.0);
-                } else if (item.type === 'backed_window') {
-                    updateBackedWindowTransform(item.id, item.x, item.y, item.scale);
-                }
-            }
+        // 4. *** REVISED ATOMIC UPDATE ***
+        // Remove the window from the front layer and add an optimistic representation
+        // to the back layer in the same tick. This is the key to preserving the component.
+
+        // First, remove from the front.
+        windows.removeWindow(windowToBack.id, { force: true });
+
+        // Then, add a temporary object to the back layer store. This object mimics
+        // the structure of a real backed window from the database.
+        const optimisticBackedWindow = {
+            id: `temp-${Date.now()}`, // Temporary ID, will be replaced by backend response
+            originalGroupId: backedItem.id,
+            config: backedItem.config,
+            x: backedItem.x,
+            y: backedItem.y,
+            width: backedItem.width, // Use base width from tempNewItem
+            height: backedItem.height, // Use base height from tempNewItem
+            scale: backedItem.scale,
+            z_index: 1, // Placeholder
+        };
+        backedWindows.update(bws => [...bws, optimisticBackedWindow]);
+
+        // 5. Persist all changes to the backend asynchronously.
+
+        // The backedItem's config needs to be a string for the backend.
+        const finalConfigStr = JSON.stringify(backedItem.config);
+
+        // Persist the main backed window
+        createBackedWindow(finalConfigStr, backedItem.x, backedItem.y, backedItem.width, backedItem.height, backedItem.scale, backedItem.id);
+
+        // Persist any other items that were pushed during collision resolution
+        const pushedItems = updatedFrameItems.filter(item => {
+            const uniqueId = `${item.type}-${item.id}`;
+            return pushedItemsMap.has(uniqueId);
         });
 
-        // 5. Remove original window
-        windows.removeWindow(windowToBack.id);
+        pushedItems.forEach(item => {
+            if (item.type === 'box') {
+                updateBoxTransform(item.id, item.x, item.y, item.scale);
+            } else if (item.type === 'shortcut') {
+                updateShortcutTransform(item.id, item.x, item.y, item.scale || 1.0);
+            } else if (item.type === 'backed_window') {
+                updateBackedWindowTransform(item.originalBackedId || item.id, item.x, item.y, item.scale);
+            }
+        });
     }
-
 
     onMount(() => {
         // The WebSocket connection is now established in SideKick.svelte
@@ -1367,6 +1592,8 @@
         if (saveViewTimeout) clearTimeout(saveViewTimeout);
         if (controlsTimeout) clearTimeout(controlsTimeout);
         if (desktopMiddleClickTimeout) clearTimeout(desktopMiddleClickTimeout);
+        backedWindowMiddleClickTimeout.forEach(timeout => clearTimeout(timeout));
+        backedWindowLeftClickTimeout.forEach(timeout => clearTimeout(timeout));
         window.removeEventListener('mousemove', handleDesktopMouseMove);
         window.removeEventListener('mouseup', handleDesktopMouseUp);
         window.removeEventListener('mousemove', handleMinimapMouseMove);
@@ -1394,7 +1621,6 @@
         position: relative;
         width: 100%;
         height: 100%;
-        overflow: hidden;
     }
     .desktop-background {
         position: absolute;
@@ -1428,11 +1654,17 @@
         border: 1px solid var(--border-color);
         border-radius: 4px;
         box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        z-index: 10001; /* Above Dash */
+        z-index: 23000;
         display: flex;
         flex-direction: column;
         padding: 4px 0;
         min-width: 120px;
+    }
+
+    .context-menu-separator {
+        height: 1px;
+        background-color: var(--border-color);
+        margin: 4px 0;
     }
 
     .context-menu button {
@@ -1445,8 +1677,14 @@
         font-size: 14px;
     }
 
-    .context-menu button:hover {
+    .context-menu button:not(:disabled):hover {
         background-color: var(--taskbar-button-hover-bg);
+    }
+
+    .context-menu button:disabled {
+        color: var(--text-color-light);
+        cursor: not-allowed;
+        opacity: 0.5;
     }
 
     .desktop-content {
@@ -1475,53 +1713,12 @@
     .boxes-layer > :global(*), .shortcuts-layer > :global(*) {
         pointer-events: auto; /* Children (boxes, shortcuts) are interactive */
     }
-
-    .backed-windows-layer {
+    /* MODIFIED */
+    .windows-container {
         position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
     }
-    .backed-windows-layer > :global(*) {
-        pointer-events: auto; /* Children (boxes, shortcuts) are interactive */
-    }
-
-    .windows-layer {
-        position: absolute;
-        top: 0; left: 0;
-        width: 100%; height: 100%;
-        pointer-events: none;
-    }
-
-    /* Styles for the frameless backed window */
-    .backed-window {
+    .windows-container > :global(*) {
         pointer-events: auto;
-        border: 1px solid var(--border-color);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-        background-color: var(--window-bg);
-        transition: border-color 0.1s ease-in-out, box-shadow 0.1s ease-in-out, opacity 0.2s ease-in-out;
-        position: absolute;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        border-radius: 6px;
-        box-sizing: border-box;
-    }
-    .backed-window.selected {
-        border-color: rgba(52, 152, 219, 0.7);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.3), 0 0 8px rgba(52, 152, 219, 0.6);
-    }
-    .backed-window.interactive {
-        border-color: #f39c12;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.3), 0 0 8px rgba(243, 156, 18, 0.8);
-    }
-    .backed-content-area {
-        width: 100%;
-        height: 100%;
-        overflow: auto;
-        padding: 5px;
-        box-sizing: border-box;
-        pointer-events: none; /* Make content non-interactive by default */
-    }
-    .backed-window.interactive .backed-content-area {
-        pointer-events: auto; /* Enable interaction only when the parent is interactive */
     }
 
     .selection-box {
@@ -1537,7 +1734,7 @@
         position: absolute;
         top: 20px;
         right: 20px;
-        z-index: 10000;
+        z-index: 22000;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -1565,7 +1762,7 @@
         padding: 6px 0;
         cursor: pointer;
         font-size: 12px;
-        transition: background-color 0.2s;
+        transition: background-color: 0.2s;
         height: auto;
         width: auto;
         border-radius: 0;
@@ -1621,7 +1818,7 @@
         font-weight: bold;
         line-height: 1;
         padding: 0;
-        transition: background-color 0.2s, opacity 0.2s;
+        transition: background-color: 0.2s, opacity: 0.2s;
     }
     .view-controls button:not(:disabled):hover {
         background-color: rgba(255, 255, 255, 0.2);
@@ -1674,9 +1871,9 @@
     }
 </style>
 
-<svelte:window 
-    bind:innerWidth 
-    bind:innerHeight 
+<svelte:window
+    bind:innerWidth
+    bind:innerHeight
     on:keydown={e => {
         if (e.key === 'Control' && !e.repeat) ctrlPressed = true;
         if (e.key === 'Shift' && !e.repeat) shiftPressed = true;
@@ -1691,83 +1888,39 @@
     }}
 />
 
-<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop}>
+<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop} style="overflow: hidden;">
     <div class="desktop-background" style:background={backgroundStyle || ''} style:opacity={sceneOpacity}></div>
-    <!-- BACK LAYER -->
-    <div class="desktop-content back-layer" style:transform="translate({$desktopView.panX}px, {$desktopView.panY}px) scale({$desktopView.zoom})">
+    <!-- BACK LAYER (for non-window items) -->
+    <div class="desktop-content back-layer">
         {#if $connectionStatus === 'connected'}
-            <div class="backed-windows-layer">
-                {#each $backedWindows as bw (bw.id)}
-                    {@const config = bw.config}
-                    {@const activeTabConfig = (config.tabs.find(t => t.originalId === config.activeTabId) || config.tabs[0])}
-                    {@const isSelected = $selectedItems.has(`backed_window-${bw.id}`)}
-                    {#if activeTabConfig}
-                        {@const Component = componentMap[activeTabConfig.componentType]}
-                        {#if Component}
-                            {@const tabProps = { ...activeTabConfig, id: activeTabConfig.originalId, groupId: bw.id, isActive: false, isBacked: true, x: bw.x, y: bw.y, width: bw.width, height: bw.height }}
-                            <div
-                                class="backed-window"
-                                class:selected={isSelected}
-                                class:interactive={bw.id === interactiveBackedWindowId}
-                                data-id={bw.id}
-                                data-type="backed_window"
-                                style:left="{bw.x}px"
-                                style:top="{bw.y}px"
-                                style:width="{bw.width * (bw.scale || 1.0)}px"
-                                style:height="{bw.height * (bw.scale || 1.0)}px"
-                                style:z-index="{bw.z_index || 1}"
-                                style:background={backWindowBgStyle}
-                                style:opacity={bw.id === interactiveBackedWindowId ? backWindowSettings?.activeOpacity : backWindowSettings?.inactiveOpacity}
-                                on:contextmenu|preventDefault|stopPropagation={(event) => showBackedWindowContextMenu(event, bw)}
-                                on:wheel={e => {
-                                    if (e.ctrlKey || e.altKey) {
-                                        e.preventDefault();
-                                        const zoomStep = 0.05;
-                                        const delta = e.deltaY < 0 ? zoomStep : -zoomStep;
-                                        const currentScale = bw.scale || 1.0;
-                                        const newScale = Math.max(0.2, currentScale + delta);
-                                        handleItemScaleRequest({ detail: { id: bw.id, newScale, type: 'backed_window' } });
-                                    }
-                                }}
-                            >
-                                <div class="backed-content-area" style:zoom={activeTabConfig.zoom || 1.0}>
-                                    <svelte:component this={Component} {...tabProps} />
-                                </div>
-                            </div>
-                        {/if}
-                    {/if}
-                {/each}
-            </div>
-
-            <div class="shortcuts-layer">
+            <div class="shortcuts-layer" style:z-index={$activeBoxId !== null ? 0 : 'auto'}>
                 {#each $desktopShortcuts as shortcut (shortcut.id)}
                     <Shortcut {...shortcut} on:scale={e => handleItemScaleRequest({ detail: { ...e.detail, type: 'shortcut' } })}/>
                 {/each}
             </div>
             <div class="boxes-layer">
-                {#each $boxes as box (box.id)}
+                {#each displayableBoxes as box (box.id)}
                     <Box {box} on:scale={e => handleItemScaleRequest({ detail: { ...e.detail, type: 'box' } })}/>
                 {/each}
             </div>
         {/if}
     </div>
 
-    <!-- FRONT LAYER for non-maximized windows -->
-    <div class="desktop-content front-layer" style:transform="translate({$windowView.panX}px, {$windowView.panY}px) scale({$windowView.zoom})">
-        <div class="windows-layer">
-            {#each $windows.filter(win => !win.maximized) as win (win.id)}
-                <Window {...win} on:backrequest={() => handleBackRequest(win)} />
-            {/each}
-        </div>
-    </div>
-
-    <!-- Layer for maximized windows, not transformed -->
-    <div class="windows-layer">
-        {#each $windows.filter(win => win.maximized) as win (win.id)}
-            <Window {...win} on:backrequest={() => handleBackRequest(win)} />
+    <!-- UNIFIED WINDOWS CONTAINER -->
+    <div class="windows-container">
+        {#each allRenderableWindows as win (win.id)}
+            <Window
+                {...win}
+                on:backrequest={() => handleBackRequest(win)}
+                on:contextmenubacked={(event) => showBackedWindowContextMenu(event, win.backedWindowObject)}
+                on:backedmouseenterfocus={() => {
+                    interactiveBackedWindowId = win.id;
+                    windows.unfocusAllWindows();
+                }}
+                on:scale={e => handleItemScaleRequest({ detail: { ...e.detail, type: 'backed_window' } })}
+            />
         {/each}
     </div>
-
 
     {#if selectionRect.visible}
         <div
@@ -1829,20 +1982,23 @@
             </div>
             <div class="pan-controls">
                 <button class="pan-up" on:click={() => pan(0, panStep)} title="Pan Up">▲</button>
-                <button class="pan-left" on:click={() => pan(panStep, 0)} title="Pan Left">◀</button>
+                <button class="pan-left" on:click={() => pan(panStep, 0)} title="PaLeft">◀</button>
                 <button class="pan-reset" on:click={resetPan} title="Reset Pan" disabled={isPanResetDisabled}>●</button>
                 <button class="pan-right" on:click={() => pan(-panStep, 0)} title="Pan Right">▶</button>
                 <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
             </div>
             <div class="action-controls">
                 <button class="zoom-reset" on:click={resetView} title="Reset View" disabled={isViewResetDisabled}>Reset</button>
-                <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content" disabled={isBestFit}>Fit</button>
+                <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to C" disabled={isBestFit}>Fit</button>
             </div>
         </div>
     {/if}
 
     {#if contextMenu.visible && !wasPanning}
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
+            <button on:click={handleNewBoxClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Box</button>
+            <button on:click={handleNewShortcutClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Shortcut</button>
+            <div class="context-menu-separator"></div>
             <button on:click={openSettingsMenu}>Settings...</button>
         </div>
     {/if}

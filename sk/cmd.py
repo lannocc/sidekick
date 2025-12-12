@@ -13,10 +13,9 @@ import os
 from datetime import datetime
 
 print = print_flush
-ENCODING = tiktoken.get_encoding('cl100k_base')
 
 
-def _prepare_attachment(shot, file, package, quiet):
+def _prepare_attachment(shot, file, package, quiet, use_openai=False):
     """Handles screenshot, file, and package attachments, ensuring only one is used."""
     attachment_content = ""
     final_file_path = file
@@ -31,7 +30,7 @@ def _prepare_attachment(shot, file, package, quiet):
             print(f'SAVED SCREENSHOT to: {final_file_path}')
 
     elif package:
-        final_file_path, counts = package_directory(package)
+        final_file_path, counts = package_directory(package, use_openai=use_openai)
         if not quiet:
             print(f'PACKAGED to: {final_file_path}')
             if isinstance(counts, list):
@@ -207,7 +206,7 @@ def main(args, called=''):
                 print(f'!!! path not found or is not a regular file/directory: {path}')
                 return
 
-        final_file_path, attachment_content = _prepare_attachment(shot, file, pkg or None, quiet)
+        final_file_path, attachment_content = _prepare_attachment(shot, file, pkg or None, quiet, use_openai=use_openai)
         if final_file_path is None and attachment_content is None:
             # Error occurred and was printed in helper
             return
@@ -215,7 +214,7 @@ def main(args, called=''):
         prompt = None # Prompt is now handled interactively or via pipe
         if task:
             do_task(prompt, file=final_file_path, attachment_content=attachment_content, quiet=quiet,
-                         chatter=chatter, model=model)
+                         chatter=chatter, model=model, use_openai=use_openai)
         else:
             ask_question(prompt, file=final_file_path, attachment_content=attachment_content,
                            mdlang=lang, mdsave=save, work_file=save_work, quiet=quiet,
@@ -269,21 +268,33 @@ def version(args):
 
 
 def help_cmds(args):
+    if args:
+        sub_cmd = args[0]
+        if sub_cmd in COMMANDS:
+            cmd_handler = COMMANDS[sub_cmd][0]
+            cmd_handler(['--help'])
+            return
+        else:
+            print(f'!!! unknown command: {sub_cmd}')
+            print('Try `sk help` for a list of commands.')
+            return
+
     print('SideKick AI Admin')
     print()
     print('COMMAND USAGE:')
     print('     sk [options] <command> [args...]')
     print()
     print('Use `sk` to command and evaluate at a modular level.')
+    print('For help on a specific command, use `sk help <command>`.')
     print()
     print('The following commands are available:')
     for name, cmd in COMMANDS.items():
         print(f'   {name} :: {cmd[1]}')
     print()
     print('SEE ALSO:')
-    print('    ask -h')
-    print('   task -h')
-    print('   iosk')
+    print('        ask -h')
+    print('       task -h')
+    print('       iosk')
 
 
 def agent(args):
@@ -300,6 +311,11 @@ def action(args):
 
 def ticket(args):
     from . import ticket
+
+    if args and (args[0] == '--help' or args[0] == '-h'):
+        print("usage: sk ticket [<ticket-number>]")
+        print("\nView ticket details. If no ticket number is provided, you will be prompted.")
+        return
 
     if args:
         if len(args) != 1:
@@ -327,6 +343,7 @@ def tree(args):
 
     md = False
     count = False
+    use_openai = False
 
     while args and args[0].startswith('-'):
         op = args[0]
@@ -339,9 +356,11 @@ def tree(args):
             print('    sk [general-opts] tree [tree-opts] <directory>')
             print()
             print('The following tree command options are available:')
-            print('   -h  :: help for tree command (also --help)')
-            print('   -md :: markdown compatible output')
-            print('   -c  :: count bytes and tokens')
+            print('   -h       :: help for tree command (also --help)')
+            print('   -md      :: markdown compatible output')
+            print('   -c       :: count bytes and tokens')
+            print('   --google :: use google for token counting (default)')
+            print('   --openai :: use openai (tiktoken) for token counting')
             print()
             print('See `sk -h` for general options.')
             return
@@ -351,6 +370,12 @@ def tree(args):
 
         elif op == '-c':
             count = True
+
+        elif op == '--google':
+            use_openai = False
+
+        elif op == '--openai':
+            use_openai = True
 
         else:
             print(f'!!! unknown tree option: {op}')
@@ -371,12 +396,18 @@ def tree(args):
         print('  <<')
         print()
 
-    print(get_directory_tree_as_text(path, markdown=md, count=count))
+    print(get_directory_tree_as_text(path, markdown=md, count=count, use_openai=use_openai))
 
 
 def md(args):
     from .util import get_md_code_block
     import sys
+
+    if args and (args[0] == '--help' or args[0] == '-h'):
+        print("usage: sk md [<language>]")
+        print("\nExtract a markdown code block from stdin.")
+        print("If language is not provided, it extracts the first code block found.")
+        return
 
     if args:
         if len(args) != 1:
@@ -406,10 +437,15 @@ def iosk(args):
     iosk_run(args)
 
 
-def local(args):
-    from .local import main as local_main
+def bridge(args):
+    from .bridge import main as bridge_main
 
-    local_main(args)
+    bridge_main(args)
+
+
+def bridge_entry_point():
+    import sys
+    bridge(sys.argv[1:])
 
 
 OPTIONS = {
@@ -461,6 +497,6 @@ COMMANDS = {
     #    'ask commands'),
     'iosk': (iosk,
         'run iosk system'),
-    'local': (local,
-        'run local service for SKYBOARD'),
+    'bridge': (bridge,
+        'SKYBRIDGE local backend service for SKYBOARD'),
 }

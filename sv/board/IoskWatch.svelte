@@ -2,9 +2,9 @@
 <script>
     import { onMount, onDestroy, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { fileSystemRequests, fileSystemResponses } from './iosk.js';
-    import { windows, activeConsoles } from './windows.js';
-    import { parseAnsi } from './ansi.js';
+    import { fileSystemRequests, fileSystemResponses } from '../iosk.js';
+    import { windows, activeConsoles } from '../windows.js';
+    import { parseAnsi } from '../ansi.js';
 
     export let id; // tab id
     export let groupId;

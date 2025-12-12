@@ -4,9 +4,9 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter } from './windows.js';
-    import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems } from './desktop.js';
-    import { createBox, connectionStatus } from './local.js';
+    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, newBoxesWindow, newCamera } from './windows.js';
+    import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled, componentIconMap } from './desktop.js';
+    import { connectionStatus, switchToBox, boxes } from './bridge.js';
     import Clock from './Clock.svelte';
     import { get } from 'svelte/store';
 
@@ -15,10 +15,14 @@
 
     let showWindowsMenu = false; // For Windows list menu
     let windowsButton;
-    
+
     let screenWidth;
     let menuBackgroundStyle = '';
-    
+
+    // For box hierarchy and active item highlighting
+    let boxHierarchy = [];
+    let activeWindowId = null;
+
     $: tbSettings = $desktopSettings.sky?.frame;
     $: tbHeight = tbSettings?.height || 40;
 
@@ -30,6 +34,33 @@
         } else {
             menuBackgroundStyle = `background-color: ${tbSettings.bgColor};`;
         }
+    }
+
+    $: {
+        // Calculate box hierarchy path
+        const path = [];
+        if ($boxes.length > 0) {
+            const boxMap = new Map($boxes.map(b => [b.id, b]));
+            let current = boxMap.get($currentBoxId);
+            while (current) {
+                path.unshift(current);
+                current = boxMap.get(current.parent_box_id);
+            }
+            // Ensure root is present if it's not the start of the path
+            if (path.length === 0) {
+                 const rootBox = boxMap.get(0);
+                 if (rootBox) path.push(rootBox);
+            } else if (path[0].id !== 0) {
+                 const rootBox = boxMap.get(0);
+                 if (rootBox && !path.find(p => p.id === 0)) {
+                     path.unshift(rootBox);
+                 }
+            }
+        }
+        boxHierarchy = path;
+
+        // Find active window
+        activeWindowId = ($windows.find(w => w.isActive))?.id;
     }
 
     function generateBgStyle(bgSettings) {
@@ -98,6 +129,11 @@
         };
     }
 
+    function getActiveTab(win) {
+        if (!win || !win.tabs) return null;
+        return win.tabs.find(t => t.id === win.activeTabId) || win.tabs[0];
+    }
+
     function getActiveTabTitle(win) {
         if (!win || !win.tabs) return '...';
         const activeTab = win.tabs.find(t => t.id === win.activeTabId);
@@ -118,12 +154,12 @@
 
         // The width of the desktop container in screen pixels
         const screenDesktopWidth = screenWidth - (2 * frameWidth);
-        
+
         // Center of window relative to the desktop container
         const windowCenterInDesktop = screenWinX + screenWinWidth / 2;
 
         // Progress of the window's center across the desktop container
-        const progress = screenDesktopWidth > 0 
+        const progress = screenDesktopWidth > 0
             ? Math.max(0, Math.min(1, windowCenterInDesktop / screenDesktopWidth))
             : 0.5;
 
@@ -132,31 +168,40 @@
         const rightAlignedPos = screenWinX + screenWinWidth - buttonWidth + frameWidth;
 
         let idealLeft = leftAlignedPos * (1 - progress) + rightAlignedPos * progress;
-        
+
         // Clamp the ideal position to be above the desktop area, respecting side frames.
         // This provides a much better starting point for the collision logic.
         const desktopScreenRight = screenWidth - frameWidth;
         idealLeft = Math.max(frameWidth, Math.min(idealLeft, desktopScreenRight - buttonWidth));
-        
+
         return idealLeft;
     }
 
     function getIdealButtonTop(win, buttonHeight) {
         // Fix #1: Use restored geometry for maximized windows
         const winY = win.maximized && typeof win.prevY === 'number' ? win.prevY : win.y;
+        const winHeight = win.maximized && typeof win.prevHeight === 'number' ? win.prevHeight : win.height;
 
         const frameSettings = get(desktopSettings).sky?.frame;
         const th = frameSettings?.height ?? 40;
         const bottomFrameHeight = frameSettings?.width ?? 0;
         const screenWinY = winY * $windowView.zoom + $windowView.panY;
+        const screenWinHeight = (winHeight || 0) * $windowView.zoom;
         const screenDesktopHeight = window.innerHeight - th - bottomFrameHeight;
-        
-        const progress = screenDesktopHeight > 0
-            ? Math.max(0, Math.min(1, screenWinY / screenDesktopHeight))
-            : 0.5;
-        const availableSpace = th - buttonHeight;
-        const idealTop = progress * availableSpace;
-        
+
+        // This logic treats the button as a minimap of the window's vertical position
+        // by mapping the window's movable range to the button's movable range.
+        const windowMovableSpace = screenDesktopHeight - screenWinHeight;
+        const buttonMovableSpace = th - buttonHeight;
+
+        if (windowMovableSpace <= 0 || buttonMovableSpace <= 0) {
+            return 0; // Default to top if no space to move
+        }
+
+        // Calculate progress of the window within its movable space
+        const progress = Math.max(0, Math.min(1, screenWinY / windowMovableSpace));
+        const idealTop = progress * buttonMovableSpace;
+
         return Math.max(0, Math.min(idealTop, th - buttonHeight));
     }
 
@@ -199,12 +244,12 @@
                 for (let i = 0; i < 50; i++) { // Failsafe iteration limit
                     top = Math.max(0, Math.min(top, tbHeight - item.height)); // Clamp top
                     const currentRect = { left, top, right: left + item.width, bottom: top + item.height };
-                    
+
                     const collisionIndex = placedRects.findIndex(r => intersects(currentRect, r));
                     if (collisionIndex === -1) break; // Found a spot
 
                     const collision = placedRects[collisionIndex];
-                    
+
                     if (collisionIndex === 2) { // 0: left, 1: center, 2: right
                         left = collision.left - item.width; // Push left of the boundary
                         top = item.idealTop; // Reset vertical position to try again
@@ -223,11 +268,11 @@
                         top = collision.bottom + GAP; // Vertically blocked, move down to stack
                     }
                 }
-                
+
                 newLayouts[item.id] = { left, top };
                 placedRects.push({ left, top, right: left + item.width, bottom: top + item.height });
             }
-            
+
             taskItemLayouts = newLayouts;
         }
     } else if ($windows.length === 0) {
@@ -249,7 +294,7 @@
                 windows.toggleCloak(win.id);
                 return;
             }
-            
+
             const timeout = setTimeout(() => {
                 middleClickTimeouts.delete(win.id);
             }, 250);
@@ -263,7 +308,7 @@
                 if (Math.abs(dx) > 3 || Math.abs(dy) > 3) { // Drag threshold
                     clearTimeout(middleClickTimeouts.get(win.id));
                     middleClickTimeouts.delete(win.id);
-                    
+
                     window.removeEventListener('mousemove', onMove);
                     window.removeEventListener('mouseup', onUp);
 
@@ -279,7 +324,7 @@
 
                     window.addEventListener('mousemove', handleDragMove);
                     window.addEventListener('mouseup', handleDragEnd, { once: true });
-                    
+
                     handleDragMove(moveEvent);
                 }
             };
@@ -287,7 +332,7 @@
             const onUp = () => {
                 window.removeEventListener('mousemove', onMove);
             };
-            
+
             window.addEventListener('mousemove', onMove);
             // Fix #1: Make onUp listener self-removing for robustness
             window.addEventListener('mouseup', onUp, { once: true });
@@ -310,22 +355,30 @@
         if (dragInfo.isDragging) {
             event.preventDefault(); // Prevent text selection etc. only when dragging
             const view = get(windowView);
+            const win = dragInfo.win;
 
             const frameSettings = get(desktopSettings).sky?.frame;
             const th = frameSettings?.height ?? 40;
             const bottomFrameHeight = frameSettings?.width ?? 0;
-            const buttonSize = taskItemSizes.get(dragInfo.win.id) || { width: 100, height: 28 };
+            const buttonSize = taskItemSizes.get(win.id) || { width: 100, height: 28 };
 
-            // The button's vertical position is a "minimap" of the window's position on the desktop.
             // To make the button track the mouse 1:1, we need to scale the window's vertical movement.
+            // This scale factor is the inverse of the scaling used to position the button.
             const screenDesktopHeight = window.innerHeight - th - bottomFrameHeight;
-            const availableVSpace = th - buttonSize.height;
-            const scaleY = availableVSpace > 0 ? screenDesktopHeight / availableVSpace : 1;
+            const buttonMovableSpace = th - buttonSize.height;
+
+            const winHeight = win.maximized && typeof win.prevHeight === 'number' ? win.prevHeight : win.height;
+            const screenWinHeight = (winHeight || 0) * view.zoom;
+            const windowMovableSpace = screenDesktopHeight - screenWinHeight;
+
+            const scaleY = buttonMovableSpace > 0 && windowMovableSpace > 0
+                ? windowMovableSpace / buttonMovableSpace
+                : 1;
 
             const newX = dragInfo.initialWinX + dx / view.zoom;
             const newY = dragInfo.initialWinY + (dy * scaleY) / view.zoom;
 
-            windows.updateWindowProps(dragInfo.win.id, {
+            windows.updateWindowProps(win.id, {
                 x: newX,
                 y: newY,
                 maximized: false,
@@ -362,6 +415,19 @@
         }
     }
 
+    function handleCurrentBoxClick() {
+        const allWindows = get(windows);
+        // If there are any windows that are not minimized, minimize all. Otherwise, restore all.
+        const shouldMinimize = allWindows.some(w => !w.minimized);
+
+        if (shouldMinimize) {
+            windows.minimizeAllWindows();
+        } else {
+            windows.restoreAllWindows();
+        }
+        showWindowsMenu = false;
+    }
+
     function handleWindowClick(event) {
         if (showMenu && startButton && !startButton.contains(event.target)) showMenu = false;
         if (showWindowsMenu && windowsButton && !windowsButton.contains(event.target)) showWindowsMenu = false;
@@ -374,27 +440,8 @@
     function launchLocalFileExplorer(props = {}) { newLocalFileExplorer(props); showMenu = false; }
     function launchAsk(props = {}) { newAskWindow(props); showMenu = false; }
 
-    function newBox() {
-        const name = prompt("Enter a name for the new Box:", "My Project Box");
-        if (!name) return;
-
-        // For simplicity, this implementation only handles 'local' type boxes.
-        const context = prompt("Enter the local filesystem path for the Box:", "/home/user/project");
-        if (!context) return;
-
-        createBox(name, 'local', context);
-    }
-
     function toggleSkyCloak() {
-        desktopSettings.update(s => {
-            if (s.sky.cloak.opacity > 0) {
-                s.sky.cloak.lastOpacity = s.sky.cloak.opacity;
-                s.sky.cloak.opacity = 0;
-            } else {
-                s.sky.cloak.opacity = s.sky.cloak.lastOpacity || 0.8;
-            }
-            return s;
-        });
+        skyCloakEnabled.update(v => !v);
     }
 
     let middleClickTimeout;
@@ -411,6 +458,12 @@
                 middleClickTimeout = null;
             }, 300);
         }
+    }
+
+    function handleTaskbarWheel(event) {
+        if (event.target !== event.currentTarget) return;
+        event.preventDefault();
+        toggleSkyCloak();
     }
 
     onMount(() => {
@@ -441,8 +494,14 @@
     .taskbar-left > .windows-button:first-child:hover { background-color: #e0443e; }
     .taskbar-left > .windows-button:nth-child(2) { background-color: #ffbd2e; border-color: #e0a320; color: white; }
     .taskbar-left > .windows-button:nth-child(2):hover { background-color: #e0a320; }
-    .start-button { background-color: #3498db; border: 1px solid #2980b9; color: white; transition: box-shadow 0.3s ease-in-out; }
+    .taskbar-left > .windows-button:nth-child(2).active {
+        background-color: #27ae60; /* A different green to indicate active state */
+        border-color: #229954;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.25);
+    }
+    .start-button { background-color: #3498db; border: 1px solid #2980b9; color: white; transition: box-shadow 0.3s ease-in-out; padding: 4px; }
     .start-button:hover { background-color: #2980b9; }
+    .start-button img { height: 100%; display: block; object-fit: contain; }
     @keyframes sky-glow {
         50% { border-color: #5dade2; box-shadow: 0 0 12px 3px #5dade2; }
     }
@@ -457,35 +516,180 @@
         font-weight: bold;
         cursor: pointer;
         height: calc(var(--tb-height, 40px) * 0.7);
-        padding: 0 calc(var(--tb-height, 40px) * 0.25);
+        width: calc(var(--tb-height, 40px) * 0.7);
+        box-sizing: border-box;
         font-size: calc(var(--tb-height, 40px) * 0.35);
         border-radius: calc(var(--tb-height, 40px) * 0.1);
         border: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     .windows-button { background-color: var(--taskbar-button-bg); color: var(--taskbar-text); }
     .windows-button:hover { background-color: var(--taskbar-button-hover-bg); }
     .windows-button.active { background-color: var(--taskbar-button-hover-bg); }
 
-    .start-menu, .windows-menu { position: absolute; top: calc(var(--tb-height, 40px) + 5px); background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 10000; display: flex; flex-direction: column; width: 200px; }
-    .start-menu { right: 10px; }
-    .windows-menu { left: 10px; max-height: 300px; overflow-y: auto; }
-    .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 10px 15px; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+    .start-menu, .windows-menu { position: absolute; top: calc(var(--tb-height, 40px) + 5px); background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 21500; }
+    .start-menu {
+        top: calc(var(--tb-height, 40px) * 0.85);
+        right: 0;
+        display: grid;
+        grid-template-columns: repeat(5, 52px);
+        grid-template-rows: repeat(2, 52px);
+        gap: 8px;
+        padding: 8px;
+        width: auto;
+    }
+    .windows-menu {
+        top: calc(var(--tb-height, 40px) * 0.85);
+        left: 0;
+        max-height: 300px;
+        overflow-y: auto; display: flex; flex-direction: column; width: 200px;
+    }
+    .menu-item-row {
+        display: flex;
+        align-items: stretch;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .menu-item-row:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .menu-item-close {
+        background-color: #ff5f56;
+        border: none;
+        color: white;
+        cursor: pointer;
+        padding: 0 12px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .menu-item-close:hover {
+        background-color: #e0443e;
+    }
+    .menu-item-icon {
+        margin-right: 8px;
+        width: 16px;
+        height: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 16px;
+    }
+    img.menu-item-icon {
+        object-fit: contain;
+    }
+    /* New button for navigating up box hierarchy */
+    .menu-item-up {
+        background-color: #ffbd2e;
+        border: none;
+        color: #333;
+        cursor: pointer;
+        padding: 0 12px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2em;
+    }
+    .menu-item-up:hover {
+        background-color: #e0a320;
+    }
+    .menu-item-row .menu-item {
+        border-bottom: none;
+        flex-grow: 1;
+    }
+    .menu-item-row:hover .menu-item {
+        background-color: transparent;
+    }
+    .menu-item { background: none; border: none; color: var(--taskbar-text); padding: 10px 15px; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; }
     .menu-item:last-child { border-bottom: none; }
     .menu-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .menu-item:disabled { color: #7f8c8d; cursor: not-allowed; }
+    /* New style for bolding active items */
+    .menu-item.bold {
+        font-weight: bold;
+    }
+    .menu-item.bold:disabled {
+        color: var(--taskbar-text);
+        opacity: 1;
+    }
+    .start-menu .menu-item {
+        position: relative;
+        padding: 0;
+        text-align: center;
+        border-bottom: none;
+        border-radius: 6px;
+        font-size: 26px;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .start-menu .menu-item:last-child {
+        border-bottom: none;
+    }
+    .start-menu .menu-item:disabled {
+        opacity: 0.5;
+    }
+    .start-menu .menu-item:disabled:hover {
+        background-color: transparent;
+    }
+    .skybridge-overlay {
+        position: absolute;
+        top: calc(8px + 52px + 8px); /* Corresponds to start-menu padding + 1 row + 1 gap */
+        left: 8px; /* Corresponds to start-menu padding */
+        width: calc(5 * 52px + 4 * 8px); /* 5 columns + 4 gaps */
+        height: 52px; /* 1 row */
+        background-color: rgba(30, 30, 30, 0.33);
+        backdrop-filter: blur(1px);
+        color: white;
+        font-weight: bold;
+        font-size: 13px;
+        letter-spacing: 0.5px;
+        border-radius: 6px;
+        z-index: 5;
+        pointer-events: none; /* Let clicks pass through to disabled buttons */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .menu-badge {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 16px;
+        height: 16px;
+    }
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
     .menu-item-empty { padding: 10px 15px; color: #7f8c8d; font-style: italic; }
-    .menu-item.close-all { color: #e74c3c; border-top: 1px solid var(--border-color); border-bottom: none; }
-    .menu-item.close-all:hover { background-color: #c0392b; color: white; }
+    .close-all-row {
+        cursor: pointer;
+        border-top: 1px solid var(--border-color);
+        border-bottom: none;
+    }
+    .close-all-row .menu-item {
+        color: #e74c3c;
+        font-weight: bold;
+        flex-grow: 1;
+    }
+    .close-all-row:hover {
+        background-color: #c0392b;
+    }
+    .close-all-row:hover .menu-item {
+        color: white;
+    }
     .start-button, .windows-list-button { position: relative; }
     .start-button::after, .windows-list-button::after { content: ''; position: absolute; bottom: 0px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
     .start-button::after { right: 5px; }
     .windows-list-button::after { left: 5px; }
-    
+
     /* Scalable clock */
     .clock-button { background: none; border: none; color: inherit; padding: 0; cursor: pointer; position: relative; border-radius: 4px; display: flex; align-items: center; justify-content: center; width: calc(var(--tb-height, 40px) - 6px); height: calc(var(--tb-height, 40px) - 6px); }
     .clock-button:hover { background-color: var(--taskbar-button-hover-bg); }
-    
+
     .notice-badge { position: absolute; top: 0px; right: 0px; background-color: #e74c3c; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; font-weight: bold; display: flex; align-items: center; justify-content: center; line-height: 1; border: 1px solid var(--taskbar-bg); }
 
     /* New styles for tab representation */
@@ -497,20 +701,81 @@
 
 <svelte:window bind:innerWidth={screenWidth} />
 
-<div class="taskbar" on:mousedown={handleTaskbarMouseDown} style="--tb-height: {tbHeight}px">
+<div class="taskbar" on:mousedown={handleTaskbarMouseDown} on:wheel={handleTaskbarWheel} style="--tb-height: {tbHeight}px">
     <div class="taskbar-left" bind:this={leftSectionEl}>
+        <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>✕</button>
         <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">&mdash;</button>
-        <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>W~</button>
         {#if showWindowsMenu}
             <div class="windows-menu" style={menuBackgroundStyle}>
+                {#each boxHierarchy as box, i (box.id)}
+                    {@const isCurrentBox = box.id === $currentBoxId}
+                    {@const parentBox = i > 0 ? boxHierarchy[i-1] : null}
+                    <div class="menu-item-row">
+                        {#if i === 0}
+                            <button class="menu-item" 
+                                style="padding-left: 15px;"
+                                class:bold={isCurrentBox}
+                                disabled={!isCurrentBox && $connectionStatus !== 'connected'}
+                                on:click={() => {
+                                    if (isCurrentBox) {
+                                        handleCurrentBoxClick();
+                                    } else if ($connectionStatus === 'connected') {
+                                        switchToBox(box.id);
+                                        showWindowsMenu = false;
+                                    }
+                                }}>
+                                <img src="/skybox.png" alt="" class="menu-item-icon" />
+                                {box.name || 'Main Desktop'}
+                            </button>
+                        {:else}
+                            <button type="button" class="menu-item-up" 
+                                on:click={() => { if ($connectionStatus === 'connected') { switchToBox(parentBox.id); showWindowsMenu = false; } }} 
+                                disabled={$connectionStatus !== 'connected'}
+                                title="Return to {parentBox.name}">
+                                ⬑
+                            </button>
+                            <button type="button" class="menu-item"
+                                style="padding-left: {15 + (i - 1) * 15}px;"
+                                class:bold={isCurrentBox}
+                                disabled={!isCurrentBox && $connectionStatus !== 'connected'}
+                                on:click={() => {
+                                    if (isCurrentBox) {
+                                        handleCurrentBoxClick();
+                                    } else if ($connectionStatus === 'connected') {
+                                        switchToBox(box.id);
+                                        showWindowsMenu = false;
+                                    }
+                                }}>
+                                <img src="/skybox.png" alt="" class="menu-item-icon" />
+                                {box.name}
+                            </button>
+                        {/if}
+                    </div>
+                {/each}
+
+                {#if $windows.length > 0}
+                    <div class="menu-separator"></div>
+                {/if}
+
                 {#each $windows.sort((a, b) => a.id - b.id) as win (win.id)}
-                    <button class="menu-item" on:click={() => { if ($dashActive) dashActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
-                        {getActiveTabTitle(win)}
-                    </button>
+                    {@const activeTab = getActiveTab(win)}
+                    <div class="menu-item-row">
+                        <button class="menu-item-close" on:click={() => windows.removeWindow(win.id)} title="Close window">✕</button>
+                        <button class="menu-item" 
+                            class:bold={win.id === activeWindowId}
+                            on:click={() => { if ($dashActive) dashActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
+                            {#if activeTab}<span class="menu-item-icon">{componentIconMap[activeTab.componentName] || componentIconMap.default}</span>{/if}
+                            {getActiveTabTitle(win)}
+                        </button>
+                    </div>
                 {:else}
                     <span class="menu-item-empty">No open windows</span>
                 {/each}
-                {#if $windows.length > 0}<button class="menu-item close-all" on:click={handleCloseAllClick}>Close All</button>{/if}
+                {#if $windows.length > 0}
+                    <div class="menu-item-row close-all-row" on:click={handleCloseAllClick}>
+                        <button type="button" class="menu-item">Close All Windows</button>
+                    </div>
+                {/if}
             </div>
         {/if}
     </div>
@@ -570,21 +835,43 @@
         </button>
     </div>
     <div class="taskbar-right" bind:this={rightSectionEl}>
-        <button class="quick-launch-button" on:click|stopPropagation={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">$+</button>
-        <button class="start-button" class:connected={$connectionStatus === 'connected'} bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }}>SKY</button>
+        <button class="quick-launch-button" on:click|stopPropagation={(e) => { if ($dashActive) dashActive.set(false); /*launchIosk({ sourceEvent: e });*/ }} title="Coming Soon...">&#9632;</button>
+        <button class="start-button" class:connected={$connectionStatus === 'connected'} bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }} title="SKYBOARD Menu"><img src="/favicon.png" alt="SKYBOARDS"></button>
         {#if showMenu}
             <div class="start-menu" style={menuBackgroundStyle}>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchSettings({ sourceEvent: e }); }}>Settings</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }}>IOSK Connection</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebBrowser({ sourceEvent: e }); showMenu = false; }}>Web Browser</button>
-                <div class="menu-separator"></div>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBox(); showMenu = false; }} disabled={$connectionStatus !== 'connected'}>New Box...</button>
-                <div class="menu-separator"></div>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'}>Ask</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalTerminal({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'}>Terminal</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'}>Files</button>
-                <div class="menu-separator"></div>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchCalculator({ sourceEvent: e }); }}>Calculator</button>
+                {#if $connectionStatus !== 'connected'}
+                    <div class="skybridge-overlay">SKYBRIDGE REQUIRED</div>
+                {/if}
+                <!-- Top Row -->
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchSettings({ sourceEvent: e }); }} title="Settings">⚙️</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchCalculator({ sourceEvent: e }); }} title="Calculator">🧮</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newCamera({ sourceEvent: e }); showMenu = false; }} title="Camera">📸</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebBrowser({ sourceEvent: e }); showMenu = false; }} title="Web Browser">🌐</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">
+                    🖥️
+                    <img class="menu-badge" src="/iosk.png" alt="IOSK" />
+                </button>
+
+                <!-- Bottom Row -->
+                <div />
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Ask">?</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBoxesWindow({ sourceEvent: e }); showMenu = false; }} disabled={$connectionStatus !== 'connected'} title="Boxes">📦</button>
+                <button class="menu-item" on:click={(e) => { 
+                    if ($dashActive) dashActive.set(false);
+                    const props = { sourceEvent: e };
+                    if ($currentBox && $currentBox.id !== 0) {
+                        props.initialPath = $currentBox.context;
+                        props.title = `Files - ${$currentBox.name}`;
+                    }
+                    launchLocalFileExplorer(props); }} disabled={$connectionStatus !== 'connected'} title="Files">📁</button>
+                <button class="menu-item" on:click={(e) => { 
+                    if ($dashActive) dashActive.set(false);
+                    const props = { sourceEvent: e };
+                    if ($currentBox && $currentBox.id !== 0) {
+                        props.initialPath = $currentBox.context;
+                        props.title = `Terminal - ${$currentBox.name}`;
+                    }
+                    launchLocalTerminal(props); }} disabled={$connectionStatus !== 'connected'} title="Terminal">&gt;_</button>
             </div>
         {/if}
     </div>

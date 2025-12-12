@@ -1,7 +1,7 @@
 # Copyright (C) 2025 LANNOCC
 # @%@~LICENSE~@%@
 
-from .config import CHROME_PROFILE
+from . import config
 
 from sys import stdout
 import os
@@ -10,12 +10,34 @@ import platform
 import tempfile
 import time
 import re
+import tiktoken
 
 
 CODEBLOCK_REGEX = re.compile(r'```(?P<language>\w*?)\n(?P<code>.*?)\n```',
                              re.DOTALL)
 
 BYTES_SEPARATOR = '\n___________:________'
+TIKTOKEN_ENCODER = tiktoken.get_encoding('cl100k_base')
+
+
+def count_tokens(text, use_openai=False):
+    """Counts tokens using Google's API or tiktoken as a fallback/option."""
+    if not use_openai:
+        try:
+            import google.generativeai as genai
+            # This is a module-level configuration. Calling it multiple times is safe.
+            genai.configure(api_key=config.GEMINI_API_KEY, transport='rest')
+
+            # The model used for counting shouldn't matter too much.
+            model = genai.GenerativeModel(config.GEMINI_MODEL_QUICK_2)
+            response = model.count_tokens(text)
+            return response.total_tokens
+        except (ImportError, AttributeError, Exception):
+            # Fallback to tiktoken if Google API fails for any reason
+            # (e.g., package not installed, API key missing, network error)
+            pass
+
+    return len(TIKTOKEN_ENCODER.encode(text))
 
 
 def print_flush(*args, **kwargs):
@@ -53,7 +75,7 @@ def open_browser(url):
         raise RuntimeError('Could not find Google Chrome')
 
     proc = subprocess.Popen([chrome_path,
-                             f'--profile-directory={CHROME_PROFILE}',
+                             f'--profile-directory={config.CHROME_PROFILE}',
                              '--start-fullscreen', '--new-window', url],
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
@@ -113,9 +135,7 @@ def is_ignorable_path(item, ignores=[ ]):
                 or item in ignores
 
 
-def get_directory_tree_as_text(path, indent='', markdown=False, count=False, dirs_only=False):
-    import tiktoken
-
+def get_directory_tree_as_text(path, indent='', markdown=False, count=False, dirs_only=False, use_openai=False):
     text = ''
     try:
         items = os.listdir(path)
@@ -160,7 +180,8 @@ def get_directory_tree_as_text(path, indent='', markdown=False, count=False, dir
             text += get_directory_tree_as_text(full_path, new_indent,
                                                markdown=markdown,
                                                count=False,
-                                               dirs_only=dirs_only)
+                                               dirs_only=dirs_only,
+                                               use_openai=use_openai)
 
     if count:
         # The 'data' for counting includes the tree structure text itself...
@@ -172,8 +193,8 @@ def get_directory_tree_as_text(path, indent='', markdown=False, count=False, dir
 
         text +=  BYTES_SEPARATOR
         text += f'\nTotal Bytes: {len(data_bytes):,}'
-        tokens = tiktoken.get_encoding('cl100k_base').encode(data)
-        text += f'\nEst. Tokens: {len(tokens):,}'
+        tokens = count_tokens(data, use_openai=use_openai)
+        text += f'\nEst. Tokens: {tokens:,}'
 
     return text
 
@@ -230,8 +251,7 @@ def get_directory_contents_as_text(path):
     return text
 
 
-def package_directory(path, label='project'): # path can be a str or list of str
-    import tiktoken
+def package_directory(path, label='project', use_openai=False): # path can be a str or list of str
     fd, name = tempfile.mkstemp(prefix='sidekick-package-', suffix='.txt')
 
     paths = path if isinstance(path, list) else [ path ]
@@ -251,8 +271,8 @@ def package_directory(path, label='project'): # path can be a str or list of str
             content_buffer[p] = {'type': 'file', 'content': content_text}
 
         data_bytes = full_data_for_count.encode('utf-8')
-        tokens = tiktoken.get_encoding('cl100k_base').encode(full_data_for_count)
-        count_str = f'\nTotal Bytes: {len(data_bytes):,}\nEst. Tokens: {len(tokens):,}'
+        tokens = count_tokens(full_data_for_count, use_openai=use_openai)
+        count_str = f'\nTotal Bytes: {len(data_bytes):,}\nEst. Tokens: {tokens:,}'
         counts.append(count_str)
 
     # Second pass: write the collected content to the temp file

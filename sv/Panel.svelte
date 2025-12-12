@@ -3,6 +3,8 @@
   @%@~LICENSE~@%@
 -->
 <script>
+    import { componentIconMap } from './desktop.js';
+
     export let board_type;
     export let board_config;
 
@@ -10,7 +12,8 @@
     let previewScale = 1;
     let previewDesktop = { width: 0, height: 0, top: 0, left: 0 };
 
-    $: if (board_type === 'dash' && board_config && containerEl) {
+    //$: if (board_type === 'dash' && board_config && containerEl) {
+    $: if (board_config && containerEl) {
         const savedDesktopWidth = board_config.desktop?.width || 1920;
         const savedDesktopHeight = board_config.desktop?.height || 1080;
         const scaleX = containerEl.clientWidth / savedDesktopWidth;
@@ -24,6 +27,10 @@
             top: (containerEl.clientHeight - scaledHeight) / 2
         };
     }
+
+    function getIcon(componentName) {
+        return componentIconMap[componentName] || componentIconMap.default;
+    }
 </script>
 
 <style>
@@ -35,14 +42,38 @@
     .mini-title-bar { flex-shrink: 0; display: flex; background-color: rgba(0,0,0,0.2); overflow: hidden; height: 20px; }
     .mini-tab { padding: 0 5px; color: rgba(255, 255, 255, 0.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; border-right: 1px solid rgba(0,0,0,0.3); line-height: 20px; }
     .mini-tab.active { font-weight: bold; color: white; background-color: rgba(255,255,255,0.1); }
-    .mini-content { flex-grow: 1; }
+    .mini-content {
+        flex-grow: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 5px;
+        padding: 5px;
+        overflow: hidden;
+    }
+    .panel-icon {
+        opacity: 0.9;
+        text-shadow: 4px 4px 6px black;
+    }
+    .single-window-icon {
+    }
+    .multi-window-icon {
+    }
 
     /* Mini Dash Styles (from Dash.svelte) */
     .preview-screen { position: absolute; background-color: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 4px; }
-    .preview-window { position: absolute; background-color: rgba(52, 152, 219, 0.5); border: 1px solid rgba(41, 128, 185, 0.8); border-radius: 2px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; }
-    .preview-title-bar { display: flex; flex-shrink: 0; background-color: rgba(0,0,0,0.2); overflow: hidden; align-items: center; height: 14px; }
+    .preview-window { position: absolute; background-color: rgba(52, 152, 219, 0.5); border: 1px solid rgba(41, 128, 185, 0.8); border-radius: 2px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .preview-title-bar { flex-shrink: 0; display: flex; background-color: rgba(0,0,0,0.2); overflow: hidden; align-items: center; height: 14px; width: 100%; }
     .preview-tab { padding: 0 3px; font-size: 9px; line-height: 14px; color: rgba(255, 255, 255, 0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70px; border-right: 1px solid rgba(41, 128, 185, 0.4); text-shadow: 0 0 2px rgba(0,0,0,0.6); }
     .preview-tab.active { font-weight: bold; color: white; background-color: rgba(255,255,255,0.1); }
+    .preview-window-icon {
+        flex-grow: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.7;
+    }
 </style>
 
 <div class="board-container" bind:this={containerEl}>
@@ -58,12 +89,25 @@
                     </div>
                 {/each}
             </div>
-            <div class="mini-content" />
+            <div class="mini-content">
+                {#if group.tabs.length === 1}
+                    <span class="panel-icon single-window-icon" style:font-size="{Math.min(200, (Math.min(group.width, group.height) * previewScale))}px">
+                        {getIcon(group.tabs[0].componentName || group.tabs[0].componentType)}
+                    </span>
+                {:else}
+                    {#each group.tabs as tab (tab.originalId)}
+                        <span class="panel-icon multi-window-icon" title={tab.title} style:font-size="{Math.min(120, (Math.min(group.width, group.height) * previewScale * 0.6))}px">
+                            {getIcon(tab.componentName || tab.componentType)}
+                        </span>
+                    {/each}
+                {/if}
+            </div>
         </div>
     {:else if board_type === 'dash' && board_config?.windowGroups && previewDesktop.width > 0}
          <div class="preview-screen" style:width="{previewDesktop.width}px" style:height="{previewDesktop.height}px" style:top="{previewDesktop.top}px" style:left="{previewDesktop.left}px">
             {#each (board_config.windowGroups || []) as group}
                 {@const isMaximized = group.maximized}
+                {@const activeTab = group.tabs.find(t => t.originalId === group.activeTabId) || group.tabs[0]}
                 <div class="preview-window" title={group.tabs.map(t => t.title).join(' | ')} style:left="{isMaximized ? 0 : (group.x * previewScale)}px" style:top="{isMaximized ? 0 : (group.y * previewScale)}px" style:width="{isMaximized ? '100%' : Math.max(20, group.width * previewScale)}px" style:height="{isMaximized ? '100%' : Math.max(16, group.height * previewScale)}px">
                     <div class="preview-title-bar">
                         {#each group.tabs as tab (tab.originalId)}
@@ -72,8 +116,14 @@
                             </div>
                         {/each}
                     </div>
+                    {#if activeTab}
+                        <div class="preview-window-icon" style:font-size="{Math.min(120, (Math.min(group.width, group.height) * previewScale * 0.6))}px">
+                             {getIcon(activeTab.componentName || activeTab.componentType)}
+                        </div>
+                    {/if}
                 </div>
             {/each}
         </div>
     {/if}
 </div>
+

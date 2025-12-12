@@ -5,14 +5,14 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch, newIoskUserInspector } from './windows.js';
-    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents, contextUpdates } from './iosk.js';
-    import { desktopSettings, windowSettings } from './desktop.js';
+    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch, newIoskUserInspector } from '../windows.js';
+    import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents, contextUpdates } from '../iosk.js';
+    import { desktopSettings, windowSettings } from '../desktop.js';
     import RoomsMenu from './popup/RoomsMenu.svelte';
     import AttachMenu from './popup/AttachMenu.svelte';
     import UserContextMenu from './popup/UserContextMenu.svelte';
-    import WindowSettingsModal from './popup/WindowSettingsModal.svelte';
-    import { parseAnsi, stripAnsi } from './ansi.js';
+    import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
+    import { parseAnsi, stripAnsi } from '../ansi.js';
 
     export let id; // Unique ID from the window manager
     export let groupId;
@@ -32,15 +32,15 @@
     desktopSettings.subscribe(value => settings = value);
 
     // --- State for Connection & Room Awareness ---
-    let isConnected = false;
-    let localHostname = '';
-    let roomName = null;
-    let roomTopic = '';
-    let motd = '';
-    let roomParticipants = [];
-    let availableRooms = [];
+    export let isConnected = false;
+    export let localHostname = '';
+    export let roomName = null;
+    export let roomTopic = '';
+    export let motd = '';
+    export let roomParticipants = [];
+    export let availableRooms = [];
+    export let userColors = {}; // New state for user color mapping
     let showRoomsMenu = false;
-    let userColors = {}; // New state for user color mapping
 
     // --- State for Attach Menu ---
     let showAttachMenu = false;
@@ -60,16 +60,16 @@
     };
 
     // --- State for Token Telemetry ---
-    let userTokenStats = {};
+    export let userTokenStats = {};
     let tokenTooltip = { visible: false, x: 0, y: 0, user: null };
 
     // --- Internal Component State ---
-    let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
-    let command = '';
-    let commandHistory = [];
+    export let output = []; // Array of { type: 'prompt'|'output', content: 'text' }
+    export let command = '';
+    export let commandHistory = [];
     let historyIndex = 0;
-    let unsentCommand = '';
-    let currentPrompt = '';
+    export let unsentCommand = '';
+    export let currentPrompt = '';
 
     // --- DOM element refs ---
     let terminalEl;
@@ -79,8 +79,8 @@
     let attachButton;
 
     // --- Users Panel State ---
-    let usersPanelWidth = 260;
-    let isUsersPanelCollapsed = true;
+    export let usersPanelWidth = 260;
+    export let isUsersPanelCollapsed = true;
     let isResizing = false;
 
     let prevRoomName = null;
@@ -95,6 +95,41 @@
         prevRoomName = roomName;
     }
 
+    // When restoring state, the live `isConnected` value from the preserved
+    // instance is the source of truth. The prop value is from a snapshot.
+    // We only restore from props if the connection is not currently active.
+    // The `output` and `commandHistory` are always safe to restore.
+    $: {
+        if (!isConnected) {
+            localHostname = localHostname;
+            roomName = roomName;
+            roomTopic = roomTopic;
+            motd = motd;
+            roomParticipants = roomParticipants;
+            availableRooms = availableRooms;
+            userColors = userColors;
+            userTokenStats = userTokenStats;
+        }
+    }
+
+    export function getState() {
+        return {
+            isConnected,
+            output,
+            commandHistory,
+            currentPrompt,
+            roomName,
+            roomTopic,
+            motd,
+            roomParticipants,
+            availableRooms,
+            userColors,
+            userTokenStats,
+            localHostname,
+            usersPanelWidth,
+            isUsersPanelCollapsed,
+        };
+    }
 
     // --- Helper functions for telemetry display ---
     function abbreviateNumber(num) {
@@ -305,6 +340,9 @@
         window.removeEventListener('click', handleGlobalClick);
         window.removeEventListener('keydown', handleGlobalKeyDown);
     });
+
+    // When history is restored, reset the index to the end
+    $: historyIndex = commandHistory.length;
 
     $: if (id !== undefined && groupId !== undefined) {
         windows.updateTabProps(groupId, id, {
