@@ -206,8 +206,8 @@
 </script>
 
 <style>
-    .viewer-container { display: flex; flex-direction: column; height: 100%; font-family: monospace; background-color: var(--console-bg); color: var(--console-text); font-size: 14px; user-select: text; }
-    .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); flex-shrink: 0; user-select: none; }
+    .viewer-container { display: flex; flex-direction: column; height: 100%; font-family: monospace; background-color: color-mix(in srgb, var(--console-bg) 42%, transparent); color: var(--console-text); font-size: 14px; user-select: text; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; background-color: color-mix(in srgb, var(--title-bar-bg) 42%, transparent); border-bottom: 1px solid var(--border-color); flex-shrink: 0; user-select: none; }
     .toolbar-path { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .toolbar-controls button { background: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--taskbar-text); padding: 2px 8px; border-radius: 3px; cursor: pointer; margin-left: 5px; }
     .toolbar-controls button:hover:not(:disabled) { background-color: var(--taskbar-button-hover-bg); }
@@ -222,7 +222,7 @@
     .hex-viewer .ascii { color: #ecf0f1; }
     .rendered-image-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
     .rendered-image { max-width: 100%; max-height: 100%; object-fit: contain; }
-    .rendered-markdown { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; white-space: normal; word-break: normal; padding: 10px; background: var(--window-bg); color: var(--title-bar-text); border-radius: 4px; }
+    .rendered-markdown { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; white-space: normal; word-break: normal; padding: 10px; background: color-mix(in srgb, var(--window-bg) 42%, transparent); color: var(--title-bar-text); border-radius: 4px; }
     .rendered-code { margin: -8px; }
     .rendered-code .hljs { padding: 8px; font-size: 14px; border-radius: 0; }
     .loading-more { text-align: center; color: #7f8c8d; padding: 10px; }

@@ -408,8 +408,8 @@
 </script>
 
 <style>
-    .explorer-container { display: flex; flex-direction: column; height: 100%; font-family: monospace; background-color: var(--console-bg); color: var(--console-text); font-size: 14px; user-select: none; }
-    .path-bar { padding: 4px 8px; background-color: var(--title-bar-bg); border-bottom: 1px solid var(--border-color); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+    .explorer-container { display: flex; flex-direction: column; height: 100%; font-family: monospace; background-color: color-mix(in srgb, var(--console-bg) 42%, transparent); color: var(--console-text); font-size: 14px; user-select: none; }
+    .path-bar { padding: 4px 8px; background-color: color-mix(in srgb, var(--title-bar-bg) 42%, transparent); border-bottom: 1px solid var(--border-color); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
     .path-bar .path-text { flex-grow: 1; overflow-x: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .path-bar .right-controls { display: flex; align-items: center; }
     .path-bar button { background-color: var(--taskbar-button-bg); border: 1px solid var(--border-color); color: var(--taskbar-text); padding: 2px 8px; border-radius: 3px; cursor: pointer; margin-left: 10px; flex-shrink: 0; }
@@ -448,7 +448,7 @@
     .nested-tile .tile-icon { font-size: 1.5em; min-height: 0; }
     .nested-tile .tile-name { font-size: 10px; margin-top: 2px; -webkit-line-clamp: 1; max-height: 1.4em; }
     .columns-view { flex-grow: 1; display: flex; overflow: auto; padding: 8px; gap: 8px; cursor: grab; }
-    .column { flex: 0 0 160px; display: flex; flex-direction: column; background-color: var(--taskbar-button-bg); border-radius: 4px; border: 1px solid var(--border-color); overflow: hidden; }
+    .column { flex: 0 0 160px; display: flex; flex-direction: column; background-color: color-mix(in srgb, var(--taskbar-button-bg) 42%, transparent); border-radius: 4px; border: 1px solid var(--border-color); overflow: hidden; }
     .column.files-column { flex: 0 0 328px; }
     .columns-view.tile-mode .column:not(.files-column) { flex: 0 0 174px; }
     .columns-view.tile-mode .column-content { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 4px; align-content: start; }
@@ -472,11 +472,11 @@
     .item.new, .column-content-item.new { animation: green-flash-list 1.5s ease-out; }
     .item.modified, .column-content-item.modified { animation: blue-flash-list 1.5s ease-out; }
     .item.removed, .column-content-item.removed { animation: red-flash-list 1s ease-out forwards; pointer-events: none; }
-    .context-menu { position: fixed; background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 10001; display: flex; flex-direction: column; padding: 4px 0; min-width: 120px; }
+    .context-menu { position: fixed; background-color: color-mix(in srgb, var(--window-bg) 42%, transparent); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 10001; display: flex; flex-direction: column; padding: 4px 0; min-width: 120px; }
     .context-menu button { background: none; border: none; color: var(--taskbar-text); padding: 8px 12px; text-align: left; cursor: pointer; font-size: 14px; }
     .context-menu button:hover { background-color: var(--taskbar-button-hover-bg); }
     .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 100; }
-    .modal-content { background-color: var(--window-bg); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
+    .modal-content { background-color: color-mix(in srgb, var(--window-bg) 42%, transparent); padding: 20px; border-radius: 5px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 90%; max-width: 450px; display: flex; flex-direction: column; gap: 15px; }
     .modal-content h3 { margin: 0; color: var(--title-bar-text); font-weight: 500; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
     fieldset { border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
     legend { color: var(--title-bar-text); padding: 0 5px; }
