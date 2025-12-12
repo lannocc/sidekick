@@ -1,10 +1,11 @@
 <script>
     import { get } from 'svelte/store';
     import { desktopSettings, windowSettings, currentBoxId, mergeWithDefaults } from '../desktop.js';
-    import { windows } from '../windows.js';
+    import { windows, newFileExplorer } from '../windows.js';
     import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
-    import { onDestroy } from 'svelte';
+    import { onDestroy, onMount } from 'svelte';
     import { connectionStatus, boxes, saveSettingsToBox, getDesktopSettings, getBoxSpecificSettings, desktopSettingsResponse, clearSettingsForBox, allBoxSettings } from '../bridge.js';
+    import { fileSelection } from '../iosk.js';
 
     export let id;
     export let groupId;
@@ -59,9 +60,29 @@
         }
     });
 
+    let unsubscribeFileSelection;
+
+    onMount(() => {
+        unsubscribeFileSelection = fileSelection.subscribe(selection => {
+            if (!selection || !selection.targetId || !selection.path) return;
+            
+            const [type, ...pathParts] = selection.targetId.split('.');
+            if (type !== 'settings') return;
+
+            const settingPath = pathParts.join('.');
+            setNested(settings, settingPath, `file://${selection.path}`);
+            
+            settings = settings; // Trigger reactivity
+            handleUpdate();
+
+            fileSelection.set(null); // Reset store
+        });
+    });
+
     onDestroy(() => {
         if (unsubscribe) unsubscribe();
         if (unsubscribeResponse) unsubscribeResponse();
+        if (unsubscribeFileSelection) unsubscribeFileSelection();
     });
 
     let showSaveLoadMenu = false;
@@ -123,8 +144,25 @@
         }
     }
 
-    // --- New file and reset handlers ---
+    // --- File Picker, File, and Reset handlers ---
     let fileInputEl;
+
+    function setNested(obj, path, value) {
+        const keys = path.split('.');
+        let current = obj;
+        for (let i = 0; i < keys.length - 1; i++) {
+            if (!current[keys[i]]) current[keys[i]] = {};
+            current = current[keys[i]];
+        }
+        current[keys[keys.length - 1]] = value;
+    }
+
+    function openFilePicker(targetPath) {
+        newFileExplorer({
+            connectionType: 'skybridge',
+            pickerTargetId: `settings.${targetPath}`
+        });
+    }
 
     function handleResetSettings() {
         if (confirm('Are you sure you want to reset all current theme settings to their defaults? This will not affect any saved box settings.')) {
@@ -191,7 +229,7 @@
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
-    // --- End new handlers ---
+    // --- End handlers ---
 
     let isThemeDefault;
     $: if (settings) {
@@ -615,6 +653,16 @@
         gap: 8px;
         cursor: pointer;
     }
+    .input-group {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        width: 100%;
+    }
+    .input-group .text-input {
+        flex-grow: 1;
+        width: auto;
+    }
     .options-group {
         padding-left: 10px;
         display: flex;
@@ -858,9 +906,10 @@
                         <label><input type="radio" bind:group={settings.sky.scene.bgType} value="image" on:change={handleUpdate}> Image</label>
                         {#if settings.sky.scene.bgType === 'image'}
                         <div class="options-group">
-                            <label>
+                            <div class="input-group">
                                 <input class="text-input" type="text" bind:value={settings.sky.scene.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
-                            </label>
+                                <button class="menu-button" on:click={() => openFilePicker('sky.scene.bgImage')} title="Browse local files">📁</button>
+                            </div>
                             <label class="color-picker-label">
                                 <span>Display Mode</span>
                                 <select class="select-input" bind:value={settings.sky.scene.bgImageDisplayMode} on:change={handleUpdate}>
@@ -920,9 +969,10 @@
                         <label><input type="radio" bind:group={settings.sky.frame.bgType} value="image" on:change={handleUpdate}> Image</label>
                         {#if settings.sky.frame.bgType === 'image'}
                         <div class="options-group">
-                            <label>
+                            <div class="input-group">
                                 <input class="text-input" type="text" bind:value={settings.sky.frame.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
-                            </label>
+                                <button class="menu-button" on:click={() => openFilePicker('sky.frame.bgImage')} title="Browse local files">📁</button>
+                            </div>
                             <label class="color-picker-label">
                                 <span>Display Mode</span>
                                 <select class="select-input" bind:value={settings.sky.frame.bgImageDisplayMode} on:change={handleUpdate}>
@@ -974,9 +1024,10 @@
                         <label><input type="radio" bind:group={settings.sky.cloak.bgType} value="image" on:change={handleUpdate}> Image</label>
                         {#if settings.sky.cloak.bgType === 'image'}
                         <div class="options-group">
-                            <label>
+                            <div class="input-group">
                                 <input class="text-input" type="text" bind:value={settings.sky.cloak.bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
-                            </label>
+                                <button class="menu-button" on:click={() => openFilePicker('sky.cloak.bgImage')} title="Browse local files">📁</button>
+                            </div>
                             <label class="color-picker-label">
                                 <span>Display Mode</span>
                                 <select class="select-input" bind:value={settings.sky.cloak.bgImageDisplayMode} on:change={handleUpdate}>
@@ -1041,7 +1092,10 @@
                                         <label><input type="radio" bind:group={settings.boxes[part][state].bgType} value="image" on:change={handleUpdate}> Image</label>
                                         {#if settings.boxes[part][state].bgType === 'image'}
                                         <div class="options-group">
-                                            <label><input class="text-input" type="text" bind:value={settings.boxes[part][state].bgImage} on:input={handleUpdate} placeholder="Enter Image URL..."></label>
+                                            <div class="input-group">
+                                                <input class="text-input" type="text" bind:value={settings.boxes[part][state].bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                                                <button class="menu-button" on:click={() => openFilePicker(`boxes.${part}.${state}.bgImage`)} title="Browse local files">📁</button>
+                                            </div>
                                             <label class="color-picker-label">
                                                 <span>Display Mode</span>
                                                 <select class="select-input" bind:value={settings.boxes[part][state].bgImageDisplayMode} on:change={handleUpdate}>
@@ -1147,7 +1201,10 @@
                                         <label><input type="radio" bind:group={settings.windows.back[part][state].bgType} value="image" on:change={handleUpdate}> Image</label>
                                         {#if settings.windows.back[part][state].bgType === 'image'}
                                         <div class="options-group">
-                                            <label><input class="text-input" type="text" bind:value={settings.windows.back[part][state].bgImage} on:input={handleUpdate} placeholder="Enter Image URL..."></label>
+                                            <div class="input-group">
+                                                <input class="text-input" type="text" bind:value={settings.windows.back[part][state].bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                                                <button class="menu-button" on:click={() => openFilePicker(`windows.back.${part}.${state}.bgImage`)} title="Browse local files">📁</button>
+                                            </div>
                                             <label class="color-picker-label">
                                                 <span>Display Mode</span>
                                                 <select class="select-input" bind:value={settings.windows.back[part][state].bgImageDisplayMode} on:change={handleUpdate}>
@@ -1253,7 +1310,10 @@
                                         <label><input type="radio" bind:group={settings.windows.normal[part][state].bgType} value="image" on:change={handleUpdate}> Image</label>
                                         {#if settings.windows.normal[part][state].bgType === 'image'}
                                         <div class="options-group">
-                                            <label><input class="text-input" type="text" bind:value={settings.windows.normal[part][state].bgImage} on:input={handleUpdate} placeholder="Enter Image URL..."></label>
+                                            <div class="input-group">
+                                                <input class="text-input" type="text" bind:value={settings.windows.normal[part][state].bgImage} on:input={handleUpdate} placeholder="Enter Image URL...">
+                                                <button class="menu-button" on:click={() => openFilePicker(`windows.normal.${part}.${state}.bgImage`)} title="Browse local files">📁</button>
+                                            </div>
                                             <label class="color-picker-label">
                                                 <span>Display Mode</span>
                                                 <select class="select-input" bind:value={settings.windows.normal[part][state].bgImageDisplayMode} on:change={handleUpdate}>
@@ -1324,9 +1384,10 @@
                 </label>
                 {#if settings.chimeType === 'custom'}
                     <div class="options-group">
-                        <label>
-                            <input class="text-input"ype="text" bind:value={settings.chimeUrl} on:input={handleUpdate} placeholder="Enter Sound URL...">
-                        </label>
+                        <div class="input-group">
+                            <input class="text-input" type="text" bind:value={settings.chimeUrl} on:input={handleUpdate} placeholder="Enter Sound URL...">
+                            <button class="menu-button" on:click={() => openFilePicker('chimeUrl')} title="Browse local files">📁</button>
+                        </div>
                     </div>
                 {/if}
             </fieldset>
@@ -1372,9 +1433,10 @@
                     </label>
                     {#if settings.noticeDefaults.audio.sound === 'custom'}
                         <div class="options-group">
-                            <label>
+                            <div class="input-group">
                                 <input class="text-input" type="text" bind:value={settings.noticeDefaults.audio.url} on:input={handleUpdate} placeholder="Enter Sound URL...">
-                            </label>
+                                <button class="menu-button" on:click={() => openFilePicker('noticeDefaults.audio.url')} title="Browse local files">📁</button>
+                            </div>
                         </div>
                     {/if}
                 </div>
