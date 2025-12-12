@@ -6,7 +6,7 @@
     import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, skyCloakEnabled } from './desktop.js';
-    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox } from './bridge.js';
+    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox, resolveAssetDataUrl } from './bridge.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import Shortcut from './Shortcut.svelte';
@@ -21,7 +21,7 @@
     // This is the key to preserving component instances across front/back transitions.
     $: allRenderableWindows = (() => {
         const frontWindows = $windows.map(w => ({ ...w, isBacked: false, scale: 1.0 }));
-        
+
         // Initialize seenKeys with all keys from front windows to detect collisions between front/back layers.
         const seenKeys = new Set(frontWindows.map(w => w.id));
 
@@ -45,7 +45,7 @@
             }
 
             seenKeys.add(persistentId);
-            
+
             return {
                 ...config,
                 // Explicitly override with live data from the backed window record
@@ -108,8 +108,8 @@
 
     $: displayableBoxes = $boxes.filter(b => b.parent_box_id === $currentBoxId);
 
-    $: isDesktopEmpty = allRenderableWindows.length === 0 && 
-                        ($desktopShortcuts || []).length === 0 && 
+    $: isDesktopEmpty = allRenderableWindows.length === 0 &&
+                        ($desktopShortcuts || []).length === 0 &&
                         (displayableBoxes || []).length === 0;
 
     // --- View Control Mode ---
@@ -167,7 +167,9 @@
         closeBackedWindowContextMenu();
     }
 
-    function generateBgStyle(bgSettings) {
+    let resolvedBgImageUrl = null;
+
+    function generateBgStyle(bgSettings, resolvedUrl) {
         if (!bgSettings) return null;
         if (bgSettings.bgType === 'gradient') {
             return `linear-gradient(45deg, ${bgSettings.bgGradientStart} 0%, ${bgSettings.bgGradientEnd} 100%)`;
@@ -184,15 +186,31 @@
                 case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
                 case 'cover': default: break;
             }
-            return `url('${bgSettings.bgImage}') ${position} / ${size} ${repeat}`;
+            const imageUrl = resolvedUrl || bgSettings.bgImage;
+            return `url('${imageUrl}') ${position} / ${size} ${repeat}`;
         }
         return null;
     }
 
     $: sceneSettings = $desktopSettings.sky?.scene;
-    $: backgroundStyle = generateBgStyle(sceneSettings);
+
+    $: {
+        if (sceneSettings?.bgType === 'image' && sceneSettings?.bgImage) {
+            const urlToLoad = sceneSettings.bgImage;
+            resolveAssetDataUrl(urlToLoad).then(url => {
+                // Prevent race condition if user quickly changes selection
+                if (get(desktopSettings).sky.scene.bgImage === urlToLoad) {
+                    resolvedBgImageUrl = url;
+                }
+            });
+        } else {
+            resolvedBgImageUrl = null;
+        }
+    }
+
+    $: backgroundStyle = generateBgStyle(sceneSettings, resolvedBgImageUrl);
     $: sceneOpacity = sceneSettings?.opacity ?? 1.0;
-    $: backWindowBgStyle = generateBgStyle($desktopSettings.windows?.back);
+    $: backWindowBgStyle = generateBgStyle($desktopSettings.windows?.back, null); // Second param not needed here
     $: backWindowSettings = $desktopSettings.windows?.back;
 
     function handleRightClick(event) {
@@ -268,8 +286,8 @@
 
     // --- Bird's Eye View & Fit/Center Logic ---
     $: allItems = [
-        ...allRenderableWindows.filter(w => !w.maximized).map(w => ({ 
-            ...w, 
+        ...allRenderableWindows.filter(w => !w.maximized).map(w => ({
+            ...w,
             type: w.isBacked ? 'backed_window' : 'window',
             baseWidth: w.width, // for backed_window compatibility
             baseHeight: w.height,
@@ -510,7 +528,7 @@
         if (displayViewControlMode === 'both') {
             const currentWindowView = get(windowView);
             const currentDesktopView = get(desktopView);
-            
+
             // We can only preserve the relation if window zoom is not zero.
             if (currentWindowView.zoom !== 0) {
                 // targetFitView is calculated for the combined view in the front-layer's coordinate space.
@@ -524,7 +542,7 @@
                 const newDesktopZoom = targetView.zoom * relativeZoom;
                 const newDesktopPanX = (relativePanX * targetView.zoom) + targetView.panX;
                 const newDesktopPanY = (relativePanY * targetView.zoom) + targetView.panY;
-                
+
                 const newDesktopView = {
                     zoom: newDesktopZoom,
                     panX: newDesktopPanX,
@@ -857,7 +875,7 @@
             toggleSkyCloak();
             return;
         }
-        
+
         // Set a timeout to clear the double-click state. If another click
         // arrives before this, it's a double-click.
         desktopMiddleClickTimeout = setTimeout(() => {
@@ -892,21 +910,21 @@
             // Window.svelte is responsible for its own focus management.
             return;
         }
-    
+
         const targetItemEl = event.target.closest('.shortcut, .box, .window-wrapper.backed');
-    
+
         // Clicking anything other than a front window (and not a middle click)
         // should clear front window focus.
         if (event.button !== 1) {
             windows.unfocusAllWindows();
         }
-        
+
         // If we're not clicking on a backed window itself (and not a middle click),
         // clear the active backed window.
         if (event.button !== 1 && (!targetItemEl || targetItemEl.dataset.type !== 'backed_window')) {
             interactiveBackedWindowId = null;
         }
-    
+
         if (targetItemEl) {
             handleItemMouseDown(event, targetItemEl);
         } else {
@@ -931,7 +949,7 @@
             desktopInteraction.set(false);
             return;
         }
-        
+
         event.preventDefault();
         event.stopPropagation();
 
@@ -950,7 +968,7 @@
                 selectedItems.set(new Set([uniqueId]));
             }
         }
-        
+
         dragStartData.button = event.button;
 
         isDraggingItems = true;
@@ -964,7 +982,7 @@
         };
 
         dragStartData.items.clear();
-        
+
         if (event.button === 0) {
             get(selectedItems).forEach(selUniqueId => {
                 const [itemType, itemId] = selUniqueId.split('-');
@@ -1008,7 +1026,7 @@
                 backedWindowMiddleClickTimeout.delete(id);
                 event.preventDefault();
                 event.stopPropagation();
-                
+
                 if (backedWindowItem) {
                     const newConfig = { ...backedWindowItem.config, cloaked: !isCloaked };
                     updateBackedWindowTransform(backedWindowItem.id, backedWindowItem.x, backedWindowItem.y, backedWindowItem.scale, newConfig);
@@ -1025,7 +1043,7 @@
                 backedWindowLeftClickTimeout.delete(id);
                 event.preventDefault();
                 event.stopPropagation();
-                
+
                 if (backedWindowItem) {
                     const newConfig = { ...backedWindowItem.config, cloaked: false };
                     updateBackedWindowTransform(backedWindowItem.id, backedWindowItem.x, backedWindowItem.y, backedWindowItem.scale, newConfig);
@@ -1139,7 +1157,7 @@
                         // The remaining case is !hasAMoved && !hasBMoved (two static, overlapping items).
                         continue;
                     }
-                    
+
                     const pushedUniqueId = `${pushed.type}-${pushed.id}`;
                     if (!pushedItemsMap.has(pushedUniqueId)) {
                         pushedItemsMap.set(pushedUniqueId, { x: pushed.x, y: pushed.y });
@@ -1872,9 +1890,9 @@
     }
 </style>
 
-<svelte:window 
-    bind:innerWidth 
-    bind:innerHeight 
+<svelte:window
+    bind:innerWidth
+    bind:innerHeight
     on:keydown={e => {
         if (e.key === 'Control' && !e.repeat) ctrlPressed = true;
         if (e.key === 'Shift' && !e.repeat) shiftPressed = true;
@@ -1910,8 +1928,8 @@
     <!-- UNIFIED WINDOWS CONTAINER -->
     <div class="windows-container">
         {#each allRenderableWindows as win (win.id)}
-            <Window 
-                {...win} 
+            <Window
+                {...win}
                 on:backrequest={() => handleBackRequest(win)}
                 on:contextmenubacked={(event) => showBackedWindowContextMenu(event, win.backedWindowObject)}
                 on:backedmouseenterfocus={() => {
@@ -1991,13 +2009,13 @@
             </div>
             <div class="pan-controls">
                 <button class="pan-up" on:click={() => pan(0, panStep)} title="Pan Up">▲</button>
-                <button class="pan-left" on:click={() => pan(panStep, 0)} title="Pan Left">◀</button>
+                <button class="pan-left" on:click={() => pan(panStep, 0)} title="PaLeft">◀</button>
                 <button class="pan-reset" on:click={resetPan} title="Reset Pan" disabled={isPanResetDisabled}>●</button>
                 <button class="pan-right" on:click={() => pan(-panStep, 0)} title="Pan Right">▶</button>
                 <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
             </div>
             <div class="action-controls">
-                <button class="zoom-reset" on:click={resetView} title="Reset View" disabled={isViewResetDisabled}>Reset</button>
+                <button class="zoom-reset" on:click={resetView} title="Reset View" disabled={isViisabled}>Reset</button>
                 <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content" disabled={isBestFit}>Fit</button>
             </div>
         </div>
@@ -2022,3 +2040,4 @@
         <Dash />
     {/if}
 </div>
+

@@ -1,5 +1,6 @@
 import { writable, get } from 'svelte/store';
 import { desktopSettings, desktopView, windowView, TASKBAR_HEIGHT, currentBoxId, mergeWithDefaults } from './desktop.js';
+import { v4 as uuidv4 } from 'uuid';
 
 const PORT = 4210;
 const URL = `ws://localhost:${PORT}`;
@@ -25,6 +26,68 @@ export const askExit = writable(null);
 export const askStatsResponse = writable(null);
 export const boxes = writable([]);
 export const backedWindows = writable([]);
+
+// --- Asset Resolution for local files ---
+const pendingRequests = new Map();
+const assetCache = new Map();
+
+fsReadResponse.subscribe(msg => {
+    if (msg && pendingRequests.has(msg.requester_id)) {
+        const { resolve } = pendingRequests.get(msg.requester_id);
+        resolve(msg);
+        pendingRequests.delete(msg.requester_id);
+    }
+});
+
+fsError.subscribe(err => {
+     if (err && pendingRequests.has(err.requester_id)) {
+        const { reject } = pendingRequests.get(err.requester_id);
+        reject(new Error(err.error));
+        pendingRequests.delete(err.requester_id);
+    }
+});
+
+function readFileChunk(path, offset = 0, length = -1) {
+    const requester_id = uuidv4();
+    return new Promise((resolve, reject) => {
+        pendingRequests.set(requester_id, { resolve, reject });
+        sendMessage({ type: 'fs_read', path, offset, length, requester_id });
+    });
+}
+
+export async function resolveAssetDataUrl(url) {
+    if (!url || !url.startsWith('file://')) {
+        return url;
+    }
+    if (assetCache.has(url)) {
+        return assetCache.get(url);
+    }
+
+    const path = url.substring('file://'.length);
+    const promise = readFileChunk(path).then(response => {
+        // Simple MIME type detection
+        const extension = path.split('.').pop().toLowerCase();
+        let mimeType = 'application/octet-stream';
+        const imageExtensions = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'gif': 'image/gif',
+            'svg': 'image/svg+xml',
+            'webp': 'image/webp',
+        };
+        if (imageExtensions[extension]) {
+            mimeType = imageExtensions[extension];
+        }
+        const dataUrl = `data:${mimeType};base64,${response.content_b64}`;
+        assetCache.set(url, dataUrl);
+        return dataUrl;
+    });
+
+    assetCache.set(url, promise); // Cache the promise itself to handle concurrent requests
+    return promise;
+}
+
 
 // --- Stores for inspecting arbitrary boxes ---
 export const shortcutListResponse = writable(null);
@@ -154,7 +217,7 @@ function updateViewSettings(viewSettings) {
 export function updateDesktopSettings(partialSettings) {
     const newSettings = { ...get(desktopSettings), ...partialSettings };
     desktopSettings.set(newSettings); // Update the store, which will trigger saves
-    
+
     const { panX, panY, zoom, windowPanX, windowPanY, windowZoom, ...themeSettings } = newSettings;
     sendMessage({ type: 'update_desktop_settings', settings: themeSettings, box_id: get(currentBoxId) });
 }
@@ -374,3 +437,4 @@ function attemptConnection() {
 export function initializeLocalConnection() {
     attemptConnection();
 }
+
