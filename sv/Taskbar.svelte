@@ -854,8 +854,22 @@
                 <!-- Bottom Row -->
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Ask">?</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBoxesWindow({ sourceEvent: e }); showMenu = false; }} disabled={$connectionStatus !== 'connected'} title="Boxes">📦</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalFileExplorer({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Files">📁</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchLocalTerminal({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Terminal">&gt;_</button>
+                <button class="menu-item" on:click={(e) => { 
+                    if ($dashActive) dashActive.set(false);
+                    const props = { sourceEvent: e };
+                    if ($currentBox && $currentBox.id !== 0) {
+                        props.initialPath = $currentBox.context;
+                        props.title = `Files - ${$currentBox.name}`;
+                    }
+                    launchLocalFileExplorer(props); }} disabled={$connectionStatus !== 'connected'} title="Files">📁</button>
+                <button class="menu-item" on:click={(e) => { 
+                    if ($dashActive) dashActive.set(false);
+                    const props = { sourceEvent: e };
+                    if ($currentBox && $currentBox.id !== 0) {
+                        props.initialPath = $currentBox.context;
+                        props.title = `Terminal - ${$currentBox.name}`;
+                    }
+                    launchLocalTerminal(props); }} disabled={$connectionStatus !== 'connected'} title="Terminal">&gt;_</button>
             </div>
         {/if}
     </div>
