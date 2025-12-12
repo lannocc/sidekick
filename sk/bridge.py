@@ -83,6 +83,9 @@ HOST = '127.0.0.1'
 
 ENCODING = tiktoken.get_encoding('cl100k_base')
 running_asks = {}
+WATCHERS = {} # path -> {'clients': set(), 'task': asyncio.Task, 'state': dict}
+TAILERS = {}   # path -> {'clients': set(), 'task': asyncio.Task}
+
 
 # --- SKYBRIDGE Globals ---
 DB_CONN = None
@@ -435,7 +438,7 @@ async def handle_sk_ask(websocket, msg):
             del running_asks[ask_id]
 
 
-async def handle_fs_list(path):
+async def handle_fs_list(path, recursive=False):
     """Handles the fs_list request."""
     try:
         abs_path = os.path.abspath(path)
@@ -444,14 +447,37 @@ async def handle_fs_list(path):
             return {'type': 'fs_error', 'path': path, 'error': 'Not a directory or does not exist'}
 
         entries = []
-        for name in sorted(os.listdir(abs_path)):
-            try:
-                full_path = os.path.join(abs_path, name)
-                stat = os.stat(full_path)
-                entry_type = 'dir' if os.path.isdir(full_path) else 'file'
-                entries.append({'name': name, 'type': entry_type, 'size': stat.st_size})
-            except OSError:
-                continue
+        if recursive:
+            for root, dirs, files in os.walk(abs_path, topdown=True):
+                rel_root = os.path.relpath(root, abs_path)
+                if rel_root == '.':
+                    rel_root = ''
+                
+                for name in sorted(dirs):
+                    try:
+                        full_path = os.path.join(root, name)
+                        stat = os.stat(full_path)
+                        entry_path = os.path.join(rel_root, name)
+                        entries.append({'name': entry_path, 'type': 'dir', 'size': stat.st_size})
+                    except OSError:
+                        continue
+                for name in sorted(files):
+                    try:
+                        full_path = os.path.join(root, name)
+                        stat = os.stat(full_path)
+                        entry_path = os.path.join(rel_root, name)
+                        entries.append({'name': entry_path, 'type': 'file', 'size': stat.st_size})
+                    except OSError:
+                        continue
+        else:
+            for name in sorted(os.listdir(abs_path)):
+                try:
+                    full_path = os.path.join(abs_path, name)
+                    stat = os.stat(full_path)
+                    entry_type = 'dir' if os.path.isdir(full_path) else 'file'
+                    entries.append({'name': name, 'type': entry_type, 'size': stat.st_size})
+                except OSError:
+                    continue
         return {'type': 'fs_list_response', 'path': path, 'entries': entries}
     except Exception as e:
         log.error(f"Error listing path {path}: {e}")
@@ -567,6 +593,87 @@ async def pty_reader(pty_master_fd, websocket, term_id):
                 pass # Client may have disconnected in the meantime.
 
 
+async def directory_watcher_task(path):
+    """Polls a directory for changes and notifies clients."""
+    log.info(f"Starting watcher for: {path}")
+    abs_path = os.path.abspath(path)
+    
+    try:
+        current_state = {f: os.path.getmtime(os.path.join(abs_path, f)) for f in os.listdir(abs_path)}
+        WATCHERS[path]['state'] = current_state
+
+        while path in WATCHERS and WATCHERS[path]['clients']:
+            await asyncio.sleep(2)
+            
+            if not os.path.isdir(abs_path):
+                event_data = {'type': 'fs_watch_event', 'path': path, 'event_type': 'deleted', 'entry_name': os.path.basename(path), 'is_dir': True}
+                clients = list(WATCHERS[path]['clients'])
+                if clients:
+                    await asyncio.gather(*[client.send(json.dumps(event_data)) for client in clients])
+                break
+
+            new_state = {f: os.path.getmtime(os.path.join(abs_path, f)) for f in os.listdir(abs_path)}
+            
+            old_files, new_files = set(current_state.keys()), set(new_state.keys())
+            created, deleted = new_files - old_files, old_files - new_files
+            
+            events = []
+            for f in created:
+                events.append({'path': path, 'event_type': 'created', 'entry_name': f, 'is_dir': os.path.isdir(os.path.join(abs_path, f))})
+            for f in deleted:
+                events.append({'path': path, 'event_type': 'deleted', 'entry_name': f, 'is_dir': False})
+            for f in old_files.intersection(new_files):
+                if new_state[f] > current_state[f]:
+                    events.append({'path': path, 'event_type': 'modified', 'entry_name': f, 'is_dir': os.path.isdir(os.path.join(abs_path, f))})
+            
+            if events:
+                clients = list(WATCHERS[path]['clients'])
+                if clients:
+                    for event in events:
+                        await asyncio.gather(*[client.send(json.dumps({'type': 'fs_watch_event', **event})) for client in clients])
+
+            current_state = new_state
+            WATCHERS[path]['state'] = current_state
+    except Exception as e:
+        log.error(f"Error in watcher for {path}: {e}")
+    finally:
+        if path in WATCHERS:
+            del WATCHERS[path]
+        log.info(f"Stopping watcher for: {path}")
+
+
+async def file_tailer_task(path):
+    """Polls a file for new content and sends it to clients."""
+    log.info(f"Starting tailer for: {path}")
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            f.seek(0, os.SEEK_END)
+            while path in TAILERS and TAILERS[path]['clients']:
+                line = f.readline()
+                if line:
+                    clients = list(TAILERS[path]['clients'])
+                    if clients:
+                        await asyncio.gather(*[client.send(json.dumps({'type': 'fs_tail_event', 'path': path, 'data': line})) for client in clients])
+                else:
+                    await asyncio.sleep(0.1)
+    except FileNotFoundError:
+        log.warning(f"File to tail not found: {path}")
+        if path in TAILERS:
+            clients = list(TAILERS[path]['clients'])
+            if clients:
+                await asyncio.gather(*[client.send(json.dumps({'type': 'fs_tail_event', 'path': path, 'error': 'File not found'})) for client in clients])
+    except Exception as e:
+        log.error(f"Error in tailer for {path}: {e}")
+        if path in TAILERS:
+            clients = list(TAILERS[path]['clients'])
+            if clients:
+                await asyncio.gather(*[client.send(json.dumps({'type': 'fs_tail_event', 'path': path, 'error': str(e)})) for client in clients])
+    finally:
+        if path in TAILERS:
+            del TAILERS[path]
+        log.info(f"Stopping tailer for: {path}")
+
+
 async def websocket_handler(websocket):
     """Main handler for each WebSocket connection."""
     log.info(f"Client connected from {websocket.remote_address}")
@@ -582,14 +689,45 @@ async def websocket_handler(websocket):
                 # --- Filesystem Operations ---
                 if msg_type == 'fs_list':
                     path = msg.get('path', '.')
-                    print_action("FS List", f"path='{path}'")
-                    response = await handle_fs_list(path)
+                    recursive = msg.get('recursive', False)
+                    print_action("FS List", f"path='{path}', recursive={recursive}")
+                    response = await handle_fs_list(path, recursive)
                     await websocket.send(json.dumps(response))
                 elif msg_type == 'fs_read':
                     path = msg.get('path')
                     print_action("FS Read", f"path='{path}'")
                     response = await handle_fs_read(path)
                     await websocket.send(json.dumps(response))
+
+                # --- Filesystem Advanced Operations ---
+                elif msg_type == 'fs_watch_start':
+                    path = msg.get('path')
+                    print_action("FS Watch Start", f"path='{path}'")
+                    if path not in WATCHERS:
+                        task = asyncio.create_task(directory_watcher_task(path))
+                        WATCHERS[path] = {'clients': set(), 'task': task, 'state': {}}
+                    WATCHERS[path]['clients'].add(websocket)
+                elif msg_type == 'fs_watch_stop':
+                    path = msg.get('path')
+                    print_action("FS Watch Stop", f"path='{path}'")
+                    if path in WATCHERS and websocket in WATCHERS[path]['clients']:
+                        WATCHERS[path]['clients'].remove(websocket)
+                        if not WATCHERS[path]['clients']:
+                            WATCHERS[path]['task'].cancel()
+                elif msg_type == 'fs_tail_start':
+                    path = msg.get('path')
+                    print_action("FS Tail Start", f"path='{path}'")
+                    if path not in TAILERS:
+                        task = asyncio.create_task(file_tailer_task(path))
+                        TAILERS[path] = {'clients': set(), 'task': task}
+                    TAILERS[path]['clients'].add(websocket)
+                elif msg_type == 'fs_tail_stop':
+                    path = msg.get('path')
+                    print_action("FS Tail Stop", f"path='{path}'")
+                    if path in TAILERS and websocket in TAILERS[path]['clients']:
+                        TAILERS[path]['clients'].remove(websocket)
+                        if not TAILERS[path]['clients']:
+                            TAILERS[path]['task'].cancel()
 
                 # --- Ask Operations ---
                 elif msg_type == 'sk_ask':
@@ -1076,6 +1214,21 @@ async def websocket_handler(websocket):
         log.info("Client disconnected.")
     finally:
         CONNECTED_CLIENTS.remove(websocket)
+        
+        # Disconnect client from any watchers and cancel tasks if no clients left
+        for path, data in list(WATCHERS.items()):
+            if websocket in data['clients']:
+                data['clients'].remove(websocket)
+            if not data['clients']:
+                data['task'].cancel()
+        
+        # Disconnect client from any tailers and cancel tasks if no clients left
+        for path, data in list(TAILERS.items()):
+            if websocket in data['clients']:
+                data['clients'].remove(websocket)
+            if not data['clients']:
+                data['task'].cancel()
+
         if active_terminals:
             log.info(f"Cleaning up {len(active_terminals)} PTY resources for disconnected client.")
             for term_id, term_session in active_terminals.items():

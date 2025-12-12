@@ -49,7 +49,7 @@
     let content_area_el;
     let fsAdapter;
 
-    $: supportsTail = connectionType === 'iosk';
+    $: supportsTail = true;
     $: fileExtension = getFileExtension(path);
     $: isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(fileExtension);
     $: isMarkdown = ['md', 'markdown'].includes(fileExtension);
@@ -160,6 +160,11 @@
 
         fsAdapter.tailEvent.subscribe(event => {
             if (event && isFollowing && event.path === path) {
+                if (event.error) {
+                    errorMessage = event.error;
+                    isFollowing = false; // Stop following on error
+                    return;
+                }
                 if (!get(windows).find(w => w.id === groupId)?.isActive) {
                     windows.notifyActivity(groupId, id, { summary: `Content updated for ${path}` });
                 }

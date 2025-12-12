@@ -17,6 +17,8 @@ export const terminalExit = writable(null);
 export const fsListResponse = writable(null);
 export const fsReadResponse = writable(null);
 export const fsError = writable(null);
+export const fsWatchEvent = writable(null);
+export const fsTailEvent = writable(null);
 export const askOutput = writable(null);
 export const askError = writable(null);
 export const askExit = writable(null);
@@ -252,6 +254,12 @@ function attemptConnection() {
                 case 'fs_error':
                     fsError.set(msg);
                     break;
+                case 'fs_watch_event':
+                    fsWatchEvent.set({ ...msg, timestamp: Date.now() });
+                    break;
+                case 'fs_tail_event':
+                    fsTailEvent.set({ ...msg, timestamp: Date.now() });
+                    break;
                 case 'ask_output':
                     askOutput.set({ ...msg, timestamp: Date.now() });
                     break;
@@ -366,4 +374,3 @@ function attemptConnection() {
 export function initializeLocalConnection() {
     attemptConnection();
 }
-

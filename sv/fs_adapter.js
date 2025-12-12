@@ -9,7 +9,9 @@ import {
     sendMessage, 
     fsListResponse, 
     fsReadResponse, 
-    fsError 
+    fsError,
+    fsWatchEvent,
+    fsTailEvent
 } from './bridge.js';
 
 export function createFsAdapter({ connectionType, consoleId, requesterId }) {
@@ -85,6 +87,26 @@ export function createFsAdapter({ connectionType, consoleId, requesterId }) {
                 readResponse.set({ path: err.path, error: err.error });
             }
         }));
+
+        unsubscribers.push(fsWatchEvent.subscribe(event => {
+            if (event) {
+                watchEvent.set({
+                    path: event.path,
+                    type: event.event_type,
+                    entry: {
+                        name: event.entry_name,
+                        type: event.is_dir ? 'dir' : 'file',
+                        size: -1 // Size info not provided by bridge watcher
+                    }
+                });
+            }
+        }));
+
+        unsubscribers.push(fsTailEvent.subscribe(event => {
+            if (event) {
+                tailEvent.set(event);
+            }
+        }));
     }
 
     // Return the public API for the component to use
@@ -99,7 +121,7 @@ export function createFsAdapter({ connectionType, consoleId, requesterId }) {
                 const command = { type: 'fs_list', path, recursive, honor_skignore };
                 fileSystemRequests.set({ consoleId, requesterId, command, timestamp: Date.now() });
             } else {
-                sendMessage({ type: 'fs_list', path });
+                sendMessage({ type: 'fs_list', path, recursive });
             }
         },
 
@@ -116,22 +138,30 @@ export function createFsAdapter({ connectionType, consoleId, requesterId }) {
         watch: (path) => {
             if (connectionType === 'iosk') {
                 fileSystemRequests.set({ consoleId, command: { type: 'fs_watch_start', path }, timestamp: Date.now() });
+            } else {
+                sendMessage({ type: 'fs_watch_start', path });
             }
         },
         unwatch: (path) => {
              if (connectionType === 'iosk') {
                 fileSystemRequests.set({ consoleId, command: { type: 'fs_watch_stop', path }, timestamp: Date.now() });
+            } else {
+                sendMessage({ type: 'fs_watch_stop', path });
             }
         },
 
         tail: (path) => {
              if (connectionType === 'iosk') {
                 fileSystemRequests.set({ consoleId, command: { type: 'fs_tail_start', path }, timestamp: Date.now() });
+            } else {
+                sendMessage({ type: 'fs_tail_start', path });
             }
         },
         untail: (path) => {
              if (connectionType === 'iosk') {
                 fileSystemRequests.set({ consoleId, command: { type: 'fs_tail_stop', path }, timestamp: Date.now() });
+            } else {
+                sendMessage({ type: 'fs_tail_stop', path });
             }
         },
 
