@@ -462,19 +462,21 @@ function createWindowManager() {
         });
     };
 
-    const removeWindow = (groupId) => {
+    const removeWindow = (groupId, { force = false } = {}) => {
         update(currentWindows => {
-            const group = currentWindows.find(g => g.id === groupId);
-            if (!group) return currentWindows;
+            if (!force) {
+                const group = currentWindows.find(g => g.id === groupId);
+                if (!group) return currentWindows;
 
-            // Check if any tab requires confirmation
-            for (const tab of group.tabs) {
-                 if (tab.component === IoskConsole && tab.isConsoleConnected) {
-                    if (!confirm(`Console "${tab.title}" has an active connection. Are you sure you want to close it?`)) {
-                        return currentWindows;
+                // Check if any tab requires confirmation
+                for (const tab of group.tabs) {
+                     if (tab.component === IoskConsole && tab.isConsoleConnected) {
+                        if (!confirm(`Console "${tab.title}" has an active connection. Are you sure you want to close it?`)) {
+                            return currentWindows;
+                        }
+                        // Only need to confirm once for the whole group
+                        break;
                     }
-                    // Only need to confirm once for the whole group
-                    break;
                 }
             }
             return currentWindows.filter(g => g.id !== groupId);

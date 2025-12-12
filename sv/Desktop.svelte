@@ -30,18 +30,14 @@
             // The preferred key is originalGroupId for component persistence, otherwise the db id.
             let persistentId = bw.originalGroupId != null ? bw.originalGroupId : bw.id;
 
-            // Check if this preferred key is already taken by a front window or another backed window.
+            // During a transition, a window can briefly exist in both the front and back stores
+            // within the same Svelte tick. If a front window exists with the same persistent key,
+            // we temporarily ignore the backed version to avoid a key collision in the #each block.
+            // Svelte will then process the removal of the front window in the same tick, and on the
+            // next computation of this store, the backed window will appear correctly without collision.
+            // This allows Svelte to see it as a property update on the same component instance.
             if (seenKeys.has(persistentId)) {
-                console.warn(`Duplicate key (${persistentId}) found for backed window (collides with front window or other backed window). Using unique DB ID ${bw.id} as key to prevent crash.`);
-                // Fallback to the unique DB id.
-                persistentId = bw.id;
-            }
-
-            // It's possible the fallback DB ID is also a duplicate. This is a rare
-            // but possible edge case. If it happens, we must not crash.
-            if (seenKeys.has(persistentId)) {
-                console.error(`Unresolvable key collision for backed window ${bw.id}. Using prefixed key as last resort.`);
-                persistentId = `dbid-${bw.id}`;
+                return null;
             }
 
             seenKeys.add(persistentId);
@@ -72,7 +68,7 @@
                 // Pass the full backed window object for the context menu
                 backedWindowObject: bw,
             };
-        });
+        }).filter(Boolean);
 
         return [...frontWindows, ...mappedBackedWindows];
     })();
@@ -1484,7 +1480,6 @@
         const config = generateBoardConfigFromWindow(windowToBack, get(windows));
         const frontWindow = get(windows).find(w => w.id === windowToBack.id);
         config.cloaked = frontWindow ? frontWindow.cloaked : false;
-        const configStr = JSON.stringify(config);
 
         // Get view states for coordinate transformation
         const wv = $windowView;
@@ -1510,21 +1505,22 @@
         const newX = backWorldMidX - newWidth / 2;
         const newY = backWorldMidY - newHeight / 2;
 
+        // Create a representation of the item as it will exist on the back layer
         const tempNewItem = {
             id: windowToBack.id, // Use the same ID to allow Svelte to transition the component
             type: 'backed_window',
             x: newX, y: newY,
             width: newWidth, height: newHeight,
-            baseWidth: newWidth,
+            baseWidth: newWidth, // for scaling
             baseHeight: newHeight,
             scale: 1.0,
-            config: configStr,
+            config: config, // Use the live config object, not a string
         };
 
         // 2. Prepare for collision resolution
         let frameItems = [...allItems.filter(i => i.type !== 'window' && i.id !== windowToBack.id), tempNewItem];
         const activeItemIds = new Set([`backed_window-${windowToBack.id}`]);
-        const startStates = frameItems.map(i => ({ ...i, config: i.config ? JSON.parse(JSON.stringify(i.config)) : undefined }));
+        const startStates = frameItems.map(i => ({ ...i }));
         const pushedItemsMap = new Map();
 
         // 3. Resolve collisions
@@ -1536,44 +1532,52 @@
             return;
         }
 
-        // 4. Perform an atomic, optimistic update to prevent component destruction
-        backedWindows.update(bws => {
-            const optimisticBackedWindow = {
-                id: `temp-${Date.now()}`, // Temporary ID, will be replaced by backend response
-                originalGroupId: backedItem.id,
-                config: JSON.parse(backedItem.config),
-                x: backedItem.x,
-                y: backedItem.y,
-                width: backedItem.width,
-                height: backedItem.height,
-                scale: backedItem.scale,
-                z_index: 1, // Placeholder
-            };
-            return [...bws, optimisticBackedWindow];
-        });
-        windows.removeWindow(windowToBack.id);
+        // 4. *** REVISED ATOMIC UPDATE ***
+        // Remove the window from the front layer and add an optimistic representation
+        // to the back layer in the same tick. This is the key to preserving the component.
 
-        // 5. Persist all changes to the backend asynchronously
-        const itemsToUpdate = new Set([...activeItemIds, ...pushedItemsMap.keys()]);
-        updatedFrameItems.forEach(item => {
+        // First, remove from the front.
+        windows.removeWindow(windowToBack.id, { force: true });
+
+        // Then, add a temporary object to the back layer store. This object mimics
+        // the structure of a real backed window from the database.
+        const optimisticBackedWindow = {
+            id: `temp-${Date.now()}`, // Temporary ID, will be replaced by backend response
+            originalGroupId: backedItem.id,
+            config: backedItem.config,
+            x: backedItem.x,
+            y: backedItem.y,
+            width: backedItem.width, // Use base width from tempNewItem
+            height: backedItem.height, // Use base height from tempNewItem
+            scale: backedItem.scale,
+            z_index: 1, // Placeholder
+        };
+        backedWindows.update(bws => [...bws, optimisticBackedWindow]);
+
+        // 5. Persist all changes to the backend asynchronously.
+
+        // The backedItem's config needs to be a string for the backend.
+        const finalConfigStr = JSON.stringify(backedItem.config);
+
+        // Persist the main backed window
+        createBackedWindow(finalConfigStr, backedItem.x, backedItem.y, backedItem.width, backedItem.height, backedItem.scale, backedItem.id);
+
+        // Persist any other items that were pushed during collision resolution
+        const pushedItems = updatedFrameItems.filter(item => {
             const uniqueId = `${item.type}-${item.id}`;
-            if (!itemsToUpdate.has(uniqueId)) return;
+            return pushedItemsMap.has(uniqueId);
+        });
 
-            if (item.id === windowToBack.id) {
-                 // The originalGroupId is crucial for preserving the component instance key.
-                createBackedWindow(item.config, item.x, item.y, item.width, item.height, item.scale, item.id);
-            } else {
-                if (item.type === 'box') {
-                    updateBoxTransform(item.id, item.x, item.y, item.scale);
-                } else if (item.type === 'shortcut') {
-                    updateShortcutTransform(item.id, item.x, item.y, item.scale || 1.0);
-                } else if (item.type === 'backed_window') {
-                    updateBackedWindowTransform(item.originalBackedId || item.id, item.x, item.y, item.scale);
-                }
+        pushedItems.forEach(item => {
+            if (item.type === 'box') {
+                updateBoxTransform(item.id, item.x, item.y, item.scale);
+            } else if (item.type === 'shortcut') {
+                updateShortcutTransform(item.id, item.x, item.y, item.scale || 1.0);
+            } else if (item.type === 'backed_window') {
+                updateBackedWindowTransform(item.originalBackedId || item.id, item.x, item.y, item.scale);
             }
         });
     }
-
 
     onMount(() => {
         // The WebSocket connection is now established in SideKick.svelte

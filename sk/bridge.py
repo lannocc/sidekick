@@ -912,13 +912,11 @@ async def websocket_handler(websocket):
                     print_action("Create BackWin", f"box={box_id}, x={int(x)}, y={int(y)}")
                     cursor = DB_CONN.cursor()
 
-                    # New: Ensure original_group_id is unique for this box_id.
-                    # If another backed window is using this ID, it means the old one
-                    # is stale. We nullify its original_group_id to give precedence 
-                    # to the new one, preventing key collisions on the frontend.
+                    # MODIFICATION: Ensure original_group_id is unique for this box_id by deleting any stale entries.
+                    # This is more robust than nullifying the ID.
                     if original_group_id is not None:
                         cursor.execute(
-                            "UPDATE board SET original_group_id = NULL WHERE box_id = ? AND original_group_id = ?",
+                            "DELETE FROM board WHERE box_id = ? AND original_group_id = ?",
                             (box_id, original_group_id)
                         )
 

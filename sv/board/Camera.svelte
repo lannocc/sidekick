@@ -1,11 +1,18 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
 
+    // Make `mirrored` a prop to receive saved state on re-creation.
+    export let mirrored = false;
+
+    // Add a `getState` function so the window manager can save the component's state.
+    export function getState() {
+        return { mirrored };
+    }
+
     let videoEl;
     let canvasEl; // For taking snapshots
     let stream;
     let error = null;
-    let mirrored = false; // State for the mirror toggle
     let showControls = false; // State to control control visibility
 
     onMount(async () => {
