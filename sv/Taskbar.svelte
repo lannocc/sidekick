@@ -4,7 +4,7 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, newBoxesWindow } from './windows.js';
+    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, newBoxesWindow, newWebcam } from './windows.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled, componentIconMap } from './desktop.js';
     import { connectionStatus, switchToBox, boxes } from './bridge.js';
     import Clock from './Clock.svelte';
@@ -534,7 +534,7 @@
         top: calc(var(--tb-height, 40px) * 0.85);
         right: 0;
         display: grid;
-        grid-template-columns: repeat(4, 52px);
+        grid-template-columns: repeat(5, 52px);
         grid-template-rows: repeat(2, 52px);
         gap: 8px;
         padding: 8px;
@@ -641,7 +641,7 @@
         position: absolute;
         top: calc(8px + 52px + 8px); /* Corresponds to start-menu padding + 1 row + 1 gap */
         left: 8px; /* Corresponds to start-menu padding */
-        width: calc(4 * 52px + 3 * 8px); /* 4 columns + 3 gaps */
+        width: calc(5 * 52px + 4 * 8px); /* 5 columns + 4 gaps */
         height: 52px; /* 1 row */
         background-color: rgba(30, 30, 30, 0.33);
         backdrop-filter: blur(1px);
@@ -845,6 +845,7 @@
                 <!-- Top Row -->
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchSettings({ sourceEvent: e }); }} title="Settings">⚙️</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchCalculator({ sourceEvent: e }); }} title="Calculator">🧮</button>
+                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebcam({ sourceEvent: e }); showMenu = false; }} title="Webcam">📸</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebBrowser({ sourceEvent: e }); showMenu = false; }} title="Web Browser">🌐</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">
                     🖥️
@@ -852,6 +853,7 @@
                 </button>
 
                 <!-- Bottom Row -->
+                <div />
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Ask">?</button>
                 <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBoxesWindow({ sourceEvent: e }); showMenu = false; }} disabled={$connectionStatus !== 'connected'} title="Boxes">📦</button>
                 <button class="menu-item" on:click={(e) => { 
