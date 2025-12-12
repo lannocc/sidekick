@@ -315,6 +315,8 @@
     function getMaxExpandedDepth(node) { if (!node.children || node.children.length === 0) return 0; function findMax(currentNode, currentLevel) { if (!expandedNodes.has(currentNode.path) || !currentNode.children || currentNode.children.length === 0) return currentLevel; let maxChildLevel = currentLevel; for (const child of currentNode.children) { const childMaxLevel = findMax(child, currentLevel + 1); if (childMaxLevel > maxChildLevel) maxChildLevel = childMaxLevel; } return maxChildLevel; } let maxDepth = 0; for (const child of node.children) { const childMaxDepth = findMax(child, 0); if (childMaxDepth > maxDepth) maxDepth = childMaxDepth; } return maxDepth; }
 
     onMount(() => {
+        if (treeNode) return; // Prevent execution in recursive children
+
         fsAdapter = createFsAdapter({ connectionType, consoleId, requesterId: id });
         window.addEventListener('click', closeContextMenu);
 
@@ -393,6 +395,8 @@
     });
 
     onDestroy(() => {
+        if (treeNode) return; // Prevent execution in recursive children
+
         if (isWatching) fsAdapter.unwatch(currentPath);
         if (fsAdapter) fsAdapter.destroy();
         clearTimeout(changeClearTimeout);
