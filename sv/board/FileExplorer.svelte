@@ -382,7 +382,7 @@
                 if (s === 'connected') {
                     requestPath(initialPath);
                 } else if (s === 'disconnected' || s === 'error') {
-                    errorMessage = "Not connected to local backend. Run 'sk local'.";
+                    errorMessage = "SKYBRIDGE REQUIRED. Not connected to local backend.";
                     items = [];
                 }
             });
