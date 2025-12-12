@@ -143,6 +143,19 @@
     let middleClickTimeout;
     let componentInstances = {};
 
+    function handleWheel(event) {
+        if (isBacked && (event.ctrlKey || event.altKey)) {
+            event.preventDefault();
+            event.stopPropagation();
+            const zoomStep = 0.05;
+            const delta = event.deltaY < 0 ? zoomStep : -zoomStep;
+            const newScale = Math.max(0.2, (scale ?? 1.0) + delta);
+            // Dispatch a 'scale' event, consistent with Shortcut.svelte and Box.svelte
+            dispatch('scale', { id, newScale });
+        }
+        // Allow wheel events to bubble for other cases (e.g., front window content scroll)
+    }
+
     // --- MODIFICATION START: Content Panning State ---
     let isContentPanning = false;
     let panTargetX = null;
@@ -661,7 +674,7 @@
     data-id={id}
     data-type={isBacked ? 'backed_window' : 'window'}
     on:contextmenu|preventDefault|stopPropagation={isBacked ? (e) => dispatch('contextmenubacked', e) : null}
-    on:wheel={isBacked ? (e) => dispatch('wheelbacked', e) : null}
+    on:wheel={handleWheel}
 >
     <div
         class:window-frame={!isBacked}
@@ -718,7 +731,7 @@
             <div class="content-area-wrapper">
                 {#each tabs as tab (tab.id)}
                     {@const { component, ...restOfTab } = tab}
-                  <div class="content-area-container" style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'} style:pointer-events={isBacked ? (isActive && !cloaked ? null : 'none') : ($desktopInteraction || $dragState || cloaked ? 'none' : null)} style:background={sceneStyle} style:opacity={sceneSettings?.opacity ?? 1.0} on:mousedown={handleContentMouseDown} on:wheel={e => handleContentWheel(e, tab)} on:focusout={e => handleFocusOut(e, tab)}>
+                  <div class="content-area-container" style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'} style:pointer-events={isBacked ? (isActive && !cloaked ? null : 'none') : ($desktopInteraction || $dragState || cloaked ? 'none' : null)} style:background={sceneStyle} style:opacity={sceneSettings?.opacity ?? 1.0} on:mousedown={handleContentMouseDown} on:wheel={!isBacked ? e => handleContentWheel(e, tab) : null} on:focusout={e => handleFocusOut(e, tab)}>
                         <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
                             <svelte:component bind:this={componentInstances[tab.id]} this={component} {...restOfTab} groupId={id} id={tab.id} isActive={isActive && tab.id === activeTabId} {x} {y} {width} {height} {maximized} {isBacked} />
                             {#if componentInstances[tab.id]}

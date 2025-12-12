@@ -1913,15 +1913,7 @@
                     interactiveBackedWindowId = win.id;
                     windows.unfocusAllWindows();
                 }}
-                on:wheelbacked={e => {
-                    if (e.ctrlKey || e.altKey) {
-                        e.preventDefault();
-                        const zoomStep = 0.05;
-                        const delta = e.deltaY < 0 ? zoomStep : -zoomStep;
-                        const newScale = Math.max(0.2, win.scale + delta);
-                        handleItemScaleRequest({ detail: { id: win.id, newScale, type: 'backed_window' } });
-                    }
-                }}
+                on:scale={e => handleItemScaleRequest({ detail: { ...e.detail, type: 'backed_window' } })}
             />
         {/each}
     </div>
