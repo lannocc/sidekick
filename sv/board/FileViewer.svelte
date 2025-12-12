@@ -123,7 +123,7 @@
         fsAdapter = createFsAdapter({ connectionType, consoleId, requesterId: id });
 
         fsAdapter.readResponse.subscribe(data => {
-            if (data && data.path === path) {
+            if (data && data.path === path && data.requester_id === id) {
                 isLoading = false;
                 isLoadingNextChunk = false;
                 if (data.error) {

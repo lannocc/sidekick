@@ -509,20 +509,43 @@ async def handle_fs_list(path, recursive=False, requester_id=None):
         return response
 
 
-async def handle_fs_read(path):
-    """Handles the fs_read request."""
+async def handle_fs_read(path, offset=0, length=-1, requester_id=None):
+    """Handles the fs_read request, supporting binary files and chunking."""
+    response = {'type': 'fs_read_response', 'path': path}
+    if requester_id is not None:
+        response['requester_id'] = requester_id
+    
     try:
         abs_path = os.path.abspath(path)
 
         if not os.path.isfile(abs_path):
-            return {'type': 'fs_error', 'path': path, 'error': 'Not a file or does not exist'}
+            response['type'] = 'fs_error'
+            response['error'] = 'Not a file or does not exist'
+            return response
 
-        with open(abs_path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-        return {'type': 'fs_read_response', 'path': path, 'content': content}
+        total_size = os.path.getsize(abs_path)
+        is_bin = is_binary(abs_path)
+        
+        with open(abs_path, 'rb') as f:
+            f.seek(offset)
+            if length == -1:
+                content_bytes = f.read()
+            else:
+                content_bytes = f.read(length)
+
+        response.update({
+            'content_b64': base64.b64encode(content_bytes).decode('utf-8'),
+            'is_binary': is_bin,
+            'total_size': total_size,
+            'offset': offset,
+            'length': len(content_bytes) if length != -1 else -1,
+        })
+        return response
     except Exception as e:
         log.error(f"Error reading path {path}: {e}")
-        return {'type': 'fs_error', 'path': path, 'error': str(e)}
+        response['type'] = 'fs_error'
+        response['error'] = str(e)
+        return response
 
 
 def _get_formatted_file_content(full_path):
@@ -721,8 +744,11 @@ async def websocket_handler(websocket):
                     await websocket.send(json.dumps(response))
                 elif msg_type == 'fs_read':
                     path = msg.get('path')
-                    print_action("FS Read", f"path='{path}'")
-                    response = await handle_fs_read(path)
+                    offset = msg.get('offset', 0)
+                    length = msg.get('length', -1)
+                    requester_id = msg.get('requester_id')
+                    print_action("FS Read", f"path='{path}', offset={offset}, len={length}, id={requester_id}")
+                    response = await handle_fs_read(path, offset, length, requester_id)
                     await websocket.send(json.dumps(response))
 
                 # --- Filesystem Advanced Operations ---

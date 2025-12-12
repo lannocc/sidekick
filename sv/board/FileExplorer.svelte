@@ -271,7 +271,7 @@
             columnsEnabled = false;
         }
         const isRecursive = (nestedView || columnsEnabled) && supportsRecursive;
-        fsAdapter.requestPath(path, isRecursive, isRecursive);
+        fsAdapter.requestPath(path, isRecursive);
     }
 
     function handleItemClick(item) {
