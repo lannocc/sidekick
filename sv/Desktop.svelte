@@ -879,10 +879,17 @@
         window.addEventListener('mouseup', onUp, { once: true });
     }
 
-
+    // --- MODIFICATION START: Updated Global Mouse Down Handler ---
     function handleGlobalMouseDown(event) {
         if (event.target.closest('.window-wrapper:not(.backed)')) {
-            // Click was on a front window, let Window.svelte handle it. It will manage its own focus.
+            // A click landed on a front window. Window.svelte's handlers run first.
+            // If it was a middle click that Window.svelte decided not to handle (e.g., no scrollable content),
+            // the event will bubble here. In that case, we treat it as a desktop pan.
+            if (event.button === 1) {
+                handleDesktopMiddleClick(event);
+            }
+            // For any click on a front window, we don't want the logic below (unfocusing, etc) to run.
+            // Window.svelte is responsible for its own focus management.
             return;
         }
     
@@ -903,7 +910,7 @@
         if (targetItemEl) {
             handleItemMouseDown(event, targetItemEl);
         } else {
-            // This is a click on the desktop background. We already cleared backed window focus above.
+            // This is a click on the desktop background.
             if (event.target.classList.contains('desktop-background')) {
                 if (event.button === 1) { // Middle mouse for panning
                     handleDesktopMiddleClick(event);
@@ -913,6 +920,7 @@
             }
         }
     }
+    // --- MODIFICATION END ---
 
     function startItemDrag(event, itemEl) {
         const id = itemEl.dataset.id;

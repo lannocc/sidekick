@@ -115,20 +115,52 @@
     let middleClickTimeout;
     let componentInstances = {};
 
-    // --- NEW: Content Panning State ---
+    // --- MODIFICATION START: Content Panning State ---
     let isContentPanning = false;
-    let panTargetElement = null;
+    let panTargetX = null;
+    let panTargetY = null;
     let panStartX, panStartY, panScrollLeftStart, panScrollTopStart;
+    // --- MODIFICATION END ---
 
     // --- Event Handlers ---
     function handleContentMouseDown(event) {
         if (isBacked) return; // Let Desktop.svelte handle backed item interaction
-        if (event.button === 1) {
+
+        // --- MODIFICATION START: Smart Middle-Click Handling ---
+        if (event.button === 1) { // Middle mouse button
             if (event.ctrlKey) { event.preventDefault(); event.stopPropagation(); dispatch('backrequest'); return; }
-            handleMiddleClick(event);
-            event.stopPropagation();
+            
+            // Check if there's any scrollable content under the cursor.
+            const contentArea = event.target.closest('.content-area-container');
+            if (contentArea) {
+                let target = event.target;
+                let isScrollable = false;
+                // Traverse up from the event target to find a scrollable parent within the content area
+                while (target && target !== contentArea.parentElement) {
+                    if (target.scrollHeight > target.clientHeight || target.scrollWidth > target.clientWidth) {
+                        isScrollable = true;
+                        break;
+                    }
+                    if (target === contentArea) break;
+                    target = target.parentElement;
+                }
+                // Also check the main container itself if no inner element was found
+                if (!isScrollable && (contentArea.scrollHeight > contentArea.clientHeight || contentArea.scrollWidth > contentArea.clientWidth)) {
+                    isScrollable = true;
+                }
+
+                if (isScrollable) {
+                    // If content is scrollable, handle it here and stop it from bubbling to the desktop.
+                    handleMiddleClick(event);
+                    event.stopPropagation();
+                }
+            }
+            // If not in content area, or if content is not scrollable, do nothing.
+            // The event will bubble up to Desktop.svelte, which will handle it as a desktop pan.
             return;
         }
+        // --- MODIFICATION END ---
+
         if ((event.altKey || event.metaKey) && !maximized) {
             if (event.button === 0) { dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY, focus: false }); }
             else if (event.button === 2) {
@@ -261,22 +293,32 @@
     function onResize(event) { if (!isResizing) return; const { x: ix, y: iy, width: iw, height: ih, mouseX: startX, mouseY: startY } = initialResizeState; const { zoom } = get(windowView); const dx = (event.clientX - startX) / zoom; const dy = (event.clientY - startY) / zoom; const minWidth = 250, minHeight = 150; let newX = ix, newY = iy, newWidth = iw, newHeight = ih; if (resizeDirection.includes('e')) { newWidth = iw + dx; } else if (resizeDirection.includes('w')) { newWidth = iw - dx; newX = ix + dx; } if (resizeDirection.includes('s')) { newHeight = ih + dy; } else if (resizeDirection.includes('n')) { newHeight = ih - dy; newY = iy + dy; } if (newWidth < minWidth) { if (resizeDirection.includes('w')) { newX -= minWidth - newWidth; } newWidth = minWidth; } if (newHeight < minHeight) { if (resizeDirection.includes('n')) { newY -= minHeight - newHeight; } newHeight = minHeight; } windows.updateWindowProps(id, { x: newX, y: newY, width: newWidth, height: newHeight }); }
     function onResizeEnd() { isResizing = false; window.removeEventListener('mousemove', onResize); restoreFocus(); }
 
+    // --- MODIFICATION START: Updated Content Panning Logic ---
     function handleContentPanMove(event) {
-        if (!isContentPanning || !panTargetElement) return;
+        if (!isContentPanning) return;
         const dx = event.clientX - panStartX;
         const dy = event.clientY - panStartY;
-        panTargetElement.scrollLeft = panScrollLeftStart - dx;
-        panTargetElement.scrollTop = panScrollTopStart - dy;
+        if (panTargetX) {
+            panTargetX.scrollLeft = panScrollLeftStart - dx;
+        }
+        if (panTargetY) {
+            panTargetY.scrollTop = panScrollTopStart - dy;
+        }
     }
 
     function handleContentPanEnd() {
         if (!isContentPanning) return;
         isContentPanning = false;
-        if (panTargetElement) {
-            panTargetElement.style.cursor = '';
-            panTargetElement.style.userSelect = '';
-            panTargetElement = null;
-        }
+        
+        const elementsToReset = new Set([panTargetX, panTargetY].filter(Boolean));
+        elementsToReset.forEach(el => {
+            el.style.cursor = '';
+            el.style.userSelect = '';
+        });
+
+        panTargetX = null;
+        panTargetY = null;
+        
         document.body.style.cursor = 'auto';
         window.removeEventListener('mousemove', handleContentPanMove);
     }
@@ -286,49 +328,88 @@
         if (!contentArea) return;
 
         let target = event.target;
-        let scrollableEl = null;
+        let scrollableElX = null;
+        let scrollableElY = null;
 
-        // Traverse up from the event target to find a scrollable parent within the content area
+        // Traverse up from the event target to find the nearest scrollable parents for each axis
         while (target && target !== contentArea.parentElement) {
-            if (target.scrollHeight > target.clientHeight || target.scrollWidth > target.clientWidth) {
-                scrollableEl = target;
-                break;
+            if (!scrollableElX && target.scrollWidth > target.clientWidth) {
+                scrollableElX = target;
             }
+            if (!scrollableElY && target.scrollHeight > target.clientHeight) {
+                scrollableElY = target;
+            }
+            if (scrollableElX && scrollableElY) break;
             if (target === contentArea) break;
             target = target.parentElement;
         }
 
-        if (!scrollableEl) {
-            scrollableEl = contentArea;
+        // If not found, check the main container itself.
+        if (!scrollableElX && contentArea.scrollWidth > contentArea.clientWidth) {
+            scrollableElX = contentArea;
+        }
+        if (!scrollableElY && contentArea.scrollHeight > contentArea.clientHeight) {
+            scrollableElY = contentArea;
         }
         
-        if (!scrollableEl || (scrollableEl.scrollHeight <= scrollableEl.clientHeight && scrollableEl.scrollWidth <= scrollableEl.clientWidth)) {
-            return; // Nothing to pan
+        if (!scrollableElX && !scrollableElY) {
+            return; // Should not happen, as checked in handleContentMouseDown
         }
 
         event.preventDefault();
         isContentPanning = true;
-        panTargetElement = scrollableEl;
+        panTargetX = scrollableElX;
+        panTargetY = scrollableElY;
         panStartX = event.clientX; panStartY = event.clientY;
-        panScrollLeftStart = panTargetElement.scrollLeft; panScrollTopStart = panTargetElement.scrollTop;
+        panScrollLeftStart = panTargetX ? panTargetX.scrollLeft : 0;
+        panScrollTopStart = panTargetY ? panTargetY.scrollTop : 0;
         document.body.style.cursor = 'grabbing';
-        panTargetElement.style.cursor = 'grabbing'; panTargetElement.style.userSelect = 'none';
+
+        const elementsToStyle = new Set([panTargetX, panTargetY].filter(Boolean));
+        elementsToStyle.forEach(el => {
+            el.style.cursor = 'grabbing';
+            el.style.userSelect = 'none';
+        });
+
         window.addEventListener('mousemove', handleContentPanMove);
         window.addEventListener('mouseup', handleContentPanEnd, { once: true });
     }
 
-    function handleMiddleClick(event) { if (isBacked) return; if (event.button !== 1) return; event.preventDefault(); if (middleClickTimeout) { clearTimeout(middleClickTimeout); middleClickTimeout = null; windows.toggleCloak(id); return; } middleClickTimeout = setTimeout(() => { middleClickTimeout = null; }, 250); const onMove = () => { clearTimeout(middleClickTimeout); middleClickTimeout = null; if (maximized) return; if (event.target.closest('.content-area-container')) { handleContentPanStart(event); } else { onDragStart(event, { focus: false }); } }; const onUp = () => { window.removeEventListener('mousemove', onMove); }; window.addEventListener('mousemove', onMove, { once: true }); window.addEventListener('mouseup', onUp, { once: true }); }
+    function handleMiddleClick(event) {
+        if (isBacked) return;
+        if (event.button !== 1) return;
+        event.preventDefault();
+        if (middleClickTimeout) {
+            clearTimeout(middleClickTimeout);
+            middleClickTimeout = null;
+            windows.toggleCloak(id);
+            return;
+        }
+        middleClickTimeout = setTimeout(() => { middleClickTimeout = null; }, 250);
+        const onMove = () => {
+            clearTimeout(middleClickTimeout);
+            middleClickTimeout = null;
+            if (maximized) return;
+            // The decision to pan has already been made, so we just start it.
+            handleContentPanStart(event);
+        };
+        const onUp = () => { window.removeEventListener('mousemove', onMove); };
+        window.addEventListener('mousemove', onMove, { once: true });
+        window.addEventListener('mouseup', onUp, { once: true });
+    }
+    // --- MODIFICATION END ---
+
     function handleFrameMouseDown(event) {
         // For backed windows, all mouse down interactions are handled by Desktop.svelte
         if (isBacked) return;
 
-        // For front windows, handle middle-click for cloaking/dragging universally on the frame.
-        if (event.button === 1) {
+        // --- MODIFICATION START: Allow desktop pan fallback ---
+        if (event.button === 1) { // Middle mouse button
             if (event.ctrlKey) { event.preventDefault(); event.stopPropagation(); dispatch('backrequest'); return; }
-            handleMiddleClick(event);
-            event.stopPropagation();
+            // Let the event bubble up to Desktop.svelte to handle panning.
             return;
         }
+        // --- MODIFICATION END ---
 
         // For other buttons on front windows...
         clearTimeout(focusFollowsMouseTimeout);
@@ -357,17 +438,18 @@
             if (!isActive) windows.focusWindow(id);
             return;
         }
-        if (event.button === 1) {
+        // --- MODIFICATION START: Allow desktop pan fallback ---
+        if (event.button === 1) { // Middle mouse button
             if (event.ctrlKey) {
                 event.preventDefault();
                 event.stopPropagation();
                 dispatch('backrequest');
                 return;
             }
-            handleMiddleClick(event);
-            event.stopPropagation();
+            // Let the event bubble up to Desktop.svelte to handle panning.
             return;
         }
+        // --- MODIFICATION END ---
         if (maximized) {
             if (!isActive) windows.focusWindow(id);
             return;
