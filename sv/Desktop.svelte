@@ -2015,7 +2015,7 @@
                 <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
             </div>
             <div class="action-controls">
-                <button class="zoom-reset" on:click={resetView} title="Reset View" disabled={isViisabled}>Reset</button>
+                <button class="zoom-reset" on:click={resetView} title="Reset View" disabled={isViewResetDisabled}>Reset</button>
                 <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to Content" disabled={isBestFit}>Fit</button>
             </div>
         </div>
