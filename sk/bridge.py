@@ -13,6 +13,7 @@ from datetime import datetime
 from . import config
 from .util import get_directory_tree_as_text, get_directory_contents_as_text
 from binaryornot.check import is_binary
+import base64
 
 # pty is not available on Windows
 if platform.system() != 'Windows':
