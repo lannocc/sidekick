@@ -10,6 +10,9 @@
     export let id;
     export let groupId;
 
+    let chimeTestAudio;
+    let noticeTestAudio;
+
     let settings;
     const unsubscribe = desktopSettings.subscribe(value => {
         // Deep copy to avoid mutating the store directly before handleUpdate
@@ -420,7 +423,8 @@
         if (src) {
             try {
                 const resolvedSrc = await resolveAssetDataUrl(src);
-                new Audio(resolvedSrc).play().catch(e => console.error("Audio play failed:", e));
+                chimeTestAudio = new Audio(resolvedSrc);
+                chimeTestAudio.play().catch(e => console.error("Audio play failed:", e));
             } catch (e) {
                 alert("Could not play audio. Check URL or console for errors.");
                 console.error("Audio play error:", e);
@@ -435,7 +439,8 @@
         if (src) {
             try {
                 const resolvedSrc = await resolveAssetDataUrl(src);
-                new Audio(resolvedSrc).play().catch(e => console.error("Audio play failed:", e));
+                noticeTestAudio = new Audio(resolvedSrc);
+                noticeTestAudio.play().catch(e => console.error("Audio play failed:", e));
             } catch (e) {
                 alert("Could not play audio. Check URL or console for errors.");
                 console.error("Audio play error:", e);
@@ -1460,4 +1465,3 @@
     {componentName}
     {x} {y} {width} {height}
 />
-
