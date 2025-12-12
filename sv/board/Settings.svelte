@@ -4,7 +4,7 @@
     import { windows, newFileExplorer } from '../windows.js';
     import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
     import { onDestroy, onMount } from 'svelte';
-    import { connectionStatus, boxes, saveSettingsToBox, getDesktopSettings, getBoxSpecificSettings, desktopSettingsResponse, clearSettingsForBox, allBoxSettings } from '../bridge.js';
+    import { connectionStatus, boxes, saveSettingsToBox, getDesktopSettings, getBoxSpecificSettings, desktopSettingsResponse, clearSettingsForBox, allBoxSettings, resolveAssetDataUrl } from '../bridge.js';
     import { fileSelection } from '../iosk.js';
 
     export let id;
@@ -29,7 +29,7 @@
             console.warn("Main Desktop (id=0) not found in boxes list.");
             return [];
         }
-        
+
         for (const node of nodeMap.values()) {
             if (node.id === 0) continue; // Root is not a child
             const parent = nodeMap.get(node.parent_box_id);
@@ -65,13 +65,13 @@
     onMount(() => {
         unsubscribeFileSelection = fileSelection.subscribe(selection => {
             if (!selection || !selection.targetId || !selection.path) return;
-            
+
             const [type, ...pathParts] = selection.targetId.split('.');
             if (type !== 'settings') return;
 
             const settingPath = pathParts.join('.');
             setNested(settings, settingPath, `file://${selection.path}`);
-            
+
             settings = settings; // Trigger reactivity
             handleUpdate();
 
@@ -129,7 +129,7 @@
         getDesktopSettings(boxId);
         showSaveLoadMenu = false;
     }
-    
+
     function handleSave(boxId) {
         saveSettingsToBox(boxId);
         showSaveLoadMenu = false;
@@ -414,24 +414,32 @@
         handleUpdate();
     }
 
-    function testChime() {
+    async function testChime() {
         if (!settings.chimeType || settings.chimeType === 'none') return;
         let src = settings.chimeType === 'custom' ? settings.chimeUrl : `/assets/${settings.chimeType}`;
         if (src) {
             try {
-                new Audio(src).play().catch(e => console.error("Audio play failed:", e));
-            } catch (e) { alert("Could not play audio. Check URL or console for errors."); }
+                const resolvedSrc = await resolveAssetDataUrl(src);
+                new Audio(resolvedSrc).play().catch(e => console.error("Audio play failed:", e));
+            } catch (e) {
+                alert("Could not play audio. Check URL or console for errors.");
+                console.error("Audio play error:", e);
+            }
         }
      }
 
-    function testNoticeSound() {
+    async function testNoticeSound() {
         const audioSettings = settings.noticeDefaults.audio;
         if (!audioSettings.sound || audioSettings.sound === 'none') return;
         let src = audioSettings.sound === 'custom' ? audioSettings.url : `/assets/${audioSettings.sound}`;
         if (src) {
             try {
-                new Audio(src).play().catch(e => console.error("Audio play failed:", e));
-            } catch (e) { alert("Could not play audio. Check URL or console for errors."); }
+                const resolvedSrc = await resolveAssetDataUrl(src);
+                new Audio(resolvedSrc).play().catch(e => console.error("Audio play failed:", e));
+            } catch (e) {
+                alert("Could not play audio. Check URL or console for errors.");
+                console.error("Audio play error:", e);
+            }
         }
     }
 
@@ -757,7 +765,7 @@
 {#snippet renderBox(box, depth)}
     {@const hasCustomSettings = box.has_custom_settings}
     {@const isReadyForCompare = $allBoxSettings.hasOwnProperty(box.id)}
-    
+
     {@const targetBoxSettings = $allBoxSettings[box.id]}
     {@const currentTheme = getThemePart(settings)}
     {@const targetTheme = getThemePart(targetBoxSettings)}
@@ -772,9 +780,9 @@
         >
             🗑
         </button>
-        <button 
-            class="box-name-clickable" 
-            on:click={() => handleLoad(box.id)} 
+        <button
+            class="box-name-clickable"
+            on:click={() => handleLoad(box.id)}
             style:font-weight={$currentBoxId === box.id ? 'bold' : 'normal'}
             disabled={!hasCustomSettings || themesAreEqual}
             title={
@@ -791,7 +799,7 @@
             disabled={!isReadyForCompare || themesAreEqual}
             title={
                 !isReadyForCompare ? `Loading settings for ${box.name}...` :
-                themesAreEqual ? `${box.name} already has these settings` : 
+                themesAreEqual ? `${box.name} already has these settings` :
                 `Save current settings to ${box.name}`
             }
         >
@@ -807,7 +815,7 @@
 
 <div class="settings-container">
     <div class="tabs-container">
-        <div class="tabs">
+       <div class="tabs">
             <button class="tab-button" class:active={activeTab === 'sky'} on:click={() => activeTab = 'sky'}>Sky</button>
             <button class="tab-button" class:active={activeTab === 'boxes'} on:click={() => activeTab = 'boxes'}>Box</button>
             <button class="tab-button" class:active={activeTab === 'backBoard'} on:click={() => activeTab = 'backBoard'}>Back Board</button>
@@ -839,9 +847,9 @@
             >
                 📥
             </button>
-            
+
             <div style="position: relative;" bind:this={menuWrapperEl}>
-                <button 
+                <button
                     class="menu-button"
                     on:click={() => showSaveLoadMenu = !showSaveLoadMenu}
                     disabled={$connectionStatus !== 'connected'}
@@ -913,7 +921,7 @@
                             <label class="color-picker-label">
                                 <span>Display Mode</span>
                                 <select class="select-input" bind:value={settings.sky.scene.bgImageDisplayMode} on:change={handleUpdate}>
-                                    <option value="cover">Cover</option>
+                                  <option value="cover">Cover</option>
                                     <option value="contain">Fit</option>
                                     <option value="stretch">Stretch</option>
                                     <option value="tile">Tile</option>
@@ -1106,7 +1114,7 @@
                                         {/if}
                                     </div>
                                 </fieldset>
-                                
+
                                 {#if part === 'frame'}
                                     <fieldset>
                                         <legend>Shadow / Glow</legend>
@@ -1215,7 +1223,7 @@
                                         {/if}
                                     </div>
                                 </fieldset>
-                                
+
                                 {#if part === 'frame'}
                                     <fieldset>
                                         <legend>Shadow / Glow</legend>
@@ -1324,7 +1332,7 @@
                                         {/if}
                                     </div>
                                 </fieldset>
-                                
+
                                 {#if part === 'frame'}
                                     <fieldset>
                                         <legend>Shadow / Glow</legend>
@@ -1452,3 +1460,4 @@
     {componentName}
     {x} {y} {width} {height}
 />
+

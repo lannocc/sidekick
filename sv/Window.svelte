@@ -7,7 +7,7 @@
     import { get } from 'svelte/store';
     import { windows, dragState, instanceRegistry, dragRequest, generateBoardConfigFromWindow } from './windows.js';
     import { desktopSettings, windowSettings, windowView, desktopView, TASKBAR_HEIGHT, desktopInteraction, selectedItems } from './desktop.js';
-    import { savePanelConfig } from './bridge.js';
+    import { savePanelConfig, generateBgStyle, resolveAssetDataUrl } from './bridge.js';
     import IoskConsole from './board/IoskConsole.svelte';
     import FileViewer from './board/FileViewer.svelte';
     import WebBrowser from './board/WebBrowser.svelte';
@@ -54,39 +54,67 @@
     let settings;
     desktopSettings.subscribe(value => settings = value);
 
-    // --- Style Generation ---
-    function generateBgStyle(bgSettings) {
-        if (!bgSettings) return null;
-        if (bgSettings.bgType === 'gradient') return `linear-gradient(45deg, ${bgSettings.bgGradientStart} 0%, ${bgSettings.bgGradientEnd} 100%)`;
-        if (bgSettings.bgType === 'color') return bgSettings.bgColor;
-        if (bgSettings.bgType === 'image' && bgSettings.bgImage) {
-            let size = 'cover', repeat = 'no-repeat', position = 'center center';
-            switch (bgSettings.bgImageDisplayMode) {
-                case 'contain': size = 'contain'; break;
-                case 'stretch': size = '100% 100%'; break;
-                case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
-                case 'cover': default: break;
-            }
-            return `url('${bgSettings.bgImage}') ${position} / ${size} ${repeat}`;
-        }
-        return null;
-    }
+    // --- State for resolved image URLs ---
+    let resolvedFrameUrl = null;
+    let resolvedSceneUrl = null;
+    let resolvedCloakUrl = null;
 
     $: state = isActive ? 'active' : 'inactive';
     $: windowType = isBacked ? 'back' : 'normal';
-    
+
     // --- Window Styles (Unified) ---
     $: frameSettings = settings?.windows?.[windowType]?.frame?.[state];
-    $: frameStyle = generateBgStyle(frameSettings);
+    $: sceneSettings = settings?.windows?.[windowType]?.scene?.[state];
+    $: cloakSettings = settings?.windows?.[windowType]?.cloak?.[state];
+
+    // --- Reactive URL Resolvers ---
+    $: if (frameSettings?.bgType === 'image' && frameSettings?.bgImage) {
+        const urlToLoad = frameSettings.bgImage;
+        resolveAssetDataUrl(urlToLoad).then(url => {
+            const currentFrameSettings = get(desktopSettings)?.windows?.[windowType]?.frame?.[state];
+            if (currentFrameSettings?.bgImage === urlToLoad) {
+                resolvedFrameUrl = url;
+            }
+        });
+    } else {
+        resolvedFrameUrl = null;
+    }
+
+    $: if (sceneSettings?.bgType === 'image' && sceneSettings?.bgImage) {
+        const urlToLoad = sceneSettings.bgImage;
+        resolveAssetDataUrl(urlToLoad).then(url => {
+            const currentSceneSettings = get(desktopSettings)?.windows?.[windowType]?.scene?.[state];
+            if (currentSceneSettings?.bgImage === urlToLoad) {
+                resolvedSceneUrl = url;
+            }
+        });
+    } else {
+        resolvedSceneUrl = null;
+    }
+
+    $: if (cloakSettings?.bgType === 'image' && cloakSettings?.bgImage) {
+        const urlToLoad = cloakSettings.bgImage;
+        resolveAssetDataUrl(urlToLoad).then(url => {
+            const currentCloakSettings = get(desktopSettings)?.windows?.[windowType]?.cloak?.[state];
+            if (currentCloakSettings?.bgImage === urlToLoad) {
+                resolvedCloakUrl = url;
+            }
+        });
+    } else {
+        resolvedCloakUrl = null;
+    }
+
+    // --- Style Generation ---
+    $: frameStyle = generateBgStyle(frameSettings, resolvedFrameUrl);
+    $: sceneStyle = generateBgStyle(sceneSettings, resolvedSceneUrl);
+    $: cloakStyle = generateBgStyle(cloakSettings, resolvedCloakUrl);
+
     $: frameHeight = frameSettings?.height ?? 30;
     $: frameWidth = frameSettings?.width ?? 0;
     $: frameOpacity = frameSettings?.opacity ?? 1.0;
     $: boxShadowStyle = cloaked ? 'none' : (frameSettings?.shadowEnabled
         ? `${frameSettings.shadowInset ? 'inset ' : ''}${frameSettings.shadowX}px ${frameSettings.shadowY}px ${frameSettings.shadowBlur}px ${frameSettings.shadowSpread}px ${frameSettings.shadowColor}`
         : 'none');
-    $: sceneSettings = settings?.windows?.[windowType]?.scene?.[state];
-    $: cloakSettings = settings?.windows?.[windowType]?.cloak?.[state];
-    $: cloakStyle = generateBgStyle(cloakSettings);
     $: cloakOpacity = cloaked ? (cloakSettings?.opacity ?? 0.8) : 0;
 
     // --- NEW: Scrollbar Color Derivation ---
@@ -95,7 +123,7 @@
 
     // --- Backed Window Specifics ---
     $: isSelected = $selectedItems.has(`backed_window-${id}`);
-    
+
     // --- Transform Logic ---
     $: currentView = isBacked ? $desktopView : $windowView;
     $: transform = `translate(${currentView.panX}px, ${currentView.panY}px) scale(${currentView.zoom}) translate(${x}px, ${y}px)`;
@@ -129,7 +157,7 @@
         // --- MODIFICATION START: Smart Middle-Click Handling ---
         if (event.button === 1) { // Middle mouse button
             if (event.ctrlKey) { event.preventDefault(); event.stopPropagation(); dispatch('backrequest'); return; }
-            
+
             // Check if there's any scrollable content under the cursor.
             const contentArea = event.target.closest('.content-area-container');
             if (contentArea) {
@@ -170,11 +198,11 @@
             }
         } else if (!isActive) { windows.focusWindow(id); }
     }
-    
+
     // ... (Most other functions like onDragStart, onResize, etc., can remain as they are,
     // since they correctly handle the 'front' window case, which is what they're for.)
     // All the logic for handleConnect, handleDisconnect, tab dragging, etc. is fine.
-    
+
     // --- Simplified functions that already exist ---
     function handleContentWheel(event, tab) {
         if (event.ctrlKey || event.altKey) {
@@ -194,7 +222,7 @@
         const request = $dragRequest;
         dragRequest.set(null);
         const mockEvent = { clientX: request.clientX, clientY: request.clientY, target: titleBarEl, preventDefault: () => {}, button: request.type === 'move' ? 0 : 2 };
-        if (request.type === 'move') { onDragStart(mockEvent, { focus: request.focus ?? true }); } 
+        if (request.type === 'move') { onDragStart(mockEvent, { focus: request.focus ?? true }); }
         else if (request.type === 'resize') { onResizeStart(mockEvent, request.direction, { focus: request.focus ?? true }); }
     }
     let showGenericSettingsModal = false;
@@ -309,7 +337,7 @@
     function handleContentPanEnd() {
         if (!isContentPanning) return;
         isContentPanning = false;
-        
+
         const elementsToReset = new Set([panTargetX, panTargetY].filter(Boolean));
         elementsToReset.forEach(el => {
             el.style.cursor = '';
@@ -318,7 +346,7 @@
 
         panTargetX = null;
         panTargetY = null;
-        
+
         document.body.style.cursor = 'auto';
         window.removeEventListener('mousemove', handleContentPanMove);
     }
@@ -351,7 +379,7 @@
         if (!scrollableElY && contentArea.scrollHeight > contentArea.clientHeight) {
             scrollableElY = contentArea;
         }
-        
+
         if (!scrollableElX && !scrollableElY) {
             return; // Should not happen, as checked in handleContentMouseDown
         }
@@ -565,7 +593,7 @@
     .backed-window-frame:not(.active) {
         cursor: pointer;
     }
-    
+
     @keyframes notice-glow {
         50% { border-color: var(--notice-color); box-shadow: 0 0 20px 5px var(--notice-color), var(--original-shadow, 0 5px 15px rgba(0,0,0,0.3)); }
     }
@@ -635,16 +663,16 @@
     on:contextmenu|preventDefault|stopPropagation={isBacked ? (e) => dispatch('contextmenubacked', e) : null}
     on:wheel={isBacked ? (e) => dispatch('wheelbacked', e) : null}
 >
-    <div 
+    <div
         class:window-frame={!isBacked}
         class:backed-window-frame={isBacked}
-        class:active={isActive} 
-        class:noticing={!!notice} 
+        class:active={isActive}
+        class:noticing={!!notice}
         class:cloaked
         class:selected={isBacked && isSelected}
         style:box-shadow={boxShadowStyle}
-        style:--box-shadow={boxShadowStyle} 
-        style:--notice-color={notice?.color} 
+        style:--box-shadow={boxShadowStyle}
+        style:--notice-color={notice?.color}
         on:mousedown={!isBacked ? handleFrameMouseDown : null}
         on:mouseenter={handleMouseEnter}
         on:mouseleave={handleMouseLeave}
@@ -674,7 +702,7 @@
                     <span class="title-text">{title}</span>
                 {/if}
             </div>
-            
+
             {#if !isBacked}
                 <div class="window-controls" on:dblclick|stopPropagation on:mouseup|stopPropagation>
                     <div class="window-control maximize" title={maximized ? 'Restore' : 'Maximize'} on:click={() => windows.toggleMaximize(id)} on:mousedown|stopPropagation>
@@ -690,7 +718,7 @@
             <div class="content-area-wrapper">
                 {#each tabs as tab (tab.id)}
                     {@const { component, ...restOfTab } = tab}
-                    <div class="content-area-container" style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'} style:pointer-events={isBacked ? (isActive && !cloaked ? null : 'none') : ($desktopInteraction || $dragState || cloaked ? 'none' : null)} style:background={generateBgStyle(sceneSettings)} style:opacity={sceneSettings?.opacity ?? 1.0} on:mousedown={handleContentMouseDown} on:wheel={e => handleContentWheel(e, tab)} on:focusout={e => handleFocusOut(e, tab)}>
+                  <div class="content-area-container" style:display={tab.id === activeTabId && !minimized ? 'block' : 'none'} style:pointer-events={isBacked ? (isActive && !cloaked ? null : 'none') : ($desktopInteraction || $dragState || cloaked ? 'none' : null)} style:background={sceneStyle} style:opacity={sceneSettings?.opacity ?? 1.0} on:mousedown={handleContentMouseDown} on:wheel={e => handleContentWheel(e, tab)} on:focusout={e => handleFocusOut(e, tab)}>
                         <div style="height: 100%;" style:zoom={tab.zoom || 1.0}>
                             <svelte:component bind:this={componentInstances[tab.id]} this={component} {...restOfTab} groupId={id} id={tab.id} isActive={isActive && tab.id === activeTabId} {x} {y} {width} {height} {maximized} {isBacked} />
                             {#if componentInstances[tab.id]}
@@ -733,7 +761,7 @@
                 <button class="menu-item close-option" on:click={() => { showOptionsMenu = false; windows.removeWindow(id); }}>Close</button>
             </div>
         {/if}
-        
+
         <div class="cloak" style:background={cloakStyle} style:opacity={cloakOpacity} style:pointer-events={cloaked ? 'auto' : 'none'}
              on:dblclick|stopPropagation={!isBacked ? () => windows.toggleCloak(id) : null}
              on:mousedown={!isBacked ? handleFrameMouseDown : null}></div>
@@ -752,3 +780,4 @@
 
     <WindowSettingsModal bind:show={showGenericSettingsModal} title="Window Settings: {title}" {componentName} {x} {y} {width} {height} showNoticeSettings={true}/>
 </div>
+

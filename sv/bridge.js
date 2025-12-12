@@ -88,6 +88,30 @@ export async function resolveAssetDataUrl(url) {
     return promise;
 }
 
+// --- Style Generation Utility ---
+export function generateBgStyle(bgSettings, resolvedUrl) {
+    if (!bgSettings) return null;
+    if (bgSettings.bgType === 'gradient') {
+        return `linear-gradient(45deg, ${bgSettings.bgGradientStart} 0%, ${bgSettings.bgGradientEnd} 100%)`;
+    } else if (bgSettings.bgType === 'color') {
+        return bgSettings.bgColor;
+    } else if (bgSettings.bgType === 'image' && bgSettings.bgImage) {
+        let size = 'cover';
+        let repeat = 'no-repeat';
+        let position = 'center center';
+
+        switch (bgSettings.bgImageDisplayMode) {
+            case 'contain': size = 'contain'; break;
+            case 'stretch': size = '100% 100%'; break;
+            case 'tile': size = 'auto'; repeat = 'repeat'; position = '0 0'; break;
+            case 'cover': default: break;
+        }
+        const imageUrl = resolvedUrl || bgSettings.bgImage;
+        return `url('${imageUrl}') ${position} / ${size} ${repeat}`;
+    }
+    return null;
+}
+
 
 // --- Stores for inspecting arbitrary boxes ---
 export const shortcutListResponse = writable(null);
