@@ -309,9 +309,9 @@
             columnsContainer.scrollLeft += event.deltaY;
         }
     }
-    function handlePanStart(event) { if (event.button !== 1 || !columnsContainer) return; event.preventDefault(); isPanning = true; columnsContainer.style.cursor = 'grabbing'; columnsContainer.style.userSelect = 'none'; panStartX = event.clientX; panScrollLeftStart = columnsContainer.scrollLeft; panStartY = event.clientY; scrollableColumns = []; const els = columnsContainer.querySelectorAll('.column-content'); els.forEach(el => { if (el.scrollHeight > el.clientHeight) scrollableColumns.push({ element: el, initialScrollTop: el.scrollTop }); }); window.addEventListener('mousemove', handlePanMove); window.addEventListener('mouseup', handlePanEnd); }
+    function handlePanStart(event) { if (event.button !== 1 || !columnsContainer) return; event.preventDefault(); event.stopPropagation(); isPanning = true; columnsContainer.style.cursor = 'grabbing'; columnsContainer.style.userSelect = 'none'; panStartX = event.clientX; panScrollLeftStart = columnsContainer.scrollLeft; panStartY = event.clientY; scrollableColumns = []; const els = columnsContainer.querySelectorAll('.column-content'); els.forEach(el => { if (el.scrollHeight > el.clientHeight) scrollableColumns.push({ element: el, initialScrollTop: el.scrollTop }); }); window.addEventListener('mousemove', handlePanMove); window.addEventListener('mouseup', handlePanEnd, { once: true }); }
     function handlePanMove(event) { if (!isPanning) return; const dx = event.clientX - panStartX; columnsContainer.scrollLeft = panScrollLeftStart - dx; const dy = event.clientY - panStartY; scrollableColumns.forEach(({ element, initialScrollTop }) => { element.scrollTop = initialScrollTop - dy; }); }
-    function handlePanEnd(event) { if (event.button !== 1 || !isPanning) return; isPanning = false; columnsContainer.style.cursor = 'grab'; columnsContainer.style.userSelect = 'auto'; scrollableColumns = []; window.removeEventListener('mousemove', handlePanMove); window.removeEventListener('mouseup', handlePanEnd); }
+    function handlePanEnd(event) { if (!isPanning) return; isPanning = false; columnsContainer.style.cursor = 'grab'; columnsContainer.style.userSelect = 'auto'; scrollableColumns = []; window.removeEventListener('mousemove', handlePanMove); }
     function getMaxExpandedDepth(node) { if (!node.children || node.children.length === 0) return 0; function findMax(currentNode, currentLevel) { if (!expandedNodes.has(currentNode.path) || !currentNode.children || currentNode.children.length === 0) return currentLevel; let maxChildLevel = currentLevel; for (const child of currentNode.children) { const childMaxLevel = findMax(child, currentLevel + 1); if (childMaxLevel > maxChildLevel) maxChildLevel = childMaxLevel; } return maxChildLevel; } let maxDepth = 0; for (const child of node.children) { const childMaxDepth = findMax(child, 0); if (childMaxDepth > maxDepth) maxDepth = childMaxDepth; } return maxDepth; }
 
     onMount(() => {
@@ -403,7 +403,6 @@
         clearTimeout(changeClearTimeout);
         window.removeEventListener('click', closeContextMenu);
         window.removeEventListener('mousemove', handlePanMove);
-        window.removeEventListener('mouseup', handlePanEnd);
     });
 </script>
 

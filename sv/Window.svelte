@@ -115,6 +115,11 @@
     let middleClickTimeout;
     let componentInstances = {};
 
+    // --- NEW: Content Panning State ---
+    let isContentPanning = false;
+    let panTargetElement = null;
+    let panStartX, panStartY, panScrollLeftStart, panScrollTopStart;
+
     // --- Event Handlers ---
     function handleContentMouseDown(event) {
         if (isBacked) return; // Let Desktop.svelte handle backed item interaction
@@ -173,7 +178,7 @@
     }
     function handleWindowClick(event) { if (showOptionsMenu && optionsButton && !optionsButton.contains(event.target) && !event.target.closest('.options-menu')) { showOptionsMenu = false; } }
     onMount(() => { window.addEventListener('click', handleWindowClick); });
-    onDestroy(() => { window.removeEventListener('click', handleWindowClick); if (focusFollowsMouseTimeout) clearTimeout(focusFollowsMouseTimeout); if (middleClickTimeout) clearTimeout(middleClickTimeout); });
+    onDestroy(() => { window.removeEventListener('click', handleWindowClick); if (focusFollowsMouseTimeout) clearTimeout(focusFollowsMouseTimeout); if (middleClickTimeout) clearTimeout(middleClickTimeout); window.removeEventListener('mousemove', handleContentPanMove); });
     function handleConnect() { const instance = instanceRegistry.get(activeTabId); if (instance && typeof instance.connect === 'function') instance.connect(); showOptionsMenu = false; }
     function handleDisconnect() { const instance = instanceRegistry.get(activeTabId); if (instance && typeof instance.disconnect === 'function') instance.disconnect(); showOptionsMenu = false; }
     let isTabDragging = false, draggedTabInfo = null, dropIndicator = { visible: false, left: 0 }, tabDragHasMoved = false;
@@ -255,7 +260,64 @@
     }
     function onResize(event) { if (!isResizing) return; const { x: ix, y: iy, width: iw, height: ih, mouseX: startX, mouseY: startY } = initialResizeState; const { zoom } = get(windowView); const dx = (event.clientX - startX) / zoom; const dy = (event.clientY - startY) / zoom; const minWidth = 250, minHeight = 150; let newX = ix, newY = iy, newWidth = iw, newHeight = ih; if (resizeDirection.includes('e')) { newWidth = iw + dx; } else if (resizeDirection.includes('w')) { newWidth = iw - dx; newX = ix + dx; } if (resizeDirection.includes('s')) { newHeight = ih + dy; } else if (resizeDirection.includes('n')) { newHeight = ih - dy; newY = iy + dy; } if (newWidth < minWidth) { if (resizeDirection.includes('w')) { newX -= minWidth - newWidth; } newWidth = minWidth; } if (newHeight < minHeight) { if (resizeDirection.includes('n')) { newY -= minHeight - newHeight; } newHeight = minHeight; } windows.updateWindowProps(id, { x: newX, y: newY, width: newWidth, height: newHeight }); }
     function onResizeEnd() { isResizing = false; window.removeEventListener('mousemove', onResize); restoreFocus(); }
-    function handleMiddleClick(event) { if (isBacked) return; if (event.button !== 1) return; event.preventDefault(); if (middleClickTimeout) { clearTimeout(middleClickTimeout); middleClickTimeout = null; windows.toggleCloak(id); return; } middleClickTimeout = setTimeout(() => { middleClickTimeout = null; }, 250); const onMove = () => { clearTimeout(middleClickTimeout); middleClickTimeout = null; if (maximized) return; if (event.target.closest('.content-area-container')) { dragRequest.set({ id, type: 'move', direction: null, clientX: event.clientX, clientY: event.clientY, focus: false }); } else { onDragStart(event, { focus: false }); } }; const onUp = () => { window.removeEventListener('mousemove', onMove); }; window.addEventListener('mousemove', onMove, { once: true }); window.addEventListener('mouseup', onUp, { once: true }); }
+
+    function handleContentPanMove(event) {
+        if (!isContentPanning || !panTargetElement) return;
+        const dx = event.clientX - panStartX;
+        const dy = event.clientY - panStartY;
+        panTargetElement.scrollLeft = panScrollLeftStart - dx;
+        panTargetElement.scrollTop = panScrollTopStart - dy;
+    }
+
+    function handleContentPanEnd() {
+        if (!isContentPanning) return;
+        isContentPanning = false;
+        if (panTargetElement) {
+            panTargetElement.style.cursor = '';
+            panTargetElement.style.userSelect = '';
+            panTargetElement = null;
+        }
+        document.body.style.cursor = 'auto';
+        window.removeEventListener('mousemove', handleContentPanMove);
+    }
+
+    function handleContentPanStart(event) {
+        const contentArea = event.target.closest('.content-area-container');
+        if (!contentArea) return;
+
+        let target = event.target;
+        let scrollableEl = null;
+
+        // Traverse up from the event target to find a scrollable parent within the content area
+        while (target && target !== contentArea.parentElement) {
+            if (target.scrollHeight > target.clientHeight || target.scrollWidth > target.clientWidth) {
+                scrollableEl = target;
+                break;
+            }
+            if (target === contentArea) break;
+            target = target.parentElement;
+        }
+
+        if (!scrollableEl) {
+            scrollableEl = contentArea;
+        }
+        
+        if (!scrollableEl || (scrollableEl.scrollHeight <= scrollableEl.clientHeight && scrollableEl.scrollWidth <= scrollableEl.clientWidth)) {
+            return; // Nothing to pan
+        }
+
+        event.preventDefault();
+        isContentPanning = true;
+        panTargetElement = scrollableEl;
+        panStartX = event.clientX; panStartY = event.clientY;
+        panScrollLeftStart = panTargetElement.scrollLeft; panScrollTopStart = panTargetElement.scrollTop;
+        document.body.style.cursor = 'grabbing';
+        panTargetElement.style.cursor = 'grabbing'; panTargetElement.style.userSelect = 'none';
+        window.addEventListener('mousemove', handleContentPanMove);
+        window.addEventListener('mouseup', handleContentPanEnd, { once: true });
+    }
+
+    function handleMiddleClick(event) { if (isBacked) return; if (event.button !== 1) return; event.preventDefault(); if (middleClickTimeout) { clearTimeout(middleClickTimeout); middleClickTimeout = null; windows.toggleCloak(id); return; } middleClickTimeout = setTimeout(() => { middleClickTimeout = null; }, 250); const onMove = () => { clearTimeout(middleClickTimeout); middleClickTimeout = null; if (maximized) return; if (event.target.closest('.content-area-container')) { handleContentPanStart(event); } else { onDragStart(event, { focus: false }); } }; const onUp = () => { window.removeEventListener('mousemove', onMove); }; window.addEventListener('mousemove', onMove, { once: true }); window.addEventListener('mouseup', onUp, { once: true }); }
     function handleFrameMouseDown(event) {
         // For backed windows, all mouse down interactions are handled by Desktop.svelte
         if (isBacked) return;
