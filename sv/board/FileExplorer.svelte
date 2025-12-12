@@ -322,6 +322,7 @@
 
         fsAdapter.listResponse.subscribe(response => {
             if (!response) return;
+            if (response.requester_id !== id) return;
             const { path, entries, error } = response;
             if (error) {
                 errorMessage = error;

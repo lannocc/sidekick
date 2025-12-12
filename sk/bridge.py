@@ -438,13 +438,16 @@ async def handle_sk_ask(websocket, msg):
             del running_asks[ask_id]
 
 
-async def handle_fs_list(path, recursive=False):
+async def handle_fs_list(path, recursive=False, requester_id=None):
     """Handles the fs_list request."""
     try:
         abs_path = os.path.abspath(path)
 
         if not os.path.isdir(abs_path):
-            return {'type': 'fs_error', 'path': path, 'error': 'Not a directory or does not exist'}
+            response = {'type': 'fs_error', 'path': path, 'error': 'Not a directory or does not exist'}
+            if requester_id is not None:
+                response['requester_id'] = requester_id
+            return response
 
         entries = []
         if recursive:
@@ -494,10 +497,16 @@ async def handle_fs_list(path, recursive=False):
         # Return the normalized absolute path, as the frontend uses this
         # for tree building and navigation state.
         norm_path = abs_path.replace(os.sep, '/')
-        return {'type': 'fs_list_response', 'path': norm_path, 'entries': entries}
+        response = {'type': 'fs_list_response', 'path': norm_path, 'entries': entries}
+        if requester_id is not None:
+            response['requester_id'] = requester_id
+        return response
     except Exception as e:
         log.error(f"Error listing path {path}: {e}")
-        return {'type': 'fs_error', 'path': path, 'error': str(e)}
+        response = {'type': 'fs_error', 'path': path, 'error': str(e)}
+        if requester_id is not None:
+            response['requester_id'] = requester_id
+        return response
 
 
 async def handle_fs_read(path):
@@ -706,8 +715,9 @@ async def websocket_handler(websocket):
                 if msg_type == 'fs_list':
                     path = msg.get('path', '.')
                     recursive = msg.get('recursive', False)
-                    print_action("FS List", f"path='{path}', recursive={recursive}")
-                    response = await handle_fs_list(path, recursive)
+                    requester_id = msg.get('requester_id')
+                    print_action("FS List", f"path='{path}', recursive={recursive}, id={requester_id}")
+                    response = await handle_fs_list(path, recursive, requester_id)
                     await websocket.send(json.dumps(response))
                 elif msg_type == 'fs_read':
                     path = msg.get('path')
