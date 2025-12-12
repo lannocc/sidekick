@@ -9,14 +9,12 @@
     import { desktopSettings, windowSettings, windowView, desktopView, TASKBAR_HEIGHT, desktopInteraction, selectedItems } from './desktop.js';
     import { savePanelConfig } from './bridge.js';
     import IoskConsole from './board/IoskConsole.svelte';
-    import IoskFileExplorer from './board/IoskFileExplorer.svelte';
-    import IoskFileViewer from './board/IoskFileViewer.svelte';
+    import FileViewer from './board/FileViewer.svelte';
     import WebBrowser from './board/WebBrowser.svelte';
     import Settings from './board/Settings.svelte';
     import Calculator from './board/Calculator.svelte';
     import IoskPrivateChat from './board/IoskPrivateChat.svelte';
     import LocalTerminal from './board/LocalTerminal.svelte';
-    import LocalFileExplorer from './board/LocalFileExplorer.svelte';
     import Ask from './board/Ask.svelte';
     import IoskWatch from './board/IoskWatch.svelte';
     import IoskUserInspector from './board/IoskUserInspector.svelte';
@@ -166,7 +164,7 @@
     function openSettings() {
         showOptionsMenu = false;
         const instance = instanceRegistry.get(activeTabId);
-        const componentsWithCustomSettings = ['IoskConsole', 'IoskFileExplorer', 'WebBrowser', 'Settings'];
+        const componentsWithCustomSettings = ['IoskConsole', 'IoskFileExplorer', 'FileExplorer', 'WebBrowser', 'Settings'];
         if (componentsWithCustomSettings.includes(componentName) && instance && typeof instance.showSettingsDialog === 'function') {
             instance.showSettingsDialog();
         } else {
@@ -575,7 +573,7 @@
                 <div class="menu-separator"></div>
                 <button class="menu-item" on:click={handleDisconnect} disabled={!isConsoleConnected}>Disconnect</button>
                 {/if}
-                {#if component === IoskFileViewer}
+                {#if component === FileViewer}
                     <div class="menu-separator"></div>
                     <button class="menu-item" on:click={() => { const i = instanceRegistry.get(activeTabId); if (i?.setMode) i.setMode('rendered'); showOptionsMenu = false; }} disabled={!canRender}>Rendered</button>
                     <button class="menu-item" on:click={() => { const i = instanceRegistry.get(activeTabId); if (i?.setMode) i.setMode('raw'); showOptionsMenu = false; }}>Raw</button>

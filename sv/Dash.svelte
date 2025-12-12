@@ -11,12 +11,11 @@
     import IoskConsole from './board/IoskConsole.svelte';
     import Calculator from './board/Calculator.svelte';
     import Settings from './board/Settings.svelte';
-    import IoskFileExplorer from './board/IoskFileExplorer.svelte';
-    import IoskFileViewer from './board/IoskFileViewer.svelte';
+    import FileExplorer from './board/FileExplorer.svelte';
+    import FileViewer from './board/FileViewer.svelte';
     import WebBrowser from './board/WebBrowser.svelte';
     import IoskPrivateChat from './board/IoskPrivateChat.svelte';
     import LocalTerminal from './board/LocalTerminal.svelte';
-    import LocalFileExplorer from './board/LocalFileExplorer.svelte';
     import Ask from './board/Ask.svelte';
     import IoskWatch from './board/IoskWatch.svelte';
 
@@ -149,12 +148,11 @@
         if (component === IoskConsole) return 'IoskConsole';
         if (component === Calculator) return 'Calculator';
         if (component === Settings) return 'Settings';
-        if (component === IoskFileExplorer) return 'IoskFileExplorer';
-        if (component === IoskFileViewer) return 'IoskFileViewer';
+        if (component === FileExplorer) return 'FileExplorer';
+        if (component === FileViewer) return 'FileViewer';
         if (component === WebBrowser) return 'WebBrowser';
         if (component === IoskPrivateChat) return 'IoskPrivateChat';
         if (component === LocalTerminal) return 'LocalTerminal';
-        if (component === LocalFileExplorer) return 'LocalFileExplorer';
         if (component === Ask) return 'Ask';
         if (component === IoskWatch) return 'IoskWatch';
         return 'Unknown';
