@@ -126,7 +126,7 @@
 
     // --- Transform Logic ---
     $: currentView = isBacked ? $desktopView : $windowView;
-    $: transform = `translate(${currentView.panX}px, ${currentView.panY}px) scale(${currentView.zoom}) translate(${x}px, ${y}px)`;
+    $: transform = `translate(${currentView.panX}px, ${currentView.panY}px) scale(${currentView.zoom}) translate(${x}px, ${y}px) scale(${scale || 1.0})`;
 
     // --- Interaction State ---
     let isDragging = false;
@@ -649,7 +649,7 @@
 
 <div class="window-wrapper"
     bind:this={windowWrapperEl}
-    style:width="{width * scale}px" style:height="{height * scale}px"
+    style:width="{width}px" style:height="{height}px"
     style:z-index="{zIndex}"
     style:transform="{transform}"
     style:--scrollbar-thumb-bg={scrollbarThumbColor}
@@ -780,4 +780,3 @@
 
     <WindowSettingsModal bind:show={showGenericSettingsModal} title="Window Settings: {title}" {componentName} {x} {y} {width} {height} showNoticeSettings={true}/>
 </div>
-
