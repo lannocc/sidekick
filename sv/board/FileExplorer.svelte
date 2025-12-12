@@ -64,8 +64,9 @@
     let contextMenu = { visible: false, x: 0, y: 0, item: null };
 
     // --- Feature Flags ---
-    $: supportsWatch = connectionType === 'iosk';
-    $: supportsRecursive = connectionType === 'iosk';
+    // Phase 2: Backend parity. All features are now supported by skybridge.
+    $: supportsWatch = true;
+    $: supportsRecursive = true;
 
     function getFileExtension(name) {
         if (name === '..') return '';

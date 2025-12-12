@@ -449,24 +449,30 @@ async def handle_fs_list(path, recursive=False):
         entries = []
         if recursive:
             for root, dirs, files in os.walk(abs_path, topdown=True):
-                rel_root = os.path.relpath(root, abs_path)
-                if rel_root == '.':
-                    rel_root = ''
-                
                 for name in sorted(dirs):
                     try:
                         full_path = os.path.join(root, name)
                         stat = os.stat(full_path)
-                        entry_path = os.path.join(rel_root, name)
-                        entries.append({'name': entry_path, 'type': 'dir', 'size': stat.st_size})
+                        entries.append({
+                            'name': name,
+                            'path': full_path.replace(os.sep, '/'),
+                            'type': 'dir',
+                            'size': stat.st_size,
+                            'mtime': stat.st_mtime
+                        })
                     except OSError:
                         continue
                 for name in sorted(files):
                     try:
                         full_path = os.path.join(root, name)
                         stat = os.stat(full_path)
-                        entry_path = os.path.join(rel_root, name)
-                        entries.append({'name': entry_path, 'type': 'file', 'size': stat.st_size})
+                        entries.append({
+                            'name': name,
+                            'path': full_path.replace(os.sep, '/'),
+                            'type': 'file',
+                            'size': stat.st_size,
+                            'mtime': stat.st_mtime
+                        })
                     except OSError:
                         continue
         else:
@@ -475,10 +481,20 @@ async def handle_fs_list(path, recursive=False):
                     full_path = os.path.join(abs_path, name)
                     stat = os.stat(full_path)
                     entry_type = 'dir' if os.path.isdir(full_path) else 'file'
-                    entries.append({'name': name, 'type': entry_type, 'size': stat.st_size})
+                    entries.append({
+                        'name': name,
+                        'path': full_path.replace(os.sep, '/'),
+                        'type': entry_type,
+                        'size': stat.st_size,
+                        'mtime': stat.st_mtime
+                    })
                 except OSError:
                     continue
-        return {'type': 'fs_list_response', 'path': path, 'entries': entries}
+        
+        # Return the normalized absolute path, as the frontend uses this
+        # for tree building and navigation state.
+        norm_path = abs_path.replace(os.sep, '/')
+        return {'type': 'fs_list_response', 'path': norm_path, 'entries': entries}
     except Exception as e:
         log.error(f"Error listing path {path}: {e}")
         return {'type': 'fs_error', 'path': path, 'error': str(e)}
