@@ -27,6 +27,11 @@ export const askStatsResponse = writable(null);
 export const boxes = writable([]);
 export const backedWindows = writable([]);
 
+// --- ProcBox Stores ---
+export const runningProcesses = writable([]);
+export const ioskConfigResponse = writable(null);
+
+
 // --- Asset Resolution for local files ---
 const pendingRequests = new Map();
 const assetCache = new Map();
@@ -213,9 +218,32 @@ export function deleteBox(id) {
     sendMessage({ type: 'delete_box', id });
 }
 
+// --- ProcBox Functions ---
 export function promoteToIosk(box_id) {
     sendMessage({ type: 'promote_to_iosk', box_id });
 }
+
+export function getIoskConfig(box_id) {
+    sendMessage({ type: 'get_iosk_config', box_id });
+}
+
+export function updateIoskConfig(box_id, config) {
+    sendMessage({ type: 'update_iosk_config', box_id, config });
+}
+
+export function startIosk(box_id) {
+    sendMessage({ type: 'start_iosk', box_id });
+}
+
+export function stopProcess(pid) {
+    sendMessage({ type: 'stop_process', pid });
+}
+
+export function listRunningProcesses() {
+    sendMessage({ type: 'list_running_processes' });
+}
+// --- End ProcBox Functions ---
+
 
 export function getBoxConfig(id) {
     sendMessage({ type: 'get_box_config', id });
@@ -318,6 +346,7 @@ function attemptConnection() {
     socket.onopen = () => {
         connectionStatus.set('connected');
         sendMessage({ type: 'list_boxes' });
+        sendMessage({ type: 'list_running_processes' });
         switchToBox(0); // Load the main desktop content
         setupViewSettingsPersistence(); // Persist pan/zoom changes
         processQueue(); // Send any messages that were were queued
@@ -434,6 +463,13 @@ function attemptConnection() {
                             return box;
                         });
                     });
+                    break;
+                // --- ProcBox Handlers ---
+                case 'running_processes_list':
+                    runningProcesses.set(msg.processes || []);
+                    break;
+                case 'iosk_config_response':
+                    ioskConfigResponse.set(msg);
                     break;
                 default:
                     console.warn('Unknown message type from local backend:', msg.type);
