@@ -212,6 +212,11 @@ export function updateBox(id, name) {
 export function deleteBox(id) {
     sendMessage({ type: 'delete_box', id });
 }
+
+export function promoteToIosk(box_id) {
+    sendMessage({ type: 'promote_to_iosk', box_id });
+}
+
 export function getBoxConfig(id) {
     sendMessage({ type: 'get_box_config', id });
 }
@@ -461,4 +466,3 @@ function attemptConnection() {
 export function initializeLocalConnection() {
     attemptConnection();
 }
-

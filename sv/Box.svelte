@@ -6,7 +6,7 @@
     import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
-    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover, switchToBox, allBoxSettings, getBoxSpecificSettings } from './bridge.js';
+    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover, switchToBox, allBoxSettings, getBoxSpecificSettings, promoteToIosk } from './bridge.js';
     import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId, calculateContextMenuPosition } from './desktop.js';
     import Panel from './Panel.svelte';
 
@@ -403,6 +403,11 @@
         }
     }
 
+    function handlePromoteToIosk() {
+        closeContextMenu();
+        promoteToIosk(box.id);
+    }
+
     function setCoverImage() {
         closeContextMenu();
         if (!canSetCover) {
@@ -640,6 +645,16 @@
 
     .box.is-unfolded {
         transition-delay: 0s;
+    }
+
+    .iosk-badge {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        width: 20px;
+        height: 20px;
+        z-index: 6;
+        pointer-events: none;
     }
 
     .box-cloak {
@@ -931,6 +946,10 @@
     on:wheel={handleWheel}
     on:scale
 >
+    {#if box.type === 'iosk'}
+        <img src="/iosk.png" alt="IOSK Box" class="iosk-badge" title="IOSK Box" />
+    {/if}
+
     <!-- Default Cloak (visible when folded) -->
     {#if !coverImageUrl}
     <div 
@@ -1064,6 +1083,10 @@
         <button on:click={openTerminal} disabled={box.type !== 'local'}>Terminal</button>
         <button on:click={openFiles} disabled={box.type !== 'local'}>Files</button>
         <div class="menu-separator"></div>
+        {#if box.type === 'local'}
+            <button on:click={handlePromoteToIosk}>Promote to IOSK Box</button>
+            <div class="menu-separator"></div>
+        {/if}
         <button on:click={renameBox}>Rename...</button>
         <div class="menu-separator"></div>
         <button on:click={setCoverImage} disabled={!canSetCover}>Set Cover Image...</button>
