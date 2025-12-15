@@ -784,14 +784,31 @@ def check_stale_processes():
     log.info("Checking for stale running processes on startup...")
     cursor = DB_CONN.cursor()
     cursor.execute("SELECT pid FROM process WHERE status IN ('running', 'paused')")
-    stale_pids = [row['pid'] for row in cursor.fetchall() if not is_pid_running(row['pid'])]
+    procs_to_check = cursor.fetchall()
+    
+    if not procs_to_check:
+        log.info("No processes were marked as running in the database. Check complete.")
+        return
+
+    log.info(f"Found {len(procs_to_check)} processes marked as 'running' or 'paused'. Verifying each PID.")
+    stale_pids = []
+    for row in procs_to_check:
+        pid = row['pid']
+        log.info(f"  - Verifying PID: {pid}...")
+        if not is_pid_running(pid):
+            log.warning(f"    -> Stale PID detected: {pid} is not running.")
+            stale_pids.append(pid)
+        else:
+            log.info(f"    -> PID {pid} is active.")
     
     if stale_pids:
-        log.warning(f"Found {len(stale_pids)} stale processes: {stale_pids}. Marking as stopped.")
+        log.warning(f"Found {len(stale_pids)} stale processes: {stale_pids}. Marking as 'stopped' in the database.")
         placeholders = ', '.join(['?'] * len(stale_pids))
         cursor.execute(f"UPDATE process SET status = 'stopped' WHERE pid IN ({placeholders})", tuple(stale_pids))
         DB_CONN.commit()
         log.info(f"Updated status for {len(stale_pids)} stale processes.")
+    else:
+        log.info("All running processes verified to be active.")
 
 async def periodic_process_check():
     """Periodically check for running processes that have died."""
@@ -802,10 +819,15 @@ async def periodic_process_check():
                 cursor = DB_CONN.cursor()
                 cursor.execute("SELECT pid FROM process WHERE status IN ('running', 'paused')")
                 pids_to_check = [row['pid'] for row in cursor.fetchall()]
-                stale_pids = [pid for pid in pids_to_check if not is_pid_running(pid)]
+                
+                stale_pids = []
+                for pid in pids_to_check:
+                    if not is_pid_running(pid):
+                        print_action("Process Died", f"PID {pid} is no longer running")
+                        stale_pids.append(pid)
                 
                 if stale_pids:
-                    log.warning(f"Periodic check: Found {len(stale_pids)} stale processes: {stale_pids}. Marking as stopped.")
+                    log.warning(f"Periodic check: Found {len(stale_pids)} stale processes. Updating DB and notifying clients.")
                     placeholders = ', '.join(['?'] * len(stale_pids))
                     cursor.execute(f"UPDATE process SET status = 'stopped' WHERE pid IN ({placeholders})", tuple(stale_pids))
                     DB_CONN.commit()
