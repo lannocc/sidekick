@@ -142,6 +142,7 @@ The currently unused green square button will be activated.
     *   Quick action buttons next to each entry (e.g., a "Stop" button).
     *   A summary of currently open (actived) desktop (Box).
     *   A button at the bottom to "Open Process Manager".
+    *   A button at the bottom to "Open Boxes Manager".
 
 ### 3. Command Line Interface (`sk/iosk/cmd.py`)
 
