@@ -873,7 +873,7 @@
                 return;
             }
 
-            const { x, y } = calculateWindowContextMenuPosition(positionEvent, menuDimensions);
+            const { x, y } = calculateWindowContextMenuPosition(positionEvent, menuDimensions, { preferredX: 'left' });
             attachMenuPosition = { x, y };
         }
     }
@@ -1251,7 +1251,7 @@
                 <div class="user-list">
                     {#each localUsers as participant (participant.name)}                     <div
                             class="user-item"
-                            title={participant.name}
+                        title={participant.name}
                             on:contextmenu={(e) => handleUserRightClick(e, participant.name)}
                             on:click={() => openPrivateChat(participant.name)}
                         >
@@ -1288,7 +1288,7 @@
                     {#each remoteUsers as participant (participanme)}
                         <div
                             class="user-item"
-                            title={participant.name}
+                        title={participant.name}
                             on:contextmenu={(e) => handleUserRightClick(e, participant.name)}
                             on:click={() => openPrivateChat(participant.name)}
                         >
@@ -1386,3 +1386,4 @@
         </div>
     {/if}
 </div>
+

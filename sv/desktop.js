@@ -433,21 +433,27 @@ export function calculateContextMenuPosition(event, menuDimensions = { width: 15
  * within the viewport boundaries.
  * @param {MouseEvent} event The mouse event that triggered the menu.
  * @param {object} [menuDimensions={width: 150, height: 200}] The estimated dimensions of the menu.
+ * @param {object} [options={}] Optional positioning preferences.
+ * @param {'left'|'right'} [options.preferredX='right'] Preferred horizontal opening direction.
+ * @param {'up'|'down'} [options.preferredY='down'] Preferred vertical opening direction.
  * @returns {{x: number, y: number}} The top-left coordinates for the menu's style attribute.
  */
-export function calculateWindowContextMenuPosition(event, menuDimensions = { width: 150, height: 200 }) {
+export function calculateWindowContextMenuPosition(
+    event,
+    menuDimensions = { width: 150, height: 200 },
+    options = {}
+) {
     if (!event || !event.target) {
         console.warn("calculateWindowContextMenuPosition called without a valid event. Returning {x: 0, y: 0}.");
         return { x: 0, y: 0 };
     }
 
+    const { preferredX = 'right', preferredY = 'down' } = options;
     const windowWrapper = event.target.closest('.window-wrapper:not(.backed)');
     const { zoom } = get(windowView);
 
-    // 1. Determine the target viewport coordinates for the menu's top-left corner,
-    //    adjusted to prevent it from going off-screen.
-    let targetX = event.clientX;
-    let targetY = event.clientY;
+    // 1. Determine the target viewport coordinates for the menu's top-left corner.
+    let targetX, targetY;
 
     const screenWidth = window.innerWidth;
     const screenHeight = window.innerHeight;
@@ -456,14 +462,56 @@ export function calculateWindowContextMenuPosition(event, menuDimensions = { wid
     const scaledMenuWidth = menuDimensions.width * (zoom || 1);
     const scaledMenuHeight = menuDimensions.height * (zoom || 1);
 
-    if (targetX + scaledMenuWidth > screenWidth) {
-        targetX = screenWidth - scaledMenuWidth - 5;
-    }
-    if (targetY + scaledMenuHeight > screenHeight) {
-        targetY = screenHeight - scaledMenuHeight - 5;
+    // Adjust X position based on preference, flipping if necessary
+    if (preferredX === 'left') {
+        targetX = event.clientX - scaledMenuWidth;
+        if (targetX < 0) { // Off-screen left, flip to right
+            targetX = event.clientX;
+        }
+    } else { // 'right' is default
+        targetX = event.clientX;
+        if (targetX + scaledMenuWidth > screenWidth) { // Off-screen right, flip to left
+            targetX = event.clientX - scaledMenuWidth;
+        }
     }
 
-    // 2. Convert these target viewport coordinates into coordinates relative to the transformed window.
+    // Adjust Y position based on preference, flipping if necessary
+    if (preferredY === 'up') {
+        targetY = event.clientY - scaledMenuHeight;
+        if (targetY < 0) { // Off-screen top, flip down
+            targetY = event.clientY;
+        }
+    } else { // 'down' is default
+        targetY = event.clientY;
+        if (targetY + scaledMenuHeight > screenHeight) { // Off-screen bottom, flip up
+            targetY = event.clientY - scaledMenuHeight;
+        }
+    }
+
+    // 2. Clamp to viewport edges as a final step.
+    const PADDING = 5;
+    if (targetX < PADDING) {
+        targetX = PADDING;
+    }
+    if (targetY < PADDING) {
+        targetY = PADDING;
+    }
+    if (targetX + scaledMenuWidth > screenWidth - PADDING) {
+        targetX = screenWidth - scaledMenuWidth - PADDING;
+    }
+    if (targetY + scaledMenuHeight > screenHeight - PADDING) {
+        targetY = screenHeight - scaledMenuHeight - PADDING;
+    }
+    // Re-ensure it's not off the left/top after a right/bottom adjustment
+    if (targetX < PADDING) {
+        targetX = PADDING;
+    }
+    if (targetY < PADDING) {
+        targetY = PADDING;
+    }
+
+
+    // 3. Convert these target viewport coordinates into coordinates relative to the transformed window.
     if (windowWrapper && zoom !== 0) {
         const rect = windowWrapper.getBoundingClientRect();
         // The calculated x/y will be used as `left` and `top` style properties.
