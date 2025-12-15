@@ -7,13 +7,17 @@
     import { get } from 'svelte/store';
     import { dragState, windows, generateBoardConfigFromWindow, } from './windows.js';
     import { newAskWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './apps.js';
-    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover, switchToBox, allBoxSettings, getBoxSpecificSettings, promoteToIosk } from './bridge.js';
+    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover, switchToBox, allBoxSettings, getBoxSpecificSettings, promoteToIosk, runningProcesses } from './bridge.js';
     import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId, calculateContextMenuPosition } from './desktop.js';
     import Panel from './Panel.svelte';
 
     export let box;
 
     const dispatch = createEventDispatcher();
+
+    // --- Process Status ---
+    let processStatus;
+    $: processStatus = $runningProcesses.find(p => p.box_id === box.id && (p.status === 'running' || p.status === 'paused'))?.status;
 
     // --- Position, Size, and Scale ---
     let x = box.x ?? 100 + (box.id % 5) * 200;
@@ -941,6 +945,25 @@
         color: #7f8c8d;
         font-style: italic;
     }
+
+    .process-status-badge {
+        position: absolute;
+        bottom: 4px;
+        right: 4px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        z-index: 6;
+        pointer-events: none;
+        border: 2px solid var(--window-bg, #333);
+        box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    }
+    .process-status-badge.running {
+        background-color: #2ecc71;
+    }
+    .process-status-badge.paused {
+        background-color: #f39c12;
+    }
 </style>
 
 <svelte:window bind:innerWidth bind:innerHeight />
@@ -964,6 +987,15 @@
 >
     {#if box.type === 'iosk'}
         <img src="/iosk.png" alt="IOSK Box" class="iosk-badge" title="IOSK Box" />
+    {/if}
+
+    {#if processStatus}
+        <div
+            class="process-status-badge"
+            class:running={processStatus === 'running'}
+            class:paused={processStatus === 'paused'}
+            title="Process is {processStatus}"
+        ></div>
     {/if}
 
     <!-- Default Cloak (visible when folded) -->
