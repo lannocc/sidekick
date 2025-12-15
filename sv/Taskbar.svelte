@@ -896,7 +896,7 @@
         </button>
     </div>
     <div class="taskbar-right" bind:this={rightSectionEl}>
-        <button class="quick-launch-button" bind:this={quickViewButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showQuickView = !showQuickView; }} title="Quick View Dashboard">&#9632;</button>
+        <button class="quick-launch-button" bind:this={quickViewButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showQuickView = !showQuickView; }} title="Context Quick View">&#9632;</button>
         {#if showQuickView}
             <div class="quick-view-menu" style={menuBackgroundStyle} on:click|stopPropagation>
                 <div class="quick-view-section-header">Running IOSK Processes</div>
