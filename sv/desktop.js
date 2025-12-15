@@ -423,3 +423,41 @@ export function calculateContextMenuPosition(event, menuDimensions = { width: 15
 
     return { x, y };
 }
+
+/**
+ * Calculates the correct screen position for a context menu inside a transformed window layer,
+ * ensuring it doesn't render off-screen.
+ * @param {MouseEvent} event The mouse event that triggered the menu.
+ * @param {object} [menuDimensions={width: 150, height: 200}] The estimated dimensions of the menu.
+ * @returns {{x: number, y: number}} The top-left coordinates for the menu, relative to the window layer.
+ */
+export function calculateWindowContextMenuPosition(event, menuDimensions = { width: 150, height: 200 }) {
+    const { panX, panY, zoom } = get(windowView);
+
+    // The menu is inside the transformed layer, so its perceived size on screen is scaled by zoom.
+    const menuScreenWidth = menuDimensions.width * zoom;
+    const menuScreenHeight = menuDimensions.height * zoom;
+
+    let finalViewportX = event.clientX;
+    let finalViewportY = event.clientY;
+
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+
+    // Adjust if the menu would go off the right edge of the screen
+    if (finalViewportX + menuScreenWidth > screenWidth) {
+        finalViewportX = screenWidth - menuScreenWidth - 5; // subtract 5 for padding
+    }
+
+    // Adjust if the menu would go off the bottom edge of the screen
+    if (finalViewportY + menuScreenHeight > screenHeight) {
+        finalViewportY = screenHeight - menuScreenHeight - 5; // subtract 5 for padding
+    }
+
+    // Convert the final, adjusted viewport coordinates into coordinates relative to the transformed layer.
+    const layerX = (finalViewportX - panX) / zoom;
+    const layerY = (finalViewportY - panY) / zoom;
+
+    return { x: layerX, y: layerY };
+}
+

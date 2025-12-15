@@ -8,7 +8,7 @@
     import { windows } from '../windows.js';
     import { newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch, newIoskUserInspector } from '../apps.js';
     import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents, contextUpdates } from '../iosk.js';
-    import { desktopSettings, windowSettings } from '../desktop.js';
+    import { desktopSettings, windowSettings, calculateWindowContextMenuPosition } from '../desktop.js';
     import RoomsMenu from './popup/RoomsMenu.svelte';
     import AttachMenu from './popup/AttachMenu.svelte';
     import UserContextMenu from './popup/UserContextMenu.svelte';
@@ -183,7 +183,7 @@
 
         // Prevent default to avoid text selection issues
         event.preventDefault();
-        
+
         document.body.classList.add('resizing');
         window.addEventListener('mousemove', handleResize);
         window.addEventListener('mouseup', stopResize);
@@ -377,10 +377,12 @@
         showRoomsMenu = false;
         showAttachMenu = false;
 
+        const { x, y } = calculateWindowContextMenuPosition(event);
+
         userContextMenu = {
             visible: true,
-            x: event.clientX,
-            y: event.clientY,
+            x,
+            y,
             user: participant,
         };
     }
@@ -848,15 +850,13 @@
         showRoomsMenu = !showRoomsMenu;
     }
 
-    export function toggleAttachMenu() {
+    export function toggleAttachMenu(event) {
         showAttachMenu = !showAttachMenu;
         if (showAttachMenu) {
-            const rect = attachButton.getBoundingClientRect();
-            // Position popup's top below the button's bottom, and right edges aligned.
-            attachMenuPosition = {
-                x: rect.right,
-                y: rect.bottom + 2,
-            };
+            // Estimate menu dimensions to pass to the helper function.
+            const menuDimensions = { width: 240, height: 350 };
+            const { x, y } = calculateWindowContextMenuPosition(event, menuDimensions);
+            attachMenuPosition = { x, y };
         }
     }
 
@@ -1145,7 +1145,6 @@
     .attach-menu-wrapper {
         z-index: 200;
         /* Position is set via style attribute */
-        transform: translateX(-100%); /* Aligns right edge of popup with left coordinate */
         background-color: var(--window-bg);
         border: 1px solid var(--border-color);
         border-radius: 4px;
@@ -1223,7 +1222,7 @@
                 {/if}
                 <div class="panel-header-controls">
                     {#if !isUsersPanelCollapsed}
-                        <button class="attach-button" bind:this={attachButton} on:click|stopPropagation={toggleAttachMenu} title="Attach Device/User">Attach</button>
+                        <button class="attach-button" bind:this={attachButton} on:click|stopPropagation={(e) => toggleAttachMenu(e)} title="Attach Device/User">Attach</button>
                     {/if}
                     <button class="collapse-toggle-button" on:click|stopPropagation={() => isUsersPanelCollapsed = !isUsersPanelCollapsed} title={isUsersPanelCollapsed ? 'Expand' : 'Collapse'}>
                         {isUsersPanelCollapsed ? '❮' : '❯'}
@@ -1232,8 +1231,7 @@
             </div>
             {#if !isUsersPanelCollapsed}
                 <div class="user-list">
-                    {#each localUsers as participant (participant.name)}
-                        <div
+                    {#each localUsers as participant (participant.name)}                     <div
                             class="user-item"
                             title={participant.name}
                             on:contextmenu={(e) => handleUserRightClick(e, participant.name)}
@@ -1269,7 +1267,7 @@
                     {#if localUsers.length > 0 && remoteUsers.length > 0}
                         <div class="menu-separator" style="margin: 4px 0;"></div>
                     {/if}
-                    {#each remoteUsers as participant (participant.name)}
+                    {#each remoteUsers as participant (participanme)}
                         <div
                             class="user-item"
                             title={participant.name}
@@ -1307,7 +1305,7 @@
             {:else}
                 <div class="collapsed-user-counts" title="Click to expand Users panel">
                     <div title={"Local Users:\n" + localUsers.map(u => u.displayName).join('\n')}>
-                        {localUsers.length}
+                    {localUsers.length}
                     </div>
                     {#if remoteUsers.length > 0}
                         <div class="collapsed-count-separator"></div>
@@ -1370,3 +1368,4 @@
         </div>
     {/if}
 </div>
+
