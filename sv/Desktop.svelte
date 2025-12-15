@@ -143,6 +143,7 @@
     };
 
     function showBackedWindowContextMenu(event, backedWindow) {
+        window.dispatchEvent(new CustomEvent('close-all-context-menus'));
         closeContextMenu(); // Close the main desktop one if open
         backedWindowContextMenu = {
             visible: true,
@@ -190,6 +191,7 @@
         if (isPanning) return;
         if (get(dashActive)) return; // Don't show if dash is active
 
+        window.dispatchEvent(new CustomEvent('close-all-context-menus'));
         contextMenu = {
             visible: true,
             ...calculateContextMenuPosition(event, { width: 120, height: 150 }),
@@ -1608,13 +1610,13 @@
     onMount(() => {
         // The WebSocket connection is now established in SideKick.svelte
         window.addEventListener('click', closeContextMenu);
-        window.addEventListener('click', closeBackedWindowContextMenu);
         window.addEventListener('keyup', handleKeyUpForScale);
+        window.addEventListener('close-all-context-menus', closeContextMenu);
     });
     onDestroy(() => {
         window.removeEventListener('click', closeContextMenu);
-        window.removeEventListener('click', closeBackedWindowContextMenu);
         window.removeEventListener('keyup', handleKeyUpForScale);
+        window.removeEventListener('close-all-context-menus', closeContextMenu);
         if (saveViewTimeout) clearTimeout(saveViewTimeout);
         if (controlsTimeout) clearTimeout(controlsTimeout);
         if (desktopMiddleClickTimeout) clearTimeout(desktopMiddleClickTimeout);

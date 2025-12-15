@@ -8,7 +8,7 @@
     import { desktopView, selectedItems, wasDraggingItems, calculateContextMenuPosition } from './desktop.js';
     import { desktopShortcuts, updateShortcutTransform } from './bridge.js';
     import { get } from 'svelte/store';
-    import { onDestroy, afterUpdate, createEventDispatcher } from 'svelte';
+    import { onMount, onDestroy, afterUpdate, createEventDispatcher } from 'svelte';
 
     export let id;
     export let name;
@@ -66,17 +66,17 @@
     function handleRightClick(event) {
         event.preventDefault();
         event.stopPropagation(); // Prevent desktop context menu
+        window.dispatchEvent(new CustomEvent('close-all-context-menus'));
         contextMenu = {
             visible: true,
             ...calculateContextMenuPosition(event, { width: 120, height: 50 }),
         };
-        window.addEventListener('click', closeContextMenu);
+        window.addEventListener('click', closeContextMenu, { once: true });
     }
 
     function closeContextMenu() {
         if (contextMenu.visible) {
             contextMenu.visible = false;
-            window.removeEventListener('click', closeContextMenu);
         }
     }
 
@@ -95,8 +95,13 @@
         }
     }
 
+    onMount(() => {
+        window.addEventListener('close-all-context-menus', closeContextMenu);
+    });
+
     onDestroy(() => {
         window.removeEventListener('click', closeContextMenu);
+        window.removeEventListener('close-all-context-menus', closeContextMenu);
     });
 </script>
 
@@ -184,10 +189,10 @@
 >
     <div class="icon">{type === 'dir' ? '🗂️' : '📄'}</div>
     <div class="name">{name}</div>
-
-    {#if contextMenu.visible}
-        <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
-            <button on:click={removeShortcut}>Remove Shortcut</button>
-        </div>
-    {/if}
 </div>
+
+{#if contextMenu.visible}
+    <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
+        <button on:click={removeShortcut}>Remove Shortcut</button>
+    </div>
+{/if}

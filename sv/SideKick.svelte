@@ -85,6 +85,16 @@
             return;
         }
 
+        // --- MODIFICATION START ---
+        // Handle plain Escape key press to close any open context menus.
+        // The event is handled by listeners in Desktop, Box, and Shortcut components.
+        if (e.key === 'Escape' && !e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey) {
+            window.dispatchEvent(new CustomEvent('close-all-context-menus'));
+            // We don't return or stop propagation here, as other components like Box
+            // might use subsequent Escape presses for other actions (e.g., folding).
+        }
+        // --- MODIFICATION END ---
+
         // Tab switching with Alt/Ctrl + Number
         const numericKey = parseInt(e.key, 10);
         if ((e.altKey || e.ctrlKey) && !e.metaKey && !isNaN(numericKey) && numericKey >= 1 && numericKey <= 9) {

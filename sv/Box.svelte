@@ -275,6 +275,7 @@
     function handlePanelRightClick(event, loc_x, loc_y) {
         event.preventDefault();
         event.stopPropagation();
+        window.dispatchEvent(new CustomEvent('close-all-context-menus'));
 
         const panelKey = `${loc_x}_${loc_y}`;
         const panelConfig = panels[panelKey];
@@ -301,6 +302,11 @@
     }
     function closePanelContextMenu() {
         panelContextMenu.visible = false;
+    }
+    
+    function closeAllLocalMenus() {
+        closeContextMenu();
+        closePanelContextMenu();
     }
 
     // Close menu or fold box on outside click or Esc key
@@ -336,9 +342,11 @@
         updateUnfoldDirection(); // Set initial direction
         window.addEventListener('click', handleWindowClick, true); // Use capture phase
         window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('close-all-context-menus', closeAllLocalMenus);
         return () => { // Svelte's onDestroy is implicitly called by this return
             window.removeEventListener('click', handleWindowClick, true);
             window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('close-all-context-menus', closeAllLocalMenus);
             if (clickTimeout) clearTimeout(clickTimeout);
             if (get(activeBoxId) === box.id) {
                 activeBoxId.set(null);
@@ -951,7 +959,7 @@
 
     <!-- User-defined Cover Image (also visible when folded) -->
     {#if coverImageUrl}
-        <div class="box-cover" on:click={(e) => handlePanelClick(e, 0, 0)}>
+        <div class="box-cover" on:click={(e) => handlePanelClick(e, 0, 0)} on:contextmenu={(e) => handlePanelRightClick(e, 0, 0)}>
             <img src={coverImageUrl} alt="{box.name} cover" class="cover-image" />
         </div>
     {/if}
