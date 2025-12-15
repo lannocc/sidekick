@@ -639,7 +639,10 @@
     .options-menu-button { background-color: #3498db; color: white; line-height: 0.8; }
     .middle-row { flex-grow: 1; display: flex; flex-direction: row; overflow: hidden; }
     .content-area-wrapper { flex-grow: 1; position: relative; overflow: hidden; }
-    .content-area-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: auto; padding: 5px; box-sizing: border-box; transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out; }
+    .content-area-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: auto; padding: 5px; box-sizing: border-box; transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
+        /* Re-enable user selection for window content, overriding the global `body` style */
+        user-select: auto;
+        -webkit-user-select: auto; }
     .side-frame, .bottom-frame { flex-shrink: 0; transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out, width 0.3s ease-in-out, height 0.3s ease-in-out; }
     .cloak { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 5; pointer-events: none; border-radius: 5px; transition: opacity 0.3s ease-in-out, background 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
     .resize-handle { position: absolute; z-index: 6; }

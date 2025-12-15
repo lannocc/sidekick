@@ -256,6 +256,20 @@
         animation: box-switch-flash 0.4s ease-in-out;
     }
 
+    /* Globally disable text selection to prevent it during drag operations */
+    :global(body) {
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+    /* Re-enable text selection for specific elements where it's expected */
+    :global(input),
+    :global(textarea),
+    :global(pre),
+    :global(code) {
+        user-select: text;
+        -webkit-user-select: text;
+    }
     /* --- GLOBAL SCROLLBAR STYLES --- */
     :global(*), :global(*::before), :global(*::after) {
         /* For Firefox */
