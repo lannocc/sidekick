@@ -134,6 +134,16 @@
         sourceEvent: null,
     };
 
+    // --- MODIFICATION START ---
+    // --- Selection Context Menu State ---
+    let selectionContextMenu = {
+        visible: false,
+        x: 0,
+        y: 0,
+        count: 0,
+    };
+    // --- MODIFICATION END ---
+
     // --- Backed Window Context Menu State ---
     let backedWindowContextMenu = {
         visible: false,
@@ -155,6 +165,28 @@
     function closeBackedWindowContextMenu() {
         backedWindowContextMenu.visible = false;
     }
+
+    // --- MODIFICATION START ---
+    function showSelectionContextMenu(event) {
+        window.dispatchEvent(new CustomEvent('close-all-context-menus'));
+        const selectionSize = get(selectedItems).size;
+        selectionContextMenu = {
+            visible: true,
+            ...calculateContextMenuPosition(event, { width: 220, height: 50 }),
+            count: selectionSize,
+        };
+    }
+
+    function closeSelectionContextMenu() {
+        selectionContextMenu.visible = false;
+    }
+
+    function handleRemoveSelectedItems() {
+        handleDeleteSelectedItems();
+        closeSelectionContextMenu();
+    }
+    // --- MODIFICATION END ---
+
 
     function unbackAndRestoreWindow() {
         if (backedWindowContextMenu.window) {
@@ -202,6 +234,7 @@
     function closeContextMenu() {
         contextMenu.visible = false;
         closeBackedWindowContextMenu();
+        closeSelectionContextMenu(); // Also close the selection menu
     }
 
     function openSettingsMenu() {
@@ -909,6 +942,46 @@
                     handleMarqueeSelectStart(event);
                 }
             }
+        }
+    }
+    // --- MODIFICATION END ---
+
+    // --- MODIFICATION START ---
+    function handleDesktopContextMenu(event) {
+        if (isPanning) {
+            event.preventDefault();
+            return;
+        }
+
+        const targetItemEl = event.target.closest('.shortcut, .box, .window-wrapper.backed');
+
+        if (targetItemEl) {
+            const id = targetItemEl.dataset.id;
+            const type = targetItemEl.dataset.type;
+            const uniqueId = `${type}-${id}`;
+            const selected = get(selectedItems);
+
+            if (selected.has(uniqueId)) {
+                // Right-clicked an already selected item.
+                if (selected.size > 1) {
+                    // It's part of a multi-selection, so show the selection menu.
+                    event.preventDefault();
+                    event.stopPropagation();
+                    showSelectionContextMenu(event);
+                    return;
+                }
+                // Otherwise, it's a single selection. Do nothing and let the
+                // item's own context menu handler take over.
+            } else {
+                // Right-clicked an unselected item.
+                // The standard behavior is to clear the old selection and select this new item.
+                selectedItems.set(new Set([uniqueId]));
+                // Let the event propagate so the item's own context menu handler can fire.
+            }
+        } else {
+            // Clicked on the desktop background. Show the main desktop context menu.
+            event.preventDefault();
+            handleRightClick(event);
         }
     }
     // --- MODIFICATION END ---
@@ -1919,7 +1992,7 @@
     }}
 />
 
-<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop} style="overflow: hidden;">
+<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu={handleDesktopContextMenu} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop} style="overflow: hidden;">
     <div class="desktop-background" style:background={backgroundStyle || ''} style:opacity={sceneOpacity}></div>
     <!-- BACK LAYER (for non-window items) -->
     <div class="desktop-content back-layer">
@@ -2039,6 +2112,15 @@
             <button on:click={unbackAndRestoreWindow}>Restore Window</button>
         </div>
     {/if}
+
+    <!-- MODIFICATION START -->
+    {#if selectionContextMenu.visible}
+        <div class="context-menu" style="top: {selectionContextMenu.y}px; left: {selectionContextMenu.x}px;" on:click|stopPropagation>
+            <button on:click={handleRemoveSelectedItems}>Remove {selectionContextMenu.count} Selected Items</button>
+        </div>
+    {/if}
+    <!-- MODIFICATION END -->
+
 
     {#if $dashActive}
         <Dash />
