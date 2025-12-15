@@ -13,6 +13,7 @@ import IoskWatch from './board/IoskWatch.svelte';
 import IoskUserInspector from './board/IoskUserInspector.svelte';
 import NotificationCenter from './board/NotificationCenter.svelte';
 import Boxes from './board/Boxes.svelte';
+import Processes from './board/Processes.svelte';
 import { TASKBAR_HEIGHT, desktopSettings, windowSettings, desktopView } from './desktop.js';
 import { createBox, boxes, desktopShortcuts, backedWindows } from './bridge.js';
 import { windows } from './windows.js';
@@ -67,6 +68,14 @@ export const appList = [
         name: 'Ask',
         icon: '?',
         launcher: newAskWindow,
+        requiresConnection: true,
+        menuPosition: { row: 1, col: 0 },
+    },
+    {
+        id: 'processes',
+        name: 'Processes',
+        icon: '🛠️',
+        launcher: newProcessesWindow,
         requiresConnection: true,
         menuPosition: { row: 1, col: 1 },
     },
@@ -161,6 +170,18 @@ export function newBoxesWindow(props = {}) {
         return;
     }
     windows.addWindow(Boxes, { title: 'Boxes', width: 760, height: 600, ...props });
+}
+
+export function newProcessesWindow(props = {}) {
+    const allWindows = get(windows);
+    const existingProcessesTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'Processes');
+    if (existingProcessesTab) {
+        const group = allWindows.find(g => g.tabs.some(t => t.id === existingProcessesTab.id));
+        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
+        windows.setActiveTab(group.id, existingProcessesTab.id);
+        return;
+    }
+    windows.addWindow(Processes, { title: 'Processes', width: 900, height: 600, ...props });
 }
 
 // --- UNIFIED FILE EXPLORER / VIEWER FUNCTIONS ---
