@@ -2,6 +2,18 @@ Copyright (C) 2025 LANNOCC
 @%@~LICENSE~@%@
 
 
+v0.4.7
+======
+
+Date: December 12, 2025
+
+    * Include a Camera board for use with a webcam.
+    * Improvements to the SKYBRIDGE for iosk feature parity on local files.
+    * Now have the ability to "activate" boxes, replacing the desktop.
+    * Created SKYBOARDS logo and some other images.
+    * Improved theming options and ability for boxes to have different settings.
+
+
 v0.4.6
 ======
 
