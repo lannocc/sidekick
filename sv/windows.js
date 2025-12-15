@@ -1173,7 +1173,7 @@ export function newBoxesWindow(props = {}) {
         windows.setActiveTab(group.id, existingBoxesTab.id);
         return;
     }
-    windows.addWindow(Boxes, { title: 'Boxes', width: 600, height: 400, ...props });
+    windows.addWindow(Boxes, { title: 'Boxes', width: 760, height: 600, ...props });
 }
 
 // --- UNIFIED FILE EXPLORER / VIEWER FUNCTIONS ---
