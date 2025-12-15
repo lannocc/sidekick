@@ -3,9 +3,9 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
+    import { windows, newSettings, newIoskConnection, newCalculator, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newBoxesWindow, newCamera, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, skyCloakEnabled, calculateContextMenuPosition } from './desktop.js';
+    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, currentBox, skyCloakEnabled, calculateContextMenuPosition } from './desktop.js';
     import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox, resolveAssetDataUrl, generateBgStyle, deleteBox, deleteBackedWindow } from './bridge.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
@@ -241,6 +241,43 @@
         closeContextMenu();
         newSettings({ sourceEvent: contextMenu.sourceEvent });
     }
+
+    // --- MODIFICATION START: SKYBOARD CONTEXT MENU ---
+    function launchApp(launcher, props = {}) {
+        const event = contextMenu.sourceEvent;
+        launcher({ ...props, sourceEvent: event });
+        closeContextMenu();
+    }
+
+    const skyboardMenuItems = [
+        { name: 'Ask', icon: '?', action: () => launchApp(newAskWindow), requiresConnection: true },
+        { name: 'Boxes', icon: '📦', action: () => launchApp(newBoxesWindow), requiresConnection: true },
+        { name: 'Calculator', icon: '🧮', action: () => launchApp(newCalculator), requiresConnection: false },
+        { name: 'Camera', icon: '📸', action: () => launchApp(newCamera), requiresConnection: false },
+        { name: 'Files', icon: '📁', action: () => {
+            const props = {};
+            const box = get(currentBox);
+            if (box && box.id !== 0) {
+                props.initialPath = box.context;
+                props.title = `Files - ${box.name}`;
+            }
+            launchApp(newLocalFileExplorer, props);
+        }, requiresConnection: true },
+        { name: 'IOSK Connection', icon: '🖥️', action: () => launchApp(newIoskConnection), requiresConnection: false },
+        { name: 'Settings', icon: '⚙️', action: () => launchApp(newSettings), requiresConnection: false },
+        { name: 'Terminal', icon: '>_', action: () => {
+            const props = {};
+            const box = get(currentBox);
+            if (box && box.id !== 0) {
+                props.initialPath = box.context;
+                props.title = `Terminal - ${box.name}`;
+            }
+            launchApp(newLocalTerminal, props);
+        }, requiresConnection: true },
+        { name: 'Web Browser', icon: '🌐', action: () => launchApp(newWebBrowser), requiresConnection: false },
+    ].sort((a, b) => a.name.localeCompare(b.name));
+    // --- MODIFICATION END ---
+
 
     function handleNewBoxClick() {
         closeContextMenu();
@@ -1779,6 +1816,12 @@
         text-align: left;
         cursor: pointer;
         font-size: 14px;
+        /* MODIFICATION START */
+        display: flex;
+        align-items: center;
+        width: 100%;
+        box-sizing: border-box;
+        /* MODIFICATION END */
     }
 
     .context-menu button:not(:disabled):hover {
@@ -1973,6 +2016,48 @@
     .birdseye-viewport.front {
         border: 1px solid #3498db; /* Blue for front layer */
     }
+
+    /* MODIFICATION START: Sub-menu styles */
+    .context-menu-icon {
+        display: inline-block;
+        width: 20px;
+        text-align: center;
+        margin-right: 8px;
+        flex-shrink: 0;
+    }
+    .context-menu-item-container {
+        position: relative;
+    }
+    .context-menu-item-with-submenu {
+        justify-content: space-between;
+    }
+    .context-menu-item-with-submenu::after {
+        content: '▶';
+        font-size: 0.7em;
+        opacity: 0.7;
+        margin-left: auto;
+        padding-left: 10px;
+    }
+    .submenu {
+        display: none;
+        position: absolute;
+        left: 100%;
+        top: -5px; /* Aligns with parent item based on parent padding */
+        z-index: 1;
+
+        /* Re-apply context-menu styles for the sub-menu */
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        padding: 4px 0;
+        min-width: 180px;
+    }
+    .context-menu-item-container:hover > .submenu {
+        display: flex;
+        flex-direction: column;
+    }
+    /* MODIFICATION END */
 </style>
 
 <svelte:window
@@ -2103,6 +2188,24 @@
 
     {#if contextMenu.visible && !wasPanning}
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
+            <!-- MODIFICATION START -->
+            <div class="context-menu-item-container">
+                <button class="context-menu-item-with-submenu">SKYBOARD</button>
+                <div class="submenu">
+                    {#each skyboardMenuItems as item (item.name)}
+                        <button
+                            on:click={item.action}
+                            disabled={item.requiresConnection && $connectionStatus !== 'connected'}
+                            title={item.requiresConnection && $connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : item.name}
+                        >
+                            <span class="context-menu-icon">{item.icon}</span>
+                            <span>{item.name}</span>
+                        </button>
+                    {/each}
+                </div>
+            </div>
+            <div class="context-menu-separator"></div>
+            <!-- MODIFICATION END -->
             <button on:click={handleNewBoxClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Box</button>
             <button on:click={handleNewShortcutClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Shortcut</button>
             <div class="context-menu-separator"></div>
