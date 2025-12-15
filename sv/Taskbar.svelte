@@ -4,7 +4,8 @@
 -->
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { windows, newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, newBoxesWindow, newCamera } from './windows.js';
+    import { windows } from './windows.js';
+    import { newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, newBoxesWindow, newCamera } from './apps.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled, componentIconMap } from './desktop.js';
     import { connectionStatus, switchToBox, boxes } from './bridge.js';
     import Clock from './Clock.svelte';

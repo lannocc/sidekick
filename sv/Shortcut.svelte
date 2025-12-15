@@ -4,7 +4,7 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { newLocalFileExplorer, newLocalFileViewer } from './windows.js';
+    import { newLocalFileExplorer, newLocalFileViewer } from './apps.js';
     import { desktopView, selectedItems, wasDraggingItems, calculateContextMenuPosition } from './desktop.js';
     import { desktopShortcuts, updateShortcutTransform } from './bridge.js';
     import { get } from 'svelte/store';

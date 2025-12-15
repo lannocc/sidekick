@@ -5,7 +5,8 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { windows, newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch, newIoskUserInspector } from '../windows.js';
+    import { windows } from '../windows.js';
+    import { newIoskFileExplorer, newIoskFileViewer, newIoskPrivateChat, newIoskWatch, newIoskUserInspector } from '../apps.js';
     import { fileSystemRequests, fileSystemResponses, consoleCommands, privateMessages, fileSystemWatchEvents, fileSystemTailEvents, contextUpdates } from '../iosk.js';
     import { desktopSettings, windowSettings } from '../desktop.js';
     import RoomsMenu from './popup/RoomsMenu.svelte';

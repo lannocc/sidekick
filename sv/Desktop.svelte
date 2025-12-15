@@ -3,7 +3,8 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { windows, newSettings, newIoskConnection, newCalculator, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newBoxesWindow, newCamera, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
+    import { windows, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
+    import { newSettings, newIoskConnection, newCalculator, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newBoxesWindow, newCamera } from './apps.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, currentBox, skyCloakEnabled, calculateContextMenuPosition } from './desktop.js';
     import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox, resolveAssetDataUrl, generateBgStyle, deleteBox, deleteBackedWindow } from './bridge.js';

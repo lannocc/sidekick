@@ -5,7 +5,8 @@
 <script>
     import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
-    import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
+    import { dragState, windows, generateBoardConfigFromWindow, } from './windows.js';
+    import { newAskWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './apps.js';
     import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover, switchToBox, allBoxSettings, getBoxSpecificSettings, promoteToIosk } from './bridge.js';
     import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId, calculateContextMenuPosition } from './desktop.js';
     import Panel from './Panel.svelte';

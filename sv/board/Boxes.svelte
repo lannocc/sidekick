@@ -20,7 +20,7 @@
         runningProcesses
     } from '../bridge.js';
     import { currentBoxId } from '../desktop.js';
-    import { newBox as createNewBoxEntity } from '../windows.js';
+    import { newBox as createNewBoxEntity } from '../apps.js';
 
     let selectedBoxId = null;
     let selectedBox = null;

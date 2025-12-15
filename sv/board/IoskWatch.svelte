@@ -3,7 +3,8 @@
     import { onMount, onDestroy, tick } from 'svelte';
     import { get } from 'svelte/store';
     import { fileSystemRequests, fileSystemResponses } from '../iosk.js';
-    import { windows, activeConsoles } from '../windows.js';
+    import { windows } from '../windows.js';
+    import { activeConsoles } from '../apps.js';
     import { parseAnsi } from '../ansi.js';
 
     export let id; // tab id

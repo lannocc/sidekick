@@ -6,7 +6,8 @@
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { createFsAdapter } from '../fs_adapter.js';
-    import { windows, activeConsoles, newFileViewer, newAskWindow } from '../windows.js';
+    import { windows } from '../windows.js';
+    import { newFileViewer, newAskWindow, activeConsoles } from '../apps.js';
     import { windowSettings, windowView, TASKBAR_HEIGHT } from '../desktop.js';
     import { connectionStatus, createBox } from '../bridge.js';
     import { fileSelection } from '../iosk.js';

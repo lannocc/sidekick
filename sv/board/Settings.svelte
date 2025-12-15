@@ -1,7 +1,8 @@
 <script>
     import { get } from 'svelte/store';
     import { desktopSettings, windowSettings, currentBoxId, mergeWithDefaults } from '../desktop.js';
-    import { windows, newFileExplorer } from '../windows.js';
+    import { windows } from '../windows.js';
+    import { newFileExplorer } from '../apps.js';
     import WindowSettingsModal from '../popup/WindowSettingsModal.svelte';
     import { onDestroy, onMount } from 'svelte';
     import { connectionStatus, boxes, saveSettingsToBox, getDesktopSettings, getBoxSpecificSettings, desktopSettingsResponse, clearSettingsForBox, allBoxSettings, resolveAssetDataUrl } from '../bridge.js';

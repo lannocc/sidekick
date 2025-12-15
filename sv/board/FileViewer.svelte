@@ -7,7 +7,8 @@
     import { get } from 'svelte/store';
     import { createFsAdapter } from '../fs_adapter.js';
     import { marked } from 'marked';
-    import { windows, activeConsoles } from '../windows.js';
+    import { windows } from '../windows.js';
+    import { activeConsoles } from '../apps.js';
     import { parseAnsi } from '../ansi.js';
     import hljs from 'highlight.js/lib/core';
     import javascript from 'highlight.js/lib/languages/javascript';
