@@ -853,9 +853,27 @@
     export function toggleAttachMenu(event) {
         showAttachMenu = !showAttachMenu;
         if (showAttachMenu) {
-            // Estimate menu dimensions to pass to the helper function.
             const menuDimensions = { width: 240, height: 350 };
-            const { x, y } = calculateWindowContextMenuPosition(event, menuDimensions);
+
+            let positionEvent = event;
+            // If called without an event (from Window options menu), create a synthetic one
+            // positioned relative to the console's "Attach" button in the user panel.
+            if (!positionEvent && attachButton) {
+                const rect = attachButton.getBoundingClientRect();
+                positionEvent = {
+                    target: attachButton, // a valid target inside the window
+                    clientX: rect.left,
+                    clientY: rect.bottom,
+                };
+            }
+
+            if (!positionEvent) {
+                console.error("Could not determine position for Attach menu.");
+                showAttachMenu = false;
+                return;
+            }
+
+            const { x, y } = calculateWindowContextMenuPosition(positionEvent, menuDimensions);
             attachMenuPosition = { x, y };
         }
     }
@@ -1368,4 +1386,3 @@
         </div>
     {/if}
 </div>
-
