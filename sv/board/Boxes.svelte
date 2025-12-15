@@ -16,6 +16,8 @@
         updateIoskConfig,
         startIosk,
         stopProcess,
+        pauseProcess,
+        resumeProcess,
         ioskConfigResponse,
         runningProcesses,
         requestedBoxId
@@ -51,6 +53,14 @@
     let boxTree = [];
     let flatBoxList = [];
     let expanded = { 0: true }; // Root is expanded by default
+    let processMap = {};
+
+    $: if ($runningProcesses) {
+        processMap = $runningProcesses.reduce((acc, p) => {
+            acc[p.box_id] = p;
+            return acc;
+        }, {});
+    }
 
     function toggleExpand(boxId) {
         expanded[boxId] = !expanded[boxId];
@@ -270,6 +280,8 @@
     .box-list-item.current { border-left-color: var(--accent-color, #88C0D0); }
     .tree-toggle, .tree-toggle-placeholder { width: 24px; height: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: none; border: none; color: var(--text-color-light); font-family: monospace; font-size: 14px; cursor: pointer; }
     .tree-toggle:hover { color: var(--text-color); }
+    .box-icon-container { position: relative; width: 24px; height: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .iosk-badge { position: absolute; bottom: -2px; right: -4px; width: 14px; height: 14px; background-color: var(--window-bg); border-radius: 50%; padding: 1px; }
     .box-icon { width: 24px; height: 24px; flex-shrink: 0; }
     .box-name { flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .right-panel { flex-grow: 1; padding: 16px; padding-top: 64px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; overflow-x: hidden; position: relative; }
@@ -297,6 +309,10 @@
     .details-list li strong { color: var(--text-color); }
     .details-list li pre { margin-top: 4px; padding: 4px; background-color: rgba(0,0,0,0.2); border-radius: 4px; white-space: pre-wrap; }
     hr { border: none; border-top: 1px solid var(--border-color); margin: 0; }
+    .process-controls-list { margin-left: auto; padding-right: 4px; }
+    .icon-btn-list { width: 28px; height: 28px; padding: 5px; border-radius: 50%; border: none; background-color: transparent; cursor: pointer; color: var(--text-color-light); display: flex; align-items: center; justify-content: center; }
+    .icon-btn-list:hover { background-color: var(--item-hover-bg); color: var(--text-color); }
+    .icon-btn-list svg { width: 100%; height: 100%; fill: currentColor; }
     /* ProcBox Styles */
     .status-display { display: flex; gap: 16px; align-items: center; background-color: var(--input-bg); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color); }
     .status-indicator { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
@@ -314,6 +330,8 @@
     .controls .icon-btn svg { width: 100%; height: 100%; fill: currentColor; }
     .controls .start-btn:not(:disabled) { background-color: #27ae60; border-color: #2ecc71; color: white; }
     .controls .start-btn:not(:disabled):hover { background-color: #2ecc71; }
+    .controls .pause-btn:not(:disabled) { background-color: #f39c12; border-color: #f1c40f; color: white; }
+    .controls .pause-btn:not(:disabled):hover { background-color: #f1c40f; }
     .controls .stop-btn:not(:disabled) { background-color: #c0392b; border-color: #e74c3c; color: white; }
     .controls .stop-btn:not(:disabled):hover { background-color: #e74c3c; }
     .config-grid { display: grid; grid-template-columns: auto 1fr; gap: 12px 8px; align-items: center; }
@@ -334,14 +352,34 @@
     
     <div class="left-panel" style:width="{leftPanelWidth}px">
         {#each flatBoxList as box (box.id)}
+            {@const process = processMap[box.id]}
             <div class="box-list-item" class:selected={box.id === selectedBoxId} class:current={box.id === $currentBoxId} on:click={() => handleSelectBox(box.id)} title={box.name} style:padding-left="{box.level * 20 + 8}px">
                 {#if box.children && box.children.length > 0}
                     <button class="tree-toggle" on:click|stopPropagation={() => toggleExpand(box.id)}>{expanded[box.id] ? '▼' : '►'}</button>
                 {:else}
                     <div class="tree-toggle-placeholder"></div>
                 {/if}
-                <img src="/skybox.png" alt="Box" class="box-icon" />
+                <div class="box-icon-container">
+                    <img src="/skybox.png" alt="Box" class="box-icon" />
+                    {#if box.type === 'iosk'}
+                        <img src="/iosk.png" alt="IOSK" class="iosk-badge" />
+                    {/if}
+                </div>
                 <span class="box-name">{box.name}</span>
+
+                {#if process && (process.status === 'running' || process.status === 'paused')}
+                    <div class="process-controls-list">
+                        {#if process.status === 'running'}
+                            <button class="icon-btn-list" on:click|stopPropagation={() => pauseProcess(process.pid)} title="Pause Process">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                            </button>
+                        {:else if process.status === 'paused'}
+                            <button class="icon-btn-list" on:click|stopPropagation={() => resumeProcess(process.pid)} title="Resume Process">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                            </button>
+                        {/if}
+                    </div>
+                {/if}
             </div>
         {/each}
     </div>
@@ -394,9 +432,20 @@
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
                                 </button>
                                 <button class="quick-link-btn" disabled={!latestProcess} on:click={() => latestProcess && showProcessesAndSelect(latestProcess.pid)}>View in Process Manager</button>
-                                <button on:click={() => startIosk(selectedBoxId)} disabled={!!activeProcess} class="icon-btn start-btn" title="Start Process">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                                </button>
+                                
+                                {#if activeProcess?.status === 'running'}
+                                    <button on:click={() => pauseProcess(activeProcess.pid)} class="icon-btn pause-btn" title="Pause Process">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                                    </button>
+                                {:else if activeProcess?.status === 'paused'}
+                                    <button on:click={() => resumeProcess(activeProcess.pid)} class="icon-btn start-btn" title="Resume Process">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                    </button>
+                                {:else}
+                                    <button on:click={() => startIosk(selectedBoxId)} disabled={!!activeProcess} class="icon-btn start-btn" title="Start Process">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                    </button>
+                                {/if}
                             </div>
                         </div>
 
