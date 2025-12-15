@@ -154,9 +154,9 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
     // Calculate the visible area in world coordinates, including margins and frames.
     const margin = 10; // screen pixels
     const view = {
-        x: (-panX + sideFrameWidth + margin) / zoom,
+        x: (-panX + margin) / zoom,
         y: (-panY + margin) / zoom,
-        width: (window.innerWidth - (2 * sideFrameWidth) - (2 * margin)) / zoom,
+        width: (window.innerWidth - sideFrameWidth - sideFrameWidth - (2 * margin)) / zoom,
         height: (window.innerHeight - taskbarHeight - bottomFrameHeight - (2 * margin)) / zoom,
     };
 
