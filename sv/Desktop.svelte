@@ -2043,6 +2043,22 @@
         margin-left: auto;
         padding-left: 10px;
     }
+    .context-menu-item-with-submenu.open-left {
+        flex-direction: row-reverse;
+    }
+    .context-menu-item-with-submenu.open-left::after {
+        content: '◀';
+        margin-left: 0;
+        padding-left: 0;
+        padding-right: 10px;
+    }
+    .context-menu-item-with-submenu::after {
+        content: '▶';
+        font-size: 0.7em;
+        opacity: 0.7;
+        margin-left: auto;
+        padding-left: 10px;
+    }
     .submenu {
         display: none;
         position: absolute;
@@ -2198,7 +2214,7 @@
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
             <!-- MODIFICATION START -->
             <div class="context-menu-item-container">
-                <button class="context-menu-item-with-submenu">SKYBOARD</button>
+                <button class="context-menu-item-with-submenu" class:open-left={openSubmenuLeft}>SKYBOARD</button>
                 <div class="submenu" class:open-left={openSubmenuLeft}>
                     {#each skyboardMenuItems as item (item.name)}
                         <button
@@ -2240,4 +2256,3 @@
         <Dash />
     {/if}
 </div>
-
