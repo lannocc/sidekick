@@ -57,7 +57,12 @@
 
     $: if ($runningProcesses) {
         processMap = $runningProcesses.reduce((acc, p) => {
-            acc[p.box_id] = p;
+            // The list from the backend is sorted with newest processes first.
+            // We only add a process to the map if one for that box_id isn't already there.
+            // This ensures we get the latest process for each box.
+            if (p.box_id !== null && !acc[p.box_id]) {
+                acc[p.box_id] = p;
+            }
             return acc;
         }, {});
     }
@@ -283,7 +288,7 @@
     .box-icon-container { position: relative; width: 24px; height: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
     .iosk-badge { position: absolute; bottom: -2px; right: -4px; width: 14px; height: 14px; background-color: var(--window-bg); border-radius: 50%; padding: 1px; }
     .box-icon { width: 24px; height: 24px; flex-shrink: 0; }
-    .box-name { flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .box-name { flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     .right-panel { flex-grow: 1; padding: 16px; padding-top: 64px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; overflow-x: hidden; position: relative; }
     .details-group { display: flex; flex-direction: column; gap: 4px; }
     .details-group label { font-size: 0.9em; color: var(--text-color-light); }
@@ -309,7 +314,7 @@
     .details-list li strong { color: var(--text-color); }
     .details-list li pre { margin-top: 4px; padding: 4px; background-color: rgba(0,0,0,0.2); border-radius: 4px; white-space: pre-wrap; }
     hr { border: none; border-top: 1px solid var(--border-color); margin: 0; }
-    .process-controls-list { margin-left: auto; padding-right: 4px; }
+    .process-controls-list { padding-right: 4px; }
     .icon-btn-list { width: 28px; height: 28px; padding: 5px; border-radius: 50%; border: none; background-color: transparent; cursor: pointer; color: var(--text-color-light); display: flex; align-items: center; justify-content: center; }
     .icon-btn-list:hover { background-color: var(--item-hover-bg); color: var(--text-color); }
     .icon-btn-list svg { width: 100%; height: 100%; fill: currentColor; }
@@ -366,7 +371,6 @@
                     {/if}
                 </div>
                 <span class="box-name">{box.name}</span>
-
                 {#if process && (process.status === 'running' || process.status === 'paused')}
                     <div class="process-controls-list">
                         {#if process.status === 'running'}
