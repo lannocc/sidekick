@@ -5,9 +5,9 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows } from './windows.js';
-    import { appList, newNotificationCenter } from './apps.js';
+    import { appList, newNotificationCenter, newBoxes, newProcesses } from './apps.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled, componentIconMap } from './desktop.js';
-    import { connectionStatus, switchToBox, boxes } from './bridge.js';
+    import { connectionStatus, switchToBox, boxes, runningProcesses, stopProcess } from './bridge.js';
     import Clock from './Clock.svelte';
     import { get } from 'svelte/store';
 
@@ -16,6 +16,9 @@
 
     let showWindowsMenu = false; // For Windows list menu
     let windowsButton;
+
+    let showQuickView = false; // For the new quick-view menu
+    let quickViewButton;
 
     let screenWidth;
     let menuBackgroundStyle = '';
@@ -72,6 +75,9 @@
         }
     });
 
+    // Find launchers for manager buttons
+    const boxesApp = appList.find(app => app.name === 'Boxes');
+    const processesApp = appList.find(app => app.name === 'Processes');
 
     function generateBgStyle(bgSettings) {
         if (!bgSettings) return null;
@@ -441,6 +447,9 @@
     function handleWindowClick(event) {
         if (showMenu && startButton && !startButton.contains(event.target)) showMenu = false;
         if (showWindowsMenu && windowsButton && !windowsButton.contains(event.target)) showWindowsMenu = false;
+        if (showQuickView && quickViewButton && !quickViewButton.contains(event.target)) {
+            showQuickView = false;
+        }
     }
 
     function toggleSkyCloak() {
@@ -532,7 +541,21 @@
     .windows-button:hover { background-color: var(--taskbar-button-hover-bg); }
     .windows-button.active { background-color: var(--taskbar-button-hover-bg); }
 
-    .start-menu, .windows-menu { position: absolute; top: calc(var(--tb-height, 40px) + 5px); background-color: var(--window-bg); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 21500; }
+    .start-menu, .windows-menu, .quick-view-menu {
+        position: absolute;
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        z-index: 21500;
+    }
+    .quick-view-menu {
+        bottom: calc(var(--tb-height, 40px) + 5px);
+        right: 0;
+        width: 300px;
+        max-height: 400px;
+        overflow-y: auto;
+    }
     .start-menu {
         top: calc(var(--tb-height, 40px) * 0.85);
         right: 0;
@@ -668,6 +691,41 @@
     }
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
     .menu-item-empty { padding: 10px 15px; color: #7f8c8d; font-style: italic; }
+    
+    .quick-view-section-header {
+        padding: 6px 12px;
+        font-size: 0.8em;
+        font-weight: bold;
+        color: var(--text-color-light);
+        background-color: var(--taskbar-button-bg);
+        border-bottom: 1px solid var(--border-color);
+    }
+    .quick-view-process-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .quick-view-process-item:last-of-type { border-bottom: none; }
+    .status-indicator { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .status-running { background-color: #2ecc71; }
+    .status-paused { background-color: #f39c12; }
+    .process-info { flex-grow: 1; overflow: hidden; }
+    .process-info .name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .process-info .status { font-size: 0.8em; color: var(--text-color-light); text-transform: capitalize; }
+    .quick-action-btn {
+        padding: 4px; width: 24px; height: 24px;
+        border: none; background-color: transparent; color: #e74c3c;
+        cursor: pointer; border-radius: 50%; display: flex;
+        align-items: center; justify-content: center;
+    }
+    .quick-action-btn:hover { background-color: rgba(231, 76, 60, 0.2); }
+    .quick-action-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+    .quick-view-menu .menu-item { width: 100%; box-sizing: border-box; }
+    .quick-view-menu .menu-item:first-of-type { border-top: 1px solid var(--border-color); }
+
     .close-all-row {
         cursor: pointer;
         border-top: 1px solid var(--border-color);
@@ -838,7 +896,40 @@
         </button>
     </div>
     <div class="taskbar-right" bind:this={rightSectionEl}>
-        <button class="quick-launch-button" on:click|stopPropagation={(e) => { if ($dashActive) dashActive.set(false); /*launchIosk({ sourceEvent: e });*/ }} title="Coming Soon...">&#9632;</button>
+        <button class="quick-launch-button" bind:this={quickViewButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showQuickView = !showQuickView; }} title="Quick View Dashboard">&#9632;</button>
+        {#if showQuickView}
+            <div class="quick-view-menu" style={menuBackgroundStyle} on:click|stopPropagation>
+                <div class="quick-view-section-header">Running IOSK Processes</div>
+                {#each $runningProcesses.filter(p => p.type === 'iosk' && (p.status === 'running' || p.status === 'paused')) as proc (proc.pid)}
+                    <div class="quick-view-process-item">
+                        <div class="status-indicator status-{proc.status}"></div>
+                        <div class="process-info">
+                            <div class="name" title={proc.box_name}>{proc.box_name || 'Untitled Process'}</div>
+                            <div class="status">PID: {proc.pid} | {proc.status}</div>
+                        </div>
+                        <button class="quick-action-btn" title="Stop Process" on:click={() => stopProcess(proc.pid)}>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                        </button>
+                    </div>
+                {:else}
+                    <div class="menu-item-empty">No IOSK processes running.</div>
+                {/if}
+    
+                <div class="menu-separator"></div>
+                <div class="quick-view-section-header">Current Desktop</div>
+                <div class="menu-item" style="cursor: default;">
+                    <img src="/skybox.png" alt="" class="menu-item-icon" />
+                    {$currentBox?.name || 'Main Desktop'}
+                </div>
+    
+                {#if processesApp}
+                    <button class="menu-item" on:click={() => { processesApp.launcher(); showQuickView = false; }}>Open Process Manager</button>
+                {/if}
+                {#if boxesApp}
+                    <button class="menu-item" on:click={() => { boxesApp.launcher(); showQuickView = false; }}>Open Boxes Manager</button>
+                {/if}
+            </div>
+        {/if}
         <button class="start-button" class:connected={$connectionStatus === 'connected'} bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }} title="SKYBOARD Menu"><img src="/favicon.png" alt="SKYBOARDS"></button>
         {#if showMenu}
             <div class="start-menu" style={menuBackgroundStyle}>
