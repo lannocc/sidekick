@@ -34,7 +34,8 @@
     
     // --- State for IOSK tab ---
     let ioskConfig = null;
-    let associatedProcess = null;
+    let latestProcess = null; // Most recent process record for the box
+    let activeProcess = null; // The process if it's currently running or paused
     let uptime = 'N/A';
     let uptimeInterval;
     let configDebounceTimer;
@@ -76,9 +77,13 @@
     $: if ($ioskConfigResponse && $ioskConfigResponse.box_id === selectedBoxId) {
         ioskConfig = $ioskConfigResponse.config || { mount_point: '', daemon_mode: 1, enable_stdin: 0 };
     }
+    // Find the latest process record for the selected box
     $: if ($runningProcesses && selectedBoxId !== null) {
-        associatedProcess = $runningProcesses.find(p => p.box_id === selectedBoxId) || null;
+        latestProcess = $runningProcesses.find(p => p.box_id === selectedBoxId) || null;
     }
+    // Determine if the process is "active" (i.e., can be interacted with)
+    $: activeProcess = (latestProcess && (latestProcess.status === 'running' || latestProcess.status === 'paused')) ? latestProcess : null;
+
 
     // Rebuild the tree structure when the source box list changes
     $: if ($boxes && $boxes.length > 0) {
@@ -143,18 +148,19 @@
     }
 
     function calculateUptime() {
-        if (associatedProcess && associatedProcess.status === 'running') {
-            uptime = formatUptime(associatedProcess.start_time);
+        if (activeProcess && activeProcess.status === 'running') {
+            uptime = formatUptime(activeProcess.start_time);
         } else {
             uptime = 'N/A';
         }
     }
 
-    $: if (associatedProcess) {
+    // Reactive logic to manage the uptime timer interval
+    $: {
         calculateUptime();
-        if (associatedProcess.status === 'running' && !uptimeInterval) {
+        if (activeProcess && activeProcess.status === 'running' && !uptimeInterval) {
             uptimeInterval = setInterval(calculateUptime, 1000);
-        } else if (associatedProcess.status !== 'running' && uptimeInterval) {
+        } else if ((!activeProcess || activeProcess.status !== 'running') && uptimeInterval) {
             clearInterval(uptimeInterval);
             uptimeInterval = null;
         }
@@ -175,7 +181,7 @@
             selectedBoxBackedWindows = [];
             selectedBoxSettings = {};
             ioskConfig = null;
-            associatedProcess = null;
+            latestProcess = null;
         }
         selectedBoxId = id;
     }
@@ -293,6 +299,10 @@
     .controls button:disabled { opacity: 0.5; cursor: not-allowed; }
     .controls .icon-btn { width: 40px; height: 40px; padding: 8px; display: flex; align-items: center; justify-content: center; }
     .controls .icon-btn svg { width: 100%; height: 100%; fill: currentColor; }
+    .controls .start-btn:not(:disabled) { background-color: #27ae60; border-color: #2ecc71; color: white; }
+    .controls .start-btn:not(:disabled):hover { background-color: #2ecc71; }
+    .controls .stop-btn:not(:disabled) { background-color: #c0392b; border-color: #e74c3c; color: white; }
+    .controls .stop-btn:not(:disabled):hover { background-color: #e74c3c; }
     .config-grid { display: grid; grid-template-columns: auto 1fr; gap: 12px 8px; align-items: center; }
     .config-grid label { font-size: 0.9em; color: var(--text-color-light); justify-self: end; }
     .config-grid input[type="text"] { width: 100%; }
@@ -349,11 +359,11 @@
                     <div class="tab-pane">
                         <div class="details-group">
                             <div class="controls">
-                                <button on:click={() => stopProcess(associatedProcess.pid)} disabled={!associatedProcess} class="icon-btn" title="Stop Process">
+                                <button on:click={() => stopProcess(activeProcess.pid)} disabled={!activeProcess} class="icon-btn stop-btn" title="Stop Process">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
                                 </button>
                                 <button class="quick-link-btn" disabled>View in Process Manager</button>
-                                <button on:click={() => startIosk(selectedBoxId)} disabled={!!associatedProcess} class="icon-btn" title="Start Process">
+                                <button on:click={() => startIosk(selectedBoxId)} disabled={!!activeProcess} class="icon-btn start-btn" title="Start Process">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                                 </button>
                             </div>
@@ -362,11 +372,11 @@
                         <div class="details-group">
                             <label>Status</label>
                             <div class="status-display">
-                                <div class="status-indicator" class:running={associatedProcess?.status === 'running'} class:stopped={!associatedProcess || associatedProcess?.status === 'stopped'} class:paused={associatedProcess?.status === 'paused'} class:error={associatedProcess?.status === 'error'}></div>
-                                <span class="status-text">{associatedProcess?.status ?? 'Stopped'}</span>
+                                <div class="status-indicator" class:running={latestProcess?.status === 'running'} class:stopped={!latestProcess || latestProcess?.status === 'stopped'} class:paused={latestProcess?.status === 'paused'} class:error={latestProcess?.status === 'error'}></div>
+                                <span class="status-text">{latestProcess?.status ?? 'Stopped'}</span>
                                 <span class="status-details">
-                                    {#if associatedProcess}
-                                        PID: {associatedProcess.pid} &nbsp;&nbsp; Uptime: {uptime}
+                                    {#if activeProcess}
+                                        PID: {activeProcess.pid} &nbsp;&nbsp; Uptime: {uptime}
                                     {:else}
                                         Not running.
                                     {/if}
