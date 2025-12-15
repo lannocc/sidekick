@@ -30,6 +30,7 @@ export const backedWindows = writable([]);
 // --- ProcBox Stores ---
 export const runningProcesses = writable([]);
 export const ioskConfigResponse = writable(null);
+export const processOutput = writable(null);
 
 
 // --- Asset Resolution for local files ---
@@ -241,6 +242,22 @@ export function stopProcess(pid) {
 
 export function listRunningProcesses() {
     sendMessage({ type: 'list_running_processes' });
+}
+
+export function pauseProcess(pid) {
+    sendMessage({ type: 'pause_process', pid });
+}
+
+export function resumeProcess(pid) {
+    sendMessage({ type: 'resume_process', pid });
+}
+
+export function killProcess(pid) {
+    sendMessage({ type: 'kill_process', pid });
+}
+
+export function sendProcessStdin(pid, data) {
+    sendMessage({ type: 'process_stdin', pid, data });
 }
 // --- End ProcBox Functions ---
 
@@ -470,6 +487,9 @@ function attemptConnection() {
                     break;
                 case 'iosk_config_response':
                     ioskConfigResponse.set(msg);
+                    break;
+                case 'process_output':
+                    processOutput.set({ ...msg, timestamp: Date.now() });
                     break;
                 default:
                     console.warn('Unknown message type from local backend:', msg.type);

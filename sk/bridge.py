@@ -760,9 +760,10 @@ async def broadcast_process_list():
     
     cursor = DB_CONN.cursor()
     cursor.execute("""
-        SELECT p.*, b.name as box_name 
+        SELECT p.*, b.name as box_name, i.enable_stdin
         FROM process p 
         LEFT JOIN box b ON p.box_id = b.id
+        LEFT JOIN iosk i ON p.box_id = i.box_id
         ORDER BY p.start_time DESC
     """)
     processes = [dict(row) for row in cursor.fetchall()]
@@ -1220,8 +1221,11 @@ async def websocket_handler(websocket):
                     pid_to_stop = msg.get('pid')
                     print_action("Stop Process", f"pid={pid_to_stop}, signal=SIGTERM")
                     try:
-                        os.kill(pid_to_stop, signal.SIGTERM)
-                    except ProcessLookupError:
+                        if platform.system() == 'Windows':
+                            subprocess.run(['taskkill', '/PID', str(pid_to_stop)], check=True, capture_output=True)
+                        else:
+                            os.kill(pid_to_stop, signal.SIGTERM)
+                    except (ProcessLookupError, subprocess.CalledProcessError):
                         log.warning(f"Process {pid_to_stop} not found, already stopped.")
                         cursor = DB_CONN.cursor()
                         cursor.execute("UPDATE process SET status = 'stopped' WHERE pid = ?", (pid_to_stop,))
@@ -1230,6 +1234,23 @@ async def websocket_handler(websocket):
                     except Exception as e:
                         log.error(f"Failed to send SIGTERM to process {pid_to_stop}: {e}")
                 
+                elif msg_type == 'kill_process':
+                    pid_to_kill = msg.get('pid')
+                    print_action("Kill Process", f"pid={pid_to_kill}, signal=SIGKILL")
+                    try:
+                        if platform.system() == 'Windows':
+                            subprocess.run(['taskkill', '/F', '/PID', str(pid_to_kill)], check=True, capture_output=True)
+                        else:
+                            os.kill(pid_to_kill, signal.SIGKILL)
+                    except (ProcessLookupError, subprocess.CalledProcessError):
+                        log.warning(f"Process {pid_to_kill} not found for kill, already stopped.")
+                        cursor = DB_CONN.cursor()
+                        cursor.execute("UPDATE process SET status = 'stopped' WHERE pid = ?", (pid_to_kill,))
+                        DB_CONN.commit()
+                        await broadcast_process_list()
+                    except Exception as e:
+                        log.error(f"Failed to send kill signal to process {pid_to_kill}: {e}")
+
                 elif msg_type in ('pause_process', 'resume_process'):
                     if platform.system() == 'Windows':
                         log.warning("Pause/Resume is not supported on Windows.")
