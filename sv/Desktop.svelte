@@ -5,7 +5,7 @@
 <script>
     import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, skyCloakEnabled } from './desktop.js';
+    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, skyCloakEnabled, calculateContextMenuPosition } from './desktop.js';
     import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox, resolveAssetDataUrl, generateBgStyle, deleteBox, deleteBackedWindow } from './bridge.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
@@ -146,8 +146,7 @@
         closeContextMenu(); // Close the main desktop one if open
         backedWindowContextMenu = {
             visible: true,
-            x: event.clientX,
-            y: event.clientY,
+            ...calculateContextMenuPosition(event, { width: 120, height: 50 }),
             window: backedWindow,
         };
     }
@@ -193,8 +192,7 @@
 
         contextMenu = {
             visible: true,
-            x: event.clientX,
-            y: event.clientY,
+            ...calculateContextMenuPosition(event, { width: 120, height: 150 }),
             sourceEvent: event,
         };
     }

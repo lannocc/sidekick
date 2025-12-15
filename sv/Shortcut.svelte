@@ -5,7 +5,7 @@
 -->
 <script>
     import { newLocalFileExplorer, newLocalFileViewer } from './windows.js';
-    import { desktopView, selectedItems, wasDraggingItems } from './desktop.js';
+    import { desktopView, selectedItems, wasDraggingItems, calculateContextMenuPosition } from './desktop.js';
     import { desktopShortcuts, updateShortcutTransform } from './bridge.js';
     import { get } from 'svelte/store';
     import { onDestroy, afterUpdate, createEventDispatcher } from 'svelte';
@@ -68,8 +68,7 @@
         event.stopPropagation(); // Prevent desktop context menu
         contextMenu = {
             visible: true,
-            x: event.clientX,
-            y: event.clientY,
+            ...calculateContextMenuPosition(event, { width: 120, height: 50 }),
         };
         window.addEventListener('click', closeContextMenu);
     }

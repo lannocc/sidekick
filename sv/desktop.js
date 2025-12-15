@@ -396,3 +396,31 @@ export const currentBox = derived(
 // New stores for Notification Center
 export const notificationHistory = writable([]);
 export const unreadNoticeCount = writable(0);
+
+/**
+ * Calculates the correct screen position for a context menu, ensuring it doesn't render off-screen.
+ * @param {MouseEvent} event The mouse event that triggered the menu.
+ * @param {object} [menuDimensions={width: 150, height: 200}] The estimated dimensions of the menu.
+ * @returns {{x: number, y: number}} The top-left coordinates for the menu.
+ */
+export function calculateContextMenuPosition(event, menuDimensions = { width: 150, height: 200 }) {
+    let x = event.clientX;
+    let y = event.clientY;
+
+    // Ensure we have window dimensions. This should be safe in a browser context.
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+
+    // Adjust if the menu would go off the right edge of the screen
+    if (x + menuDimensions.width > screenWidth) {
+        x = screenWidth - menuDimensions.width - 5; // subtract 5 for padding
+    }
+
+    // Adjust if the menu would go off the bottom edge of the screen
+    if (y + menuDimensions.height > screenHeight) {
+        y = screenHeight - menuDimensions.height - 5; // subtract 5 for padding
+    }
+
+    return { x, y };
+}
+

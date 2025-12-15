@@ -7,7 +7,7 @@
     import { get } from 'svelte/store';
     import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
     import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover, switchToBox, allBoxSettings, getBoxSpecificSettings } from './bridge.js';
-    import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId } from './desktop.js';
+    import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId, calculateContextMenuPosition } from './desktop.js';
     import Panel from './Panel.svelte';
 
     export let box;
@@ -276,27 +276,28 @@
         event.preventDefault();
         event.stopPropagation();
 
-        const { panX, panY, zoom } = get(desktopView);
-        const menuX = (event.clientX - panX) / zoom;
-        const menuY = (event.clientY - 40 - panY) / zoom; // -40 for taskbar height
-
         const panelKey = `${loc_x}_${loc_y}`;
         const panelConfig = panels[panelKey];
 
         // If center panel is empty, show the main box context menu.
         if (loc_x === 0 && loc_y === 0 && !panelConfig) {
             closePanelContextMenu();
-            contextMenu = { visible: true, x: menuX, y: menuY };
+            // Estimate menu size: min-width: 150px, ~8 items
+            const position = calculateContextMenuPosition(event, { width: 150, height: 250 });
+            contextMenu = { visible: true, x: position.x, y: position.y };
             return;
         }
 
         // For any non-empty panel (including a non-empty center), show the panel context menu.
         if (panelConfig) {
             closeContextMenu();
-            panelContextMenu = { visible: true, x: menuX, y: menuY, location: { x: loc_x, y: loc_y } };
+            // Estimate panel menu size: min-width: 150px, 1 item
+            const position = calculateContextMenuPosition(event, { width: 150, height: 50 });
+            panelContextMenu = { visible: true, x: position.x, y: position.y, location: { x: loc_x, y: loc_y } };
         }
     }
     function closeContextMenu() {
+        contextMenu.visible = false;
     }
     function closePanelContextMenu() {
         panelContextMenu.visible = false;
