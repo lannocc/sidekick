@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows } from './windows.js';
-    import { appList, newNotificationCenter, newBoxes, newProcesses } from './apps.js';
+    import { appList, newNotificationCenter } from './apps.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled, componentIconMap } from './desktop.js';
     import { connectionStatus, switchToBox, boxes, runningProcesses, stopProcess } from './bridge.js';
     import Clock from './Clock.svelte';
