@@ -142,13 +142,22 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
         return false;
     };
 
-    // Calculate the visible area in world coordinates
+    // Get current desktop settings to account for frames
+    const settings = get(desktopSettings);
+    const skyFrame = settings.sky?.frame;
+    const taskbarHeight = skyFrame?.height ?? TASKBAR_HEIGHT;
+    const sideFrameWidth = skyFrame?.width ?? 0;
+    // Symmetrical frame: bottom frame has same thickness as side frames.
+    const bottomFrameHeight = sideFrameWidth;
+
+
+    // Calculate the visible area in world coordinates, including margins and frames.
     const margin = 10; // screen pixels
     const view = {
-        x: (-panX / zoom) + (margin / zoom),
-        y: (-panY / zoom) + (margin / zoom),
-        width: (window.innerWidth / zoom) - (2 * margin / zoom),
-        height: ((window.innerHeight - TASKBAR_HEIGHT) / zoom) - (2 * margin / zoom),
+        x: (-panX + sideFrameWidth + margin) / zoom,
+        y: (-panY + margin) / zoom,
+        width: (window.innerWidth - (2 * sideFrameWidth) - (2 * margin)) / zoom,
+        height: (window.innerHeight - taskbarHeight - bottomFrameHeight - (2 * margin)) / zoom,
     };
 
     const clampToView = (pos) => {
@@ -182,7 +191,7 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
     if (sourceEvent) {
         // Convert click event to world coordinates
         const worldX = (sourceEvent.clientX - panX) / zoom;
-        const worldY = ((sourceEvent.clientY - TASKBAR_HEIGHT) - panY) / zoom;
+        const worldY = ((sourceEvent.clientY - taskbarHeight) - panY) / zoom;
         startPos = { x: worldX - width / 2, y: worldY - height / 2 };
     } else {
         // Default to center of the current view
