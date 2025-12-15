@@ -1127,7 +1127,7 @@ export function newCamera(props = {}) {
     windows.addWindow(Camera, { title: 'Camera', width: 640, height: 480, ...props });
 }
 export function newSettings(props = {}) {
-    windows.addWindow(Settings, { title: 'Settings', width: 420, height: 711, ...props });
+    windows.addWindow(Settings, { title: 'Settings', width: 640, height: 711, ...props });
 }
 export function newNotificationCenter(props = {}) {
     const allWindows = get(windows);
