@@ -11,6 +11,8 @@
         listRunningProcesses,
         connectionStatus
     } from '../bridge.js';
+    import { newLocalFileViewer } from '../apps.js';
+    import { parseAnsi } from '../ansi.js';
 
     let selectedPid = null;
     let selectedProcess = null;
@@ -61,7 +63,8 @@
     $: if ($processOutput) {
         const { pid, data, stream } = $processOutput;
         if (processLogs[pid]) {
-            const coloredData = `<span class="log-${stream}">${data.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`;
+            const processedData = parseAnsi(data);
+            const coloredData = `<span class="log-${stream}">${processedData}</span>`;
             processLogs[pid].lines = [...processLogs[pid].lines, coloredData];
             setTimeout(() => {
                 const el = processLogs[pid].element;
@@ -136,6 +139,8 @@
     .details-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; }
     .details-grid dt { font-weight: bold; color: var(--text-color-light); justify-self: end; }
     .details-grid dd { font-family: monospace; background: var(--input-bg); padding: 4px 8px; border-radius: 4px; user-select: text; word-break: break-all; }
+    .details-grid dd.clickable { cursor: pointer; color: var(--accent-color); }
+    .details-grid dd.clickable:hover { text-decoration: underline; }
     .controls { display: flex; gap: 8px; border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); padding: 12px 0; }
     .controls button { padding: 6px 14px; border: 1px solid var(--button-border-color); background-color: var(--button-bg); color: var(--text-color); border-radius: 4px; cursor: pointer; font-weight: bold; transition: background-color 0.2s; }
     .controls button:hover:not(:disabled) { background-color: var(--button-hover-bg); }
@@ -145,6 +150,7 @@
     .terminal-container { flex-grow: 1; display: flex; flex-direction: column; background: #1e1e1e; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color); }
     .terminal-view { flex-grow: 1; overflow-y: auto; padding: 10px; font-family: 'Courier New', Courier, monospace; font-size: 14px; color: #ccc; white-space: pre-wrap; word-wrap: break-word; line-height: 1.4; }
     .terminal-view :global(.log-stderr) { color: #f07178; }
+    .terminal-view :global(.log-stdout) { color: #ccc; }
     .stdin-form { display: flex; border-top: 1px solid var(--border-color); }
     .stdin-form input { flex-grow: 1; background: transparent; border: none; color: #ccc; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; }
 </style>
@@ -174,8 +180,14 @@
                 <dt>Status</dt><dd>{selectedProcess.status}</dd>
                 <dt>Start Time</dt><dd>{new Date(selectedProcess.start_time).toLocaleString()}</dd>
                 <dt>Uptime</dt><dd>{uptime}</dd>
-                <dt>STDOUT Log</dt><dd>{selectedProcess.stdout_log_path}</dd>
-                <dt>STDERR Log</dt><dd>{selectedProcess.stderr_log_path}</dd>
+                <dt>STDOUT Log</dt>
+                <dd class="clickable" on:click={() => newLocalFileViewer({ path: selectedProcess.stdout_log_path })}>
+                    {selectedProcess.stdout_log_path}
+                </dd>
+                <dt>STDERR Log</dt>
+                <dd class="clickable" on:click={() => newLocalFileViewer({ path: selectedProcess.stderr_log_path })}>
+                    {selectedProcess.stderr_log_path}
+                </dd>
             </dl>
             <div class="controls">
                 <button on:click={() => pauseProcess(selectedPid)} disabled={selectedProcess.status !== 'running' || $connectionStatus !== 'connected'}>Pause</button>

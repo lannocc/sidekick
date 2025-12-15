@@ -850,8 +850,8 @@ async def handle_start_iosk(msg):
     
     proc_args = {
         'stdin': asyncio.subprocess.PIPE if iosk_row['enable_stdin'] else None,
-        'stdout': open(stdout_log, 'w'),
-        'stderr': open(stderr_log, 'w'),
+        'stdout': open(stdout_log, 'w', buffering=1),
+        'stderr': open(stderr_log, 'w', buffering=1),
     }
 
     if iosk_row['daemon_mode']:
@@ -1253,7 +1253,7 @@ async def websocket_handler(websocket):
 
                 elif msg_type in ('pause_process', 'resume_process'):
                     if platform.system() == 'Windows':
-                        log.warning("Pause/Resume is not supported on Windows.")
+                        log.warning("Pause/Resume is not supported on this platform (e.g., Windows).")
                         continue
                     
                     pid = msg.get('pid')
