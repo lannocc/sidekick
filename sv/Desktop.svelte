@@ -4,7 +4,7 @@
 -->
 <script>
     import { windows, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
-    import { newSettings, newIoskConnection, newCalculator, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newBoxesWindow, newCamera } from './apps.js';
+    import { appList } from './apps.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, currentBox, skyCloakEnabled, calculateContextMenuPosition } from './desktop.js';
     import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox, resolveAssetDataUrl, generateBgStyle, deleteBox, deleteBackedWindow } from './bridge.js';
@@ -245,11 +245,6 @@
         closeSelectionContextMenu(); // Also close the selection menu
     }
 
-    function openSettingsMenu() {
-        closeContextMenu();
-        newSettings({ sourceEvent: contextMenu.sourceEvent });
-    }
-
     // --- MODIFICATION START: SKYBOARD CONTEXT MENU ---
     function launchApp(launcher, props = {}) {
         const event = contextMenu.sourceEvent;
@@ -257,33 +252,19 @@
         closeContextMenu();
     }
 
-    const skyboardMenuItems = [
-        { name: 'Ask', icon: '?', action: () => launchApp(newAskWindow), requiresConnection: true },
-        { name: 'Boxes', icon: '📦', action: () => launchApp(newBoxesWindow), requiresConnection: true },
-        { name: 'Calculator', icon: '🧮', action: () => launchApp(newCalculator), requiresConnection: false },
-        { name: 'Camera', icon: '📸', action: () => launchApp(newCamera), requiresConnection: false },
-        { name: 'Files', icon: '📁', action: () => {
-            const props = {};
-            const box = get(currentBox);
-            if (box && box.id !== 0) {
-                props.initialPath = box.context;
-                props.title = `Files - ${box.name}`;
+    const skyboardMenuItems = appList.map(app => ({
+        name: app.name,
+        icon: app.icon,
+        action: () => {
+            let props = {};
+            if (app.getProps) {
+                // Pass the currentBox store to getProps
+                props = app.getProps({ currentBox });
             }
-            launchApp(newLocalFileExplorer, props);
-        }, requiresConnection: true },
-        { name: 'IOSK Connection', icon: '🖥️', action: () => launchApp(newIoskConnection), requiresConnection: false },
-        { name: 'Settings', icon: '⚙️', action: () => launchApp(newSettings), requiresConnection: false },
-        { name: 'Terminal', icon: '>_', action: () => {
-            const props = {};
-            const box = get(currentBox);
-            if (box && box.id !== 0) {
-                props.initialPath = box.context;
-                props.title = `Terminal - ${box.name}`;
-            }
-            launchApp(newLocalTerminal, props);
-        }, requiresConnection: true },
-        { name: 'Web Browser', icon: '🌐', action: () => launchApp(newWebBrowser), requiresConnection: false },
-    ].sort((a, b) => a.name.localeCompare(b.name));
+            launchApp(app.launcher, props);
+        },
+        requiresConnection: app.requiresConnection,
+    })).sort((a, b) => a.name.localeCompare(b.name));
 
     // Calculate submenu height for positioning to prevent it from going off-screen.
     const SKYBOARD_ITEM_HEIGHT = 34; // Estimated height of one menu item (padding + line-height)
@@ -2244,8 +2225,6 @@
             <!-- MODIFICATION END -->
             <button on:click={handleNewBoxClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Box</button>
             <button on:click={handleNewShortcutClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Shortcut</button>
-            <div class="context-menu-separator"></div>
-            <button on:click={openSettingsMenu}>Settings...</button>
         </div>
     {/if}
 

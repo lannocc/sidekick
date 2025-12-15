@@ -18,6 +18,105 @@ import { createBox, boxes, desktopShortcuts, backedWindows } from './bridge.js';
 import { windows } from './windows.js';
 
 
+// --- App Definitions ---
+// This centralizes app metadata for use in menus.
+export const appList = [
+    {
+        id: 'settings',
+        name: 'Settings',
+        icon: '⚙️',
+        launcher: newSettings,
+        requiresConnection: false,
+        menuPosition: { row: 0, col: 0 },
+    },
+    {
+        id: 'calculator',
+        name: 'Calculator',
+        icon: '🧮',
+        launcher: newCalculator,
+        requiresConnection: false,
+        menuPosition: { row: 0, col: 1 },
+    },
+    {
+        id: 'camera',
+        name: 'Camera',
+        icon: '📸',
+        launcher: newCamera,
+        requiresConnection: false,
+        menuPosition: { row: 0, col: 2 },
+    },
+    {
+        id: 'web_browser',
+        name: 'Web Browser',
+        icon: '🌐',
+        launcher: newWebBrowser,
+        requiresConnection: false,
+        menuPosition: { row: 0, col: 3 },
+    },
+    {
+        id: 'iosk_connection',
+        name: 'IOSK Connection',
+        icon: '🖥️',
+        launcher: newIoskConnection,
+        requiresConnection: false,
+        menuPosition: { row: 0, col: 4 },
+        badge: '/iosk.png',
+    },
+    {
+        id: 'ask',
+        name: 'Ask',
+        icon: '?',
+        launcher: newAskWindow,
+        requiresConnection: true,
+        menuPosition: { row: 1, col: 1 },
+    },
+    {
+        id: 'boxes',
+        name: 'Boxes',
+        icon: '📦',
+        launcher: newBoxesWindow,
+        requiresConnection: true,
+        menuPosition: { row: 1, col: 2 },
+    },
+    {
+        id: 'files',
+        name: 'Files',
+        icon: '📁',
+        launcher: newLocalFileExplorer,
+        requiresConnection: true,
+        menuPosition: { row: 1, col: 3 },
+        getProps: (stores) => {
+            const box = get(stores.currentBox);
+            if (box && box.id !== 0) {
+                return {
+                    initialPath: box.context,
+                    title: `Files - ${box.name}`,
+                };
+            }
+            return {};
+        }
+    },
+    {
+        id: 'terminal',
+        name: 'Terminal',
+        icon: '>_',
+        launcher: newLocalTerminal,
+        requiresConnection: true,
+        menuPosition: { row: 1, col: 4 },
+        getProps: (stores) => {
+            const box = get(stores.currentBox);
+            if (box && box.id !== 0) {
+                return {
+                    initialPath: box.context,
+                    title: `Terminal - ${box.name}`,
+                };
+            }
+            return {};
+        }
+    },
+];
+
+
 // --- Window Creation Functions ---
 
 export function newIoskConnection(props = {}) {

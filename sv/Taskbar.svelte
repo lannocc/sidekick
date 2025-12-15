@@ -5,7 +5,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows } from './windows.js';
-    import { newIoskConnection, newCalculator, newSettings, newWebBrowser, newLocalTerminal, newLocalFileExplorer, newAskWindow, newNotificationCenter, newBoxesWindow, newCamera } from './apps.js';
+    import { appList, newNotificationCenter } from './apps.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled, componentIconMap } from './desktop.js';
     import { connectionStatus, switchToBox, boxes } from './bridge.js';
     import Clock from './Clock.svelte';
@@ -63,6 +63,15 @@
         // Find active window
         activeWindowId = ($windows.find(w => w.isActive))?.id;
     }
+
+    // --- Create a grid for the SKYBOARD menu ---
+    const menuGrid = Array(2).fill(null).map(() => Array(5).fill(null));
+    appList.forEach(app => {
+        if (app.menuPosition) {
+            menuGrid[app.menuPosition.row][app.menuPosition.col] = app;
+        }
+    });
+
 
     function generateBgStyle(bgSettings) {
         if (!bgSettings) return null;
@@ -433,13 +442,6 @@
         if (showMenu && startButton && !startButton.contains(event.target)) showMenu = false;
         if (showWindowsMenu && windowsButton && !windowsButton.contains(event.target)) showWindowsMenu = false;
     }
-
-    function launchIosk(props = {}) { newIoskConnection(props); showMenu = false; }
-    function launchCalculator(props = {}) { newCalculator(props); showMenu = false; }
-    function launchSettings(props = {}) { newSettings(props); showMenu = false; }
-    function launchLocalTerminal(props = {}) { newLocalTerminal(props); showMenu = false; }
-    function launchLocalFileExplorer(props = {}) { newLocalFileExplorer(props); showMenu = false; }
-    function launchAsk(props = {}) { newAskWindow(props); showMenu = false; }
 
     function toggleSkyCloak() {
         skyCloakEnabled.update(v => !v);
@@ -843,36 +845,33 @@
                 {#if $connectionStatus !== 'connected'}
                     <div class="skybridge-overlay">SKYBRIDGE REQUIRED</div>
                 {/if}
-                <!-- Top Row -->
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchSettings({ sourceEvent: e }); }} title="Settings">⚙️</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchCalculator({ sourceEvent: e }); }} title="Calculator">🧮</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newCamera({ sourceEvent: e }); showMenu = false; }} title="Camera">📸</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newWebBrowser({ sourceEvent: e }); showMenu = false; }} title="Web Browser">🌐</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchIosk({ sourceEvent: e }); }} title="IOSK Connection">
-                    🖥️
-                    <img class="menu-badge" src="/iosk.png" alt="IOSK" />
-                </button>
-
-                <!-- Bottom Row -->
-                <div />
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); launchAsk({ sourceEvent: e }); }} disabled={$connectionStatus !== 'connected'} title="Ask">?</button>
-                <button class="menu-item" on:click={(e) => { if ($dashActive) dashActive.set(false); newBoxesWindow({ sourceEvent: e }); showMenu = false; }} disabled={$connectionStatus !== 'connected'} title="Boxes">📦</button>
-                <button class="menu-item" on:click={(e) => { 
-                    if ($dashActive) dashActive.set(false);
-                    const props = { sourceEvent: e };
-                    if ($currentBox && $currentBox.id !== 0) {
-                        props.initialPath = $currentBox.context;
-                        props.title = `Files - ${$currentBox.name}`;
-                    }
-                    launchLocalFileExplorer(props); }} disabled={$connectionStatus !== 'connected'} title="Files">📁</button>
-                <button class="menu-item" on:click={(e) => { 
-                    if ($dashActive) dashActive.set(false);
-                    const props = { sourceEvent: e };
-                    if ($currentBox && $currentBox.id !== 0) {
-                        props.initialPath = $currentBox.context;
-                        props.title = `Terminal - ${$currentBox.name}`;
-                    }
-                    launchLocalTerminal(props); }} disabled={$connectionStatus !== 'connected'} title="Terminal">&gt;_</button>
+                {#each menuGrid as row, rowIndex (rowIndex)}
+                    {#each row as app, colIndex (colIndex)}
+                        {#if app}
+                            <button
+                                class="menu-item"
+                                on:click={(e) => {
+                                    if ($dashActive) dashActive.set(false);
+                                    let props = { sourceEvent: e };
+                                    if (app.getProps) {
+                                        props = { ...props, ...app.getProps({ currentBox }) };
+                                    }
+                                    app.launcher(props);
+                                    showMenu = false;
+                                }}
+                                disabled={app.requiresConnection && $connectionStatus !== 'connected'}
+                                title={app.name}
+                            >
+                                {app.icon}
+                                {#if app.badge}
+                                    <img class="menu-badge" src={app.badge} alt={app.name} />
+                                {/if}
+                            </button>
+                        {:else}
+                            <div />
+                        {/if}
+                    {/each}
+                {/each}
             </div>
         {/if}
     </div>

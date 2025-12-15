@@ -423,4 +423,3 @@ export function calculateContextMenuPosition(event, menuDimensions = { width: 15
 
     return { x, y };
 }
-
