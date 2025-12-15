@@ -6,7 +6,7 @@
 
 ## Abstract
 
-This proposal outlines a plan to integrate the launching, management, and monitoring of `iosk` instances directly within the SKYBOARD desktop environment. Currently, `iosk` instances can be run independently and connected to, but this proposal seeks to make `iosk` a first-class, managed entity within SKYBOARD. This will be achieved by upgrading "Boxes" to represent either local directory contexts or full `iosk` sandboxes. The SKYBRIDGE backend will be enhanced to manage the lifecycle of these `iosk` processes, and the frontend will be updated with new UI components for control and monitoring.
+This proposal outlines a plan to integrate the launching, management, and monitoring of `iosk` instances directly within the SKYBOARD desktop environment. Currently, `iosk` instances can be run independently and connected to, but this proposal seeks to make `iosk` a first-class, managed entity within SKYBOARD. This will be achieved by upgrading "Boxes" to represent either local directory contexts or full `iosk` sandboxes. The SKYBRIDGE backend will be enhanced to manage the lifecycle of these `iosk` processes, and the frontend will be updated with new UI components for control, monitoring, and interaction.
 
 ## Motivation
 
@@ -38,6 +38,7 @@ We will introduce two new tables to `skybridge.db` and modify the `box` table's 
         box_id INTEGER PRIMARY KEY,
         mount_point TEXT, -- The optional path for mounted media mode
         daemon_mode INTEGER NOT NULL DEFAULT 1, -- Boolean (0 or 1)
+        enable_stdin INTEGER NOT NULL DEFAULT 0, -- Boolean (0 or 1), enables interactive stdin
         FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
     );
     ```
@@ -67,7 +68,9 @@ The bridge will gain the ability to launch `iosk` as a subprocess. A key require
     *   On POSIX systems, `subprocess.Popen` with the `start_new_session=True` argument will be used to run the process in a new session, detaching it from the bridge's lifecycle.
     *   On Windows, the `DETACHED_PROCESS` creation flag will be used to achieve a similar result.
     *   If `daemon_mode` is false, the process will be launched normally as a child of the bridge and will be terminated when the bridge exits.
-*   **I/O Handling**: Standard output and error for each process will be redirected to dedicated log files in a temporary or user data directory. The bridge will tail these files to stream new output to the frontend.
+*   **I/O Handling**:
+    *   Standard output and error for each process will be redirected to dedicated log files in a temporary or user data directory. The bridge will tail these files to stream new output to the frontend.
+    *   If the `enable_stdin` setting is true for an `iosk` process, it will be launched with its standard input connected to a pipe (`stdin=subprocess.PIPE`). The bridge will manage this pipe, writing data to it when it receives `process_stdin` messages from the frontend.
 
 #### 1.3. WebSocket API Expansion
 
@@ -76,7 +79,7 @@ The following new message types will be added to the websocket protocol:
 *   **Box Promotion**:
     *   `promote_to_iosk` -> `(box_id)`: Client requests to convert a 'local' box to an 'iosk' box. Backend changes `box.type` and creates a default `iosk` entry.
 *   **IOSK Configuration**:
-    *   `update_iosk_config` -> `(box_id, config)`: Client sends updated config (e.g., `mount_point`, `daemon_mode`).
+    *   `update_iosk_config` -> `(box_id, config)`: Client sends updated config (e.g., `mount_point`, `daemon_mode`, `enable_stdin`).
     *   `get_iosk_config` -> `(box_id)`: Client requests config for a box.
     *   `iosk_config_response` <- `(box_id, config)`: Backend sends config.
 *   **Process Lifecycle**:
@@ -84,11 +87,12 @@ The following new message types will be added to the websocket protocol:
     *   `stop_process` -> `(pid)`: Client requests to stop a running process.
     *   `pause_process` -> `(pid)`: Client requests to pause a process (SIGSTOP).
     *   `resume_process` -> `(pid)`: Client requests to resume a process (SIGCONT).
-*   **Process Monitoring**:
+*   **Process Monitoring and Interaction**:
     *   `list_running_processes` -> `()`: Client requests a list of all managed processes.
     *   `running_processes_list` <- `(processes)`: Backend sends the list of processes from the `process` table.
     *   `process_output` <- `(pid, stream, data)`: Backend streams stdout/stderr data from a process's log file.
     *   `process_status_update` <- `(pid, status)`: Backend broadcasts status changes (e.g., 'running' -> 'stopped').
+    *   `process_stdin` -> `(pid, data)`: Client sends a string of data to be written to the specified process's standard input.
 
 ### 2. Frontend Changes (`sv/`)
 
@@ -112,7 +116,7 @@ The "Boxes" management window will be significantly updated.
     *   For any selected Box of type `'iosk'`, a new "IOSK" tab will appear as the first tab.
     *   The new "IOSK" tab should be the default tab for Box of type `'iosk'`.
     *   This tab will display:
-        *   **Configuration**: Form fields to edit the `mount_point` and toggle `daemon_mode`. Changes will be sent via `update_iosk_config`.
+        *   **Configuration**: Form fields to edit the `mount_point`, toggle `daemon_mode`, and toggle `enable_stdin`. Changes will be sent via `update_iosk_config`.
         *   **Status Display**: A section showing the current status (`Running`, `Stopped`), PID, and uptime.
         *   **Controls**: "Start" and "Stop" buttons that trigger `start_iosk` and `stop_process`.
         *   **Quick Link**: A button to "View in Process Manager" which will open the new `Processes.svelte` board and focus on this specific process.
@@ -124,7 +128,7 @@ A new board for managing all backend-launched processes.
 *   **Layout**: A two-pane layout. The left pane will list all running processes. The right pane will show details for the selected process.
 *   **Process List**: Each item will show the process type (e.g., "IOSK"), associated Box name, PID, and status.
 *   **Detail View**: For a selected process, this view will feature:
-    *   A live, auto-scrolling terminal-like view for combined stdout/stderr.
+    *   A live, auto-scrolling terminal-like view for combined stdout/stderr. If standard input is enabled for the process, an input field will be included to allow interactive communication. Data sent from this field will be forwarded to the process's `stdin`.
     *   Detailed information (PID, start time, uptime, log file paths).
     *   Action buttons: "Pause", "Resume", "Terminate" (SIGTERM), and "Kill" (SIGKILL).
 
@@ -151,4 +155,3 @@ This proposal lays the groundwork for a robust process management system. Future
 *   **Resource Monitoring**: Displaying CPU and memory usage for each managed process.
 *   **Agent Process Management**: Integrating the launching and monitoring of autonomous agent tasks as managed processes.
 *   **Process Templates**: Allowing users to define custom commands as "Process Templates" that can be launched and managed through the UI.
-
