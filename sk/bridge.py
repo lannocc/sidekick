@@ -279,9 +279,17 @@ def init_db():
             status TEXT NOT NULL CHECK(status IN ('running', 'paused', 'stopped', 'error')),
             stdout_log_path TEXT NOT NULL,
             stderr_log_path TEXT NOT NULL,
+            stdin_pipe_path TEXT,
             FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE SET NULL
         );
     """)
+
+    # Simple migration for existing databases
+    cursor.execute("PRAGMA table_info(process)")
+    columns = [row['name'] for row in cursor.fetchall()]
+    if 'stdin_pipe_path' not in columns:
+        log.info("Applying database migration: Adding 'stdin_pipe_path' to 'process' table.")
+        cursor.execute("ALTER TABLE process ADD COLUMN stdin_pipe_path TEXT;")
 
 
     # For new databases, create the default 'Main Desktop' box with id=0.
@@ -775,23 +783,54 @@ def is_pid_running(pid: int) -> bool:
         else:
             return True   # PID exists
 
+async def reattach_to_processes(procs):
+    """Re-attaches to previously running processes on startup."""
+    for proc_info in procs:
+        pid = proc_info['pid']
+        log.info(f"Re-attaching to process {pid}")
+        
+        entry = {
+            'process': None, # We don't have the process object
+            'monitor_task': None, # Cannot monitor without process object
+            'stdout_tailer': asyncio.create_task(process_log_tailer(pid, 'stdout', proc_info['stdout_log_path'])),
+            'stderr_tailer': asyncio.create_task(process_log_tailer(pid, 'stderr', proc_info['stderr_log_path'])),
+        }
+        
+        if proc_info.get('stdin_pipe_path'):
+            pipe_path = proc_info['stdin_pipe_path']
+            if os.path.exists(pipe_path):
+                try:
+                    if platform.system() != 'Windows':
+                        writer_fd = os.open(pipe_path, os.O_WRONLY | os.O_NONBLOCK)
+                        stdin_writer = os.fdopen(writer_fd, 'wb', buffering=0)
+                        entry['stdin_writer'] = stdin_writer
+                        log.info(f"Re-attached to stdin pipe for PID {pid} at {pipe_path}")
+                except Exception as e:
+                    log.error(f"Failed to re-attach to stdin pipe for PID {pid}: {e}", exc_info=True)
+        
+        RUNNING_PROCESSES[pid] = entry
+
 def check_stale_processes():
-    """Checks for processes marked as running that no longer exist and updates their status."""
+    """
+    Checks for processes marked as running that no longer exist and updates their status.
+    Returns a list of active processes to be re-attached to.
+    """
     if not DB_CONN:
         log.error("Cannot check stale processes, DB not connected.")
-        return
+        return []
     
     log.info("Checking for stale running processes on startup...")
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT pid FROM process WHERE status IN ('running', 'paused')")
+    cursor.execute("SELECT pid, stdout_log_path, stderr_log_path, stdin_pipe_path FROM process WHERE status IN ('running', 'paused')")
     procs_to_check = cursor.fetchall()
     
     if not procs_to_check:
         log.info("No processes were marked as running in the database. Check complete.")
-        return
+        return []
 
     log.info(f"Found {len(procs_to_check)} processes marked as 'running' or 'paused'. Verifying each PID.")
     stale_pids = []
+    active_procs = []
     for row in procs_to_check:
         pid = row['pid']
         log.info(f"  - Verifying PID: {pid}...")
@@ -800,6 +839,7 @@ def check_stale_processes():
             stale_pids.append(pid)
         else:
             log.info(f"    -> PID {pid} is active.")
+            active_procs.append(dict(row))
     
     if stale_pids:
         log.warning(f"Found {len(stale_pids)} stale processes: {stale_pids}. Marking as 'stopped' in the database.")
@@ -809,6 +849,8 @@ def check_stale_processes():
         log.info(f"Updated status for {len(stale_pids)} stale processes.")
     else:
         log.info("All running processes verified to be active.")
+    
+    return active_procs
 
 async def periodic_process_check():
     """Periodically check for running processes that have died."""
@@ -831,6 +873,20 @@ async def periodic_process_check():
                     placeholders = ', '.join(['?'] * len(stale_pids))
                     cursor.execute(f"UPDATE process SET status = 'stopped' WHERE pid IN ({placeholders})", tuple(stale_pids))
                     DB_CONN.commit()
+                    
+                    # Clean up resources for stale processes
+                    for pid in stale_pids:
+                        proc_data = RUNNING_PROCESSES.pop(pid, None)
+                        if proc_data:
+                            log.info(f"Cleaning up resources for stale process {pid}.")
+                            if proc_data.get('stdout_tailer'): proc_data['stdout_tailer'].cancel()
+                            if proc_data.get('stderr_tailer'): proc_data['stderr_tailer'].cancel()
+                            if proc_data.get('stdin_writer'):
+                                try:
+                                    proc_data['stdin_writer'].close()
+                                except Exception as e:
+                                    log.warning(f"Error closing stdin_writer for stale pid {pid}: {e}")
+                    
                     await broadcast_process_list()
         except Exception as e:
             log.error(f"Error during periodic process check: {e}", exc_info=True)
@@ -892,6 +948,7 @@ async def process_monitor(pid, process_obj):
         log.info(f"Cleaning up resources for process {pid}.")
         proc_data['stdout_tailer'].cancel()
         proc_data['stderr_tailer'].cancel()
+        if proc_data.get('stdin_writer'): proc_data['stdin_writer'].close()
         if process_obj.stdout: process_obj.stdout.close()
         if process_obj.stderr: process_obj.stderr.close()
     
@@ -932,8 +989,26 @@ async def handle_start_iosk(msg):
     cmd = [iosk_executable, os.path.abspath(box_row['context'])]
     if iosk_row['mount_point']: cmd.append(os.path.abspath(iosk_row['mount_point']))
     
+    stdin_pipe_path = None
+    stdin_arg = None
+    stdin_writer_obj = None
+
+    if iosk_row['enable_stdin']:
+        if platform.system() != 'Windows':
+            pipe_dir = os.path.join(config.DIRS.user_data_dir, 'proc_pipes')
+            os.makedirs(pipe_dir, exist_ok=True)
+            stdin_pipe_path = os.path.join(pipe_dir, f"{timestamp}_{box_id}.stdin.pipe")
+            os.mkfifo(stdin_pipe_path)
+            # Open RDWR to prevent blocking until the other end is opened.
+            pipe_fd = os.open(stdin_pipe_path, os.O_RDWR)
+            stdin_arg = os.fdopen(pipe_fd, 'r')
+            writer_fd = os.dup(pipe_fd)
+            stdin_writer_obj = os.fdopen(writer_fd, 'wb', buffering=0)
+        else:
+            stdin_arg = asyncio.subprocess.PIPE
+
     proc_args = {
-        'stdin': asyncio.subprocess.PIPE if iosk_row['enable_stdin'] else None,
+        'stdin': stdin_arg if iosk_row['enable_stdin'] else None,
         'stdout': open(stdout_log, 'w', buffering=1),
         'stderr': open(stderr_log, 'w', buffering=1),
     }
@@ -949,10 +1024,14 @@ async def handle_start_iosk(msg):
         pid = process.pid
         print_action("Start IOSK", f"box={box_id}, pid={pid}, daemon={bool(iosk_row['daemon_mode'])}")
 
+        if iosk_row['enable_stdin'] and platform.system() != 'Windows':
+            # The child now has the read end, so we can close our copy in the parent.
+            stdin_arg.close()
+
         start_time_iso = datetime.now().isoformat()
         cursor.execute(
-            "INSERT INTO process (box_id, pid, type, start_time, status, stdout_log_path, stderr_log_path) VALUES (?, ?, 'iosk', ?, 'running', ?, ?)",
-            (box_id, pid, start_time_iso, stdout_log, stderr_log)
+            "INSERT INTO process (box_id, pid, type, start_time, status, stdout_log_path, stderr_log_path, stdin_pipe_path) VALUES (?, ?, 'iosk', ?, 'running', ?, ?, ?)",
+            (box_id, pid, start_time_iso, stdout_log, stderr_log, stdin_pipe_path)
         )
         DB_CONN.commit()
 
@@ -962,6 +1041,12 @@ async def handle_start_iosk(msg):
             'stdout_tailer': asyncio.create_task(process_log_tailer(pid, 'stdout', stdout_log)),
             'stderr_tailer': asyncio.create_task(process_log_tailer(pid, 'stderr', stderr_log)),
         }
+        
+        if iosk_row['enable_stdin']:
+            if platform.system() != 'Windows':
+                RUNNING_PROCESSES[pid]['stdin_writer'] = stdin_writer_obj
+            else:
+                RUNNING_PROCESSES[pid]['stdin_writer'] = process.stdin
         
         await broadcast_process_list()
     except Exception as e:
@@ -1308,6 +1393,12 @@ async def websocket_handler(websocket):
                         if platform.system() == 'Windows':
                             subprocess.run(['taskkill', '/PID', str(pid_to_stop)], check=True, capture_output=True)
                         else:
+                            cursor = DB_CONN.cursor()
+                            cursor.execute("SELECT status FROM process WHERE pid = ?", (pid_to_stop,))
+                            row = cursor.fetchone()
+                            if row and row['status'] == 'paused':
+                                log.info(f"Resuming paused process {pid_to_stop} before stopping.")
+                                os.kill(pid_to_stop, signal.SIGCONT)
                             os.kill(pid_to_stop, signal.SIGTERM)
                     except (ProcessLookupError, subprocess.CalledProcessError):
                         log.warning(f"Process {pid_to_stop} not found, already stopped.")
@@ -1325,6 +1416,12 @@ async def websocket_handler(websocket):
                         if platform.system() == 'Windows':
                             subprocess.run(['taskkill', '/F', '/PID', str(pid_to_kill)], check=True, capture_output=True)
                         else:
+                            cursor = DB_CONN.cursor()
+                            cursor.execute("SELECT status FROM process WHERE pid = ?", (pid_to_kill,))
+                            row = cursor.fetchone()
+                            if row and row['status'] == 'paused':
+                                log.info(f"Resuming paused process {pid_to_kill} before killing.")
+                                os.kill(pid_to_kill, signal.SIGCONT)
                             os.kill(pid_to_kill, signal.SIGKILL)
                     except (ProcessLookupError, subprocess.CalledProcessError):
                         log.warning(f"Process {pid_to_kill} not found for kill, already stopped.")
@@ -1362,14 +1459,19 @@ async def websocket_handler(websocket):
                     pid = msg.get('pid')
                     data = msg.get('data')
                     proc_data = RUNNING_PROCESSES.get(pid)
-                    if proc_data and proc_data['process'].stdin:
-                        try:
-                            proc_data['process'].stdin.write(data.encode('utf-8'))
-                            await proc_data['process'].stdin.drain()
-                        except (BrokenPipeError, ConnectionResetError):
-                            log.warning(f"stdin for process {pid} is closed.")
-                        except Exception as e:
-                            log.error(f"Error writing to stdin for process {pid}: {e}")
+                    if proc_data:
+                        writer = proc_data.get('stdin_writer')
+                        if writer:
+                            try:
+                                if isinstance(writer, asyncio.StreamWriter):
+                                    writer.write(data.encode('utf-8'))
+                                    await writer.drain()
+                                else: # POSIX file object
+                                    writer.write(data.encode('utf-8'))
+                            except (BrokenPipeError, ConnectionResetError):
+                                log.warning(f"stdin for process {pid} is closed.")
+                            except Exception as e:
+                                log.error(f"Error writing to stdin for process {pid}: {e}")
 
 
                 # --- SKYBRIDGE Box Operations ---
@@ -1648,8 +1750,10 @@ async def websocket_handler(websocket):
                     pass
 
 
-async def start_server():
+async def start_server(active_procs_to_reattach=None):
     """Starts the WebSocket server."""
+    if active_procs_to_reattach:
+        await reattach_to_processes(active_procs_to_reattach)
     asyncio.create_task(periodic_process_check())
     async with serve(websocket_handler, HOST, PORT):
         await asyncio.Future()  # run forever
@@ -1659,9 +1763,9 @@ def main(args):
     """Entry point for `sk local` command."""
     print_startup_banner()
     init_db()  # Initialize the database on startup
-    check_stale_processes() # Check for dead processes on startup
+    active_procs = check_stale_processes() # Check for dead processes on startup
     try:
-        asyncio.run(start_server())
+        asyncio.run(start_server(active_procs))
     except KeyboardInterrupt:
         print_shutdown_message()
     except OSError as e:
