@@ -522,6 +522,14 @@
     }
     .quick-launch-button { background-color: #27c93f; border: 1px solid #1a9c2a; color: white; }
     .quick-launch-button:hover { background-color: #1a9c2a; }
+    .quick-launch-button.active {
+        background-color: #1a9c2a;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.25);
+    }
+    .quick-launch-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
 
     /* Scalable main buttons */
     .windows-button, .quick-launch-button, .start-button {
@@ -550,7 +558,7 @@
         z-index: 21500;
     }
     .quick-view-menu {
-        bottom: calc(var(--tb-height, 40px) + 5px);
+        top: calc(var(--tb-height, 40px) + 5px);
         right: 0;
         width: 300px;
         max-height: 400px;
@@ -896,7 +904,14 @@
         </button>
     </div>
     <div class="taskbar-right" bind:this={rightSectionEl}>
-        <button class="quick-launch-button" bind:this={quickViewButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showQuickView = !showQuickView; }} title="Context Quick View">&#9632;</button>
+        <button
+            class="quick-launch-button"
+            class:active={showQuickView}
+            bind:this={quickViewButton}
+            on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showQuickView = !showQuickView; }}
+            title="Context Quick View"
+            disabled={$connectionStatus !== 'connected'}
+        >&#9632;</button>
         {#if showQuickView}
             <div class="quick-view-menu" style={menuBackgroundStyle} on:click|stopPropagation>
                 <div class="quick-view-section-header">Running IOSK Processes</div>
