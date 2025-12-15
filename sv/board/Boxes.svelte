@@ -94,7 +94,12 @@
         selectedBoxSettings = $specificSettingsResponse.settings || {};
     }
     $: if ($ioskConfigResponse && $ioskConfigResponse.box_id === selectedBoxId) {
-        ioskConfig = $ioskConfigResponse.config || { mount_point: '', daemon_mode: 1, enable_stdin: 0 };
+        const config = $ioskConfigResponse.config || { mount_point: '', mount_point_mode: 'none', daemon_mode: 1, enable_stdin: 0 };
+        // Fallback for older data from a migrated DB
+        if (!config.mount_point_mode) {
+            config.mount_point_mode = config.mount_point ? 'custom' : 'none';
+        }
+        ioskConfig = config;
     }
     // Find the latest process record for the selected box
     $: if ($runningProcesses && selectedBoxId !== null) {
@@ -238,15 +243,7 @@
     
     function handlePromoteSelectedBox() {
         if (!selectedBox || selectedBox.type !== 'local') return;
-        let defaultMountPoint = null;
-        if (selectedBox.context) {
-            const pathParts = selectedBox.context.split('/').filter(p => p);
-            const lastPart = pathParts.pop();
-            if (lastPart) {
-                defaultMountPoint = `/mnt/${lastPart}`;
-            }
-        }
-        promoteToIosk(selectedBox.id, defaultMountPoint);
+        promoteToIosk(selectedBox.id);
     }
 
     function handleConfigChange() {
@@ -255,6 +252,7 @@
             if (!selectedBoxId || !ioskConfig) return;
             const configPayload = {
                 mount_point: ioskConfig.mount_point,
+                mount_point_mode: ioskConfig.mount_point_mode,
                 daemon_mode: ioskConfig.daemon_mode ? 1 : 0,
                 enable_stdin: ioskConfig.enable_stdin ? 1 : 0,
             };
@@ -363,6 +361,9 @@
     .checkbox-group input { width: 16px; height: 16px; }
     .checkbox-group.disabled { cursor: not-allowed; }
     .checkbox-group.disabled span { opacity: 0.6; }
+    .mount-options-group { display: flex; gap: 16px; }
+    .mount-options-group label { display: flex; align-items: center; gap: 4px; cursor: pointer; justify-self: start; }
+    .managed-path-display { font-family: monospace; color: var(--text-color-light); font-size: 0.9em; padding: 8px; background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px; user-select: text; }
 </style>
 
 {#if $connectionStatus === 'connected'}
@@ -483,8 +484,20 @@
                         <div class="details-group">
                             <label>Configuration</label>
                             <div class="config-grid">
-                                <label for="mount-point">Mount Point</label>
-                                <input id="mount-point" type="text" placeholder="(Optional) Path to media directory" bind:value={ioskConfig.mount_point} on:input={handleConfigChange} disabled={!!activeProcess}>
+                                <label>Mount Point</label>
+                                <div class="mount-options-group">
+                                    <label><input type="radio" bind:group={ioskConfig.mount_point_mode} value="managed" on:change={handleConfigChange} disabled={!!activeProcess} /> Managed</label>
+                                    <label><input type="radio" bind:group={ioskConfig.mount_point_mode} value="custom" on:change={handleConfigChange} disabled={!!activeProcess} /> Custom</label>
+                                    <label><input type="radio" bind:group={ioskConfig.mount_point_mode} value="none" on:change={handleConfigChange} disabled={!!activeProcess} /> None</label>
+                                </div>
+                                
+                                {#if ioskConfig.mount_point_mode === 'custom'}
+                                    <label for="mount-point-custom"></label>
+                                    <input id="mount-point-custom" type="text" placeholder="/path/to/custom/mount" bind:value={ioskConfig.mount_point} on:input={handleConfigChange} disabled={!!activeProcess}>
+                                {:else if ioskConfig.mount_point_mode === 'managed'}
+                                    <label></label>
+                                    <span class="managed-path-display">/mnt/{selectedBox.name}</span>
+                                {/if}
                                 
                                 <label for="daemon-mode">Daemon Mode</label>
                                 <label class="checkbox-group" class:disabled={!!activeProcess}>

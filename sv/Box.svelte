@@ -410,15 +410,7 @@
 
     function handlePromoteToIosk() {
         closeContextMenu();
-        let defaultMountPoint = null;
-        if (box.context) {
-            const pathParts = box.context.split('/').filter(p => p); // filter out empty strings
-            const lastPart = pathParts.pop();
-            if (lastPart) {
-                defaultMountPoint = `/mnt/${lastPart}`;
-            }
-        }
-        promoteToIosk(box.id, defaultMountPoint);
+        promoteToIosk(box.id);
     }
 
     function setCoverImage() {

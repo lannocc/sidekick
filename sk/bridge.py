@@ -263,11 +263,23 @@ def init_db():
         CREATE TABLE IF NOT EXISTS iosk (
             box_id INTEGER PRIMARY KEY,
             mount_point TEXT,
+            mount_point_mode TEXT NOT NULL DEFAULT 'managed',
             daemon_mode INTEGER NOT NULL DEFAULT 1,
             enable_stdin INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
         );
     """)
+    cursor.execute("PRAGMA table_info(iosk)")
+    iosk_columns = [row['name'] for row in cursor.fetchall()]
+    if 'mount_point_mode' not in iosk_columns:
+        log.info("Applying database migration: Adding 'mount_point_mode' to 'iosk' table.")
+        cursor.execute("ALTER TABLE iosk ADD COLUMN mount_point_mode TEXT;")
+        # Old entries with a path are 'custom'
+        cursor.execute("UPDATE iosk SET mount_point_mode = 'custom' WHERE mount_point IS NOT NULL AND mount_point != '';")
+        # Old entries without a path are 'none'
+        cursor.execute("UPDATE iosk SET mount_point_mode = 'none' WHERE mount_point IS NULL OR mount_point = '';")
+        DB_CONN.commit()
+
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS process (
@@ -958,11 +970,11 @@ async def handle_start_iosk(msg):
     """Handles logic for launching and managing an iosk process."""
     box_id = msg.get('box_id')
     cursor = DB_CONN.cursor()
-    cursor.execute("SELECT context FROM box WHERE id = ?", (box_id,))
+    cursor.execute("SELECT context, name FROM box WHERE id = ?", (box_id,))
     box_row = cursor.fetchone()
     if not box_row: return
 
-    cursor.execute("SELECT mount_point, daemon_mode, enable_stdin FROM iosk WHERE box_id = ?", (box_id,))
+    cursor.execute("SELECT mount_point, mount_point_mode, daemon_mode, enable_stdin FROM iosk WHERE box_id = ?", (box_id,))
     iosk_row = cursor.fetchone()
     if not iosk_row: return
     
@@ -986,8 +998,17 @@ async def handle_start_iosk(msg):
     stdout_log = os.path.join(log_dir, f"{box_id}_{timestamp}.stdout.log")
     stderr_log = os.path.join(log_dir, f"{box_id}_{timestamp}.stderr.log")
 
+    # Resolve mount point based on mode
+    final_mount_point = None
+    mount_mode = iosk_row['mount_point_mode'] or 'managed' # Fallback for old DB entries
+    if mount_mode == 'managed':
+        final_mount_point = f"/mnt/{box_row['name']}"
+    elif mount_mode == 'custom' and iosk_row['mount_point']:
+        final_mount_point = iosk_row['mount_point']
+    
     cmd = [iosk_executable, os.path.abspath(box_row['context'])]
-    if iosk_row['mount_point']: cmd.append(os.path.abspath(iosk_row['mount_point']))
+    if final_mount_point:
+        cmd.append(os.path.abspath(final_mount_point))
     
     stdin_pipe_path = None
     stdin_arg = None
@@ -1356,7 +1377,7 @@ async def websocket_handler(websocket):
                     print_action("Promote to IOSK", f"box={box_id}")
                     cursor = DB_CONN.cursor()
                     cursor.execute("UPDATE box SET type = 'iosk' WHERE id = ?", (box_id,))
-                    cursor.execute("INSERT OR IGNORE INTO iosk (box_id) VALUES (?)", (box_id,))
+                    cursor.execute("INSERT INTO iosk (box_id, mount_point_mode) VALUES (?, 'managed') ON CONFLICT(box_id) DO NOTHING", (box_id,))
                     DB_CONN.commit()
                     await broadcast_box_list()
 
@@ -1364,7 +1385,7 @@ async def websocket_handler(websocket):
                     box_id = msg.get('box_id')
                     print_action("Get IOSK Cfg", f"box={box_id}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT box_id, mount_point, daemon_mode, enable_stdin FROM iosk WHERE box_id = ?", (box_id,))
+                    cursor.execute("SELECT box_id, mount_point, mount_point_mode, daemon_mode, enable_stdin FROM iosk WHERE box_id = ?", (box_id,))
                     config_row = cursor.fetchone()
                     config_data = dict(config_row) if config_row else None
                     await websocket.send(json.dumps({'type': 'iosk_config_response', 'box_id': box_id, 'config': config_data}))
@@ -1375,7 +1396,7 @@ async def websocket_handler(websocket):
                     print_action("Update IOSK Cfg", f"box={box_id}, keys={list(config.keys())}")
                     cursor = DB_CONN.cursor()
                     # Use a helper to build the SET part of the query safely
-                    allowed_keys = {'mount_point', 'daemon_mode', 'enable_stdin'}
+                    allowed_keys = {'mount_point', 'mount_point_mode', 'daemon_mode', 'enable_stdin'}
                     updates = {k: v for k, v in config.items() if k in allowed_keys}
                     if updates:
                         set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
