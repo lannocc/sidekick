@@ -873,6 +873,8 @@
         text-align: left;
         cursor: pointer;
         font-size: 14px;
+        display: flex;
+        align-items: center;
     }
     .context-menu button:hover {
         background-color: var(--taskbar-button-hover-bg);
@@ -881,6 +883,19 @@
         color: #7f8c8d;
         cursor: not-allowed;
         background-color: transparent;
+    }
+    .menu-item-icon {
+        margin-right: 8px;
+        width: 16px;
+        height: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 16px;
+    }
+    img.menu-item-icon {
+        object-fit: contain;
     }
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
     .context-menu .delete { color: #e74c3c; }
@@ -1079,26 +1094,26 @@
 
 {#if contextMenu.visible}
     <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
-        <button on:click={askBox} disabled={box.type !== 'local'}>Ask...</button>
-        <button on:click={openTerminal} disabled={box.type !== 'local'}>Terminal</button>
-        <button on:click={openFiles} disabled={box.type !== 'local'}>Files</button>
+        <button on:click={askBox} disabled={box.type !== 'local'}><span class="menu-item-icon">?</span>Ask...</button>
+        <button on:click={openTerminal} disabled={box.type !== 'local'}><span class="menu-item-icon">&gt;_</span>Terminal</button>
+        <button on:click={openFiles} disabled={box.type !== 'local'}><span class="menu-item-icon">📁</span>Files</button>
         <div class="menu-separator"></div>
         {#if box.type === 'local'}
-            <button on:click={handlePromoteToIosk}>Promote to IOSK Box</button>
+            <button on:click={handlePromoteToIosk}><img src="/iosk.png" alt="IOSK" class="menu-item-icon" />Promote to IOSK Box</button>
             <div class="menu-separator"></div>
         {/if}
-        <button on:click={renameBox}>Rename...</button>
+        <button on:click={renameBox}><span class="menu-item-icon">✏️</span>Rename...</button>
         <div class="menu-separator"></div>
-        <button on:click={setCoverImage} disabled={!canSetCover}>Set Cover Image...</button>
-        <button on:click={clearCoverImage} disabled={!coverPanelLocation}>Clear Cover Image</button>
+        <button on:click={setCoverImage} disabled={!canSetCover}><span class="menu-item-icon">🖼️</span>Set Cover Image...</button>
+        <button on:click={clearCoverImage} disabled={!coverPanelLocation}><span class="menu-item-icon">🚫</span>Clear Cover Image</button>
         <div class="menu-separator"></div>
-        <button on:click={deleteBoxConfirm} class="delete">Delete</button>
+        <button on:click={deleteBoxConfirm} class="delete"><span class="menu-item-icon">🗑️</span>Delete</button>
     </div>
 {/if}
 
 {#if panelContextMenu.visible}
     <div class="context-menu" style="top: {panelContextMenu.y}px; left: {panelContextMenu.x}px;" on:click|stopPropagation>
-        <button on:click={clearPanel}>Clear</button>
+        <button on:click={clearPanel}><span class="menu-item-icon">🧹</span>Clear</button>
     </div>
 {/if}
 
