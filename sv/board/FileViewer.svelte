@@ -54,7 +54,7 @@
     $: fileExtension = getFileExtension(path);
     $: isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(fileExtension);
     $: isMarkdown = ['md', 'markdown'].includes(fileExtension);
-    $: isSourceCode = ['py', 'html', 'js', 'css', 'svelte', 'c', 'cpp', 'sh', 'json', 'yml', 'xml', 'log'].includes(fileExtension);
+    $: isSourceCode = ['py', 'html', 'js', 'css', 'svelte', 'c', 'cpp', 'sh', 'json', 'yml', 'xml'].includes(fileExtension);
     $: isAnsiText = !isBinary && !isImage && !isMarkdown && !isSourceCode;
     $: canRender = (isImage && isBinary) || (isMarkdown && !isBinary) || (isSourceCode && !isBinary) || isAnsiText;
 
@@ -194,8 +194,14 @@
 
     $: if (mode === 'rendered' && isSourceCode && content_text) {
         try {
-            const language = hljs.getLanguage(fileExtension) ? fileExtension : 'plaintext';
-            highlighted_html = hljs.highlight(content_text, { language, ignoreIllegals: true }).value;
+            // Only attempt to highlight if the language is explicitly registered.
+            if (hljs.getLanguage(fileExtension)) {
+                highlighted_html = hljs.highlight(content_text, { language: fileExtension, ignoreIllegals: true }).value;
+            } else {
+                // If language is not found, just render the text as-is, but escaped.
+                // This avoids the "Unknown language" warning from highlight.js.
+                highlighted_html = content_text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            }
         } catch(e) {
             console.error("Highlighting error:", e);
             highlighted_html = content_text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
