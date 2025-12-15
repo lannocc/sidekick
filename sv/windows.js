@@ -117,6 +117,7 @@ export function generateBoardConfigFromWindow(group, allWindows) {
     };
 }
 
+// --- MODIFICATION START ---
 function findOptimalPosition(props, allWindows, currentWindowId) {
     if (typeof window === 'undefined') {
         return { x: 50, y: 50 }; // SSR fallback
@@ -195,15 +196,15 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
         return candidatePos;
     }
 
-    // Spiral search outwards from the start point
+    // Spiral search outwards from the start point. The spiral itself can go off-screen,
+    // but we clamp each test position back into the view before checking it.
     let x = startPos.x + width / 2;
     let y = startPos.y + height / 2;
     let step = 30, leg = 0, armLength = 1, count = 0;
-    for (let i = 0; i < 200; i++) {
-        const testPos = { x: x - width / 2, y: y - height / 2 };
-        if (!checkCollision({ ...testPos, width, height })) {
-            return testPos;
-        }
+    const checkedClampedPositions = new Set();
+    checkedClampedPositions.add(`${Math.round(candidatePos.x)},${Math.round(candidatePos.y)}`);
+
+    for (let i = 0; i < 250; i++) { // Increased iterations for larger screens/zooms
         switch (leg) {
             case 0: x += step; break;
             case 1: y += step; break;
@@ -215,10 +216,24 @@ function findOptimalPosition(props, allWindows, currentWindowId) {
             leg = (leg + 1) % 4;
             if (leg % 2 === 0) armLength++;
         }
+        
+        const testPos = { x: x - width / 2, y: y - height / 2 };
+        const clampedPos = clampToView(testPos);
+        const posKey = `${Math.round(clampedPos.x)},${Math.round(clampedPos.y)}`;
+
+        // Only check this clamped position if we haven't checked it before
+        if (!checkedClampedPositions.has(posKey)) {
+            checkedClampedPositions.add(posKey);
+            if (!checkCollision({ ...clampedPos, width, height })) {
+                return clampedPos;
+            }
+        }
     }
 
+    // Fallback if spiral search fails
     return { x: view.x + (currentWindowId % 10) * 20, y: view.y + (currentWindowId % 10) * 20 };
 }
+// --- MODIFICATION END ---
 
 function createSerializableLayout(allWindows) {
     if (typeof window === 'undefined') return null;
