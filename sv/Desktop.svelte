@@ -964,25 +964,28 @@
             if (selected.has(uniqueId)) {
                 // Right-clicked an already selected item.
                 if (selected.size > 1) {
-                    // It's part of a multi-selection, so show the selection menu.
+                    // It's part of a multi-selection, so show the selection menu
+                    // and stop the event from reaching the item's own handler.
                     event.preventDefault();
                     event.stopPropagation();
                     showSelectionContextMenu(event);
                     return;
                 }
                 // Otherwise, it's a single selection. Do nothing and let the
-                // item's own context menu handler take over.
+                // event propagate to the item's own context menu handler.
             } else {
                 // Right-clicked an unselected item.
                 // The standard behavior is to clear the old selection and select this new item.
                 selectedItems.set(new Set([uniqueId]));
                 // Let the event propagate so the item's own context menu handler can fire.
             }
-        } else {
+        } else if (event.target.classList.contains('desktop-background')) {
             // Clicked on the desktop background. Show the main desktop context menu.
             event.preventDefault();
             handleRightClick(event);
         }
+        // If the click was not on an item or the background (e.g., inside a window),
+        // do nothing and let the event continue.
     }
     // --- MODIFICATION END ---
 
@@ -1992,7 +1995,7 @@
     }}
 />
 
-<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu={handleDesktopContextMenu} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop} style="overflow: hidden;">
+<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu|capture={handleDesktopContextMenu} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop} style="overflow: hidden;">
     <div class="desktop-background" style:background={backgroundStyle || ''} style:opacity={sceneOpacity}></div>
     <!-- BACK LAYER (for non-window items) -->
     <div class="desktop-content back-layer">
