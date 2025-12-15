@@ -251,7 +251,7 @@
     .left-panel { width: 200px; min-width: 150px; max-width: 600px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; overflow-y: auto; background-color: hsla(0, 0%, 50%, 0.15); border-radius: 8px 0 0 8px; flex-shrink: 0; }
     .resizer { width: 5px; cursor: col-resize; background: transparent; flex-shrink: 0; position: relative; }
     .resizer:hover, .boxes-container.resizing .resizer { background-color: var(--item-selected-bg); }
-    .box-list-item { display: flex; align-items: center; padding: 8px 8px 8px 0; cursor: pointer; border-bottom: 1px solid var(--border-color-light); gap: 8px; flex-shrink: 0; border-left: 3px solid transparent; }
+    .box-list-item { display: flex; align-items: center; padding: 8px 8px 8px 0; cursor: pointer; gap: 8px; flex-shrink: 0; border-left: 3px solid transparent; }
     .box-list-item:hover { background-color: var(--item-hover-bg); }
     .box-list-item.selected { font-weight: bold; background-color: var(--item-selected-bg); }
     .box-list-item.current { border-left-color: var(--accent-color, #88C0D0); }
@@ -262,7 +262,7 @@
     .right-panel { flex-grow: 1; padding: 16px; padding-top: 64px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; overflow-x: hidden; position: relative; }
     .details-group { display: flex; flex-direction: column; gap: 4px; }
     .details-group label { font-size: 0.9em; color: var(--text-color-light); }
-    .details-group input { padding: 8px; background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-color); font-size: 1em; }
+    .details-group input { padding: 8px; background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-color); font-size: 1em; box-sizing: border-box; }
     .details-group span { padding: 8px; background-color: transparent; border: 1px solid transparent; border-radius: 4px; color: var(--text-color-light); font-size: 1em; font-family: monospace; word-break: break-all; }
     .new-box-btn { position: absolute; top: 12px; right: 12px; width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; background-color: var(--button-bg); border: 1px solid var(--button-border-color); border-radius: 8px; cursor: pointer; z-index: 10; }
     .new-box-btn:hover { background-color: var(--button-hover-bg); }
@@ -358,19 +358,6 @@
                 {#if activeTab === 'iosk'}
                     <div class="tab-pane">
                         <div class="details-group">
-                            <div class="controls">
-                                <button on:click={() => stopProcess(activeProcess.pid)} disabled={!activeProcess} class="icon-btn stop-btn" title="Stop Process">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
-                                </button>
-                                <button class="quick-link-btn" disabled>View in Process Manager</button>
-                                <button on:click={() => startIosk(selectedBoxId)} disabled={!!activeProcess} class="icon-btn start-btn" title="Start Process">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="details-group">
-                            <label>Status</label>
                             <div class="status-display">
                                 <div class="status-indicator" class:running={latestProcess?.status === 'running'} class:stopped={!latestProcess || latestProcess?.status === 'stopped'} class:paused={latestProcess?.status === 'paused'} class:error={latestProcess?.status === 'error'}></div>
                                 <span class="status-text">{latestProcess?.status ?? 'Stopped'}</span>
@@ -383,7 +370,19 @@
                                 </span>
                             </div>
                         </div>
-                        
+
+                        <div class="details-group">
+                            <div class="controls">
+                                <button on:click={() => stopProcess(activeProcess.pid)} disabled={!activeProcess} class="icon-btn stop-btn" title="Stop Process">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                                </button>
+                                <button class="quick-link-btn" disabled>View in Process Manager</button>
+                                <button on:click={() => startIosk(selectedBoxId)} disabled={!!activeProcess} class="icon-btn start-btn" title="Start Process">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                </button>
+                            </div>
+                        </div>
+
                         <hr />
 
                         {#if ioskConfig}
