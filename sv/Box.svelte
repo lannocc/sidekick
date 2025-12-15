@@ -410,7 +410,15 @@
 
     function handlePromoteToIosk() {
         closeContextMenu();
-        promoteToIosk(box.id);
+        let defaultMountPoint = null;
+        if (box.context) {
+            const pathParts = box.context.split('/').filter(p => p); // filter out empty strings
+            const lastPart = pathParts.pop();
+            if (lastPart) {
+                defaultMountPoint = `/mnt/${lastPart}`;
+            }
+        }
+        promoteToIosk(box.id, defaultMountPoint);
     }
 
     function setCoverImage() {
@@ -1131,7 +1139,7 @@
         <button on:click={openTerminal} disabled={box.type !== 'local'}><span class="menu-item-icon">&gt;_</span>Terminal</button>
         <button on:click={openFiles} disabled={box.type !== 'local'}><span class="menu-item-icon">📁</span>Files</button>
         <div class="menu-separator"></div>
-        {#if box.type === 'local'}
+        {#if box.type === 'local' && box.id !== 0}
             <button on:click={handlePromoteToIosk}><img src="/iosk.png" alt="IOSK" class="menu-item-icon" />Promote to IOSK Box</button>
             <div class="menu-separator"></div>
         {/if}

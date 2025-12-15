@@ -224,8 +224,8 @@ export function deleteBox(id) {
 }
 
 // --- ProcBox Functions ---
-export function promoteToIosk(box_id) {
-    sendMessage({ type: 'promote_to_iosk', box_id });
+export function promoteToIosk(box_id, default_mount_point) {
+    sendMessage({ type: 'promote_to_iosk', box_id, default_mount_point });
 }
 
 export function getIoskConfig(box_id) {

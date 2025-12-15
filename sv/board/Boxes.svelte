@@ -12,6 +12,7 @@
         backedWindowListResponse,
         specificSettingsResponse,
         // ProcBox imports
+        promoteToIosk,
         getIoskConfig,
         updateIoskConfig,
         startIosk,
@@ -235,6 +236,19 @@
         createNewBoxEntity({ name, context, sourceEvent: event, parent_box_id });
     }
     
+    function handlePromoteSelectedBox() {
+        if (!selectedBox || selectedBox.type !== 'local') return;
+        let defaultMountPoint = null;
+        if (selectedBox.context) {
+            const pathParts = selectedBox.context.split('/').filter(p => p);
+            const lastPart = pathParts.pop();
+            if (lastPart) {
+                defaultMountPoint = `/mnt/${lastPart}`;
+            }
+        }
+        promoteToIosk(selectedBox.id, defaultMountPoint);
+    }
+
     function handleConfigChange() {
         clearTimeout(configDebounceTimer);
         configDebounceTimer = setTimeout(() => {
@@ -300,6 +314,9 @@
     .plus-badge { position: absolute; bottom: -2px; right: -2px; background-color: #27ae60; color: white; width: 16px; height: 16px; border-radius: 50%; font-size: 14px; font-weight: bold; line-height: 1; display: flex; align-items: center; justify-content: center; border: 2px solid var(--window-bg); }
     .delete-box-btn { position: absolute; top: 12px; left: 12px; padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 8px; background-color: #c0392b; color: white; border: 1px solid #e74c3c; border-radius: 8px; cursor: pointer; z-index: 10; font-weight: bold; }
     .delete-box-btn:hover { background-color: #e74c3c; }
+    .promote-box-btn { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 8px; background-color: var(--button-bg); border: 1px solid var(--button-border-color); border-radius: 8px; cursor: pointer; z-index: 10; font-weight: bold; color: var(--text-color); }
+    .promote-box-btn:hover { background-color: var(--button-hover-bg); }
+    .promote-box-btn img { width: 16px; height: 16px; }
     .no-selection { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-color-light); font-style: italic; }
     .tabs { display: flex; border-bottom: 1px solid var(--border-color); }
     .tab-btn { padding: 8px 16px; cursor: pointer; background: none; border: none; color: var(--text-color-light); border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 0.95em; transition: color 0.2s ease, border-color 0.2s ease; }
@@ -393,6 +410,13 @@
     <div class="right-panel">
         {#if selectedBox && selectedBox.id !== 0}
             <button class="delete-box-btn" on:click={handleDeleteSelectedBox} title="Delete Selected Box">Delete Box</button>
+        {/if}
+
+        {#if selectedBox && selectedBox.type === 'local' && selectedBox.id !== 0}
+            <button class="promote-box-btn" on:click={handlePromoteSelectedBox} title="Promote to IOSK Box">
+                <img src="/iosk.png" alt="IOSK" />
+                Promote to IOSK
+            </button>
         {/if}
 
         {#if selectedBox}
