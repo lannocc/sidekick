@@ -17,10 +17,13 @@
         startIosk,
         stopProcess,
         ioskConfigResponse,
-        runningProcesses
+        runningProcesses,
+        requestedBoxId
     } from '../bridge.js';
     import { currentBoxId } from '../desktop.js';
-    import { newBox as createNewBoxEntity } from '../apps.js';
+    import { newBox as createNewBoxEntity, showProcessesAndSelect } from '../apps.js';
+
+    export let initialSelectedBoxId = null;
 
     let selectedBoxId = null;
     let selectedBox = null;
@@ -166,9 +169,18 @@
         }
     }
 
+    const unsubscribeRequestedBoxId = requestedBoxId.subscribe(id => {
+        if (id !== null) {
+            handleSelectBox(id);
+            requestedBoxId.set(null); // Consume the request
+        }
+    });
+
     // Initialize selection
     onMount(() => {
-        if ($boxes.length > 0 && selectedBoxId === null) {
+        if (initialSelectedBoxId !== null) {
+            handleSelectBox(initialSelectedBoxId);
+        } else if ($boxes.length > 0 && selectedBoxId === null) {
             selectedBoxId = 0;
         }
     });
@@ -242,6 +254,7 @@
         window.removeEventListener('mouseup', onMouseUp);
         if (uptimeInterval) clearInterval(uptimeInterval);
         clearTimeout(configDebounceTimer);
+        unsubscribeRequestedBoxId();
     });
 </script>
 
@@ -308,6 +321,8 @@
     .config-grid input[type="text"] { width: 100%; }
     .checkbox-group { display: flex; align-items: center; gap: 8px; cursor: pointer;}
     .checkbox-group input { width: 16px; height: 16px; }
+    .checkbox-group.disabled { cursor: not-allowed; }
+    .checkbox-group.disabled span { opacity: 0.6; }
 </style>
 
 {#if $connectionStatus === 'connected'}
@@ -364,6 +379,8 @@
                                 <span class="status-details">
                                     {#if activeProcess}
                                         PID: {activeProcess.pid} &nbsp;&nbsp; Uptime: {uptime}
+                                    {:else if latestProcess}
+                                        PID: {latestProcess.pid}
                                     {:else}
                                         Not running.
                                     {/if}
@@ -376,7 +393,7 @@
                                 <button on:click={() => stopProcess(activeProcess.pid)} disabled={!activeProcess} class="icon-btn stop-btn" title="Stop Process">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
                                 </button>
-                                <button class="quick-link-btn" disabled>View in Process Manager</button>
+                                <button class="quick-link-btn" disabled={!latestProcess} on:click={() => latestProcess && showProcessesAndSelect(latestProcess.pid)}>View in Process Manager</button>
                                 <button on:click={() => startIosk(selectedBoxId)} disabled={!!activeProcess} class="icon-btn start-btn" title="Start Process">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                                 </button>
@@ -390,17 +407,17 @@
                             <label>Configuration</label>
                             <div class="config-grid">
                                 <label for="mount-point">Mount Point</label>
-                                <input id="mount-point" type="text" placeholder="(Optional) Path to media directory" bind:value={ioskConfig.mount_point} on:input={handleConfigChange}>
+                                <input id="mount-point" type="text" placeholder="(Optional) Path to media directory" bind:value={ioskConfig.mount_point} on:input={handleConfigChange} disabled={!!activeProcess}>
                                 
                                 <label for="daemon-mode">Daemon Mode</label>
-                                <label class="checkbox-group">
-                                    <input id="daemon-mode" type="checkbox" bind:checked={ioskConfig.daemon_mode} on:change={handleConfigChange}>
+                                <label class="checkbox-group" class:disabled={!!activeProcess}>
+                                    <input id="daemon-mode" type="checkbox" bind:checked={ioskConfig.daemon_mode} on:change={handleConfigChange} disabled={!!activeProcess}>
                                     <span>Process can outlive SKYBRIDGE</span>
                                 </label>
 
                                 <label for="enable-stdin">Enable STDIN</label>
-                                <label class="checkbox-group">
-                                    <input id="enable-stdin" type="checkbox" bind:checked={ioskConfig.enable_stdin} on:change={handleConfigChange}>
+                                <label class="checkbox-group" class:disabled={!!activeProcess}>
+                                    <input id="enable-stdin" type="checkbox" bind:checked={ioskConfig.enable_stdin} on:change={handleConfigChange} disabled={!!activeProcess}>
                                     <span>Allow interactive standard input</span>
                                 </label>
                             </div>

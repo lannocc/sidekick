@@ -27,6 +27,10 @@ export const askStatsResponse = writable(null);
 export const boxes = writable([]);
 export const backedWindows = writable([]);
 
+// --- New stores for inter-board communication ---
+export const requestedBoxId = writable(null);
+export const requestedPid = writable(null);
+
 // --- ProcBox Stores ---
 export const runningProcesses = writable([]);
 export const ioskConfigResponse = writable(null);

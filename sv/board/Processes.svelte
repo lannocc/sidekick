@@ -9,10 +9,13 @@
         resumeProcess,
         sendProcessStdin,
         listRunningProcesses,
-        connectionStatus
+        connectionStatus,
+        requestedPid
     } from '../bridge.js';
-    import { newLocalFileViewer } from '../apps.js';
+    import { newLocalFileViewer, showBoxesAndSelect } from '../apps.js';
     import { parseAnsi } from '../ansi.js';
+
+    export let initialSelectedPid = null;
 
     let selectedPid = null;
     let selectedProcess = null;
@@ -105,7 +108,17 @@
     }
     function onMouseUp() { isResizing = false; }
 
+    const unsubscribeRequestedPid = requestedPid.subscribe(pid => {
+        if (pid !== null) {
+            selectedPid = pid;
+            requestedPid.set(null); // Consume the request
+        }
+    });
+
     onMount(() => {
+        if (initialSelectedPid) {
+            selectedPid = initialSelectedPid;
+        }
         listRunningProcesses();
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
@@ -115,6 +128,7 @@
         window.removeEventListener('mousemove', onMouseMove);
         window.removeEventListener('mouseup', onMouseUp);
         if (uptimeInterval) clearInterval(uptimeInterval);
+        unsubscribeRequestedPid();
     });
 </script>
 
@@ -153,8 +167,10 @@
     .terminal-view :global(.log-stdout) { color: #ccc; }
     .stdin-form { display: flex; border-top: 1px solid var(--border-color); }
     .stdin-form input { flex-grow: 1; background: transparent; border: none; color: #ccc; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; }
+    .disconnected-overlay { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--text-color-light); background-color: hsla(0, 0%, 20%, 0.5); font-size: 1.5em; font-weight: bold; border-radius: 8px; }
 </style>
 
+{#if $connectionStatus === 'connected'}
 <div class="manager-container" class:resizing={isResizing}>
     <div class="left-panel" style:width="{leftPanelWidth}px">
         {#each $runningProcesses as proc (proc.id)}
@@ -174,7 +190,14 @@
     <div class="right-panel">
         {#if selectedProcess}
             <dl class="details-grid">
-                <dt>Box</dt><dd>{selectedProcess.box_name || 'N/A'}</dd>
+                <dt>Box</dt>
+                {#if selectedProcess.box_id != null}
+                    <dd class="clickable" on:click={() => showBoxesAndSelect(selectedProcess.box_id)}>
+                        {selectedProcess.box_name || 'N/A'}
+                    </dd>
+                {:else}
+                    <dd>{selectedProcess.box_name || 'N/A'}</dd>
+                {/if}
                 <dt>PID</dt><dd>{selectedProcess.pid}</dd>
                 <dt>Type</dt><dd>{selectedProcess.type}</dd>
                 <dt>Status</dt><dd>{selectedProcess.status}</dd>
@@ -214,3 +237,9 @@
         {/if}
     </div>
 </div>
+{:else}
+    <div class="disconnected-overlay">
+        <span>SKYBRIDGE REQUIRED</span>
+        <span style="font-size: 0.7em; font-weight: normal; text-transform: capitalize;">Connection Status: {$connectionStatus}</span>
+    </div>
+{/if}

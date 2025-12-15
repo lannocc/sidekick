@@ -15,7 +15,7 @@ import NotificationCenter from './board/NotificationCenter.svelte';
 import Boxes from './board/Boxes.svelte';
 import Processes from './board/Processes.svelte';
 import { TASKBAR_HEIGHT, desktopSettings, windowSettings, desktopView } from './desktop.js';
-import { createBox, boxes, desktopShortcuts, backedWindows } from './bridge.js';
+import { createBox, boxes, desktopShortcuts, backedWindows, requestedBoxId, requestedPid } from './bridge.js';
 import { windows } from './windows.js';
 
 
@@ -151,7 +151,7 @@ export function newSettings(props = {}) {
 }
 export function newNotificationCenter(props = {}) {
     const allWindows = get(windows);
-    const existingNCTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'NotificationCenter' || t.componentName === 'NotificationCenter');
+    const existingNCTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'NotificationCenter');
     if (existingNCTab) {
         const group = allWindows.find(g => g.tabs.some(t => t.id === existingNCTab.id));
         if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
@@ -162,7 +162,7 @@ export function newNotificationCenter(props = {}) {
 }
 export function newBoxesWindow(props = {}) {
     const allWindows = get(windows);
-    const existingBoxesTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'Boxes' || t.componentName === 'Boxes');
+    const existingBoxesTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'Boxes');
     if (existingBoxesTab) {
         const group = allWindows.find(g => g.tabs.some(t => t.id === existingBoxesTab.id));
         if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
@@ -182,6 +182,62 @@ export function newProcessesWindow(props = {}) {
         return;
     }
     windows.addWindow(Processes, { title: 'Processes', width: 900, height: 600, ...props });
+}
+
+/**
+ * Opens the Processes window (or focuses it if already open) and selects a specific process.
+ * @param {number} pid - The process ID to select.
+ */
+export function showProcessesAndSelect(pid) {
+    if (pid == null) return;
+
+    const allWindows = get(windows);
+    const existingProcessesTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'Processes');
+
+    if (existingProcessesTab) {
+        const group = allWindows.find(g => g.tabs.some(t => t.id === existingProcessesTab.id));
+        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
+        windows.setActiveTab(group.id, existingProcessesTab.id);
+        
+        // Signal the existing window to update its selection
+        requestedPid.set(pid);
+    } else {
+        // Create a new window with the pid pre-selected
+        windows.addWindow(Processes, { 
+            title: 'Processes', 
+            width: 900, 
+            height: 600, 
+            initialSelectedPid: pid 
+        });
+    }
+}
+
+/**
+ * Opens the Boxes window (or focuses it if already open) and selects a specific box.
+ * @param {number} boxId - The box ID to select.
+ */
+export function showBoxesAndSelect(boxId) {
+    if (boxId == null) return;
+
+    const allWindows = get(windows);
+    const existingBoxesTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'Boxes');
+
+    if (existingBoxesTab) {
+        const group = allWindows.find(g => g.tabs.some(t => t.id === existingBoxesTab.id));
+        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
+        windows.setActiveTab(group.id, existingBoxesTab.id);
+
+        // Signal existing window to update selection
+        requestedBoxId.set(boxId);
+    } else {
+        // Create new window with the box pre-selected
+        windows.addWindow(Boxes, {
+            title: 'Boxes',
+            width: 760,
+            height: 600,
+            initialSelectedBoxId: boxId
+        });
+    }
 }
 
 // --- UNIFIED FILE EXPLORER / VIEWER FUNCTIONS ---

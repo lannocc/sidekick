@@ -753,6 +753,68 @@ async def file_tailer_task(path):
 
 # --- ProcBox Process Management ---
 
+def is_pid_running(pid: int) -> bool:
+    """Checks if a process with the given PID is currently running."""
+    if platform.system() == 'Windows':
+        try:
+            # The output of `tasklist` will contain the PID if it exists. /NH for no header.
+            result = subprocess.run(
+                ['tasklist', '/FI', f'PID eq {pid}', '/NH'],
+                check=True, capture_output=True, text=True, encoding='utf-8'
+            )
+            return str(pid) in result.stdout
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+    else:  # POSIX systems
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False  # PID does not exist
+        except PermissionError:
+            return True   # PID exists, but we can't signal it
+        else:
+            return True   # PID exists
+
+def check_stale_processes():
+    """Checks for processes marked as running that no longer exist and updates their status."""
+    if not DB_CONN:
+        log.error("Cannot check stale processes, DB not connected.")
+        return
+    
+    log.info("Checking for stale running processes on startup...")
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT pid FROM process WHERE status IN ('running', 'paused')")
+    stale_pids = [row['pid'] for row in cursor.fetchall() if not is_pid_running(row['pid'])]
+    
+    if stale_pids:
+        log.warning(f"Found {len(stale_pids)} stale processes: {stale_pids}. Marking as stopped.")
+        placeholders = ', '.join(['?'] * len(stale_pids))
+        cursor.execute(f"UPDATE process SET status = 'stopped' WHERE pid IN ({placeholders})", tuple(stale_pids))
+        DB_CONN.commit()
+        log.info(f"Updated status for {len(stale_pids)} stale processes.")
+
+async def periodic_process_check():
+    """Periodically check for running processes that have died."""
+    await asyncio.sleep(15) # Initial delay
+    while True:
+        try:
+            if DB_CONN:
+                cursor = DB_CONN.cursor()
+                cursor.execute("SELECT pid FROM process WHERE status IN ('running', 'paused')")
+                pids_to_check = [row['pid'] for row in cursor.fetchall()]
+                stale_pids = [pid for pid in pids_to_check if not is_pid_running(pid)]
+                
+                if stale_pids:
+                    log.warning(f"Periodic check: Found {len(stale_pids)} stale processes: {stale_pids}. Marking as stopped.")
+                    placeholders = ', '.join(['?'] * len(stale_pids))
+                    cursor.execute(f"UPDATE process SET status = 'stopped' WHERE pid IN ({placeholders})", tuple(stale_pids))
+                    DB_CONN.commit()
+                    await broadcast_process_list()
+        except Exception as e:
+            log.error(f"Error during periodic process check: {e}", exc_info=True)
+        
+        await asyncio.sleep(30) # Check every 30 seconds
+
 async def broadcast_process_list():
     """Fetches all managed processes and broadcasts them to clients."""
     if not DB_CONN or not CONNECTED_CLIENTS:
@@ -1566,6 +1628,7 @@ async def websocket_handler(websocket):
 
 async def start_server():
     """Starts the WebSocket server."""
+    asyncio.create_task(periodic_process_check())
     async with serve(websocket_handler, HOST, PORT):
         await asyncio.Future()  # run forever
 
@@ -1574,6 +1637,7 @@ def main(args):
     """Entry point for `sk local` command."""
     print_startup_banner()
     init_db()  # Initialize the database on startup
+    check_stale_processes() # Check for dead processes on startup
     try:
         asyncio.run(start_server())
     except KeyboardInterrupt:
