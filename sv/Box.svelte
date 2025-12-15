@@ -948,8 +948,8 @@
 
     .process-status-badge {
         position: absolute;
-        bottom: 4px;
-        right: 4px;
+        top: 2px;
+        right: 26px;
         width: 16px;
         height: 16px;
         border-radius: 50%;
