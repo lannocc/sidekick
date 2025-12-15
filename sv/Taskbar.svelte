@@ -913,7 +913,7 @@
                     </div>
                 {:else}
                     <div class="menu-item-empty">No IOSK processes running.</div>
-                {/if}
+                {/each}
     
                 <div class="menu-separator"></div>
                 <div class="quick-view-section-header">Current Desktop</div>
