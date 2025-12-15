@@ -6,7 +6,7 @@
     import { windows, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
     import { appList } from './apps.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, currentBox, skyCloakEnabled, calculateContextMenuPosition } from './desktop.js';
+    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, currentBox, skyCloakEnabled, calculateContextMenuPosition, windowInteraction } from './desktop.js';
     import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox, resolveAssetDataUrl, generateBgStyle, deleteBox, deleteBackedWindow } from './bridge.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
@@ -934,8 +934,13 @@
         window.addEventListener('mouseup', onUp, { once: true });
     }
 
-    // --- MODIFICATION START: Updated Global Mouse Down Handler ---
     function handleGlobalMouseDown(event) {
+        // If a window interaction (drag/resize) has been initiated, do not
+        // process any desktop-level interactions for this event.
+        if (get(windowInteraction)) {
+            return;
+        }
+
         if (event.target.closest('.window-wrapper:not(.backed)')) {
             // A click landed on a front window. Window.svelte's handlers run first.
             // If it was a middle click that Window.svelte decided not to handle (e.g., no scrollable content),
@@ -975,9 +980,7 @@
             }
         }
     }
-    // --- MODIFICATION END ---
 
-    // --- MODIFICATION START ---
     function handleDesktopContextMenu(event) {
         if (isPanning) {
             event.preventDefault();
@@ -1018,7 +1021,6 @@
         // If the click was not on an item or the background (e.g., inside a window),
         // do nothing and let the event continue.
     }
-    // --- MODIFICATION END ---
 
     function startItemDrag(event, itemEl) {
         const id = itemEl.dataset.id;

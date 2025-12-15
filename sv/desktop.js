@@ -1,3 +1,5 @@
+// sv/desktop.js
+
 import { writable, get, derived } from 'svelte/store';
 import { boxes } from './bridge.js';
 
@@ -379,6 +381,9 @@ export const wasDraggingItems = writable(false);
 // Store to track if a mouse-down-based interaction (drag, pan, select) has been initiated.
 // This is used to immediately disable pointer events on other layers to prevent unintended hover/focus effects.
 export const desktopInteraction = writable(false);
+
+// *** NEW *** Store to track if a window drag/resize is in progress.
+export const windowInteraction = writable(false);
 
 // Store to track if a box is unfolded/expanded to manage global z-index contexts.
 export const activeBoxId = writable(null);
