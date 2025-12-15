@@ -92,7 +92,7 @@
     // --- Stdin Input ---
     let stdinInput = '';
     function handleStdinSubmit() {
-        if (!selectedPid || !stdinInput) return;
+        if (!selectedPid) return;
         sendProcessStdin(selectedPid, stdinInput + '\n'); // Append newline for terminal-like behavior
         stdinInput = '';
     }
