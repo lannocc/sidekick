@@ -6,7 +6,7 @@
     import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
     import Window from './Window.svelte';
     import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, skyCloakEnabled } from './desktop.js';
-    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox, resolveAssetDataUrl, generateBgStyle } from './bridge.js';
+    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox, resolveAssetDataUrl, generateBgStyle, deleteBox, deleteBackedWindow } from './bridge.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import Shortcut from './Shortcut.svelte';
@@ -1579,6 +1579,34 @@
         });
     }
 
+    function handleDeleteSelectedItems() {
+        const selected = get(selectedItems);
+        if (selected.size === 0) return;
+
+        if (!confirm(`Are you sure you want to remove ${selected.size} item(s)?`)) {
+            return;
+        }
+
+        selected.forEach(uniqueId => {
+            const [type, idStr] = uniqueId.split('-');
+
+            if (type === 'shortcut') {
+                desktopShortcuts.remove(parseInt(idStr, 10));
+            } else if (type === 'box') {
+                deleteBox(parseInt(idStr, 10));
+            } else if (type === 'backed_window') {
+                // For backed windows, the ID can be a string (originalGroupId).
+                // We must find the item in our rendered list to get the real DB ID.
+                const item = allItems.find(i => `${i.type}-${i.id}` === uniqueId);
+                if (item && item.originalBackedId) {
+                     deleteBackedWindow(item.originalBackedId);
+                }
+            }
+        });
+
+        selectedItems.set(new Set());
+    }
+
     onMount(() => {
         // The WebSocket connection is now established in SideKick.svelte
         window.addEventListener('click', closeContextMenu);
@@ -1877,6 +1905,9 @@
     on:keydown={e => {
         if (e.key === 'Control' && !e.repeat) ctrlPressed = true;
         if (e.key === 'Shift' && !e.repeat) shiftPressed = true;
+        if (e.key === 'Delete') {
+            handleDeleteSelectedItems();
+        }
     }}
     on:keyup={e => {
         if (e.key === 'Control') ctrlPressed = false;

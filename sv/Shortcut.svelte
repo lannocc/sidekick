@@ -22,6 +22,11 @@
     $: isSelected = $selectedItems.has(`shortcut-${id}`);
     let element;
 
+    let contextMenu = {
+        visible: false,
+        x: 0, y: 0,
+    };
+
     $: transform = `translate(${$desktopView.panX}px, ${$desktopView.panY}px) scale(${$desktopView.zoom}) translate(${x}px, ${y}px) scale(${scale || 1.0})`;
 
     // By using afterUpdate, we ensure the rendered dimensions are always kept up-to-date
@@ -58,6 +63,29 @@
         }
     }
 
+    function handleRightClick(event) {
+        event.preventDefault();
+        event.stopPropagation(); // Prevent desktop context menu
+        contextMenu = {
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+        };
+        window.addEventListener('click', closeContextMenu);
+    }
+
+    function closeContextMenu() {
+        if (contextMenu.visible) {
+            contextMenu.visible = false;
+            window.removeEventListener('click', closeContextMenu);
+        }
+    }
+
+    function removeShortcut() {
+        desktopShortcuts.remove(id);
+        closeContextMenu();
+    }
+
     function handleWheel(event) {
         if (event.ctrlKey || event.altKey) {
             event.preventDefault();
@@ -67,6 +95,10 @@
             dispatch('scale', { id, newScale });
         }
     }
+
+    onDestroy(() => {
+        window.removeEventListener('click', closeContextMenu);
+    });
 </script>
 
 <style>
@@ -110,6 +142,33 @@
         word-break: break-word;
         margin-top: 4px;
     }
+    .context-menu {
+        position: fixed;
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        z-index: 23000;
+        display: flex;
+        flex-direction: column;
+        padding: 4px 0;
+        min-width: 120px;
+    }
+
+    .context-menu button {
+        background: none;
+        border: none;
+        color: var(--taskbar-text);
+        padding: 8px 12px;
+        text-align: left;
+        cursor: pointer;
+        font-size: 14px;
+        width: 100%;
+    }
+
+    .context-menu button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
 </style>
 
 <div
@@ -125,4 +184,10 @@
 >
     <div class="icon">{type === 'dir' ? '🗂️' : '📄'}</div>
     <div class="name">{name}</div>
+
+    {#if contextMenu.visible}
+        <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
+            <button on:click={removeShortcut}>Remove Shortcut</button>
+        </div>
+    {/if}
 </div>
