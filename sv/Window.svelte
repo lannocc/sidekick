@@ -729,6 +729,7 @@
     data-type={isBacked ? 'backed_window' : 'window'}
     on:contextmenu|preventDefault|stopPropagation={isBacked ? (e) => dispatch('contextmenubacked', e) : null}
     on:wheel={handleWheel}
+    on:mousedown={e => { if (e.button !== 1) e.stopPropagation(); }}
 >
     <div
         class:window-frame={!isBacked}
