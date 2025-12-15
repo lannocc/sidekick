@@ -152,6 +152,11 @@
         window: null,
     };
 
+    // --- MODIFICATION START ---
+    // Determine if the submenu should open to the left based on the main context menu's position.
+    $: openSubmenuLeft = contextMenu.visible && contextMenu.x > innerWidth / 2;
+    // --- MODIFICATION END ---
+
     function showBackedWindowContextMenu(event, backedWindow) {
         window.dispatchEvent(new CustomEvent('close-all-context-menus'));
         closeContextMenu(); // Close the main desktop one if open
@@ -2049,13 +2054,17 @@
         background-color: var(--window-bg);
         border: 1px solid var(--border-color);
         border-radius: 4px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        box-shadow: 0px 10px rgba(0,0,0,0.2);
         padding: 4px 0;
         min-width: 180px;
     }
     .context-menu-item-container:hover > .submenu {
         display: flex;
         flex-direction: column;
+    }
+    .submenu.open-left {
+        left: auto;
+        right: 100%;
     }
     /* MODIFICATION END */
 </style>
@@ -2177,8 +2186,7 @@
                 <button class="pan-left" on:click={() => pan(panStep, 0)} title="PaLeft">◀</button>
                 <button class="pan-reset" on:click={resetPan} title="Reset Pan" disabled={isPanResetDisabled}>●</button>
                 <button class="pan-right" on:click={() => pan(-panStep, 0)} title="Pan Right">▶</button>
-                <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">▼</button>
-            </div>
+                <button class="pan-down" on:click={() => pan(0, -panStep)} title="Pan Down">â            </div>
             <div class="action-controls">
                 <button class="zoom-reset" on:click={resetView} title="Reset View" disabled={isViewResetDisabled}>Reset</button>
                 <button class="zoom-reset" on:click={fitAndCenterView} title="Fit to C" disabled={isBestFit}>Fit</button>
@@ -2191,7 +2199,7 @@
             <!-- MODIFICATION START -->
             <div class="context-menu-item-container">
                 <button class="context-menu-item-with-submenu">SKYBOARD</button>
-                <div class="submenu">
+                <div class="submenu" class:open-left={openSubmenuLeft}>
                     {#each skyboardMenuItems as item (item.name)}
                         <button
                             on:click={item.action}
@@ -2232,3 +2240,4 @@
         <Dash />
     {/if}
 </div>
+
