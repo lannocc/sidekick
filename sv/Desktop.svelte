@@ -155,6 +155,8 @@
     // --- MODIFICATION START ---
     // Determine if the submenu should open to the left based on the main context menu's position.
     $: openSubmenuLeft = contextMenu.visible && contextMenu.x > innerWidth / 2;
+    // Determine if the submenu should open upwards to avoid going off-screen.
+    $: openSubmenuUp = contextMenu.visible && (contextMenu.y + skyboardSubmenuHeight > innerHeight);
     // --- MODIFICATION END ---
 
     function showBackedWindowContextMenu(event, backedWindow) {
@@ -281,6 +283,11 @@
         }, requiresConnection: true },
         { name: 'Web Browser', icon: '🌐', action: () => launchApp(newWebBrowser), requiresConnection: false },
     ].sort((a, b) => a.name.localeCompare(b.name));
+
+    // Calculate submenu height for positioning to prevent it from going off-screen.
+    const SKYBOARD_ITEM_HEIGHT = 34; // Estimated height of one menu item (padding + line-height)
+    const SUBMENU_VERTICAL_PADDING = 8; // 4px top + 4px bottom padding of the submenu itself
+    const skyboardSubmenuHeight = skyboardMenuItems.length * SKYBOARD_ITEM_HEIGHT + SUBMENU_VERTICAL_PADDING;
     // --- MODIFICATION END ---
 
 
@@ -2082,6 +2089,10 @@
         left: auto;
         right: 100%;
     }
+    .submenu.open-up {
+        top: auto;
+        bottom: -5px; /* Aligns with bottom of parent */
+    }
     /* MODIFICATION END */
 </style>
 
@@ -2215,7 +2226,7 @@
             <!-- MODIFICATION START -->
             <div class="context-menu-item-container">
                 <button class="context-menu-item-with-submenu" class:open-left={openSubmenuLeft}>SKYBOARD</button>
-                <div class="submenu" class:open-left={openSubmenuLeft}>
+                <div class="submenu" class:open-left={openSubmenuLeft} class:open-up={openSubmenuUp}>
                     {#each skyboardMenuItems as item (item.name)}
                         <button
                             on:click={item.action}
