@@ -226,7 +226,7 @@
                         {/each}
                     {/if}
                 </div>
-                {#if selectedProcess.enable_stdin}
+                {#if selectedProcess.enable_stdin && selectedProcess.status === 'running'}
                     <form class="stdin-form" on:submit|preventDefault={handleStdinSubmit}>
                         <input type="text" bind:value={stdinInput} placeholder="Send to stdin and press Enter..." autocomplete="off" spellcheck="false" disabled={$connectionStatus !== 'connected'}>
                     </form>
