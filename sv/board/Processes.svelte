@@ -213,10 +213,10 @@
                 </dd>
             </dl>
             <div class="controls">
+                <button on:click={() => killProcess(selectedPid)} disabled={selectedProcess.status === 'stopped' || selectedProcess.status === 'error' || $connectionStatus !== 'connected'} class="kill-btn">Kill</button>
+                <button on:click={() => stopProcess(selectedPid)} disabled={selectedProcess.status === 'stopped' || selectedProcess.status === 'error' || $connectionStatus !== 'connected'}>Terminate</button>
                 <button on:click={() => pauseProcess(selectedPid)} disabled={selectedProcess.status !== 'running' || $connectionStatus !== 'connected'}>Pause</button>
                 <button on:click={() => resumeProcess(selectedPid)} disabled={selectedProcess.status !== 'paused' || $connectionStatus !== 'connected'}>Resume</button>
-                <button on:click={() => stopProcess(selectedPid)} disabled={selectedProcess.status === 'stopped' || selectedProcess.status === 'error' || $connectionStatus !== 'connected'}>Terminate</button>
-                <button on:click={() => killProcess(selectedPid)} disabled={selectedProcess.status === 'stopped' || selectedProcess.status === 'error' || $connectionStatus !== 'connected'} class="kill-btn">Kill</button>
             </div>
             <div class="terminal-container">
                 <div class="terminal-view" bind:this={processLogs[selectedPid].element}>
