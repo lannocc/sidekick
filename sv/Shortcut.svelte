@@ -179,6 +179,7 @@
     data-type="shortcut"
     style:transform={transform}
     on:click={handleClick}
+    on:contextmenu={handleRightClick}
     on:wheel={handleWheel}
     on:scale
 >
