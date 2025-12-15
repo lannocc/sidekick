@@ -1240,8 +1240,8 @@ export function newIoskPrivateChat(consoleTabId, localUser, remoteUser, props = 
 export function newLocalTerminal(props = {}) {
     windows.addWindow(LocalTerminal, { title: 'Local Terminal', width: 800, height: 500, ...props });
 }
-export function newAskWindow(initialFiles = [], props = {}) {
-    windows.addWindow(Ask, { title: 'Ask', initialFiles, width: 900, height: 600, ...props });
+export function newAskWindow(props = {}) {
+    windows.addWindow(Ask, { title: 'Ask', initialFiles: [], width: 900, height: 600, ...props });
 }
 export function newIoskWatch(consoleTabId, pwd, props = {}) {
     const allWindows = get(windows);
