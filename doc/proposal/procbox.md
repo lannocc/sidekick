@@ -140,7 +140,7 @@ The currently unused green square button will be activated.
 *   **Content**: This menu will serve as a quick-glance dashboard, displaying:
     *   A list of all currently running `iosk` instances with their associated Box name and status.
     *   Quick action buttons next to each entry (e.g., a "Stop" button).
-    *   A summary of currently open (unminimized) Boxes on the desktop.
+    *   A summary of currently open (actived) desktop (Box).
     *   A button at the bottom to "Open Process Manager".
 
 ### 3. Command Line Interface (`sk/iosk/cmd.py`)
