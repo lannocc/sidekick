@@ -120,9 +120,6 @@
         selectedBox = $boxes.find(b => b.id === selectedBoxId);
         if (selectedBox) {
             nameInput = selectedBox.name;
-            if (selectedBox.type === 'iosk' && activeTab !== 'iosk') {
-                activeTab = 'iosk';
-            }
         } else {
             selectedBoxId = $boxes.find(b => b.id === 0) ? 0 : ($boxes.length > 0 ? $boxes[0].id : null);
         }
@@ -256,7 +253,7 @@
     .tree-toggle:hover { color: var(--text-color); }
     .box-icon { width: 24px; height: 24px; flex-shrink: 0; }
     .box-name { flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .right-panel { flex-grow: 1; padding: 16px; padding-top: 64px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; position: relative; }
+    .right-panel { flex-grow: 1; padding: 16px; padding-top: 64px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; overflow-x: hidden; position: relative; }
     .details-group { display: flex; flex-direction: column; gap: 4px; }
     .details-group label { font-size: 0.9em; color: var(--text-color-light); }
     .details-group input { padding: 8px; background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-color); font-size: 1em; }
@@ -290,10 +287,12 @@
     .status-indicator.error { background-color: #9b59b6; }
     .status-text { font-weight: bold; text-transform: capitalize; }
     .status-details { font-family: monospace; font-size: 0.9em; color: var(--text-color-light); }
-    .controls { display: flex; gap: 8px; }
+    .controls { display: flex; gap: 8px; justify-content: center; align-items: center; }
     .controls button, .quick-link-btn { padding: 8px 16px; border: 1px solid var(--button-border-color); background-color: var(--button-bg); color: var(--text-color); border-radius: 4px; cursor: pointer; font-weight: bold; transition: background-color 0.2s; }
     .controls button:hover, .quick-link-btn:hover { background-color: var(--button-hover-bg); }
     .controls button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .controls .icon-btn { width: 40px; height: 40px; padding: 8px; display: flex; align-items: center; justify-content: center; }
+    .controls .icon-btn svg { width: 100%; height: 100%; fill: currentColor; }
     .config-grid { display: grid; grid-template-columns: auto 1fr; gap: 12px 8px; align-items: center; }
     .config-grid label { font-size: 0.9em; color: var(--text-color-light); justify-self: end; }
     .config-grid input[type="text"] { width: 100%; }
@@ -349,6 +348,18 @@
                 {#if activeTab === 'iosk'}
                     <div class="tab-pane">
                         <div class="details-group">
+                            <div class="controls">
+                                <button on:click={() => stopProcess(associatedProcess.pid)} disabled={!associatedProcess} class="icon-btn" title="Stop Process">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                                </button>
+                                <button class="quick-link-btn" disabled>View in Process Manager</button>
+                                <button on:click={() => startIosk(selectedBoxId)} disabled={!!associatedProcess} class="icon-btn" title="Start Process">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="details-group">
                             <label>Status</label>
                             <div class="status-display">
                                 <div class="status-indicator" class:running={associatedProcess?.status === 'running'} class:stopped={!associatedProcess || associatedProcess?.status === 'stopped'} class:paused={associatedProcess?.status === 'paused'} class:error={associatedProcess?.status === 'error'}></div>
@@ -360,15 +371,6 @@
                                         Not running.
                                     {/if}
                                 </span>
-                            </div>
-                        </div>
-
-                        <div class="details-group">
-                            <label>Controls</label>
-                            <div class="controls">
-                                <button on:click={() => startIosk(selectedBoxId)} disabled={!!associatedProcess}>Start</button>
-                                <button on:click={() => stopProcess(associatedProcess.pid)} disabled={!associatedProcess}>Stop</button>
-                                <button class="quick-link-btn" disabled>View in Process Manager</button>
                             </div>
                         </div>
                         
