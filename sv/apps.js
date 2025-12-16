@@ -56,7 +56,7 @@ export const appList = [
     },
     {
         id: 'iosk_connection',
-        name: 'IOSK Connection',
+        name: 'IOSK Console',
         icon: '🖥️',
         launcher: newIoskConnection,
         requiresConnection: false,
@@ -134,7 +134,7 @@ export function newIoskConnection(props = {}) {
     const globalSettings = get(desktopSettings);
 
     windows.addWindow(IoskConsole, {
-        title: 'IOSK Connection',
+        title: 'IOSK Console',
         wsUrl: componentSettings?.defaultUrl ?? globalSettings.ioskUrl,
         username: componentSettings?.defaultUsername ?? globalSettings.ioskUsername,
         ...props,
