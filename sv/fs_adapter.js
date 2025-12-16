@@ -27,10 +27,17 @@ export function createFsAdapter({ connectionType, consoleId, requesterId }) {
     if (connectionType === 'iosk') {
         unsubscribers.push(fileSystemResponses.subscribe(msg => {
             if (msg && msg.requesterId === requesterId) {
-                if (msg.data.type === 'fs_list_response') {
-                    listResponse.set({ path: msg.data.path, entries: msg.data.listing, error: msg.data.error, requester_id: msg.data.requester_id });
-                } else if (msg.data.type === 'fs_read_response') {
-                    readResponse.set(msg.data); // Forward the whole data object
+                // The backend can respond with a specific fs_list_response or a generic
+                // exec_command_response that contains listing data. We need to handle both.
+                const responseData = msg.data;
+
+                if (responseData.type === 'fs_list_response') {
+                    listResponse.set({ path: responseData.path, entries: responseData.listing, error: responseData.error, requester_id: msg.requesterId });
+                } else if (responseData.type === 'exec_command_response' && responseData.listing !== undefined) {
+                    // Handle file listings wrapped in a generic command response
+                    listResponse.set({ path: responseData.path, entries: responseData.listing, error: responseData.error, requester_id: msg.requesterId });
+                } else if (responseData.type === 'fs_read_response') {
+                    readResponse.set(responseData); // Forward the whole data object
                 }
             }
         }));
