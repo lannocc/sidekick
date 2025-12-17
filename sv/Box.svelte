@@ -403,7 +403,7 @@
     function openFiles() {
         closeContextMenu();
         if (box.type === 'local' && box.context) {
-            newLocalFileExplorer({ title: `Files - ${box.name}`, initialPath: box.context });
+            newLocalFileExplorer({ title: `Local Files - ${box.name}`, initialPath: box.context });
             isUnfolded = false;
         }
     }

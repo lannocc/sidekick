@@ -57,7 +57,7 @@
             return;
         }
         if (type === 'dir') {
-            newLocalFileExplorer({ initialPath: path, title: `Files - ${name}` });
+            newLocalFileExplorer({ initialPath: path, title: `Local Files - ${name}` });
         } else if (type === 'file') {
             newLocalFileViewer({ path, title: name });
         }
