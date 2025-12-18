@@ -205,7 +205,6 @@
     function inspectUserContext(targetUser) {
         if (!connectionId) return;
         newIoskUserInspector({ connectionId, targetUser });
-        sendIoskRequest(connectionId, { type: 'ui_context_subscribe', targetUser });
         closeUserContextMenu();
     }
     function handleSetColor(event) {

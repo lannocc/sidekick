@@ -3,7 +3,7 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { onDestroy } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { parseAnsi } from '../ansi.js'
     // --- MODIFICATION START: Import centralized connection functions ---
@@ -15,7 +15,6 @@
     // --- Component Props ---
     export let id; // The window tab ID for this component instance
     export let groupId; // The window group ID for this component instance
-    export let consoleId; // The console tab ID this inspector is linked to
     export let targetUser; // The user whose context is being inspected
     // --- MODIFICATION START: Replace consoleWs with connectionId ---
     export let connectionId;
@@ -61,6 +60,13 @@
         ]
     ];
 
+    onMount(() => {
+        // The main inspector window is responsible for subscribing to context updates.
+        // Detached (popped-out) views or inline views rely on the main window's subscription.
+        if (!isDetached && connectionId) {
+            sendIoskRequest(connectionId, { type: 'ui_context_subscribe', targetUser });
+        }
+    });
 
     // --- State for Token Telemetry ---
     let tokenTooltip = { visible: false, x: 0, y: 0 };
@@ -189,7 +195,6 @@
         // --- MODIFICATION START: Pass connectionId to new windows instead of consoleWs ---
         const newWindow = windows.addWindow(IoskUserInspector, {
             title: `${titleName} - ${targetUser}`,
-            consoleId: consoleId,
             targetUser: targetUser,
             connectionId: connectionId,
             isDetached: true,

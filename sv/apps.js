@@ -17,6 +17,9 @@ import Processes from './board/Processes.svelte';
 import { TASKBAR_HEIGHT, desktopSettings, windowSettings, desktopView } from './desktop.js';
 import { createBox, boxes, desktopShortcuts, backedWindows, requestedBoxId, requestedPid } from './bridge.js';
 import { windows } from './windows.js';
+// --- MODIFICATION START: Import the central connections store ---
+import { activeIoskConnections } from './iosk.js';
+// --- MODIFICATION END ---
 
 
 // --- App Definitions ---
@@ -242,12 +245,14 @@ export function showBoxesAndSelect(boxId) {
 
 // --- UNIFIED FILE EXPLORER / VIEWER FUNCTIONS ---
 
+// --- MODIFICATION START: Update to use connectionId and provide it as a title fallback ---
 export function newFileExplorer(props = {}) {
-    const { connectionType, consoleId, consoleTitle } = props;
-    const title = connectionType === 'iosk' ? `Files - ${consoleTitle || `Console ${consoleId}`}` : 'Local Files';
+    const { connectionType, connectionId, consoleTitle } = props;
+    const title = connectionType === 'iosk' ? `Files - ${consoleTitle || connectionId}` : 'Local Files';
     const defaultProps = { title, width: 500, height: 600 };
     windows.addWindow(FileExplorer, { ...defaultProps, ...props });
 }
+// --- MODIFICATION END ---
 
 export function newFileViewer(props = {}) {
     const title = (props.path || '').split('/').pop() || props.path;
@@ -257,24 +262,35 @@ export function newFileViewer(props = {}) {
 
 // --- LEGACY/SPECIFIC FUNCTIONS (Now call the unified functions) ---
 
-export function newIoskFileExplorer(consoleTabId, consoleTitle, props = {}) {
+// --- MODIFICATION START: Update function signature and logic to use connectionId ---
+export function newIoskFileExplorer(props = {}) {
+    const { connectionId } = props;
+    if (!connectionId) return;
+
+    const allWindows = get(windows);
+    const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'IoskConsole' && t.connectionId === connectionId);
+    const consoleTitle = consoleTab?.title;
+
     const explorerSettings = get(windowSettings)['IoskFileExplorer'];
     newFileExplorer({ 
         connectionType: 'iosk',
-        consoleId: consoleTabId,
+        connectionId,
         consoleTitle,
         initialPath: explorerSettings?.initialPath || '.',
         ...props 
     });
 }
-export function newIoskFileViewer(consoleTabId, path, props = {}) {
+export function newIoskFileViewer(props = {}) {
+    const { connectionId, path } = props;
+    if (!connectionId || !path) return;
     newFileViewer({
         connectionType: 'iosk',
-        consoleId: consoleTabId,
+        connectionId,
         path,
         ...props
     });
 }
+// --- MODIFICATION END ---
 export function newLocalFileExplorer(props = {}) {
     newFileExplorer({ connectionType: 'skybridge', ...props });
 }
@@ -289,50 +305,101 @@ export function newWebBrowser(props = {}) {
     const initialUrl = browserSettings?.defaultUrl || (typeof window !== 'undefined' ? window.location.origin : 'about:blank');
     windows.addWindow(WebBrowser, { title: 'Web Browser', initialUrl, width: 1024, height: 768, ...props });
 }
-export function newIoskPrivateChat(consoleTabId, localUser, remoteUser, props = {}) {
+// --- MODIFICATION START: Update function signature and logic to use connectionId ---
+export function newIoskPrivateChat(props = {}) {
+    const { connectionId, localUser, remoteUser } = props;
+    if (!connectionId || !localUser || !remoteUser) return;
+
     const allWindows = get(windows);
-    const existingChatTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'IoskPrivateChat' && t.consoleId === consoleTabId && t.remoteUser === remoteUser);
+    const existingChatTab = allWindows.flatMap(g => g.tabs).find(t =>
+        t.componentName === 'IoskPrivateChat' &&
+        t.connectionId === connectionId &&
+        t.remoteUser === remoteUser
+    );
+
     if (existingChatTab) {
         const group = allWindows.find(g => g.tabs.some(t => t.id === existingChatTab.id));
-        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
-        windows.setActiveTab(group.id, existingChatTab.id);
+        if (group) {
+            if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
+            windows.setActiveTab(group.id, existingChatTab.id);
+        }
         return;
     }
     const title = remoteUser.split('.')[0];
-    windows.addWindow(IoskPrivateChat, { title: `Chat with ${title}`, consoleId: consoleTabId, localUser, remoteUser, width: 450, height: 400, ...props });
+    windows.addWindow(IoskPrivateChat, {
+        title: `Chat with ${title}`,
+        connectionId,
+        localUser,
+        remoteUser,
+        width: 450,
+        height: 400,
+        ...props
+    });
 }
+// --- MODIFICATION END ---
 export function newLocalTerminal(props = {}) {
     windows.addWindow(LocalTerminal, { title: 'Local Terminal', width: 800, height: 500, ...props });
 }
 export function newAskWindow(props = {}) {
     windows.addWindow(Ask, { title: 'Ask', initialFiles: [], width: 900, height: 600, ...props });
 }
-export function newIoskWatch(consoleTabId, pwd, props = {}) {
-    const allWindows = get(windows);
-    const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
-    if (!consoleTab || !consoleTab.isConsoleConnected) {
+// --- MODIFICATION START: Update function signature and logic to use connectionId ---
+export function newIoskWatch(props = {}) {
+    const { connectionId, path } = props;
+    if (!connectionId) return;
+
+    const connectionState = get(activeIoskConnections).get(connectionId);
+    if (!connectionState || connectionState.status !== 'connected') {
         alert("Cannot open Watch window. The selected console is not connected.");
         return;
     }
-    windows.addWindow(IoskWatch, { title: 'Watch', consoleId: consoleTabId, consoleConnection: consoleTab.consoleConnection, initialPwd: pwd, width: 700, height: 400, ...props });
+    windows.addWindow(IoskWatch, {
+        title: 'Watch',
+        connectionId,
+        initialPwd: path,
+        width: 700,
+        height: 400,
+        ...props
+    });
 }
-export function newIoskUserInspector(consoleTabId, targetUser, consoleWs, props = {}) {
+export function newIoskUserInspector(props = {}) {
+    const { connectionId, targetUser } = props;
+    if (!connectionId || !targetUser) return;
+
     const allWindows = get(windows);
-    const existingInspectorTab = allWindows.flatMap(g => g.tabs).find(t => t.componentName === 'IoskUserInspector' && !t.isDetached && t.consoleId === consoleTabId && t.targetUser === targetUser);
+    const existingInspectorTab = allWindows.flatMap(g => g.tabs).find(t =>
+        t.componentName === 'IoskUserInspector' &&
+        !t.isDetached &&
+        t.connectionId === connectionId &&
+        t.targetUser === targetUser
+    );
+
     if (existingInspectorTab) {
         const group = allWindows.find(g => g.tabs.some(t => t.id === existingInspectorTab.id));
-        if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
-        windows.setActiveTab(group.id, existingInspectorTab.id);
+        if (group) {
+            if (group.minimized) windows.toggleMinimize(group.id); else windows.focusWindow(group.id);
+            windows.setActiveTab(group.id, existingInspectorTab.id);
+        }
         return;
     }
-    const consoleTab = allWindows.flatMap(g => g.tabs).find(t => t.id === consoleTabId);
-    if (!consoleTab || !consoleTab.isConsoleConnected) {
+
+    const connectionState = get(activeIoskConnections).get(connectionId);
+    if (!connectionState || connectionState.status !== 'connected') {
         alert("Cannot inspect context. The selected console is not connected.");
         return;
     }
+
     const title = `Inspector - ${targetUser}`;
-    windows.addWindow(IoskUserInspector, { title, consoleId: consoleTabId, targetUser: targetUser, consoleWs: consoleWs, consoleConnection: consoleTab.consoleConnection, width: 700, height: 700, ...props });
+    windows.addWindow(IoskUserInspector, {
+        title,
+        connectionId,
+        targetUser,
+        width: 700,
+        height: 700,
+        ...props
+    });
 }
+// --- MODIFICATION END ---
 
 export function newBox(props = {}) {
     const { name, context, sourceEvent } = props;
@@ -417,13 +484,14 @@ export function newBox(props = {}) {
     createBox(name, 'local', context, { aspectRatio, screenX: candidatePos.x * zoom + panX, screenY: candidatePos.y * zoom + panY + TASKBAR_HEIGHT });
 }
 
+// --- MODIFICATION START: Update the store to use connectionId ---
 export const activeConsoles = readable(new Map(), set => {
     const unsubscribe = windows.subscribe(allWindows => {
         const newActiveConsoles = new Map();
         for (const group of allWindows) {
             for (const tab of group.tabs) {
-                if (tab.componentName === 'IoskConsole' && tab.isConsoleConnected && tab.consoleConnection) {
-                    const key = `${tab.consoleConnection.user}@${tab.consoleConnection.url}`;
+                if (tab.componentName === 'IoskConsole' && tab.isConsoleConnected && tab.connectionId) {
+                    const key = tab.connectionId;
                     if (!newActiveConsoles.has(key)) {
                         newActiveConsoles.set(key, tab);
                     }
@@ -435,3 +503,4 @@ export const activeConsoles = readable(new Map(), set => {
 
     return () => unsubscribe();
 });
+// --- MODIFICATION END ---
