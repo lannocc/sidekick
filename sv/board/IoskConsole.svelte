@@ -352,7 +352,13 @@
         <!-- Main Console View: Attached to a session -->
         <div class="connect-form">
             <button type="button" class="header-button disconnect-button" on:click={disconnect} title="Detach from this session and return to the connection picker. The session remains active.">Detach</button>
-            <button type="button" class="header-button room-button" bind:this={roomsButton} on:click|stopPropagation={toggleRoomsMenu} title="Available Rooms" disabled={!isConnected}>Rooms</button>
+            <button type="button" class="header-button room-button" bind:this={roomsButton} on:click|stopPropagation={toggleRoomsMenu} title={roomName ? `Current Room: ${stripAnsi(roomName)}` : "Available Rooms"} disabled={!isConnected}>
+                {#if roomName}
+                    {@html parseAnsi(roomName)}
+                {:else}
+                    Rooms
+                {/if}
+            </button>
             <div class="header-info" title={stripAnsi(roomTopic || motd)}>
                 {@html parseAnsi(roomTopic || motd)}
             </div>
@@ -454,7 +460,7 @@
     .connect-form .header-button:disabled { opacity: 0.5; cursor: not-allowed; }
     .connect-form .disconnect-button { background-color: #e74c3c; border-color: #c0392b; color: white; }
     .connect-form .disconnect-button:hover { background-color: #c0392b; }
-    .connect-form .room-button { background-color: #ffbd2e; border-color: #e0a320; color: white; position: relative; padding-left: 15px; }
+    .connect-form .room-button { background-color: #ffbd2e; border-color: #e0a320; color: white; position: relative; padding-left: 15px; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
     .connect-form .room-button:hover { background-color: #e0a320; }
     .connect-form .watch-button { background-color: #27c93f; border-color: #1a9c2a; color: white; }
     .connect-form .watch-button:hover { background-color: #1a9c2a; }
