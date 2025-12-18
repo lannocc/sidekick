@@ -1,5 +1,7 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { stripAnsi } from './ansi.js';
+import { windows } from './windows.js';
+import { newIoskPrivateChat } from './apps.js';
 
 // --- Existing Stores (payloads will be updated to include connectionId where appropriate) ---
 
@@ -129,13 +131,40 @@ export function initiateConnection(url, username) {
                 if (data.type === 'context_update') {
                     contextUpdates.set({ connectionId, ...data, type: 'full' });
                 } else if (data.type === 'private_message') {
+                    const remoteUser = stripAnsi(data.from);
+                    const localUser = state.username;
+
+                    // First, update the global message store so that any existing or newly
+                    // created windows will receive the message.
                     privateMessages.set({
                         connectionId,
-                        from: stripAnsi(data.from),
+                        from: remoteUser,
                         to: stripAnsi(data.to),
                         content: data.content,
                         timestamp: Date.now()
                     });
+                    
+                    // Don't automatically open a chat window for messages sent to oneself.
+                    if (remoteUser === localUser) {
+                        return conns;
+                    }
+
+                    // Check if a chat window for this specific conversation already exists.
+                    const allWindows = get(windows);
+                    const chatExists = allWindows.flatMap(g => g.tabs).some(t =>
+                        t.componentName === 'IoskPrivateChat' &&
+                        t.connectionId === connectionId &&
+                        t.remoteUser === remoteUser
+                    );
+
+                    if (!chatExists) {
+                        // If no window exists, create one.
+                        newIoskPrivateChat({
+                            connectionId,
+                            localUser,
+                            remoteUser
+                        });
+                    }
                 } else if (data.type === 'state_info' || data.type === 'room_state_update') {
                     if (data.hostname) state.localHostname = data.hostname;
                     state.roomName = data.roomName || null;
