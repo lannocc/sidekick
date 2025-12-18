@@ -1805,29 +1805,23 @@
         margin: 4px 0;
     }
 
-    .context-menu-subheader {
-        padding: 4px 12px;
-        font-size: 15px;
-        font-weight: bold;
-        color: var(--title-bar-text);
-        background-color: var(--title-bar-bg);
-        cursor: default;
-    }
-
     /* --- MODIFICATION START --- */
     .embedded-menu {
-        margin: 4px 8px 8px;
+        margin: 2px 4px 2px;
         border: 1px solid var(--border-color);
         border-radius: 3px;
         box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
         background-color: var(--background-color);
     }
 
-    .embedded-menu .context-menu-subheader {
-        background-color: var(--title-bar-bg);
+    .embedded-menu .embedded-menu-name {
+        color: var(--title-bar-bg);
+        font-weight: bold;
+        background-color: var(--title-bar-text);
         border-bottom: 1px solid var(--border-color);
         padding: 4px 10px;
-        font-size: 14px;
+        font-size: 15px;
+        cursor: default;
     }
 
     .embedded-menu-content {
@@ -2268,7 +2262,7 @@
             {#if $currentBoxId !== 0 && $currentBox}
                 <div class="context-menu-separator"></div>
                 <div class="embedded-menu">
-                    <div class="context-menu-subheader">{$currentBox.name}</div>
+                    <div class="embedded-menu-name">{$currentBox.name}</div>
                     <div class="embedded-menu-content">
                         <BoxContextMenu box={$currentBox} showDelete={false} showExit={true} on:close={closeContextMenu} />
                     </div>
