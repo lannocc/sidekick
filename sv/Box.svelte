@@ -12,8 +12,8 @@
         newLocalFileExplorer, 
         newLocalTerminal,
         showBoxesAndSelect,
-        newIoskConsoleForBox,
-        newIoskFileExplorerForBox
+        newIoskConsole,
+        newIoskFileExplorer
     } from './apps.js';
     import { 
         updateBox, 
@@ -33,7 +33,7 @@
         pauseProcess,
         resumeProcess
     } from './bridge.js';
-    import { activeIoskConnections } from './iosk.js';
+    import { activeIoskConnections, initiateConnection } from './iosk.js';
     import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId, calculateContextMenuPosition } from './desktop.js';
     import Panel from './Panel.svelte';
 
@@ -44,6 +44,41 @@
     // --- Process Status ---
     $: activeProcess = $runningProcesses.find(p => p.box_id === box.id && (p.status === 'running' || p.status === 'paused'));
     $: processStatus = activeProcess?.status;
+    
+    // --- IOSK Context Menu Logic ---
+    let ioskConnections = [];
+    let defaultUserConnectionInfo = {
+        exists: false,
+        connectionId: null,
+        username: 'root'
+    };
+
+    $: {
+        if (box.type === 'iosk' && activeProcess?.port) {
+            const urlPart = `ws://localhost:${activeProcess.port}`;
+            
+            // 1. Find all active connections for this box's URL
+            const allConnections = Array.from($activeIoskConnections.entries());
+            ioskConnections = allConnections
+                .filter(([, conn]) => conn.url === urlPart)
+                .map(([id, conn]) => ({ connectionId: id, username: conn.username, status: conn.status }));
+
+            // 2. Check for the default user connection
+            const config = $allIoskConfigs[box.id];
+            const defaultUsername = config?.default_username || 'root';
+            const defaultConnectionId = `${defaultUsername}@${urlPart}`;
+            const defaultConnectionExists = ioskConnections.some(c => c.username === defaultUsername);
+
+            defaultUserConnectionInfo = {
+                exists: defaultConnectionExists,
+                connectionId: defaultConnectionId,
+                username: defaultUsername
+            };
+        } else {
+            ioskConnections = [];
+            defaultUserConnectionInfo = { exists: false, connectionId: null, username: 'root' };
+        }
+    }
     
     // --- IOSK Connection Status ---
     let connectionId = null;
@@ -457,6 +492,46 @@
     function handlePromoteToIosk() {
         closeContextMenu();
         promoteToIosk(box.id);
+    }
+
+    function handleOpenConsole(connectionId, shouldConnect = false) {
+        closeContextMenu();
+        if (shouldConnect) {
+            const [username, url] = connectionId.split('@');
+            initiateConnection(url, username);
+        }
+        newIoskConsole({ connectionId });
+        isUnfolded = false;
+    }
+
+    function handleOpenFiles(connectionId, shouldConnect = false) {
+        closeContextMenu();
+        isUnfolded = false;
+
+        if (shouldConnect) {
+            const [username, url] = connectionId.split('@');
+            initiateConnection(url, username);
+            
+            const unsubscribe = activeIoskConnections.subscribe(conns => {
+                const currentConn = conns.get(connectionId);
+                if (currentConn?.status === 'connected') {
+                    newIoskFileExplorer({ connectionId });
+                    unsubscribe();
+                } else if (currentConn?.status === 'error' || currentConn?.status === 'disconnected') {
+                    alert(`Failed to connect to IOSK for box "${box.name}".`);
+                    unsubscribe();
+                }
+            });
+            setTimeout(() => unsubscribe(), 5000); // 5s timeout
+        } else {
+            const connState = get(activeIoskConnections).get(connectionId);
+            if (connState?.status === 'connected') {
+                newIoskFileExplorer({ connectionId });
+            } else {
+                // This case shouldn't happen because the button is disabled, but good to have a fallback.
+                alert('Connection is not active. Cannot open file explorer.');
+            }
+        }
     }
 
     function setCoverImage() {
@@ -1233,12 +1308,32 @@
         
         {#if box.type === 'iosk'}
             <div class="menu-separator"></div>
-            <button on:click={() => newIoskConsoleForBox(box)} disabled={!activeProcess || !activeProcess.port}>
-                <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />IOSK Console
-            </button>
-            <button on:click={() => newIoskFileExplorerForBox(box)} disabled={!connectionState || connectionState.status !== 'connected'}>
-                <span class="menu-item-icon">📁</span>IOSK Files
-            </button>
+            
+            <!-- List existing connections -->
+            {#each ioskConnections as conn (conn.connectionId)}
+                <button on:click={() => handleOpenConsole(conn.connectionId)}>
+                    <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />
+                    Console ({conn.username})
+                </button>
+                <button on:click={() => handleOpenFiles(conn.connectionId)} disabled={conn.status !== 'connected'}>
+                    <span class="menu-item-icon">📁</span>
+                    Files ({conn.username})
+                </button>
+            {/each}
+
+            <!-- Offer to connect as default user if not already connected -->
+            {#if !defaultUserConnectionInfo.exists && activeProcess?.port}
+                {#if ioskConnections.length > 0}<div class="menu-separator"></div>{/if}
+                <button on:click={() => handleOpenConsole(defaultUserConnectionInfo.connectionId, true)}>
+                    <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />
+                    Console (new as {defaultUserConnectionInfo.username})
+                </button>
+                <button on:click={() => handleOpenFiles(defaultUserConnectionInfo.connectionId, true)}>
+                    <span class="menu-item-icon">📁</span>
+                    Files (new as {defaultUserConnectionInfo.username})
+                </button>
+            {/if}
+
             <div class="menu-separator"></div>
             {#if activeProcess}
                 {#if activeProcess.status === 'running'}
