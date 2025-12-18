@@ -27,14 +27,21 @@
 
     // --- MODIFICATION START: Fetch global data on connect ---
     let initialDataFetched = false;
+
+    // Reset the flag on disconnection to ensure data is re-fetched on reconnect.
+    $: if ($connectionStatus !== 'connected') {
+        initialDataFetched = false;
+    }
+
     $: if ($connectionStatus === 'connected' && !initialDataFetched && get(boxes).length > 0) {
-        // Trigger the side-effect that we hypothesize loads the running processes list.
-        // Calling a general data request for the root box (ID 0) seems to be the trigger,
-        // mimicking the initial behavior of the 'Boxes' management window.
+        // The `bridge` automatically fetches the box list and running processes on connect.
+        // This block fetches additional data needed for the UI once the box list is populated.
+        
+        // Fetch shortcuts for the root desktop.
         getShortcuts(0); 
 
-        // Explicitly fetch all IOSK configs, as these are needed by Box components
-        // on the desktop for their badges and context menus.
+        // Explicitly fetch all IOSK configs. This is required for Box components
+        // on the desktop to display correct badges and context menu options.
         get(boxes).forEach(box => {
             if (box.type === 'iosk') {
                 getIoskConfig(box.id);
