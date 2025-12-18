@@ -750,7 +750,10 @@
         top: calc(var(--tb-height, 40px) * 0.85);
         left: 0;
         max-height: 300px;
-        overflow-y: auto; display: flex; flex-direction: column; width: 200px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        width: 360px;
     }
     .menu-item-row {
         display: flex;
