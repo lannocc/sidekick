@@ -459,11 +459,11 @@ function createWindowManager() {
 
             // Handle IoskConsole confirmation
             const tabToRemove = group.tabs[tabIndex];
-            if (tabToRemove.component === IoskConsole && tabToRemove.isConsoleConnected) {
-                if (!confirm("This console has an active connection. Are you sure you want to close it?")) {
-                    return windows;
-                }
-            }
+            //if (tabToRemove.component === IoskConsole && tabToRemove.isConsoleConnected) {
+            //    if (!confirm("This console has an active connection. Are you sure you want to close it?")) {
+            //        return windows;
+            //    }
+            //}
 
             if (group.tabs.length === 1) {
                 // Last tab, remove the whole group
@@ -494,13 +494,13 @@ function createWindowManager() {
 
                 // Check if any tab requires confirmation
                 for (const tab of group.tabs) {
-                     if (tab.component === IoskConsole && tab.isConsoleConnected) {
-                        if (!confirm(`Console "${tab.title}" has an active connection. Are you sure you want to close it?`)) {
-                            return currentWindows;
-                        }
-                        // Only need to confirm once for the whole group
-                        break;
-                    }
+                    //if (tab.component === IoskConsole && tab.isConsoleConnected) {
+                    //   if (!confirm(`Console "${tab.title}" has an active connection. Are you sure you want to close it?`)) {
+                    //       return currentWindows;
+                    //   }
+                    //   // Only need to confirm once for the whole group
+                    //   break;
+                    //}
                 }
             }
             return currentWindows.filter(g => g.id !== groupId);
@@ -657,11 +657,11 @@ function createWindowManager() {
         for (const group of windowsToCheck) {
             let tabsToKeep = [];
             for (const tab of group.tabs) {
-                if (tab.component === IoskConsole && tab.isConsoleConnected) {
-                    if (!confirm(`Console "${tab.title}" has an active connection. Close it anyway?`)) {
-                        tabsToKeep.push(tab);
-                    }
-                }
+                //if (tab.component === IoskConsole && tab.isConsoleConnected) {
+                //    if (!confirm(`Console "${tab.title}" has an active connection. Close it anyway?`)) {
+                //        tabsToKeep.push(tab);
+                //    }
+                //}
             }
             if (tabsToKeep.length > 0) {
                 windowsToKeep.push({ ...group, tabs: tabsToKeep });
