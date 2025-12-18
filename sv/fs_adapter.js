@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import { 
-    fileSystemRequests, 
+    sendRequest, 
     fileSystemResponses, 
     fileSystemWatchEvents, 
     fileSystemTailEvents 
@@ -14,7 +14,7 @@ import {
     fsTailEvent
 } from './bridge.js';
 
-export function createFsAdapter({ connectionType, consoleId, requesterId }) {
+export function createFsAdapter({ connectionType, connectionId, requesterId }) {
     // Public stores for components to subscribe to
     const listResponse = writable(null);
     const readResponse = writable(null);
@@ -43,13 +43,13 @@ export function createFsAdapter({ connectionType, consoleId, requesterId }) {
         }));
 
         unsubscribers.push(fileSystemWatchEvents.subscribe(event => {
-            if (event && event.consoleId === consoleId) {
+            if (event && event.connectionId === connectionId) {
                 watchEvent.set(event.data);
             }
         }));
 
         unsubscribers.push(fileSystemTailEvents.subscribe(event => {
-            if (event && event.consoleId === consoleId) {
+            if (event && event.connectionId === connectionId) {
                 tailEvent.set(event.data);
             }
         }));
@@ -108,8 +108,8 @@ export function createFsAdapter({ connectionType, consoleId, requesterId }) {
 
         requestPath: (path, recursive = false, honor_skignore = false) => {
             if (connectionType === 'iosk') {
-                const command = { type: 'fs_list', path, recursive, honor_skignore };
-                fileSystemRequests.set({ consoleId, requesterId, command, timestamp: Date.now() });
+                const command = { type: 'fs_list', path, recursive, honor_skignore, requesterId };
+                sendRequest(connectionId, command);
             } else {
                 sendMessage({ type: 'fs_list', path, recursive, requester_id: requesterId });
             }
@@ -117,8 +117,8 @@ export function createFsAdapter({ connectionType, consoleId, requesterId }) {
 
         readFile: (path, offset = 0, length = -1) => {
             if (connectionType === 'iosk') {
-                const command = { type: 'fs_read', path, offset, length };
-                fileSystemRequests.set({ consoleId, requesterId, command, timestamp: Date.now() });
+                const command = { type: 'fs_read', path, offset, length, requesterId };
+                sendRequest(connectionId, command);
             } else {
                 sendMessage({ type: 'fs_read', path, offset, length, requester_id: requesterId });
             }
@@ -126,29 +126,29 @@ export function createFsAdapter({ connectionType, consoleId, requesterId }) {
 
         watch: (path) => {
             if (connectionType === 'iosk') {
-                fileSystemRequests.set({ consoleId, command: { type: 'fs_watch_start', path }, timestamp: Date.now() });
+                sendRequest(connectionId, { type: 'fs_watch_start', path });
             } else {
                 sendMessage({ type: 'fs_watch_start', path });
             }
         },
         unwatch: (path) => {
-             if (connectionType === 'iosk') {
-                fileSystemRequests.set({ consoleId, command: { type: 'fs_watch_stop', path }, timestamp: Date.now() });
+            if (connectionType === 'iosk') {
+                sendRequest(connectionId, { type: 'fs_watch_stop', path });
             } else {
                 sendMessage({ type: 'fs_watch_stop', path });
             }
         },
 
         tail: (path) => {
-             if (connectionType === 'iosk') {
-                fileSystemRequests.set({ consoleId, command: { type: 'fs_tail_start', path }, timestamp: Date.now() });
+            if (connectionType === 'iosk') {
+                sendRequest(connectionId, { type: 'fs_tail_start', path });
             } else {
                 sendMessage({ type: 'fs_tail_start', path });
             }
         },
         untail: (path) => {
-             if (connectionType === 'iosk') {
-                fileSystemRequests.set({ consoleId, command: { type: 'fs_tail_stop', path }, timestamp: Date.now() });
+            if (connectionType === 'iosk') {
+                sendRequest(connectionId, { type: 'fs_tail_stop', path });
             } else {
                 sendMessage({ type: 'fs_tail_stop', path });
             }
