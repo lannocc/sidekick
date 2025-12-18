@@ -20,6 +20,7 @@
     let messageContainer;
     let inputEl;
     let shouldScroll = true;
+    let mountTimestamp;
 
     // Reactive function to get the display name (username part) from a full address
     const getDisplayName = (fullAddress) => (fullAddress || '').split('.')[0];
@@ -44,7 +45,7 @@
     }
 
     function handleMessage(message) {
-        if (!message || message.connectionId !== connectionId) return;
+        if (!message || message.connectionId !== connectionId || message.timestamp < mountTimestamp) return;
 
         const isForThisWindow =
             (message.from === remoteUser && message.to === localUser) ||
@@ -68,6 +69,7 @@
 
     let unsubscribe;
     onMount(() => {
+        mountTimestamp = Date.now();
         unsubscribe = privateMessages.subscribe(handleMessage);
         focusInput();
     });
