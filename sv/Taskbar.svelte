@@ -5,9 +5,10 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows } from './windows.js';
-    import { appList, newNotificationCenter } from './apps.js';
+    import { appList, newNotificationCenter, newIoskConsole } from './apps.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled, componentIconMap } from './desktop.js';
-    import { connectionStatus, switchToBox, boxes, runningProcesses, stopProcess } from './bridge.js';
+    import { connectionStatus, switchToBox, boxes, runningProcesses, stopProcess, pauseProcess, resumeProcess } from './bridge.js';
+    import { activeIoskConnections, disconnect } from './iosk.js';
     import Clock from './Clock.svelte';
     import { get } from 'svelte/store';
 
@@ -16,6 +17,9 @@
 
     let showWindowsMenu = false; // For Windows list menu
     let windowsButton;
+
+    let showConnectionsMenu = false; // For the new Connections menu
+    let connectionsButton;
 
     let showQuickView = false; // For the new quick-view menu
     let quickViewButton;
@@ -447,6 +451,7 @@
     function handleWindowClick(event) {
         if (showMenu && startButton && !startButton.contains(event.target)) showMenu = false;
         if (showWindowsMenu && windowsButton && !windowsButton.contains(event.target)) showWindowsMenu = false;
+        if (showConnectionsMenu && connectionsButton && !connectionsButton.contains(event.target)) showConnectionsMenu = false;
         if (showQuickView && quickViewButton && !quickViewButton.contains(event.target)) {
             showQuickView = false;
         }
@@ -478,6 +483,41 @@
         toggleSkyCloak();
     }
 
+    // --- Connections Menu Helpers ---
+    function findConsoleTitle(connectionId) {
+        const allWindows = get(windows);
+        for (const group of allWindows) {
+            for (const tab of group.tabs) {
+                // IoskConsole tabs will have a connectionId on the tab object itself
+                if (tab.componentName === 'IoskConsole' && tab.connectionId === connectionId) {
+                    return tab.title;
+                }
+            }
+        }
+        return null;
+    }
+
+    function focusOrOpenConsole(connectionId) {
+        const allWindows = get(windows);
+        let found = false;
+        for (const group of allWindows) {
+            for (const tab of group.tabs) {
+                if (tab.componentName === 'IoskConsole' && tab.connectionId === connectionId) {
+                    windows.focusWindow(group.id, tab.id);
+                    found = true;
+                    break;
+                }
+            }
+            if (found) break;
+        }
+
+        if (!found) {
+            // As per proposal, apps.js will be updated to handle this
+            newIoskConsole({ connectionId });
+        }
+        showConnectionsMenu = false;
+    }
+
     onMount(() => {
         window.addEventListener('click', handleWindowClick);
     });
@@ -507,8 +547,7 @@
     .taskbar-left > .windows-button:nth-child(2) { background-color: #ffbd2e; border-color: #e0a320; color: white; }
     .taskbar-left > .windows-button:nth-child(2):hover { background-color: #e0a320; }
     .taskbar-left > .windows-button:nth-child(2).active {
-        background-color: #27ae60; /* A different green to indicate active state */
-        border-color: #229954;
+        background-color: #e0a320;
         box-shadow: inset 0 2px 4px rgba(0,0,0,0.25);
     }
     .start-button { background-color: #3498db; border: 1px solid #2980b9; color: white; transition: box-shadow 0.3s ease-in-out; padding: 4px; }
@@ -549,13 +588,20 @@
     .windows-button:hover { background-color: var(--taskbar-button-hover-bg); }
     .windows-button.active { background-color: var(--taskbar-button-hover-bg); }
 
-    .start-menu, .windows-menu, .quick-view-menu {
+    .start-menu, .windows-menu, .quick-view-menu, .connections-menu {
         position: absolute;
         background-color: var(--window-bg);
         border: 1px solid var(--border-color);
         border-radius: 4px;
         box-shadow: 0 3px 10px rgba(0,0,0,0.2);
         z-index: 21500;
+    }
+    .connections-menu {
+        top: calc(var(--tb-height, 40px) * 0.85);
+        left: 0;
+        width: 320px;
+        max-height: 400px;
+        overflow-y: auto;
     }
     .quick-view-menu {
         top: calc(var(--tb-height, 40px) + 5px);
@@ -700,7 +746,7 @@
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
     .menu-item-empty { padding: 10px 15px; color: #7f8c8d; font-style: italic; }
     
-    .quick-view-section-header {
+    .quick-view-section-header, .connections-section-header {
         padding: 6px 12px;
         font-size: 0.8em;
         font-weight: bold;
@@ -708,31 +754,45 @@
         background-color: var(--taskbar-button-bg);
         border-bottom: 1px solid var(--border-color);
     }
-    .quick-view-process-item {
+    .quick-view-process-item, .connections-process-item, .connections-frontend-item {
         display: flex;
         align-items: center;
         gap: 8px;
         padding: 8px 12px;
         border-bottom: 1px solid var(--border-color);
     }
-    .quick-view-process-item:last-of-type { border-bottom: none; }
+    .connections-frontend-item:hover { background-color: var(--taskbar-button-hover-bg); }
+    .quick-view-process-item:last-of-type, .connections-process-item:last-of-type, .connections-frontend-item:last-of-type { border-bottom: none; }
+    
     .status-indicator { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
     .status-running { background-color: #2ecc71; }
     .status-paused { background-color: #f39c12; }
-    .process-info { flex-grow: 1; overflow: hidden; }
-    .process-info .name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .process-info .status { font-size: 0.8em; color: var(--text-color-light); text-transform: capitalize; }
-    .quick-action-btn {
+    
+    .process-info, .connection-info { flex-grow: 1; overflow: hidden; }
+    .connection-info { cursor: pointer; }
+    .process-info .name, .connection-info .name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .process-info .status, .connection-info .status { font-size: 0.8em; color: var(--text-color-light); text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .quick-action-btn, .process-actions button, .connection-actions button {
         padding: 4px; width: 24px; height: 24px;
-        border: none; background-color: transparent; color: #e74c3c;
+        border: none; background-color: transparent;
         cursor: pointer; border-radius: 50%; display: flex;
         align-items: center; justify-content: center;
     }
+    .quick-action-btn { color: #e74c3c; }
     .quick-action-btn:hover { background-color: rgba(231, 76, 60, 0.2); }
-    .quick-action-btn svg { width: 16px; height: 16px; fill: currentColor; }
+    
+    .process-actions, .connection-actions { display: flex; gap: 4px; }
+    .process-actions button, .connection-actions button { color: var(--text-color-light); }
+    .process-actions button:hover, .connection-actions button:hover { background-color: var(--taskbar-button-hover-bg); color: var(--text-color); }
+    .process-actions .stop-btn, .connection-actions .disconnect-btn { color: #e74c3c; }
+    .process-actions .stop-btn:hover, .connection-actions .disconnect-btn:hover { background-color: rgba(231, 76, 60, 0.2); }
 
-    .quick-view-menu .menu-item { width: 100%; box-sizing: border-box; }
+    .quick-action-btn svg, .process-actions svg, .connection-actions svg { width: 16px; height: 16px; fill: currentColor; }
+
+    .quick-view-menu .menu-item, .connections-menu .menu-item { width: 100%; box-sizing: border-box; }
     .quick-view-menu .menu-item:first-of-type { border-top: 1px solid var(--border-color); }
+    .connections-menu .menu-item { border-top: 1px solid var(--border-color); }
 
     .close-all-row {
         cursor: pointer;
@@ -773,7 +833,7 @@
 <div class="taskbar" on:mousedown={handleTaskbarMouseDown} on:wheel={handleTaskbarWheel} style="--tb-height: {tbHeight}px">
     <div class="taskbar-left" bind:this={leftSectionEl}>
         <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>✕</button>
-        <button class="windows-button" class:active={$dashActive} on:click={() => dashActive.update(v => !v)} title="Dash">&mdash;</button>
+        <button class="windows-button" class:active={showConnectionsMenu} bind:this={connectionsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showConnectionsMenu = !showConnectionsMenu; }} title="Connections">&mdash;</button>
         {#if showWindowsMenu}
             <div class="windows-menu" style={menuBackgroundStyle}>
                 {#each boxHierarchy as box, i (box.id)}
@@ -845,6 +905,61 @@
                         <button type="button" class="menu-item">Close All Windows</button>
                     </div>
                 {/if}
+            </div>
+        {/if}
+        {#if showConnectionsMenu}
+            <div class="connections-menu" style={menuBackgroundStyle} on:click|stopPropagation>
+                <div class="connections-section-header">Managed IOSK Processes</div>
+                {#each $runningProcesses.filter(p => p.type === 'iosk' && (p.status === 'running' || p.status === 'paused')) as proc (proc.pid)}
+                    <div class="connections-process-item">
+                        <div class="status-indicator status-{proc.status}"></div>
+                        <div class="process-info">
+                            <div class="name" title={proc.box_name}>{proc.box_name || 'Untitled Process'}</div>
+                            <div class="status">PID: {proc.pid}</div>
+                        </div>
+                        <div class="process-actions">
+                            {#if proc.status === 'running'}
+                                <button title="Pause Process" on:click={() => pauseProcess(proc.pid)}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                                </button>
+                            {:else if proc.status === 'paused'}
+                                <button title="Resume Process" on:click={() => resumeProcess(proc.pid)}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                </button>
+                            {/if}
+                            <button class="stop-btn" title="Stop Process" on:click={() => stopProcess(proc.pid)}>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                {:else}
+                    <div class="menu-item-empty">No managed IOSK processes running.</div>
+                {/each}
+
+                {#if processesApp}
+                    <button class="menu-item" on:click={() => { processesApp.launcher(); showConnectionsMenu = false; }}>Open Process Manager</button>
+                {/if}
+                <div class="menu-separator"></div>
+
+                <div class="connections-section-header">Active Frontend Connections</div>
+                {#each Array.from($activeIoskConnections.entries()) as [connectionId, conn] (connectionId)}
+                    {@const consoleTitle = findConsoleTitle(connectionId)}
+                    <div class="connections-frontend-item">
+                        <div class="connection-info" on:click={() => focusOrOpenConsole(connectionId)} title="Focus Console">
+                            <div class="name">{connectionId}</div>
+                            {#if consoleTitle}
+                                <div class="status" title={consoleTitle}>{consoleTitle}</div>
+                            {/if}
+                        </div>
+                        <div class="connection-actions">
+                            <button class="disconnect-btn" title="Disconnect" on:click={() => disconnect(connectionId)}>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                {:else}
+                    <div class="menu-item-empty">No active frontend connections.</div>
+                {/each}
             </div>
         {/if}
     </div>

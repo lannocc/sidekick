@@ -61,7 +61,7 @@ export const appList = [
         id: 'iosk_connection',
         name: 'IOSK Console',
         icon: '🖥️',
-        launcher: newIoskConnection,
+        launcher: newIoskConsole,
         requiresConnection: false,
         menuPosition: { row: 0, col: 4 },
         badge: '/iosk.png',
@@ -131,7 +131,7 @@ export const appList = [
 
 // --- Window Creation Functions ---
 
-export function newIoskConnection(props = {}) {
+export function newIoskConsole(props = {}) {
     const allWindowSettings = get(windowSettings);
     const componentSettings = allWindowSettings['IoskConsole'];
     const globalSettings = get(desktopSettings);
