@@ -1777,16 +1777,39 @@ async def websocket_handler(websocket):
                     (pid, fd) = pty.fork()
 
                     if pid == 0:  # Child process
+                        new_env = os.environ.copy()
                         if path and os.path.isdir(path):
                             try:
                                 os.chdir(path)
                                 log.info(f"Child process for term_id {term_id} changed directory to: {path}")
+
+                                # --- VENV AUTO-ACTIVATION ---
+                                venv_dir_name = None
+                                if os.path.isdir('venv'):
+                                    venv_dir_name = 'venv'
+                                elif os.path.isdir('.venv'):
+                                    venv_dir_name = '.venv'
+                                
+                                if venv_dir_name:
+                                    venv_dir = os.path.abspath(venv_dir_name)
+                                    venv_bin = os.path.join(venv_dir, 'bin')
+                                    if os.path.isdir(venv_bin):
+                                        log.info(f"Activating virtual environment for term_id {term_id} at: {venv_dir}")
+                                        new_env['VIRTUAL_ENV'] = venv_dir
+                                        
+                                        path_var = new_env.get('PATH', '')
+                                        new_env['PATH'] = f'{venv_bin}:{path_var}'
+                                        
+                                        if 'PYTHONHOME' in new_env:
+                                            del new_env['PYTHONHOME']
+                                # --- END VENV AUTO-ACTIVATION ---
+
                             except Exception as e:
                                 log.error(f"Could not change directory to {path} for term_id {term_id}: {e}")
 
                         shell = os.environ.get('SHELL', 'sh')
                         log.info(f"Child process for term_id {term_id} launching shell: {shell}")
-                        os.execvpe(shell, [shell], os.environ)
+                        os.execvpe(shell, [shell], new_env)
                     else:  # Parent process
                         log.info(f"PTY forked for term_id {term_id} with child PID: {pid}")
                         fl = fcntl.fcntl(fd, fcntl.F_GETFL)
