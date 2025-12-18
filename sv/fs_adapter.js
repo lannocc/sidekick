@@ -37,7 +37,9 @@ export function createFsAdapter({ connectionType, connectionId, requesterId }) {
                     // Handle file listings wrapped in a generic command response
                     listResponse.set({ path: responseData.path, entries: responseData.listing, error: responseData.error, requester_id: msg.requesterId });
                 } else if (responseData.type === 'fs_read_response') {
-                    readResponse.set(responseData); // Forward the whole data object
+                    // --- MODIFICATION START: Normalize the requester ID to match component expectations ---
+                    readResponse.set({ ...responseData, requester_id: msg.requesterId });
+                    // --- MODIFICATION END ---
                 }
             }
         }));
