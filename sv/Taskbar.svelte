@@ -1101,6 +1101,12 @@
                 <div class="connections-section-header">Managed IOSK Processes</div>
                 {#each $runningProcesses.filter(p => p.type === 'iosk' && (p.status === 'running' || p.status === 'paused')) as proc (proc.pid)}
                     <div class="connections-process-item">
+                        <div class="process-actions">
+                             <button class="stop-btn" title="Stop Process" on:click={() => stopProcess(proc.pid)}>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                            </button>
+                        </div>
+                        <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />
                         <div class="status-indicator status-{proc.status}"></div>
                         <div class="process-info">
                             <div class="name" title={proc.box_name}>{proc.box_name || 'Untitled Process'}</div>
@@ -1116,9 +1122,6 @@
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                                 </button>
                             {/if}
-                            <button class="stop-btn" title="Stop Process" on:click={() => stopProcess(proc.pid)}>
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
-                            </button>
                         </div>
                     </div>
                 {:else}
@@ -1126,7 +1129,9 @@
                 {/each}
 
                 {#if processesApp}
-                    <button class="menu-item" on:click={() => { processesApp.launcher(); showConnectionsMenu = false; }}>Open Process Manager</button>
+                    <button class="menu-item" on:click={() => { processesApp.launcher(); showConnectionsMenu = false; }}>
+                        <span class="menu-item-icon">{processesApp.icon}</span>Open Process Manager
+                    </button>
                 {/if}
                 <div class="menu-separator"></div>
 
@@ -1134,16 +1139,17 @@
                 {#each Array.from($activeIoskConnections.entries()) as [connectionId, conn] (connectionId)}
                     {@const consoleTitle = findConsoleTitle(connectionId)}
                     <div class="connections-frontend-item">
+                        <div class="connection-actions">
+                            <button class="disconnect-btn" title="Disconnect" on:click={() => disconnect(connectionId)}>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                            </button>
+                        </div>
+                         <span class="menu-item-icon" style="font-weight: bold;">»_</span>
                         <div class="connection-info" on:click={() => focusOrOpenConsole(connectionId)} title="Focus Console">
                             <div class="name">{connectionId}</div>
                             {#if consoleTitle}
                                 <div class="status" title={consoleTitle}>{consoleTitle}</div>
                             {/if}
-                        </div>
-                        <div class="connection-actions">
-                            <button class="disconnect-btn" title="Disconnect" on:click={() => disconnect(connectionId)}>
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-                            </button>
                         </div>
                     </div>
                 {:else}
