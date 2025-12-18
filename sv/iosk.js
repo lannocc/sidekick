@@ -132,7 +132,7 @@ export function initiateConnection(url, username) {
                     privateMessages.set({
                         connectionId,
                         from: stripAnsi(data.from),
-                        to: data.to,
+                        to: stripAnsi(data.to),
                         content: data.content,
                         timestamp: Date.now()
                     });
@@ -288,4 +288,3 @@ export function sendRequest(connectionId, request) {
         console.warn(`Cannot send request to ${connectionId}: not connected.`);
     }
 }
-

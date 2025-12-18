@@ -90,9 +90,17 @@
         const command = `@${remoteUser} ${trimmedMessage}`;
         sendCommand(connectionId, command);
 
-        // Local echo of the message is removed. The central connection hub will receive
-        // the message back from the server and update the `privateMessages` store,
-        // making the server the single source of truth.
+        // Add a local echo of the sent message for immediate feedback.
+        // The server delivers the message to the recipient but does not echo it
+        // back to the sender, so we must display it ourselves.
+        messages = [...messages, {
+            from: localUser,
+            to: remoteUser,
+            content: trimmedMessage,
+            timestamp: Date.now(),
+            connectionId: connectionId
+        }];
+        shouldScroll = true;
 
         inputMessage = '';
     }
