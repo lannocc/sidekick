@@ -122,7 +122,37 @@ The core of the frontend work is centralizing all WebSocket connection logic int
         *   `sendCommand(connectionId, command)`: Sends a command string through the specified connection's WebSocket.
         *   `sendRequest(connectionId, request)`: A generic function for sending structured requests (like `fs_list` from `IoskFileExplorer` or `exec_command` from `IoskWatch`).
 
-2.  **`sv/Taskbar.svelte`**:
+2.  **`sv/board/IoskConsole.svelte`**:
+    *   Refactor heavily to be a "dumb" viewer for a centrally managed connection.
+    *   It will take a `connectionId` prop and derive its entire display reactively from the corresponding entry in the `$activeIoskConnections` store.
+    *   It will no longer hold a `ws` instance or manage its own state.
+    *   The initial screen will show a list of active connections (from `$activeIoskConnections`) to attach to, plus an option to establish a new one.
+    *   UI actions ("Connect", "Disconnect", command input) will now call the centralized functions in `sv/iosk.js` (`initiateConnection`, `disconnect`, `sendCommand`).
+    *   Refactor the user list UI into a separate, reusable component (`IoskUsersList.svelte`) for use in the Box Menu.
+
+3.  **`sv/board/IoskUserInspector.svelte`**:
+    *   Refactor to remove the `consoleWs` prop and replace it with a `connectionId` prop.
+    *   All functions that currently send data over the WebSocket (e.g., `togglePause`, `sendInspectorCommand`) will be updated to call `iosk.sendCommand(connectionId, command)`.
+    *   The `onDestroy` logic will be simplified; it will no longer need to send an `ui_context_unsubscribe` message, as this can be managed by `sv/iosk.js` based on how many components are inspecting a given user.
+
+4.  **`sv/board/IoskPrivateChat.svelte`**:
+    *   Refactor to remove the `consoleId` prop and replace it with a `connectionId` prop.
+    *   The `sendMessage` function will be updated to call `iosk.sendCommand(connectionId, command)` instead of setting the `consoleCommands` store.
+
+5.  **`sv/board/IoskWatch.svelte`**:
+    *   Refactor to remove the `consoleId` prop and replace it with a `connectionId` prop.
+    *   The `sendWatchRequest` function will be updated to call `iosk.sendRequest(connectionId, request)` instead of setting the `fileSystemRequests` store.
+
+6.  **`sv/board/Boxes.svelte`**:
+    *   On the "IOSK" tab, add new UI controls: radio buttons for `port_mode`, a number input for `port_number`, and a text input for `default_username`.
+    *   Update `handleConfigChange` to bundle these new values into the `update_iosk_config` message.
+    *   Enhance the status display to show the assigned port number for running processes.
+
+7.  **`sv/apps.js`**:
+    *   Launchers for `newLocalFileExplorer` and `newLocalTerminal` can be used directly.
+    *   Launchers for all `iosk`-related apps (`IoskConsole`, `IoskFileExplorer`, `IoskUserInspector`, `IoskPrivateChat`, `IoskWatch`) will be updated to accept a `connectionId` to interface with the correct session.
+
+8.  **`sv/Taskbar.svelte`**:
     *   **Connections Menu (Yellow Button)**:
         *   Create a new dropdown component subscribing to `$runningProcesses` for the "Managed Processes" list and `$activeIoskConnections` for the "Active Connections" list.
         *   The "Disconnect" action will call `iosk.disconnect(connectionId)`.
@@ -133,32 +163,3 @@ The core of the frontend work is centralizing all WebSocket connection logic int
         *   For `iosk` Boxes, determine the active `connectionId` by finding the running process for the box in `$runningProcesses` and constructing the connection URL from its `port`.
         *   Refactor the user list from `IoskConsole.svelte` into a reusable component that takes its props from the relevant entry in `$activeIoskConnections`.
 
-3.  **`sv/board/IoskConsole.svelte`**:
-    *   Refactor heavily to be a "dumb" viewer for a centrally managed connection.
-    *   It will take a `connectionId` prop and derive its entire display reactively from the corresponding entry in the `$activeIoskConnections` store.
-    *   It will no longer hold a `ws` instance or manage its own state.
-    *   The initial screen will show a list of active connections (from `$activeIoskConnections`) to attach to, plus an option to establish a new one.
-    *   UI actions ("Connect", "Disconnect", command input) will now call the centralized functions in `sv/iosk.js` (`initiateConnection`, `disconnect`, `sendCommand`).
-    *   Refactor the user list UI into a separate, reusable component (`IoskUsersList.svelte`) for use in the Box Menu.
-
-4.  **`sv/board/IoskUserInspector.svelte`**:
-    *   Refactor to remove the `consoleWs` prop and replace it with a `connectionId` prop.
-    *   All functions that currently send data over the WebSocket (e.g., `togglePause`, `sendInspectorCommand`) will be updated to call `iosk.sendCommand(connectionId, command)`.
-    *   The `onDestroy` logic will be simplified; it will no longer need to send an `ui_context_unsubscribe` message, as this can be managed by `sv/iosk.js` based on how many components are inspecting a given user.
-
-5.  **`sv/board/IoskPrivateChat.svelte`**:
-    *   Refactor to remove the `consoleId` prop and replace it with a `connectionId` prop.
-    *   The `sendMessage` function will be updated to call `iosk.sendCommand(connectionId, command)` instead of setting the `consoleCommands` store.
-
-6.  **`sv/board/IoskWatch.svelte`**:
-    *   Refactor to remove the `consoleId` prop and replace it with a `connectionId` prop.
-    *   The `sendWatchRequest` function will be updated to call `iosk.sendRequest(connectionId, request)` instead of setting the `fileSystemRequests` store.
-
-7.  **`sv/board/Boxes.svelte`**:
-    *   On the "IOSK" tab, add new UI controls: radio buttons for `port_mode`, a number input for `port_number`, and a text input for `default_username`.
-    *   Update `handleConfigChange` to bundle these new values into the `update_iosk_config` message.
-    *   Enhance the status display to show the assigned port number for running processes.
-
-8.  **`sv/apps.js`**:
-    *   Launchers for `newLocalFileExplorer` and `newLocalTerminal` can be used directly.
-    *   Launchers for all `iosk`-related apps (`IoskConsole`, `IoskFileExplorer`, `IoskUserInspector`, `IoskPrivateChat`, `IoskWatch`) will be updated to accept a `connectionId` to interface with the correct session.
