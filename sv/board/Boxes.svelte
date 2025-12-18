@@ -94,7 +94,7 @@
         selectedBoxSettings = $specificSettingsResponse.settings || {};
     }
     $: if ($ioskConfigResponse && $ioskConfigResponse.box_id === selectedBoxId) {
-        const config = $ioskConfigResponse.config || { mount_point: '', mount_point_mode: 'none', daemon_mode: 1, enable_stdin: 0 };
+        const config = $ioskConfigResponse.config || { mount_point: '', mount_point_mode: 'none', daemon_mode: 1, enable_stdin: 1 };
         // Fallback for older data from a migrated DB
         if (!config.mount_point_mode) {
             config.mount_point_mode = config.mount_point ? 'custom' : 'none';

@@ -266,7 +266,7 @@ def init_db():
             mount_point TEXT,
             mount_point_mode TEXT NOT NULL DEFAULT 'managed',
             daemon_mode INTEGER NOT NULL DEFAULT 1,
-            enable_stdin INTEGER NOT NULL DEFAULT 0,
+            enable_stdin INTEGER NOT NULL DEFAULT 1,
             port_mode TEXT NOT NULL DEFAULT 'managed',
             port_number INTEGER,
             default_username TEXT,
@@ -274,7 +274,8 @@ def init_db():
         );
     """)
     cursor.execute("PRAGMA table_info(iosk)")
-    iosk_columns = [row['name'] for row in cursor.fetchall()]
+    iosk_columns_info = {row['name']: dict(row) for row in cursor.fetchall()}
+    iosk_columns = list(iosk_columns_info.keys())
     if 'mount_point_mode' not in iosk_columns:
         log.info("Applying database migration: Adding 'mount_point_mode' to 'iosk' table.")
         cursor.execute("ALTER TABLE iosk ADD COLUMN mount_point_mode TEXT;")
@@ -290,6 +291,54 @@ def init_db():
         cursor.execute("ALTER TABLE iosk ADD COLUMN port_number INTEGER;")
         cursor.execute("ALTER TABLE iosk ADD COLUMN default_username TEXT;")
         DB_CONN.commit()
+
+    # Refresh table info to check for the enable_stdin default value after other migrations
+    cursor.execute("PRAGMA table_info(iosk)")
+    iosk_columns_info = {row['name']: dict(row) for row in cursor.fetchall()}
+
+    # Migration to enable stdin by default
+    if 'enable_stdin' in iosk_columns_info and iosk_columns_info['enable_stdin']['dflt_value'] == '0':
+        log.info("Applying database migration: Setting 'iosk.enable_stdin' to default 1 and updating existing rows.")
+        try:
+            # The safest way to alter a column's default in SQLite is to rebuild the table.
+            # This is wrapped in a transaction to ensure atomicity.
+            cursor.execute("BEGIN TRANSACTION;")
+            
+            # 1. Rename the old table.
+            cursor.execute("ALTER TABLE iosk RENAME TO iosk_old;")
+
+            # 2. Create the new table with the corrected schema.
+            cursor.execute("""
+                CREATE TABLE iosk (
+                    box_id INTEGER PRIMARY KEY,
+                    mount_point TEXT,
+                    mount_point_mode TEXT NOT NULL DEFAULT 'managed',
+                    daemon_mode INTEGER NOT NULL DEFAULT 1,
+                    enable_stdin INTEGER NOT NULL DEFAULT 1,
+                    port_mode TEXT NOT NULL DEFAULT 'managed',
+                    port_number INTEGER,
+                    default_username TEXT,
+                    FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
+                );
+            """)
+
+            # 3. Copy data from the old table to the new.
+            cursor.execute("""
+                INSERT INTO iosk (box_id, mount_point, mount_point_mode, daemon_mode, enable_stdin, port_mode, port_number, default_username)
+                SELECT box_id, mount_point, mount_point_mode, daemon_mode, enable_stdin, port_mode, port_number, default_username
+                FROM iosk_old;
+            """)
+            
+            # 4. Drop the temporary old table.
+            cursor.execute("DROP TABLE iosk_old;")
+            
+            cursor.execute("COMMIT;")
+            log.info("Migration for 'iosk.enable_stdin' successful.")
+        except Exception as e:
+            cursor.execute("ROLLBACK;")
+            log.error(f"Migration for 'iosk.enable_stdin' failed: {e}. The database has been rolled back.", exc_info=True)
+        finally:
+            DB_CONN.commit()
 
 
     cursor.execute("""
