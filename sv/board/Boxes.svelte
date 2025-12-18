@@ -94,7 +94,16 @@
         selectedBoxSettings = $specificSettingsResponse.settings || {};
     }
     $: if ($ioskConfigResponse && $ioskConfigResponse.box_id === selectedBoxId) {
-        const config = $ioskConfigResponse.config || { mount_point: '', mount_point_mode: 'none', daemon_mode: 1, enable_stdin: 1 };
+        const defaults = {
+            mount_point: '',
+            mount_point_mode: 'none',
+            daemon_mode: 1,
+            enable_stdin: 1,
+            port_mode: 'managed',
+            port_number: null,
+            default_username: ''
+        };
+        const config = { ...defaults, ...($ioskConfigResponse.config || {}) };
         // Fallback for older data from a migrated DB
         if (!config.mount_point_mode) {
             config.mount_point_mode = config.mount_point ? 'custom' : 'none';
@@ -255,6 +264,9 @@
                 mount_point_mode: ioskConfig.mount_point_mode,
                 daemon_mode: ioskConfig.daemon_mode ? 1 : 0,
                 enable_stdin: ioskConfig.enable_stdin ? 1 : 0,
+                port_mode: ioskConfig.port_mode,
+                port_number: ioskConfig.port_mode === 'custom' ? (ioskConfig.port_number ? parseInt(ioskConfig.port_number, 10) : null) : null,
+                default_username: ioskConfig.default_username
             };
             updateIoskConfig(selectedBoxId, configPayload);
         }, 500);
@@ -356,7 +368,7 @@
     .controls .stop-btn:not(:disabled):hover { background-color: #e74c3c; }
     .config-grid { display: grid; grid-template-columns: auto 1fr; gap: 12px 8px; align-items: center; }
     .config-grid label { font-size: 0.9em; color: var(--text-color-light); justify-self: end; }
-    .config-grid input[type="text"] { width: 100%; }
+    .config-grid input[type="text"], .config-grid input[type="number"] { width: 100%; }
     .checkbox-group { display: flex; align-items: center; gap: 8px; cursor: pointer;}
     .checkbox-group input { width: 16px; height: 16px; }
     .checkbox-group.disabled { cursor: not-allowed; }
@@ -445,7 +457,9 @@
                                 <span class="status-text">{latestProcess?.status ?? 'Stopped'}</span>
                                 <span class="status-details">
                                     {#if activeProcess}
-                                        PID: {activeProcess.pid} &nbsp;&nbsp; Uptime: {uptime}
+                                        PID: {activeProcess.pid}
+                                        {#if activeProcess.port}&nbsp;&nbsp; Port: {activeProcess.port}{/if}
+                                        &nbsp;&nbsp; Uptime: {uptime}
                                     {:else if latestProcess}
                                         PID: {latestProcess.pid}
                                     {:else}
@@ -499,6 +513,21 @@
                                     <span class="managed-path-display">/mnt/{selectedBox.name}</span>
                                 {/if}
                                 
+                                <label>Network Port</label>
+                                <div class="mount-options-group">
+                                    <label><input type="radio" bind:group={ioskConfig.port_mode} value="managed" on:change={handleConfigChange} disabled={!!activeProcess} /> Managed</label>
+                                    <label><input type="radio" bind:group={ioskConfig.port_mode} value="custom" on:change={handleConfigChange} disabled={!!activeProcess} /> Custom</label>
+                                    <label><input type="radio" bind:group={ioskConfig.port_mode} value="none" on:change={handleConfigChange} disabled={!!activeProcess} /> None</label>
+                                </div>
+                                
+                                {#if ioskConfig.port_mode === 'custom'}
+                                    <label for="port-number-custom"></label>
+                                    <input id="port-number-custom" type="number" placeholder="e.g. 4209" bind:value={ioskConfig.port_number} on:input={handleConfigChange} disabled={!!activeProcess}>
+                                {/if}
+                                
+                                <label for="default-username">Default Username</label>
+                                <input id="default-username" type="text" placeholder="e.g. root" bind:value={ioskConfig.default_username} on:input={handleConfigChange} disabled={!!activeProcess}>
+
                                 <label for="daemon-mode">Daemon Mode</label>
                                 <label class="checkbox-group" class:disabled={!!activeProcess}>
                                     <input id="daemon-mode" type="checkbox" bind:checked={ioskConfig.daemon_mode} on:change={handleConfigChange} disabled={!!activeProcess}>
