@@ -1127,7 +1127,7 @@
                 {/if}
                 <div class="menu-separator"></div>
 
-                <div class="connections-section-header">Active Frontend Connections</div>
+                <div class="connections-section-header">Connected IOSK Sessions</div>
                 {#each Array.from($activeIoskConnections.entries()) as [connectionId, conn] (connectionId)}
                     {@const consoleTitle = findConsoleTitle(connectionId)}
                     <div class="connections-frontend-item">
