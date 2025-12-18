@@ -1814,6 +1814,33 @@
         cursor: default;
     }
 
+    /* --- MODIFICATION START --- */
+    .embedded-menu {
+        margin: 4px 8px 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 3px;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
+        background-color: var(--background-color);
+    }
+
+    .embedded-menu .context-menu-subheader {
+        background-color: var(--title-bar-bg);
+        border-bottom: 1px solid var(--border-color);
+        padding: 4px 10px;
+        font-size: 14px;
+    }
+
+    .embedded-menu-content {
+        padding: 4px;
+    }
+
+    .embedded-menu-content :global(button) {
+        padding: 6px 8px;
+        font-size: 13px;
+        border-radius: 2px;
+    }
+    /* --- MODIFICATION END --- */
+
     .context-menu button {
         background: none;
         border: none;
@@ -2237,11 +2264,17 @@
             <button on:click={handleNewBoxClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Box</button>
             <button on:click={handleNewShortcutClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Shortcut</button>
 
+            <!-- --- MODIFICATION START --- -->
             {#if $currentBoxId !== 0 && $currentBox}
                 <div class="context-menu-separator"></div>
-                <div class="context-menu-subheader">{$currentBox.name}</div>
-                <BoxContextMenu box={$currentBox} showDelete={false} showExit={true} on:close={closeContextMenu} />
+                <div class="embedded-menu">
+                    <div class="context-menu-subheader">{$currentBox.name}</div>
+                    <div class="embedded-menu-content">
+                        <BoxContextMenu box={$currentBox} showDelete={false} showExit={true} on:close={closeContextMenu} />
+                    </div>
+                </div>
             {/if}
+            <!-- --- MODIFICATION END --- -->
         </div>
     {/if}
 
