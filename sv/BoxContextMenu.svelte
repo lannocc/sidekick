@@ -24,12 +24,14 @@
         startIosk,
         stopProcess,
         pauseProcess,
-        resumeProcess
+        resumeProcess,
+        switchToBox
     } from './bridge.js';
     import { activeIoskConnections, initiateConnection } from './iosk.js';
 
     export let box;
     export let showDelete = true;
+    export let showExit = false;
 
     const dispatch = createEventDispatcher();
     function onClose() {
@@ -86,6 +88,13 @@
         onClose();
         if (confirm(`Are you sure you want to delete the box "${box.name}"?`)) {
             deleteBox(box.id);
+        }
+    }
+
+    function exitBox() {
+        onClose();
+        if (box.parent_box_id != null) {
+            switchToBox(box.parent_box_id);
         }
     }
 
@@ -240,8 +249,34 @@
     <div class="menu-separator"></div>
     <button on:click={deleteBoxConfirm} class="delete"><span class="menu-item-icon">🗑️</span>Delete</button>
 {/if}
+{#if showExit}
+    <div class="menu-separator"></div>
+    <button on:click={exitBox} class="delete"><span class="menu-item-icon">⏏️</span>Exit Box</button>
+{/if}
 
 <style>
+    button {
+        background: none;
+        border: none;
+        color: var(--taskbar-text);
+        padding: 8px 12px;
+        text-align: left;
+        cursor: pointer;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    button:not(:disabled):hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    button:disabled {
+        color: var(--text-color-light);
+        cursor: not-allowed;
+        opacity: 0.5;
+    }
+
     .menu-item-icon {
         margin-right: 8px;
         width: 16px;
@@ -257,7 +292,7 @@
     }
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
     .delete { color: #e74c3c; }
-    :global(.context-menu .delete:hover), :global(.submenu .delete:hover) {
+    .delete:hover {
         background-color: #c0392b;
         color: white;
     }
@@ -270,8 +305,8 @@
         background-color: var(--title-bar-bg);
         cursor: default;
     }
-    /* These need to be global to be applied from the parent component's class */
-    :global(.context-menu button.menu-item-indented), :global(.submenu button.menu-item-indented) {
+    
+    button.menu-item-indented {
         padding-left: 24px;
     }
 </style>

@@ -2231,7 +2231,7 @@
                         {$currentBox.name}
                     </button>
                     <div class="submenu" class:open-left={openSubmenuLeft} class:open-up={openSubmenuUp}>
-                        <BoxContextMenu box={$currentBox} showDelete={false} on:close={closeContextMenu} />
+                        <BoxContextMenu box={$currentBox} showDelete={false} showExit={true} on:close={closeContextMenu} />
                     </div>
                 </div>
             {/if}
