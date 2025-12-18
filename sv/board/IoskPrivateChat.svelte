@@ -5,15 +5,13 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { consoleCommands, privateMessages } from '../iosk.js';
+    import { sendCommand, privateMessages } from '../iosk.js';
     import { windows } from '../windows.js';
-    import { activeConsoles } from '../apps.js';
     import { parseAnsi, stripAnsi } from '../ansi.js';
 
     export let id;
     export let groupId;
-    export let consoleId;
-    export let consoleConnection = null; // Passed during Dash restore
+    export let connectionId;
     export let localUser;
     export let remoteUser;
 
@@ -28,19 +26,11 @@
 
     // Update window store with props for Dash saving
     $: if (id !== undefined && groupId !== undefined) {
-        windows.updateTabProps(groupId, id, { consoleId, localUser, remoteUser, consoleConnection });
+        windows.updateTabProps(groupId, id, { connectionId, localUser, remoteUser });
     }
 
-    // Reactive logic to find console after a Dash restore
-    $: if (consoleConnection && $windows) {
-        const myConsoleTab = $windows.flatMap(w => w.tabs).find(t => t.id === consoleId);
-        
-        if (!myConsoleTab || !myConsoleTab.isConsoleConnected) {
-            const key = `${consoleConnection.user}@${consoleConnection.url}`;
-            const compatibleConsole = $activeConsoles.get(key);
-            consoleId = compatibleConsole ? compatibleConsole.id : null;
-        }
-    }
+    // Reactive logic to find console after a Dash restore is no longer needed
+    // with the persistent, centralized connection management system.
 
     async function focusInput() {
         await tick();
@@ -54,7 +44,7 @@
     }
 
     function handleMessage(message) {
-        if (!message) return;
+        if (!message || message.connectionId !== connectionId) return;
 
         const isForThisWindow =
             (message.from === remoteUser && message.to === localUser) ||
@@ -95,17 +85,14 @@
 
     function sendMessage() {
         const trimmedMessage = inputMessage.trim();
-        if (!trimmedMessage) return;
+        if (!trimmedMessage || !connectionId) return;
 
         const command = `@${remoteUser} ${trimmedMessage}`;
-        consoleCommands.set({ consoleId, command, timestamp: Date.now() });
+        sendCommand(connectionId, command);
 
-        privateMessages.set({
-            from: localUser,
-            to: remoteUser,
-            content: trimmedMessage,
-            timestamp: Date.now()
-        });
+        // Local echo of the message is removed. The central connection hub will receive
+        // the message back from the server and update the `privateMessages` store,
+        // making the server the single source of truth.
 
         inputMessage = '';
     }
@@ -134,7 +121,7 @@
     </div>
     <div class="input-area" on:click={focusInput}>
         <form on:submit|preventDefault={sendMessage} style="width: 100%; display: flex;">
-            <input type="text" bind:this={inputEl} bind:value={inputMessage} placeholder="Type your message..." spellcheck="false" disabled={!consoleId} />
+            <input type="text" bind:this={inputEl} bind:value={inputMessage} placeholder="Type your message..." spellcheck="false" disabled={!connectionId} />
         </form>
     </div>
 </div>
