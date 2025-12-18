@@ -14,6 +14,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { connectionStatus } from './bridge.js';
+    import BoxContextMenu from './BoxContextMenu.svelte';
     import { fade } from 'svelte/transition';
     import InstanceRegistrar from './InstanceRegistrar.svelte';
 
@@ -2224,6 +2225,16 @@
                     {/each}
                 </div>
             </div>
+            {#if $currentBoxId !== 0 && $currentBox}
+                <div class="context-menu-item-container">
+                    <button class="context-menu-item-with-submenu" class:open-left={openSubmenuLeft}>
+                        {$currentBox.name}
+                    </button>
+                    <div class="submenu" class:open-left={openSubmenuLeft} class:open-up={openSubmenuUp}>
+                        <BoxContextMenu box={$currentBox} showDelete={false} on:close={closeContextMenu} />
+                    </div>
+                </div>
+            {/if}
             <div class="context-menu-separator"></div>
             <!-- MODIFICATION END -->
             <button on:click={handleNewBoxClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Box</button>

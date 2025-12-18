@@ -5,37 +5,26 @@
 <script>
     import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
-    import { dragState, windows, generateBoardConfigFromWindow, } from './windows.js';
+    import { dragState, windows, generateBoardConfigFromWindow } from './windows.js';
     import { 
-        newAskWindow, 
         newWebBrowser, 
-        newLocalFileExplorer, 
-        newLocalTerminal,
         showBoxesAndSelect,
-        newIoskConsole,
-        newIoskFileExplorer
     } from './apps.js';
     import { 
-        updateBox, 
-        deleteBox, 
         savePanelConfig, 
         updateBoxTransform, 
         setBoxCover, 
         switchToBox, 
         allBoxSettings, 
         getBoxSpecificSettings, 
-        promoteToIosk, 
         runningProcesses,
         allIoskConfigs,
         getIoskConfig,
-        startIosk,
-        stopProcess,
-        pauseProcess,
-        resumeProcess
     } from './bridge.js';
     import { activeIoskConnections, initiateConnection } from './iosk.js';
     import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId, calculateContextMenuPosition } from './desktop.js';
     import Panel from './Panel.svelte';
+    import BoxContextMenu from './BoxContextMenu.svelte';
 
     export let box;
 
@@ -44,41 +33,6 @@
     // --- Process Status ---
     $: activeProcess = $runningProcesses.find(p => p.box_id === box.id && (p.status === 'running' || p.status === 'paused'));
     $: processStatus = activeProcess?.status;
-    
-    // --- IOSK Context Menu Logic ---
-    let ioskConnections = [];
-    let defaultUserConnectionInfo = {
-        exists: false,
-        connectionId: null,
-        username: 'root'
-    };
-
-    $: {
-        if (box.type === 'iosk' && activeProcess?.port) {
-            const urlPart = `ws://localhost:${activeProcess.port}`;
-            
-            // 1. Find all active connections for this box's URL
-            const allConnections = Array.from($activeIoskConnections.entries());
-            ioskConnections = allConnections
-                .filter(([, conn]) => conn.url === urlPart)
-                .map(([id, conn]) => ({ connectionId: id, username: conn.username, status: conn.status }));
-
-            // 2. Check for the default user connection
-            const config = $allIoskConfigs[box.id];
-            const defaultUsername = config?.default_username || 'root';
-            const defaultConnectionId = `${defaultUsername}@${urlPart}`;
-            const defaultConnectionExists = ioskConnections.some(c => c.username === defaultUsername);
-
-            defaultUserConnectionInfo = {
-                exists: defaultConnectionExists,
-                connectionId: defaultConnectionId,
-                username: defaultUsername
-            };
-        } else {
-            ioskConnections = [];
-            defaultUserConnectionInfo = { exists: false, connectionId: null, username: 'root' };
-        }
-    }
     
     // --- IOSK Connection Status ---
     let connectionId = null;
@@ -107,7 +61,6 @@
     $: if (box.y != null) y = box.y;
     $: if (box.scale != null) scale = box.scale;
     $: coverPanelLocation = box.cover_panel_location;
-    $: canSetCover = !coverPanelLocation;
     $: isSelected = $selectedItems.has(`box-${box.id}`);
 
     // --- Unfold State ---
@@ -451,133 +404,6 @@
         }
     }
 
-    // --- Context Menu Actions ---
-    function renameBox() {
-        closeContextMenu();
-        const newName = prompt(`Rename box "${box.name}":`, box.name);
-        if (newName && newName.trim() !== '' && newName !== box.name) {
-            updateBox(box.id, newName);
-        }
-    }
-
-    function deleteBoxConfirm() {
-        closeContextMenu();
-        if (confirm(`Are you sure you want to delete the box "${box.name}"?`)) {
-            deleteBox(box.id);
-        }
-    }
-
-    function askBox() {
-        closeContextMenu();
-        newAskWindow([box.context]);
-        isUnfolded = false;
-    }
-
-    function openTerminal() {
-        closeContextMenu();
-        if (box.context) {
-            newLocalTerminal({ title: `Terminal - ${box.name}`, initialPath: box.context });
-            isUnfolded = false;
-        }
-    }
-
-    function openFiles() {
-        closeContextMenu();
-        if (box.context) {
-            newLocalFileExplorer({ title: `Local Files - ${box.name}`, initialPath: box.context });
-            isUnfolded = false;
-        }
-    }
-
-    function handlePromoteToIosk() {
-        closeContextMenu();
-        promoteToIosk(box.id);
-    }
-
-    function handleOpenConsole(connectionId, shouldConnect = false) {
-        closeContextMenu();
-        if (shouldConnect) {
-            const [username, url] = connectionId.split('@');
-            initiateConnection(url, username);
-        }
-        newIoskConsole({ connectionId });
-        isUnfolded = false;
-    }
-
-    function handleOpenFiles(connectionId, shouldConnect = false) {
-        closeContextMenu();
-        isUnfolded = false;
-
-        if (shouldConnect) {
-            const [username, url] = connectionId.split('@');
-            initiateConnection(url, username);
-            
-            const unsubscribe = activeIoskConnections.subscribe(conns => {
-                const currentConn = conns.get(connectionId);
-                if (currentConn?.status === 'connected') {
-                    newIoskFileExplorer({ connectionId });
-                    unsubscribe();
-                } else if (currentConn?.status === 'error' || currentConn?.status === 'disconnected') {
-                    alert(`Failed to connect to IOSK for box "${box.name}".`);
-                    unsubscribe();
-                }
-            });
-            setTimeout(() => unsubscribe(), 5000); // 5s timeout
-        } else {
-            const connState = get(activeIoskConnections).get(connectionId);
-            if (connState?.status === 'connected') {
-                newIoskFileExplorer({ connectionId });
-            } else {
-                // This case shouldn't happen because the button is disabled, but good to have a fallback.
-                alert('Connection is not active. Cannot open file explorer.');
-            }
-        }
-    }
-
-    function setCoverImage() {
-        closeContextMenu();
-        if (!canSetCover) {
-            alert("A cover image is already set.");
-            return;
-        }
-        const url = prompt("Enter URL for cover image:");
-        if (url) {
-            // Pick a preferred empty slot, e.g., 'top' at (0, -1)
-            const preferredSlot = availableSlots.find(s => s.x === 0 && s.y === -1) || availableSlots[0];
-            if (!preferredSlot) {
-                alert("Could not find an available panel slot.");
-                return;
-            }
-            const { x, y, parent } = preferredSlot;
-            const locationKey = `${x}_${y}`;
-            savePanelConfig(box.id, x, y, 'image', { url }, parent);
-            setBoxCover(box.id, locationKey);
-            isUnfolded = false;
-        }
-    }
-
-    function setCoverImageFromPicker() {
-        const { location, parent } = panelPickerProps; // location is {x, y}
-        showPanelPicker = false;
-        isUnfolded = false;
-
-        const url = prompt("Enter URL for cover image:");
-        if (url) {
-            const locationKey = `${location.x}_${location.y}`;
-            savePanelConfig(box.id, location.x, location.y, 'image', { url }, parent);
-            setBoxCover(box.id, locationKey);
-        }
-    }
-
-    function clearCoverImage() {
-        closeContextMenu();
-        if (coverPanelLocation) {
-            const [loc_x, loc_y] = coverPanelLocation.split('_').map(Number);
-            savePanelConfig(box.id, loc_x, loc_y, 'empty', null, null);
-            setBoxCover(box.id, null);
-        }
-    }
-
     function clearPanel() {
         const { location } = panelContextMenu; // location is {x, y}
         closePanelContextMenu();
@@ -588,6 +414,19 @@
             }
             savePanelConfig(box.id, location.x, location.y, 'empty', null, null);
             isUnfolded = false;
+        }
+    }
+ 
+    function setCoverImageFromPicker() {
+        const { location, parent } = panelPickerProps; // location is {x, y}
+        showPanelPicker = false;
+        isUnfolded = false;
+
+        const url = prompt("Enter URL for cover image:");
+        if (url) {
+            const locationKey = `${location.x}_${location.y}`;
+            savePanelConfig(box.id, location.x, location.y, 'image', { url }, parent);
+            setBoxCover(box.id, locationKey);
         }
     }
 
@@ -1313,67 +1152,8 @@
 </div>
 
 {#if contextMenu.visible}
-    <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
-        <button on:click={askBox}><span class="menu-item-icon">?</span>Ask...</button>
-        <button on:click={openTerminal}><span class="menu-item-icon">&gt;_</span>Terminal</button>
-        <button on:click={openFiles}><span class="menu-item-icon">📁</span>Files</button>
-        
-        {#if box.type === 'iosk'}
-            <div class="menu-separator"></div>
-            
-            <!-- List existing connections -->
-            {#each ioskConnections as conn (conn.connectionId)}
-                <div class="menu-subheader">{conn.username}</div>
-                <button class="menu-item-indented" on:click={() => handleOpenConsole(conn.connectionId)}>
-                    <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />
-                    Console
-                </button>
-                <button class="menu-item-indented" on:click={() => handleOpenFiles(conn.connectionId)} disabled={conn.status !== 'connected'}>
-                    <span class="menu-item-icon">📁</span>
-                    Files
-                </button>
-            {/each}
-
-            <!-- Offer to connect as default user if not already connected -->
-            {#if !defaultUserConnectionInfo.exists && activeProcess?.port}
-                {#if ioskConnections.length > 0}<div class="menu-separator"></div>{/if}
-                <div class="menu-subheader">New as {defaultUserConnectionInfo.username}</div>
-                <button class="menu-item-indented" on:click={() => handleOpenConsole(defaultUserConnectionInfo.connectionId, true)}>
-                    <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />
-                    Console
-                </button>
-                <button class="menu-item-indented" on:click={() => handleOpenFiles(defaultUserConnectionInfo.connectionId, true)}>
-                    <span class="menu-item-icon">📁</span>
-                    Files
-                </button>
-            {/if}
-
-            <div class="menu-separator"></div>
-            {#if activeProcess}
-                {#if activeProcess.status === 'running'}
-                    <button on:click={() => pauseProcess(activeProcess.pid)}><span class="menu-item-icon">⏸️</span>Pause</button>
-                {/if}
-                {#if activeProcess.status === 'paused'}
-                    <button on:click={() => resumeProcess(activeProcess.pid)}><span class="menu-item-icon">▶️</span>Resume</button>
-                {/if}
-                <button on:click={() => stopProcess(activeProcess.pid)}><span class="menu-item-icon">⏹️</span>Stop</button>
-            {:else}
-                <button on:click={() => startIosk(box.id)}><span class="menu-item-icon">▶️</span>Start</button>
-            {/if}
-        {/if}
-        
-        <div class="menu-separator"></div>
-        {#if box.type === 'local' && box.id !== 0}
-            <button on:click={handlePromoteToIosk}><img src="/iosk.png" alt="IOSK" class="menu-item-icon" />Promote to IOSK Box</button>
-            <div class="menu-separator"></div>
-        {/if}
-        <button on:click={() => showBoxesAndSelect(box.id)}><span class="menu-item-icon">🔧</span>Configuration...</button>
-        <button on:click={renameBox}><span class="menu-item-icon">✏️</span>Rename...</button>
-        <div class="menu-separator"></div>
-        <button on:click={setCoverImage} disabled={!canSetCover}><span class="menu-item-icon">🖼️</span>Set Cover Image...</button>
-        <button on:click={clearCoverImage} disabled={!coverPanelLocation}><span class="menu-item-icon">🚫</span>Clear Cover Image</button>
-        <div class="menu-separator"></div>
-        <button on:click={deleteBoxConfirm} class="delete"><span class="menu-item-icon">🗑️</span>Delete</button>
+    <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation >
+        <BoxContextMenu {box} showDelete={true} on:close={closeContextMenu} />
     </div>
 {/if}
 
