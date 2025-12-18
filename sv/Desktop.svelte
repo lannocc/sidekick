@@ -1805,6 +1805,15 @@
         margin: 4px 0;
     }
 
+    .context-menu-subheader {
+        padding: 4px 12px;
+        font-size: 12px;
+        font-weight: bold;
+        color: var(--title-bar-text);
+        background-color: var(--title-bar-bg);
+        cursor: default;
+    }
+
     .context-menu button {
         background: none;
         border: none;
@@ -2209,7 +2218,6 @@
 
     {#if contextMenu.visible && !wasPanning}
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
-            <!-- MODIFICATION START -->
             <div class="context-menu-item-container">
                 <button class="context-menu-item-with-submenu" class:open-left={openSubmenuLeft}>SKYBOARD</button>
                 <div class="submenu" class:open-left={openSubmenuLeft} class:open-up={openSubmenuUp}>
@@ -2225,20 +2233,15 @@
                     {/each}
                 </div>
             </div>
-            {#if $currentBoxId !== 0 && $currentBox}
-                <div class="context-menu-item-container">
-                    <button class="context-menu-item-with-submenu" class:open-left={openSubmenuLeft}>
-                        {$currentBox.name}
-                    </button>
-                    <div class="submenu" class:open-left={openSubmenuLeft} class:open-up={openSubmenuUp}>
-                        <BoxContextMenu box={$currentBox} showDelete={false} showExit={true} on:close={closeContextMenu} />
-                    </div>
-                </div>
-            {/if}
-            <div class="context-menu-separator"></div>
-            <!-- MODIFICATION END -->
+            
             <button on:click={handleNewBoxClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Box</button>
             <button on:click={handleNewShortcutClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Shortcut</button>
+
+            {#if $currentBoxId !== 0 && $currentBox}
+                <div class="context-menu-separator"></div>
+                <div class="context-menu-subheader">{$currentBox.name}</div>
+                <BoxContextMenu box={$currentBox} showDelete={false} showExit={true} on:close={closeContextMenu} />
+            {/if}
         </div>
     {/if}
 
