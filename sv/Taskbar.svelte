@@ -7,7 +7,7 @@
     import { windows } from './windows.js';
     import { appList, newNotificationCenter, newIoskConsole, newLocalFileExplorer, newLocalTerminal, newIoskFileExplorer, newIoskUserInspector, newIoskPrivateChat } from './apps.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled, componentIconMap } from './desktop.js';
-    import { connectionStatus, switchToBox, boxes, runningProcesses, stopProcess, pauseProcess, resumeProcess } from './bridge.js';
+    import { connectionStatus, switchToBox, boxes, runningProcesses, stopProcess, pauseProcess, resumeProcess, allIoskConfigs } from './bridge.js';
     import { activeIoskConnections, disconnect, initiateConnection, sendCommand } from './iosk.js';
     import Clock from './Clock.svelte';
     import { get } from 'svelte/store';
@@ -558,17 +558,20 @@
     let ioskProcess = null;
     let connectionId = null;
     let ioskConnectionState = null;
-    const IOSK_USERNAME = 'root'; // Use a default username as config isn't available here
+    let currentIoskConfig = null;
 
     $: isIoskBox = $currentBox?.type === 'iosk';
     $: if (isIoskBox && $currentBox) {
+        currentIoskConfig = $allIoskConfigs[$currentBox.id] ?? null;
         ioskProcess = $runningProcesses.find(p => p.box_id === $currentBox.id && (p.status === 'running' || p.status === 'paused'));
     } else {
+        currentIoskConfig = null;
         ioskProcess = null;
     }
 
     $: if (ioskProcess?.port) {
-        connectionId = `${IOSK_USERNAME}@ws://localhost:${ioskProcess.port}`;
+        const username = currentIoskConfig?.default_username || 'root';
+        connectionId = `${username}@ws://localhost:${ioskProcess.port}`;
     } else {
         connectionId = null;
     }
@@ -613,14 +616,15 @@
 
     function handleUserClick(user) {
         if (!connectionId) return;
+        const username = currentIoskConfig?.default_username || 'root';
         newIoskPrivateChat({
             connectionId,
-            localUser: IOSK_USERNAME,
+            localUser: username,
             remoteUser: user.name
         });
         showQuickView = false;
     }
-    
+
     function toggleAgentPause(user) {
         if (!connectionId) return;
         const command = user.paused ? `!resume ${user.name}` : `!pause ${user.name}`;

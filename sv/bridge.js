@@ -34,6 +34,7 @@ export const requestedPid = writable(null);
 // --- ProcBox Stores ---
 export const runningProcesses = writable([]);
 export const ioskConfigResponse = writable(null);
+export const allIoskConfigs = writable({});
 export const processOutput = writable(null);
 
 
@@ -182,6 +183,13 @@ export function switchToBox(boxId) {
     sendMessage({ type: 'get_desktop_settings', box_id: boxId });
     sendMessage({ type: 'get_shortcut_list', box_id: boxId });
     sendMessage({ type: 'get_backed_window_list', box_id: boxId });
+
+    // Request IOSK config if we're switching to an IOSK box.
+    const allBoxes = get(boxes);
+    const targetBox = allBoxes.find(b => b.id === boxId);
+    if (targetBox && targetBox.type === 'iosk') {
+        getIoskConfig(boxId);
+    }
 }
 
 export function clearSettingsForBox(targetBoxId) {
@@ -491,6 +499,11 @@ function attemptConnection() {
                     break;
                 case 'iosk_config_response':
                     ioskConfigResponse.set(msg);
+                    if (msg.config) {
+                        allIoskConfigs.update(configs => {
+                            return { ...configs, [msg.box_id]: msg.config };
+                        });
+                    }
                     break;
                 case 'process_output':
                     processOutput.set({ ...msg, timestamp: Date.now() });
