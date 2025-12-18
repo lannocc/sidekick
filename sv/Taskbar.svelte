@@ -448,13 +448,48 @@
         showWindowsMenu = false;
     }
 
-    function handleWindowClick(event) {
-        if (showMenu && startButton && !startButton.contains(event.target)) showMenu = false;
-        if (showWindowsMenu && windowsButton && !windowsButton.contains(event.target)) showWindowsMenu = false;
-        if (showConnectionsMenu && connectionsButton && !connectionsButton.contains(event.target)) showConnectionsMenu = false;
-        if (showQuickView && quickViewButton && !quickViewButton.contains(event.target)) {
+    function toggleMenu(menuName) {
+        const isOpening =
+            (menuName === 'start' && !showMenu) ||
+            (menuName === 'windows' && !showWindowsMenu) ||
+            (menuName === 'connections' && !showConnectionsMenu) ||
+            (menuName === 'quickview' && !showQuickView);
+
+        // First, close all menus.
+        showMenu = false;
+        showWindowsMenu = false;
+        showConnectionsMenu = false;
+        showQuickView = false;
+
+        // If the action was to open a menu, open it.
+        // If it was to close an already-open menu, it will remain closed.
+        if (isOpening) {
+            if ($dashActive) $dashActive.set(false);
+            if (menuName === 'start') showMenu = true;
+            else if (menuName === 'windows') showWindowsMenu = true;
+            else if (menuName === 'connections') showConnectionsMenu = true;
+            else if (menuName === 'quickview') showQuickView = true;
+        }
+    }
+
+    function handleKeydown(e) {
+        if (e.key === 'Escape') {
+            showMenu = false;
+            showWindowsMenu = false;
+            showConnectionsMenu = false;
             showQuickView = false;
         }
+    }
+    
+    function handleWindowClick() {
+        // This handler is for clicks "outside" the menus.
+        // It relies on the menu buttons and the menu containers themselves
+        // using `on:click|stopPropagation` to prevent clicks on them from
+        // bubbling up to the window and triggering this.
+        showMenu = false;
+        showWindowsMenu = false;
+        showConnectionsMenu = false;
+        showQuickView = false;
     }
 
     function toggleSkyCloak() {
@@ -605,9 +640,11 @@
 
     onMount(() => {
         window.addEventListener('click', handleWindowClick);
+        window.addEventListener('keydown', handleKeydown);
     });
     onDestroy(() => {
         window.removeEventListener('click', handleWindowClick);
+        window.removeEventListener('keydown', handleKeydown);
         if (middleClickTimeout) clearTimeout(middleClickTimeout);
         middleClickTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
     });
@@ -977,10 +1014,10 @@
 
 <div class="taskbar" on:mousedown={handleTaskbarMouseDown} on:wheel={handleTaskbarWheel} style="--tb-height: {tbHeight}px">
     <div class="taskbar-left" bind:this={leftSectionEl}>
-        <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showWindowsMenu = !showWindowsMenu; }}>✕</button>
-        <button class="windows-button" class:active={showConnectionsMenu} bind:this={connectionsButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showConnectionsMenu = !showConnectionsMenu; }} title="Connections">&mdash;</button>
+        <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => toggleMenu('windows')}>✕</button>
+        <button class="windows-button" class:active={showConnectionsMenu} bind:this={connectionsButton} on:click|stopPropagation={() => toggleMenu('connections')} title="Connections">&mdash;</button>
         {#if showWindowsMenu}
-            <div class="windows-menu" style={menuBackgroundStyle}>
+            <div class="windows-menu" style={menuBackgroundStyle} on:click|stopPropagation>
                 {#each boxHierarchy as box, i (box.id)}
                     {@const isCurrentBox = box.id === $currentBoxId}
                     {@const parentBox = i > 0 ? boxHierarchy[i-1] : null}
@@ -1168,7 +1205,7 @@
             class="quick-launch-button"
             class:active={showQuickView}
             bind:this={quickViewButton}
-            on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showQuickView = !showQuickView; }}
+            on:click|stopPropagation={() => toggleMenu('quickview')}
             title="Box Menu"
             disabled={$connectionStatus !== 'connected' || !$currentBox}
         >&#9632;</button>
@@ -1245,9 +1282,9 @@
                 {/if}
             </div>
         {/if}
-        <button class="start-button" class:connected={$connectionStatus === 'connected'} bind:this={startButton} on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showMenu = !showMenu; }} title="SKYBOARD Menu"><img src="/favicon.png" alt="SKYBOARDS"></button>
+        <button class="start-button" class:connected={$connectionStatus === 'connected'} bind:this={startButton} on:click|stopPropagation={() => toggleMenu('start')} title="SKYBOARD Menu"><img src="/favicon.png" alt="SKYBOARDS"></button>
         {#if showMenu}
-            <div class="start-menu" style={menuBackgroundStyle}>
+            <div class="start-menu" style={menuBackgroundStyle} on:click|stopPropagation>
                 {#if $connectionStatus !== 'connected'}
                     <div class="skybridge-overlay">SKYBRIDGE REQUIRED</div>
                 {/if}
@@ -1282,4 +1319,3 @@
         {/if}
     </div>
     </div>
-
