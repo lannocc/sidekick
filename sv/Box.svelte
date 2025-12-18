@@ -1170,7 +1170,7 @@
                 class:connecting={connectionState?.status === 'connecting'} 
                 class:disconnected={connectionState?.status === 'disconnected' || !connectionState} 
                 class:error={connectionState?.status === 'error'} 
-                title="Connection: {connectionState?.status ?? 'disconnected'}"
+                title="Default user connection: {connectionState?.status ?? 'disconnected'}"
             ></div>
         {/if}
         <img src="/iosk.png" alt="IOSK Box" class="iosk-badge" title="IOSK Box" />
@@ -1181,7 +1181,7 @@
             class="process-status-badge"
             class:running={processStatus === 'running'}
             class:paused={processStatus === 'paused'}
-            title="Process is {processStatus}"
+            title="IOSK process is {processStatus}"
         ></div>
     {/if}
 

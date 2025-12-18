@@ -275,6 +275,11 @@
                 if (item.name === '..') {
                     if (currentPath === '/') return;
                     newPath = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
+                    // --- MODIFICATION START: Turn off nested view when going up ---
+                    if (nestedView) {
+                        nestedView = false;
+                    }
+                    // --- MODIFICATION END ---
                 } else {
                     newPath = item.path || (currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`);
                 }
@@ -307,7 +312,10 @@
             const { path, entries, error } = response;
             if (error) {
                 errorMessage = error;
-                items = [];
+                // --- MODIFICATION START: Always show ".." on error unless at root ---
+                items = (path && path !== '/') ? [{ name: '..', type: 'dir', size: -1, mtime: -1 }] : [];
+                treeItems = [];
+                // --- MODIFICATION END ---
                 previousItemsMap.clear();
             } else if (entries) {
                 let finalListing = [...entries];
