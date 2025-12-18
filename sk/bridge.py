@@ -11,6 +11,7 @@ import tiktoken
 import sqlite3
 import subprocess
 import signal
+import socket
 from datetime import datetime
 from . import config
 from .util import get_directory_tree_as_text, get_directory_contents_as_text
@@ -266,6 +267,9 @@ def init_db():
             mount_point_mode TEXT NOT NULL DEFAULT 'managed',
             daemon_mode INTEGER NOT NULL DEFAULT 1,
             enable_stdin INTEGER NOT NULL DEFAULT 0,
+            port_mode TEXT NOT NULL DEFAULT 'managed',
+            port_number INTEGER,
+            default_username TEXT,
             FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
         );
     """)
@@ -280,6 +284,13 @@ def init_db():
         cursor.execute("UPDATE iosk SET mount_point_mode = 'none' WHERE mount_point IS NULL OR mount_point = '';")
         DB_CONN.commit()
 
+    if 'port_mode' not in iosk_columns:
+        log.info("Applying database migration: Adding port/username columns to 'iosk' table.")
+        cursor.execute("ALTER TABLE iosk ADD COLUMN port_mode TEXT NOT NULL DEFAULT 'managed';")
+        cursor.execute("ALTER TABLE iosk ADD COLUMN port_number INTEGER;")
+        cursor.execute("ALTER TABLE iosk ADD COLUMN default_username TEXT;")
+        DB_CONN.commit()
+
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS process (
@@ -292,6 +303,7 @@ def init_db():
             stdout_log_path TEXT NOT NULL,
             stderr_log_path TEXT NOT NULL,
             stdin_pipe_path TEXT,
+            port INTEGER,
             FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE SET NULL
         );
     """)
@@ -302,6 +314,12 @@ def init_db():
     if 'stdin_pipe_path' not in columns:
         log.info("Applying database migration: Adding 'stdin_pipe_path' to 'process' table.")
         cursor.execute("ALTER TABLE process ADD COLUMN stdin_pipe_path TEXT;")
+        DB_CONN.commit()
+
+    if 'port' not in columns:
+        log.info("Applying database migration: Adding 'port' to 'process' table.")
+        cursor.execute("ALTER TABLE process ADD COLUMN port INTEGER;")
+        DB_CONN.commit()
 
 
     # For new databases, create the default 'Main Desktop' box with id=0.
@@ -966,6 +984,13 @@ async def process_monitor(pid, process_obj):
     
     await broadcast_process_list()
 
+def find_open_port():
+    """Finds a free port on the host."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('', 0)) # Bind to a free port provided by the OS
+        s.listen(1)
+        return s.getsockname()[1]
+
 async def handle_start_iosk(msg):
     """Handles logic for launching and managing an iosk process."""
     box_id = msg.get('box_id')
@@ -974,7 +999,7 @@ async def handle_start_iosk(msg):
     box_row = cursor.fetchone()
     if not box_row: return
 
-    cursor.execute("SELECT mount_point, mount_point_mode, daemon_mode, enable_stdin FROM iosk WHERE box_id = ?", (box_id,))
+    cursor.execute("SELECT mount_point, mount_point_mode, daemon_mode, enable_stdin, port_mode, port_number FROM iosk WHERE box_id = ?", (box_id,))
     iosk_row = cursor.fetchone()
     if not iosk_row: return
     
@@ -1010,6 +1035,20 @@ async def handle_start_iosk(msg):
     if final_mount_point:
         cmd.append(os.path.abspath(final_mount_point))
     
+    # Port selection logic
+    port_to_use = None
+    port_mode = iosk_row['port_mode'] or 'managed'
+    
+    if port_mode == 'managed':
+        port_to_use = find_open_port()
+        log.info(f"Managed port selection for box {box_id}: found open port {port_to_use}")
+    elif port_mode == 'custom':
+        port_to_use = iosk_row['port_number']
+        log.info(f"Custom port selection for box {box_id}: using configured port {port_to_use}")
+    
+    if port_to_use is not None:
+        cmd.extend(['-p', str(port_to_use)])
+        
     stdin_pipe_path = None
     stdin_arg = None
     stdin_writer_obj = None
@@ -1051,8 +1090,8 @@ async def handle_start_iosk(msg):
 
         start_time_iso = datetime.now().isoformat()
         cursor.execute(
-            "INSERT INTO process (box_id, pid, type, start_time, status, stdout_log_path, stderr_log_path, stdin_pipe_path) VALUES (?, ?, 'iosk', ?, 'running', ?, ?, ?)",
-            (box_id, pid, start_time_iso, stdout_log, stderr_log, stdin_pipe_path)
+            "INSERT INTO process (box_id, pid, type, start_time, status, stdout_log_path, stderr_log_path, stdin_pipe_path, port) VALUES (?, ?, 'iosk', ?, 'running', ?, ?, ?, ?)",
+            (box_id, pid, start_time_iso, stdout_log, stderr_log, stdin_pipe_path, port_to_use)
         )
         DB_CONN.commit()
 
@@ -1385,7 +1424,7 @@ async def websocket_handler(websocket):
                     box_id = msg.get('box_id')
                     print_action("Get IOSK Cfg", f"box={box_id}")
                     cursor = DB_CONN.cursor()
-                    cursor.execute("SELECT box_id, mount_point, mount_point_mode, daemon_mode, enable_stdin FROM iosk WHERE box_id = ?", (box_id,))
+                    cursor.execute("SELECT box_id, mount_point, mount_point_mode, daemon_mode, enable_stdin, port_mode, port_number, default_username FROM iosk WHERE box_id = ?", (box_id,))
                     config_row = cursor.fetchone()
                     config_data = dict(config_row) if config_row else None
                     await websocket.send(json.dumps({'type': 'iosk_config_response', 'box_id': box_id, 'config': config_data}))
@@ -1396,7 +1435,10 @@ async def websocket_handler(websocket):
                     print_action("Update IOSK Cfg", f"box={box_id}, keys={list(config.keys())}")
                     cursor = DB_CONN.cursor()
                     # Use a helper to build the SET part of the query safely
-                    allowed_keys = {'mount_point', 'mount_point_mode', 'daemon_mode', 'enable_stdin'}
+                    allowed_keys = {
+                        'mount_point', 'mount_point_mode', 'daemon_mode', 'enable_stdin',
+                        'port_mode', 'port_number', 'default_username'
+                    }
                     updates = {k: v for k, v in config.items() if k in allowed_keys}
                     if updates:
                         set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
