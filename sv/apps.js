@@ -15,7 +15,7 @@ import NotificationCenter from './board/NotificationCenter.svelte';
 import Boxes from './board/Boxes.svelte';
 import Processes from './board/Processes.svelte';
 import { TASKBAR_HEIGHT, desktopSettings, windowSettings, desktopView } from './desktop.js';
-import { createBox, boxes, desktopShortcuts, backedWindows, requestedBoxId, requestedPid } from './bridge.js';
+import { createBox, boxes, desktopShortcuts, backedWindows, requestedBoxId, requestedPid, allIoskConfigs, runningProcesses } from './bridge.js';
 import { windows } from './windows.js';
 // --- MODIFICATION START: Import the central connections store ---
 import { activeIoskConnections } from './iosk.js';
@@ -400,6 +400,49 @@ export function newIoskUserInspector(props = {}) {
     });
 }
 // --- MODIFICATION END ---
+
+export function newIoskConsoleForBox(box) {
+    if (box.type !== 'iosk') return;
+
+    const process = get(runningProcesses).find(p => p.box_id === box.id && p.status === 'running' && p.port);
+    if (!process) {
+        alert(`IOSK process for "${box.name}" is not running or has no network port.`);
+        return;
+    }
+
+    const config = get(allIoskConfigs)[box.id];
+    const username = config?.default_username || 'root';
+    const wsUrl = `ws://localhost:${process.port}`;
+
+    newIoskConsole({
+        title: `IOSK - ${box.name}`,
+        wsUrl,
+        username
+    });
+}
+
+export function newIoskFileExplorerForBox(box) {
+    if (box.type !== 'iosk') return;
+
+    const process = get(runningProcesses).find(p => p.box_id === box.id && p.status === 'running' && p.port);
+     if (!process) {
+        alert(`IOSK process for "${box.name}" is not running or has no network port.`);
+        return;
+    }
+
+    const config = get(allIoskConfigs)[box.id];
+    const username = config?.default_username || 'root';
+    const wsUrl = `ws://localhost:${process.port}`;
+    const connectionId = `${username}@${wsUrl}`;
+
+    const connection = get(activeIoskConnections).get(connectionId);
+    if (!connection || connection.status !== 'connected') {
+        alert(`Not connected to IOSK process for "${box.name}". Please open an IOSK Console first to establish a connection.`);
+        return;
+    }
+
+    newIoskFileExplorer({ connectionId });
+}
 
 export function newBox(props = {}) {
     const { name, context, sourceEvent } = props;

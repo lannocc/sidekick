@@ -6,8 +6,34 @@
     import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
     import { dragState, windows, generateBoardConfigFromWindow, } from './windows.js';
-    import { newAskWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './apps.js';
-    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover, switchToBox, allBoxSettings, getBoxSpecificSettings, promoteToIosk, runningProcesses } from './bridge.js';
+    import { 
+        newAskWindow, 
+        newWebBrowser, 
+        newLocalFileExplorer, 
+        newLocalTerminal,
+        showBoxesAndSelect,
+        newIoskConsoleForBox,
+        newIoskFileExplorerForBox
+    } from './apps.js';
+    import { 
+        updateBox, 
+        deleteBox, 
+        savePanelConfig, 
+        updateBoxTransform, 
+        setBoxCover, 
+        switchToBox, 
+        allBoxSettings, 
+        getBoxSpecificSettings, 
+        promoteToIosk, 
+        runningProcesses,
+        allIoskConfigs,
+        getIoskConfig,
+        startIosk,
+        stopProcess,
+        pauseProcess,
+        resumeProcess
+    } from './bridge.js';
+    import { activeIoskConnections } from './iosk.js';
     import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId, calculateContextMenuPosition } from './desktop.js';
     import Panel from './Panel.svelte';
 
@@ -16,8 +42,25 @@
     const dispatch = createEventDispatcher();
 
     // --- Process Status ---
-    let processStatus;
-    $: processStatus = $runningProcesses.find(p => p.box_id === box.id && (p.status === 'running' || p.status === 'paused'))?.status;
+    $: activeProcess = $runningProcesses.find(p => p.box_id === box.id && (p.status === 'running' || p.status === 'paused'));
+    $: processStatus = activeProcess?.status;
+    
+    // --- IOSK Connection Status ---
+    let connectionId = null;
+    let connectionState = null;
+    $: {
+        const config = $allIoskConfigs[box.id];
+        const process = $runningProcesses.find(p => p.box_id === box.id && p.status === 'running' && p.port);
+        if (box.type === 'iosk' && config && process) {
+            const username = config.default_username || 'root';
+            const url = `ws://localhost:${process.port}`;
+            connectionId = `${username}@${url}`;
+            connectionState = $activeIoskConnections.get(connectionId);
+        } else {
+            connectionId = null;
+            connectionState = null;
+        }
+    }
 
     // --- Position, Size, and Scale ---
     let x = box.x ?? 100 + (box.id % 5) * 200;
@@ -37,8 +80,13 @@
     let hoveredPanelKey = null; // Key ('x_y') of the currently hovered panel
 
     // When unfolding, fetch specific settings if needed
-    $: if (isUnfolded && box.has_custom_settings && !$allBoxSettings[box.id]) {
-        getBoxSpecificSettings(box.id);
+    $: if (isUnfolded) {
+        if (box.has_custom_settings && !$allBoxSettings[box.id]) {
+            getBoxSpecificSettings(box.id);
+        }
+        if (box.type === 'iosk' && !$allIoskConfigs[box.id]) {
+            getIoskConfig(box.id);
+        }
     }
 
     $: if (isExpanded) {
@@ -386,15 +434,13 @@
 
     function askBox() {
         closeContextMenu();
-        if (box.type === 'local') {
-            newAskWindow([box.context]);
-            isUnfolded = false;
-        }
+        newAskWindow([box.context]);
+        isUnfolded = false;
     }
 
     function openTerminal() {
         closeContextMenu();
-        if (box.type === 'local' && box.context) {
+        if (box.context) {
             newLocalTerminal({ title: `Terminal - ${box.name}`, initialPath: box.context });
             isUnfolded = false;
         }
@@ -402,7 +448,7 @@
 
     function openFiles() {
         closeContextMenu();
-        if (box.type === 'local' && box.context) {
+        if (box.context) {
             newLocalFileExplorer({ title: `Local Files - ${box.name}`, initialPath: box.context });
             isUnfolded = false;
         }
@@ -965,6 +1011,44 @@
     .process-status-badge.paused {
         background-color: #f39c12;
     }
+    .connection-status-badge {
+        position: absolute;
+        top: 2px;
+        right: 50px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        z-index: 6;
+        pointer-events: none;
+        border: 2px solid var(--window-bg, #333);
+        box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    }
+    .connection-status-badge.connected { background-color: #3498db; }
+    .connection-status-badge.connecting { background-color: #f1c40f; }
+    .connection-status-badge.disconnected { background-color: #95a5a6; }
+    .connection-status-badge.error { background-color: #e74c3c; }
+
+    .user-count-badge {
+        position: absolute;
+        top: 2px;
+        right: 74px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 8px;
+        z-index: 6;
+        pointer-events: none;
+        border: 2px solid var(--window-bg, #333);
+        box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        background-color: #8e44ad;
+        color: white;
+        font-size: 10px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+    }
 </style>
 
 <svelte:window bind:innerWidth bind:innerHeight />
@@ -987,6 +1071,21 @@
     on:scale
 >
     {#if box.type === 'iosk'}
+        {#if connectionState?.status === 'connected' && connectionState?.roomParticipants?.length > 0}
+            <div class="user-count-badge" title="{connectionState.roomParticipants.length} user(s) online">
+                {connectionState.roomParticipants.length}
+            </div>
+        {/if}
+        {#if connectionId}
+            <div 
+                class="connection-status-badge" 
+                class:connected={connectionState?.status === 'connected'} 
+                class:connecting={connectionState?.status === 'connecting'} 
+                class:disconnected={connectionState?.status === 'disconnected' || !connectionState} 
+                class:error={connectionState?.status === 'error'} 
+                title="Connection: {connectionState?.status ?? 'disconnected'}"
+            ></div>
+        {/if}
         <img src="/iosk.png" alt="IOSK Box" class="iosk-badge" title="IOSK Box" />
     {/if}
 
@@ -1128,14 +1227,38 @@
 
 {#if contextMenu.visible}
     <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
-        <button on:click={askBox} disabled={box.type !== 'local'}><span class="menu-item-icon">?</span>Ask...</button>
-        <button on:click={openTerminal} disabled={box.type !== 'local'}><span class="menu-item-icon">&gt;_</span>Terminal</button>
-        <button on:click={openFiles} disabled={box.type !== 'local'}><span class="menu-item-icon">📁</span>Files</button>
+        <button on:click={askBox}><span class="menu-item-icon">?</span>Ask...</button>
+        <button on:click={openTerminal}><span class="menu-item-icon">&gt;_</span>Terminal</button>
+        <button on:click={openFiles}><span class="menu-item-icon">📁</span>Files</button>
+        
+        {#if box.type === 'iosk'}
+            <div class="menu-separator"></div>
+            <button on:click={() => newIoskConsoleForBox(box)} disabled={!activeProcess || !activeProcess.port}>
+                <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />IOSK Console
+            </button>
+            <button on:click={() => newIoskFileExplorerForBox(box)} disabled={!connectionState || connectionState.status !== 'connected'}>
+                <span class="menu-item-icon">📁</span>IOSK Files
+            </button>
+            <div class="menu-separator"></div>
+            {#if activeProcess}
+                {#if activeProcess.status === 'running'}
+                    <button on:click={() => pauseProcess(activeProcess.pid)}><span class="menu-item-icon">⏸️</span>Pause</button>
+                {/if}
+                {#if activeProcess.status === 'paused'}
+                    <button on:click={() => resumeProcess(activeProcess.pid)}><span class="menu-item-icon">▶️</span>Resume</button>
+                {/if}
+                <button on:click={() => stopProcess(activeProcess.pid)}><span class="menu-item-icon">⏹️</span>Stop</button>
+            {:else}
+                <button on:click={() => startIosk(box.id)}><span class="menu-item-icon">▶️</span>Start</button>
+            {/if}
+        {/if}
+        
         <div class="menu-separator"></div>
         {#if box.type === 'local' && box.id !== 0}
             <button on:click={handlePromoteToIosk}><img src="/iosk.png" alt="IOSK" class="menu-item-icon" />Promote to IOSK Box</button>
             <div class="menu-separator"></div>
         {/if}
+        <button on:click={() => showBoxesAndSelect(box.id)}><span class="menu-item-icon">🔧</span>Configuration...</button>
         <button on:click={renameBox}><span class="menu-item-icon">✏️</span>Rename...</button>
         <div class="menu-separator"></div>
         <button on:click={setCoverImage} disabled={!canSetCover}><span class="menu-item-icon">🖼️</span>Set Cover Image...</button>
