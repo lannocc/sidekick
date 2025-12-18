@@ -1807,7 +1807,7 @@
 
     .context-menu-subheader {
         padding: 4px 12px;
-        font-size: 12px;
+        font-size: 15px;
         font-weight: bold;
         color: var(--title-bar-text);
         background-color: var(--title-bar-bg);
@@ -2219,7 +2219,7 @@
     {#if contextMenu.visible && !wasPanning}
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
             <div class="context-menu-item-container">
-                <button class="context-menu-item-with-submenu" class:open-left={openSubmenuLeft}>SKYBOARD</button>
+                <button class="context-menu-item-with-submenu" class:open-left={openSubmenuLeft}>SKYBOARD Menu</button>
                 <div class="submenu" class:open-left={openSubmenuLeft} class:open-up={openSubmenuUp}>
                     {#each skyboardMenuItems as item (item.name)}
                         <button
