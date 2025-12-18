@@ -9,7 +9,13 @@
     import { windows } from './windows.js';
     import { dashActive, dashLayouts, dashCycleIndex, desktopSettings, activeBoxId, skyCloakEnabled, currentBoxId, currentBox } from './desktop.js';
     import { get } from 'svelte/store';
-    import { initializeLocalConnection, connectionStatus } from './bridge.js';
+    import { 
+        initializeLocalConnection, 
+        connectionStatus,
+        getIoskConfig,
+        getShortcuts,
+        boxes
+    } from './bridge.js';
 
     // --- NEW: Title update logic ---
     let title = 'SKYBOARD';
@@ -18,6 +24,26 @@
     } else {
         title = 'SKYBOARD';
     }
+
+    // --- MODIFICATION START: Fetch global data on connect ---
+    let initialDataFetched = false;
+    $: if ($connectionStatus === 'connected' && !initialDataFetched && get(boxes).length > 0) {
+        // Trigger the side-effect that we hypothesize loads the running processes list.
+        // Calling a general data request for the root box (ID 0) seems to be the trigger,
+        // mimicking the initial behavior of the 'Boxes' management window.
+        getShortcuts(0); 
+
+        // Explicitly fetch all IOSK configs, as these are needed by Box components
+        // on the desktop for their badges and context menus.
+        get(boxes).forEach(box => {
+            if (box.type === 'iosk') {
+                getIoskConfig(box.id);
+            }
+        });
+        
+        initialDataFetched = true;
+    }
+    // --- MODIFICATION END ---
 
     // --- NEW: Box switching effect logic ---
     let boxSwitchKey = 0;
