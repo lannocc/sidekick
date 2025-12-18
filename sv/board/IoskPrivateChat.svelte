@@ -14,8 +14,9 @@
     export let connectionId;
     export let localUser;
     export let remoteUser;
+    export let initialMessage = null;
 
-    let messages = [];
+    let messages = initialMessage ? [initialMessage] : [];
     let inputMessage = '';
     let messageContainer;
     let inputEl;
@@ -27,7 +28,7 @@
 
     // Update window store with props for Dash saving
     $: if (id !== undefined && groupId !== undefined) {
-        windows.updateTabProps(groupId, id, { connectionId, localUser, remoteUser });
+        windows.updateTabProps(groupId, id, { connectionId, localUser, remoteUser, initialMessage });
     }
 
     // Reactive logic to find console after a Dash restore is no longer needed
@@ -46,6 +47,12 @@
 
     function handleMessage(message) {
         if (!message || message.connectionId !== connectionId || message.timestamp < mountTimestamp) return;
+
+        // If a message with the same timestamp and sender is already displayed, skip.
+        // This primarily handles the initial message from the subscription firing on mount.
+        if (messages.some(m => m.timestamp === message.timestamp && m.from === message.from)) {
+            return;
+        }
 
         const isForThisWindow =
             (message.from === remoteUser && message.to === localUser) ||
@@ -69,7 +76,9 @@
 
     let unsubscribe;
     onMount(() => {
-        mountTimestamp = Date.now();
+        // Set the mount timestamp to the initial message's time, or now if none exists.
+        // This prevents messages before the initial one from being shown, but allows the initial one.
+        mountTimestamp = initialMessage ? initialMessage.timestamp : Date.now();
         unsubscribe = privateMessages.subscribe(handleMessage);
         focusInput();
     });

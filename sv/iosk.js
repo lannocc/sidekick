@@ -134,15 +134,16 @@ export function initiateConnection(url, username) {
                     const remoteUser = stripAnsi(data.from);
                     const localUser = state.username;
 
-                    // First, update the global message store so that any existing or newly
-                    // created windows will receive the message.
-                    privateMessages.set({
+                    const messagePayload = {
                         connectionId,
                         from: remoteUser,
                         to: stripAnsi(data.to),
                         content: data.content,
                         timestamp: Date.now()
-                    });
+                    };
+                    // First, update the global message store so that any existing or newly
+                    // created windows will receive the message.
+                    privateMessages.set(messagePayload);
                     
                     // Don't automatically open a chat window for messages sent to oneself.
                     if (remoteUser === localUser) {
@@ -158,11 +159,12 @@ export function initiateConnection(url, username) {
                     );
 
                     if (!chatExists) {
-                        // If no window exists, create one.
+                        // If no window exists, create one, passing the initial message.
                         newIoskPrivateChat({
                             connectionId,
                             localUser,
-                            remoteUser
+                            remoteUser,
+                            initialMessage: messagePayload
                         });
                     }
                 } else if (data.type === 'state_info' || data.type === 'room_state_update') {
