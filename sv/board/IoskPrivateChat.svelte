@@ -28,7 +28,11 @@
 
     // Update window store with props for Dash saving
     $: if (id !== undefined && groupId !== undefined) {
-        windows.updateTabProps(groupId, id, { connectionId, localUser, remoteUser, initialMessage });
+        // --- MODIFICATION START ---
+        // Do not write `initialMessage` back to the store, as it's only for initialization
+        // and its presence as an object in this reactive statement causes an infinite update loop.
+        windows.updateTabProps(groupId, id, { connectionId, localUser, remoteUser });
+        // --- MODIFICATION END ---
     }
 
     // Reactive logic to find console after a Dash restore is no longer needed
@@ -144,3 +148,4 @@
         </form>
     </div>
 </div>
+
