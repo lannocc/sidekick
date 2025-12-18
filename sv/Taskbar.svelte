@@ -5,10 +5,10 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { windows } from './windows.js';
-    import { appList, newNotificationCenter, newIoskConsole } from './apps.js';
+    import { appList, newNotificationCenter, newIoskConsole, newLocalFileExplorer, newLocalTerminal, newIoskFileExplorer, newIoskUserInspector, newIoskPrivateChat } from './apps.js';
     import { dashActive, unreadNoticeCount, windowView, desktopSettings, wasDraggingItems, currentBoxId, currentBox, skyCloakEnabled, componentIconMap } from './desktop.js';
     import { connectionStatus, switchToBox, boxes, runningProcesses, stopProcess, pauseProcess, resumeProcess } from './bridge.js';
-    import { activeIoskConnections, disconnect } from './iosk.js';
+    import { activeIoskConnections, disconnect, initiateConnection, sendCommand } from './iosk.js';
     import Clock from './Clock.svelte';
     import { get } from 'svelte/store';
 
@@ -518,6 +518,91 @@
         showConnectionsMenu = false;
     }
 
+    // --- Box Menu (Green Button) Logic ---
+    let isIoskBox = false;
+    let ioskProcess = null;
+    let connectionId = null;
+    let ioskConnectionState = null;
+    const IOSK_USERNAME = 'root'; // Use a default username as config isn't available here
+
+    $: isIoskBox = $currentBox?.type === 'iosk';
+    $: if (isIoskBox && $currentBox) {
+        ioskProcess = $runningProcesses.find(p => p.box_id === $currentBox.id && (p.status === 'running' || p.status === 'paused'));
+    } else {
+        ioskProcess = null;
+    }
+
+    $: if (ioskProcess?.port) {
+        connectionId = `${IOSK_USERNAME}@ws://localhost:${ioskProcess.port}`;
+    } else {
+        connectionId = null;
+    }
+
+    $: if (connectionId) {
+        ioskConnectionState = $activeIoskConnections.get(connectionId) || null;
+    } else {
+        ioskConnectionState = null;
+    }
+
+    function launchLocalFiles() {
+        if (!$currentBox?.context) return;
+        newLocalFileExplorer({ initialPath: $currentBox.context, title: `Files - ${$currentBox.name}` });
+        showQuickView = false;
+    }
+
+    function launchLocalTerminal() {
+        if (!$currentBox?.context) return;
+        newLocalTerminal({ initialPath: $currentBox.context, title: `Terminal - ${$currentBox.name}` });
+        showQuickView = false;
+    }
+
+    function connectToIosk() {
+        if (!connectionId) return;
+        const [username, url] = connectionId.split('@');
+        initiateConnection(url, username);
+    }
+
+    function launchIoskConsole() {
+        if (!connectionId) return;
+        connectToIosk(); // Ensure connection is initiated
+        newIoskConsole({ connectionId });
+        showQuickView = false;
+    }
+
+    function launchIoskFileExplorer() {
+        if (!connectionId) return;
+        connectToIosk(); // Ensure connection is initiated
+        newIoskFileExplorer({ connectionId });
+        showQuickView = false;
+    }
+
+    function handleUserClick(user) {
+        if (!connectionId) return;
+        newIoskPrivateChat({
+            connectionId,
+            localUser: IOSK_USERNAME,
+            remoteUser: user.name
+        });
+        showQuickView = false;
+    }
+    
+    function toggleAgentPause(user) {
+        if (!connectionId) return;
+        const command = user.paused ? `!resume ${user.name}` : `!pause ${user.name}`;
+        sendCommand(connectionId, command);
+    }
+    
+    function inspectUser(user) {
+        if (!connectionId) return;
+        newIoskUserInspector({ connectionId, targetUser: user.name });
+        showQuickView = false;
+    }
+
+    function formatTokenTooltip(stats) {
+        if (!stats) return 'No token data.';
+        return `Cumulative:\n  Input: ${stats.cumulative?.input ?? 0}\n  Output: ${stats.cumulative?.output ?? 0}\nLast Turn:\n  Input: ${stats.last_turn?.input ?? 0}\n  Output: ${stats.last_turn?.output ?? 0}`;
+    }
+
     onMount(() => {
         window.addEventListener('click', handleWindowClick);
     });
@@ -794,6 +879,66 @@
     .quick-view-menu .menu-item:first-of-type { border-top: 1px solid var(--border-color); }
     .connections-menu .menu-item { border-top: 1px solid var(--border-color); }
 
+    /* Box Menu Specific Styles */
+    .iosk-users-panel {
+        display: flex;
+        flex-direction: column;
+        max-height: 150px;
+        overflow-y: auto;
+    }
+    .user-item {
+        display: flex;
+        align-items: center;
+        padding: 6px 12px;
+        gap: 8px;
+    }
+    .user-item:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
+    .user-info {
+        flex-grow: 1;
+        overflow: hidden;
+        cursor: pointer;
+    }
+    .user-name {
+        font-weight: bold;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .user-status {
+        font-size: 0.8em;
+        color: var(--text-color-light);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .user-stats {
+        font-family: monospace;
+        cursor: help;
+    }
+    .user-actions {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+    }
+    .user-actions button {
+        padding: 4px; width: 22px; height: 22px;
+        border: none; background-color: transparent;
+        cursor: pointer; border-radius: 50%; display: flex;
+        align-items: center; justify-content: center;
+        color: var(--text-color-light);
+    }
+    .user-actions button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+        color: var(--text-color);
+    }
+    .user-actions svg {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
+    }
+
     .close-all-row {
         cursor: pointer;
         border-top: 1px solid var(--border-color);
@@ -1024,39 +1169,79 @@
             class:active={showQuickView}
             bind:this={quickViewButton}
             on:click|stopPropagation={() => { if ($dashActive) dashActive.set(false); showQuickView = !showQuickView; }}
-            title="Context Quick View"
-            disabled={$connectionStatus !== 'connected'}
+            title="Box Menu"
+            disabled={$connectionStatus !== 'connected' || !$currentBox}
         >&#9632;</button>
-        {#if showQuickView}
+        {#if showQuickView && $currentBox}
             <div class="quick-view-menu" style={menuBackgroundStyle} on:click|stopPropagation>
-                <div class="quick-view-section-header">Running IOSK Processes</div>
-                {#each $runningProcesses.filter(p => p.type === 'iosk' && (p.status === 'running' || p.status === 'paused')) as proc (proc.pid)}
-                    <div class="quick-view-process-item">
-                        <div class="status-indicator status-{proc.status}"></div>
-                        <div class="process-info">
-                            <div class="name" title={proc.box_name}>{proc.box_name || 'Untitled Process'}</div>
-                            <div class="status">PID: {proc.pid} | {proc.status}</div>
-                        </div>
-                        <button class="quick-action-btn" title="Stop Process" on:click={() => stopProcess(proc.pid)}>
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                <div class="quick-view-section-header">{$currentBox.name}</div>
+                
+                <button class="menu-item" on:click={launchLocalFiles} disabled={!$currentBox.context}>
+                    <span class="menu-item-icon">📁</span>Files
+                </button>
+                <button class="menu-item" on:click={launchLocalTerminal} disabled={!$currentBox.context}>
+                    <span class="menu-item-icon">&gt;_</span>Terminal
+                </button>
+
+                {#if isIoskBox}
+                    <div class="menu-separator"></div>
+                    {#if ioskProcess}
+                        <button class="menu-item" on:click={launchIoskConsole}>
+                           <span class="menu-item-icon" style="font-weight: bold;">»_</span>Console
                         </button>
-                    </div>
-                {:else}
-                    <div class="menu-item-empty">No IOSK processes running.</div>
-                {/each}
-    
-                <div class="menu-separator"></div>
-                <div class="quick-view-section-header">Current Desktop</div>
-                <div class="menu-item" style="cursor: default;">
-                    <img src="/skybox.png" alt="" class="menu-item-icon" />
-                    {$currentBox?.name || 'Main Desktop'}
-                </div>
-    
-                {#if processesApp}
-                    <button class="menu-item" on:click={() => { processesApp.launcher(); showQuickView = false; }}>Open Process Manager</button>
-                {/if}
-                {#if boxesApp}
-                    <button class="menu-item" on:click={() => { boxesApp.launcher(); showQuickView = false; }}>Open Boxes Manager</button>
+                        <button class="menu-item" on:click={launchIoskFileExplorer}>
+                            <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />IOSK Files
+                        </button>
+                        
+                        {#if ioskConnectionState?.status === 'connected'}
+                            <div class="quick-view-section-header" style="border-top: 1px solid var(--border-color); margin-top: 4px;">
+                                Live Users ({ioskConnectionState.roomParticipants.length})
+                            </div>
+                            <div class="iosk-users-panel">
+                                {#each ioskConnectionState.roomParticipants as user (user.name)}
+                                    {@const tokenStats = ioskConnectionState.userTokenStats[user.name]}
+                                    <div class="user-item">
+                                        <div class="user-info" on:click={() => handleUserClick(user)} title="Open private chat with {user.name}">
+                                            <div class="user-name">
+                                                {user.name}
+                                            </div>
+                                            <div class="user-status">
+                                                {#if user.paused}<span>(paused)</span>{/if}
+                                                {#if user.type === 'agent' && tokenStats?.cumulative?.input}
+                                                    <span class="user-stats" title={formatTokenTooltip(tokenStats)}>
+                                                        {tokenStats.cumulative.input} tokens
+                                                    </span>
+                                                {/if}
+                                            </div>
+                                        </div>
+                                        <div class="user-actions">
+                                            {#if user.type === 'agent'}
+                                                <button on:click={() => toggleAgentPause(user)} title={user.paused ? "Resume Agent" : "Pause Agent"}>
+                                                    {#if user.paused}
+                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                                    {:else}
+                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                                                    {/if}
+                                                </button>
+                                            {/if}
+                                            <button on:click={() => inspectUser(user)} title="Inspect User">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                {:else}
+                                    <div class="menu-item-empty">No users in room.</div>
+                                {/each}
+                            </div>
+                        {:else}
+                             <button class="menu-item" on:click={connectToIosk} disabled={ioskConnectionState?.status === 'connecting'}>
+                                Connect to View Users
+                            </button>
+                        {/if}
+
+                    {:else}
+                        <div class="menu-item-empty">IOSK process not running.</div>
+                    {/if}
                 {/if}
             </div>
         {/if}
@@ -1096,4 +1281,5 @@
             </div>
         {/if}
     </div>
-</div>
+    </div>
+
