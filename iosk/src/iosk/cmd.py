@@ -33,8 +33,41 @@ def run(args=sys.argv[1:]):
     # --- END FIX ---
 
     # 1. Argument Parsing
-    if not (1 <= len(args) <= 2) or args[0].startswith('-'):
-        print("Usage: iosk <workspace_directory> [<mount_point>]")
+    start_port_num = None
+    remaining_args = []
+    
+    try:
+        args_iter = iter(args)
+        for arg in args_iter:
+            if arg.startswith('-p'):
+                port_str = None
+                if len(arg) > 2:  # Handles -p4209
+                    port_str = arg[2:]
+                else:  # Handles -p 4209
+                    port_str = next(args_iter)
+                
+                try:
+                    start_port_num = int(port_str)
+                except ValueError:
+                    raise ValueError(f"invalid port number: '{port_str}'")
+
+                if not (0 < start_port_num < 65536):
+                    raise ValueError(f"port number {start_port_num} is out of range")
+            elif arg.startswith('-'):
+                raise ValueError(f"unrecognized option: {arg}")
+            else:
+                remaining_args.append(arg)
+    except (StopIteration, ValueError) as e:
+        error_msg = str(e)
+        if isinstance(e, StopIteration):
+            error_msg = "option '-p' requires an argument"
+
+        print(f":: error: {error_msg}")
+        print("Usage: iosk [-p <port>] <workspace_directory> [<mount_point>]")
+        sys.exit(1)
+
+    if not (1 <= len(remaining_args) <= 2):
+        print("Usage: iosk [-p <port>] <workspace_directory> [<mount_point>]")
         sys.exit(1)
 
     # Set the logging level for the google-genai library to WARNING to suppress INFO messages
@@ -42,8 +75,8 @@ def run(args=sys.argv[1:]):
     #logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.disable(logging.INFO) # all INFO and less are disabled
 
-    workspace_directory = args[0]
-    mount_point = args[1] if len(args) > 1 else None
+    workspace_directory = remaining_args[0]
+    mount_point = remaining_args[1] if len(remaining_args) > 1 else None
 
     # 2. System Initialization
     print(f'Preparing iosk UNIX at workspace: {workspace_directory}')
@@ -62,6 +95,20 @@ def run(args=sys.argv[1:]):
                 await kernel_instance.interactive(io)
 
         await kernel.start()
+
+        # Start port if requested via command-line argument
+        if start_port_num is not None:
+            if not hasattr(kernel, 'port') or not kernel.port:
+                print(":: warning: port manager subsystem not available, cannot start port.")
+            else:
+                print(f'Auto-starting network service on port {start_port_num}...')
+                if await kernel.port.start(start_port_num):
+                    print(f':: port {start_port_num} opened.')
+                else:
+                    # port.start() already prints a detailed error. This is a fatal startup error.
+                    print(f'!! fatal: could not start network service on port {start_port_num}. Shutting down.')
+                    if not kernel.halt.is_set():
+                        kernel.halt.set()
 
         # Create a concurrent task for the kernel lifecycle.
         unix_task = asyncio.create_task(kernel.run())
