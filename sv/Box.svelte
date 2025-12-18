@@ -1028,6 +1028,18 @@
     .context-menu .delete { color: #e74c3c; }
     .context-menu .delete:hover { background-color: #c0392b; color: white; }
 
+    .menu-subheader {
+        padding: 4px 12px;
+        font-size: 12px;
+        font-weight: bold;
+        color: var(--title-bar-text);
+        background-color: var(--title-bar-bg);
+        cursor: default;
+    }
+    .context-menu button.menu-item-indented {
+        padding-left: 24px;
+    }
+
     .panel-picker {
         position: fixed;
         background-color: var(--window-bg);
@@ -1311,26 +1323,28 @@
             
             <!-- List existing connections -->
             {#each ioskConnections as conn (conn.connectionId)}
-                <button on:click={() => handleOpenConsole(conn.connectionId)}>
+                <div class="menu-subheader">{conn.username}</div>
+                <button class="menu-item-indented" on:click={() => handleOpenConsole(conn.connectionId)}>
                     <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />
-                    Console ({conn.username})
+                    Console
                 </button>
-                <button on:click={() => handleOpenFiles(conn.connectionId)} disabled={conn.status !== 'connected'}>
+                <button class="menu-item-indented" on:click={() => handleOpenFiles(conn.connectionId)} disabled={conn.status !== 'connected'}>
                     <span class="menu-item-icon">📁</span>
-                    Files ({conn.username})
+                    Files
                 </button>
             {/each}
 
             <!-- Offer to connect as default user if not already connected -->
             {#if !defaultUserConnectionInfo.exists && activeProcess?.port}
                 {#if ioskConnections.length > 0}<div class="menu-separator"></div>{/if}
-                <button on:click={() => handleOpenConsole(defaultUserConnectionInfo.connectionId, true)}>
+                <div class="menu-subheader">New as {defaultUserConnectionInfo.username}</div>
+                <button class="menu-item-indented" on:click={() => handleOpenConsole(defaultUserConnectionInfo.connectionId, true)}>
                     <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />
-                    Console (new as {defaultUserConnectionInfo.username})
+                    Console
                 </button>
-                <button on:click={() => handleOpenFiles(defaultUserConnectionInfo.connectionId, true)}>
+                <button class="menu-item-indented" on:click={() => handleOpenFiles(defaultUserConnectionInfo.connectionId, true)}>
                     <span class="menu-item-icon">📁</span>
-                    Files (new as {defaultUserConnectionInfo.username})
+                    Files
                 </button>
             {/if}
 

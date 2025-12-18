@@ -172,7 +172,7 @@ export function newBoxesWindow(props = {}) {
         windows.setActiveTab(group.id, existingBoxesTab.id);
         return;
     }
-    windows.addWindow(Boxes, { title: 'Boxes', width: 760, height: 600, ...props });
+    windows.addWindow(Boxes, { title: 'Boxes', width: 800, height: 800, ...props });
 }
 
 export function newProcessesWindow(props = {}) {
@@ -236,8 +236,8 @@ export function showBoxesAndSelect(boxId) {
         // Create new window with the box pre-selected
         windows.addWindow(Boxes, {
             title: 'Boxes',
-            width: 760,
-            height: 600,
+            width: 800,
+            height: 800,
             initialSelectedBoxId: boxId
         });
     }
