@@ -490,7 +490,8 @@ export const activeConsoles = readable(new Map(), set => {
         const newActiveConsoles = new Map();
         for (const group of allWindows) {
             for (const tab of group.tabs) {
-                if (tab.componentName === 'IoskConsole' && tab.isConsoleConnected && tab.connectionId) {
+                // --- MODIFICATION: Remove obsolete property check ---
+                if (tab.componentName === 'IoskConsole' && tab.connectionId) {
                     const key = tab.connectionId;
                     if (!newActiveConsoles.has(key)) {
                         newActiveConsoles.set(key, tab);
