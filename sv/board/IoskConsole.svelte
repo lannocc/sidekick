@@ -7,6 +7,7 @@
     import { get } from 'svelte/store';
     import { windows } from '../windows.js';
     import { newIoskFileExplorer, newIoskWatch } from '../apps.js';
+    import { runningProcesses } from '../bridge.js';
     // --- MODIFICATION START: Import new central connection hub and the new UsersList component ---
     import {
         activeIoskConnections,
@@ -119,6 +120,10 @@
     // --- MODIFICATION: Remove ws instance ---
     let showSettings = false;
     let shouldScroll = true;
+
+    // --- NEW: Derive a list of connectable IOSK boxes from running processes ---
+    let runningIoskBoxes = [];
+    $: runningIoskBoxes = $runningProcesses.filter(p => p.type === 'iosk' && (p.status === 'running' || p.status === 'paused') && p.port);
 
     // Lifecycle and Reactive Statements
     afterUpdate(() => {
@@ -239,6 +244,19 @@
         shouldScroll = true;
     }
 
+    // --- NEW: Functions to handle connecting from a running box ---
+    function populateFromBox(proc) {
+        if (!proc || !proc.port) return;
+        localWsUrl = `ws://localhost:${proc.port}`;
+        localUsername = proc.default_username || 'root';
+    }
+
+    async function populateAndConnect(proc) {
+        populateFromBox(proc);
+        await tick(); // Allow bound values to update
+        createAndAttachConnection();
+    }
+
     // --- MODIFICATION: Room/logout actions use sendSystemCommand ---
     function joinRoom(roomToJoin) { sendSystemCommand(`$ room ${roomToJoin}`); showRoomsMenu = false; focusInput(); }
     function closeRoom() { sendSystemCommand('$ clroom'); showRoomsMenu = false; focusInput(); }
@@ -288,6 +306,25 @@
     {#if !connectionId}
         <!-- Initial Screen: Attach to existing or create new connection -->
         <div class="initial-screen">
+            <h3>Connect to Running Box</h3>
+            <div class="connection-list">
+                {#if runningIoskBoxes.length === 0}
+                    <div class="no-connections">No running IOSK boxes.</div>
+                {:else}
+                    {#each runningIoskBoxes as proc (proc.pid)}
+                        <button
+                            class="connection-item"
+                            on:click={() => populateFromBox(proc)}
+                            on:dblclick={() => populateAndConnect(proc)}
+                            title="Click to populate, Double-click to connect"
+                        >
+                            <span class="conn-id">{proc.box_name || `Box ID: ${proc.box_id}`}</span>
+                            <span class="conn-status {proc.status}">{proc.status}</span>
+                        </button>
+                    {/each}
+                {/if}
+            </div>
+
             <h3>Attach to Session</h3>
             <div class="connection-list">
                 {#if $activeIoskConnections.size === 0}
@@ -394,10 +431,11 @@
     .connection-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .conn-id { font-family: monospace; font-size: 0.9em; }
     .conn-status { font-weight: bold; font-size: 0.8em; text-transform: uppercase; padding: 2px 5px; border-radius: 3px; }
-    .conn-status.connected { color: #2ecc71; }
+    .conn-status.connected, .conn-status.running { color: #2ecc71; }
     .conn-status.connecting { color: #f39c12; }
     .conn-status.disconnected { color: #95a5a6; }
     .conn-status.error { color: #e74c3c; }
+    .conn-status.paused { color: #f39c12; }
     .separator { display: flex; align-items: center; text-align: center; color: #7f8c8d; margin: 10px 0; }
     .separator::before, .separator::after { content: ''; flex: 1; border-bottom: 1px solid var(--border-color); }
     .separator:not(:empty)::before { margin-right: .25em; }

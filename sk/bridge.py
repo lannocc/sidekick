@@ -980,7 +980,7 @@ async def broadcast_process_list():
     
     cursor = DB_CONN.cursor()
     cursor.execute("""
-        SELECT p.*, b.name as box_name, i.enable_stdin
+        SELECT p.*, b.name as box_name, i.enable_stdin, i.default_username
         FROM process p 
         LEFT JOIN box b ON p.box_id = b.id
         LEFT JOIN iosk i ON p.box_id = i.box_id
