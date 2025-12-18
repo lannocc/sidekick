@@ -517,7 +517,8 @@ async def handle_sk_ask(websocket, msg):
             else:
                 log.warning(f"File not found for 'ask', skipping: {abs_path}")
 
-        log.info(f"Executing ask command for {ask_id}: {cmd}")
+        log.info(f"Executing 'ask' for ask_id={ask_id}")
+        log.info(f"  > Full command: {cmd}")
 
         process = await asyncio.create_subprocess_exec(
             *cmd,
@@ -1129,6 +1130,8 @@ async def handle_start_iosk(msg):
             proc_args['start_new_session'] = True
 
     try:
+        log.info(f"Starting 'iosk' process for box_id={box_id}")
+        log.info(f"  > Full command: {cmd}")
         process = await asyncio.create_subprocess_exec(*cmd, **proc_args)
         pid = process.pid
         print_action("Start IOSK", f"box={box_id}, pid={pid}, daemon={bool(iosk_row['daemon_mode'])}")
