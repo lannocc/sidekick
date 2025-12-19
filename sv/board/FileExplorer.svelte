@@ -27,7 +27,7 @@
     export let treeNode = null;
     export let treeLevel = 0;
     // Pass down reactive props needed by the recursive part
-    export { viewMode, colorMode, getTileColor, handleItemClick, expandedNodes, toggleNode, handleRightClick, handleDragStart };
+    export { getTileColor, handleItemClick, expandedNodes, toggleNode, handleRightClick, handleDragStart };
 
     let currentPath = (initialPath && initialPath !== '.') ? initialPath : '/';
     let items = [];
@@ -41,9 +41,9 @@
     let changeClearTimeout;
 
     // --- View State ---
-    let viewMode = 'list';
+    export let viewMode = 'list'; // MODIFICATION: Changed 'let' to 'export let'
     export let columnsEnabled = false;
-    let colorMode = 'type';
+    export let colorMode = 'type'; // MODIFICATION: Changed 'let' to 'export let'
     export let nestedView = false;
     let treeItems = [];
     let expandedNodes = new Set();
@@ -178,8 +178,25 @@
     }
 
     // --- State & Connection Management ---
+    // MODIFICATION: Update this reactive block to save all persistent state
     $: if (id !== undefined && groupId !== undefined) {
-        windows.updateTabProps(groupId, id, { currentPath, isSettingsModalOpen: showSettings });
+        windows.updateTabProps(groupId, id, {
+            // --- Persist dynamic state ---
+            // Save the *current* path as the *initial* path for the next instantiation.
+            initialPath: currentPath,
+            isSettingsModalOpen: showSettings,
+            // Save view-related state
+            viewMode,
+            colorMode,
+            nestedView,
+            columnsEnabled,
+
+            // --- Persist "identity" props ---
+            // These are static but need to be saved for backing/restoring.
+            connectionType,
+            connectionId,
+            pickerTargetId
+        });
     }
 
     // --- View Logic ---
