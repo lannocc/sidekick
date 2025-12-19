@@ -691,10 +691,6 @@
         background-color: #1a9c2a;
         box-shadow: inset 0 2px 4px rgba(0,0,0,0.25);
     }
-    .quick-launch-button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
 
     /* Scalable main buttons */
     .windows-button, .quick-launch-button, .start-button {
@@ -724,14 +720,14 @@
     }
     .connections-menu {
         top: calc(var(--tb-height, 40px) * 0.85);
-        left: 0;
+        left: calc((var(--tb-height, 40px) * 0.7) + 8px);
         width: 320px;
         max-height: 400px;
         overflow-y: auto;
     }
     .quick-view-menu {
-        top: calc(var(--tb-height, 40px) + 5px);
-        right: 0;
+        top: calc(var(--tb-height, 40px) * 0.85);
+        right: calc((var(--tb-height, 40px) * 0.7) + 8px);
         width: 300px;
         max-height: 400px;
         overflow-y: auto;
@@ -999,9 +995,9 @@
     .close-all-row:hover .menu-item {
         color: white;
     }
-    .start-button, .windows-list-button { position: relative; }
-    .start-button::after, .windows-list-button::after { content: ''; position: absolute; bottom: 0px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
-    .start-button::after { right: 5px; }
+    .start-button, .windows-list-button, .quick-launch-button { position: relative; }
+    .start-button::after, .windows-list-button::after, .quick-launch-button::after { content: ''; position: absolute; bottom: 0px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid rgba(255, 255, 255, 0.7); }
+    .start-button::after, .quick-launch-button::after { right: 5px; }
     .windows-list-button::after { left: 5px; }
 
     /* Scalable clock */
@@ -1022,7 +1018,7 @@
 <div class="taskbar" on:mousedown={handleTaskbarMouseDown} on:wheel={handleTaskbarWheel} style="--tb-height: {tbHeight}px">
     <div class="taskbar-left" bind:this={leftSectionEl}>
         <button class="windows-button windows-list-button" bind:this={windowsButton} on:click|stopPropagation={() => toggleMenu('windows')}>✕</button>
-        <button class="windows-button" class:active={showConnectionsMenu} bind:this={connectionsButton} on:click|stopPropagation={() => toggleMenu('connections')} title="Connections">&mdash;</button>
+        <button class="windows-button windows-list-button" class:active={showConnectionsMenu} bind:this={connectionsButton} on:click|stopPropagation={() => toggleMenu('connections')} title="Connections">&mdash;</button>
         {#if showWindowsMenu}
             <div class="windows-menu" style={menuBackgroundStyle} on:click|stopPropagation>
                 {#each boxHierarchy as box, i (box.id)}
@@ -1043,7 +1039,7 @@
                                     }
                                 }}>
                                 <img src="/skybox.png" alt="" class="menu-item-icon" />
-                                {box.name || 'Main Desktop'}
+                                {box.name || 'SKYBOARD'}
                             </button>
                         {:else}
                             <button type="button" class="menu-item-up" 
@@ -1068,6 +1064,13 @@
                                 {box.name}
                             </button>
                         {/if}
+                    </div>
+                {:else}
+                    <div class="menu-item-row">
+                        <button class="menu-item bold" style="padding-left: 15px;" disabled>
+                            <img src="/skybox.png" alt="" class="menu-item-icon" />
+                            SKYBOARD
+                        </button>
                     </div>
                 {/each}
 
@@ -1098,41 +1101,46 @@
         {/if}
         {#if showConnectionsMenu}
             <div class="connections-menu" style={menuBackgroundStyle} on:click|stopPropagation>
-                <div class="connections-section-header">Managed IOSK Processes</div>
-                {#each $runningProcesses.filter(p => p.type === 'iosk' && (p.status === 'running' || p.status === 'paused')) as proc (proc.pid)}
-                    <div class="connections-process-item">
-                        <div class="process-actions">
-                             <button class="stop-btn" title="Stop Process" on:click={() => stopProcess(proc.pid)}>
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
-                            </button>
-                        </div>
-                        <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />
-                        <div class="status-indicator status-{proc.status}"></div>
-                        <div class="process-info">
-                            <div class="name" title={proc.box_name}>{proc.box_name || 'Untitled Process'}</div>
-                            <div class="status">PID: {proc.pid}</div>
-                        </div>
-                        <div class="process-actions">
-                            {#if proc.status === 'running'}
-                                <button title="Pause Process" on:click={() => pauseProcess(proc.pid)}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                <div style="position: relative;">
+                    {#if $connectionStatus !== 'connected'}
+                        <div class="skybridge-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 0; padding: 0; pointer-events: auto;">SKYBRIDGE REQUIRED</div>
+                    {/if}
+                    <div class="connections-section-header">Managed IOSK Processes</div>
+                    {#each $runningProcesses.filter(p => p.type === 'iosk' && (p.status === 'running' || p.status === 'paused')) as proc (proc.pid)}
+                        <div class="connections-process-item">
+                            <div class="process-actions">
+                                 <button class="stop-btn" title="Stop Process" on:click={() => stopProcess(proc.pid)}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
                                 </button>
-                            {:else if proc.status === 'paused'}
-                                <button title="Resume Process" on:click={() => resumeProcess(proc.pid)}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                                </button>
-                            {/if}
+                            </div>
+                            <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />
+                            <div class="status-indicator status-{proc.status}"></div>
+                            <div class="process-info">
+                                <div class="name" title={proc.box_name}>{proc.box_name || 'Untitled Process'}</div>
+                                <div class="status">PID: {proc.pid}</div>
+                            </div>
+                            <div class="process-actions">
+                                {#if proc.status === 'running'}
+                                    <button title="Pause Process" on:click={() => pauseProcess(proc.pid)}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                                    </button>
+                                {:else if proc.status === 'paused'}
+                                    <button title="Resume Process" on:click={() => resumeProcess(proc.pid)}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                    </button>
+                                {/if}
+                            </div>
                         </div>
-                    </div>
-                {:else}
-                    <div class="menu-item-empty">No managed IOSK processes running.</div>
-                {/each}
+                    {:else}
+                        <div class="menu-item-empty">No managed IOSK processes running.</div>
+                    {/each}
 
-                {#if processesApp}
-                    <button class="menu-item" on:click={() => { processesApp.launcher(); showConnectionsMenu = false; }}>
-                        <span class="menu-item-icon">{processesApp.icon}</span>Open Process Manager
-                    </button>
-                {/if}
+                    {#if processesApp}
+                        <button class="menu-item" on:click={() => { processesApp.launcher(); showConnectionsMenu = false; }}>
+                            <span class="menu-item-icon">{processesApp.icon}</span>Open Process Manager
+                        </button>
+                    {/if}
+                </div>
                 <div class="menu-separator"></div>
 
                 <div class="connections-section-header">Connected IOSK Sessions</div>
@@ -1220,18 +1228,22 @@
             bind:this={quickViewButton}
             on:click|stopPropagation={() => toggleMenu('quickview')}
             title="Box Menu"
-            disabled={$connectionStatus !== 'connected' || !$currentBox}
         >&#9632;</button>
         {#if showQuickView && $currentBox}
             <div class="quick-view-menu" style={menuBackgroundStyle} on:click|stopPropagation>
                 <div class="quick-view-section-header">{$currentBox.name}</div>
                 
-                <button class="menu-item" on:click={launchLocalFiles} disabled={!$currentBox.context}>
-                    <span class="menu-item-icon">📁</span>Files
-                </button>
-                <button class="menu-item" on:click={launchLocalTerminal} disabled={!$currentBox.context}>
-                    <span class="menu-item-icon">&gt;_</span>Terminal
-                </button>
+                <div style="position: relative;">
+                    {#if $connectionStatus !== 'connected'}
+                        <div class="skybridge-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 0; padding: 0; pointer-events: auto;">SKYBRIDGE REQUIRED</div>
+                    {/if}
+                    <button class="menu-item" on:click={launchLocalFiles} disabled={!$currentBox.context}>
+                        <span class="menu-item-icon">📁</span>Files
+                    </button>
+                    <button class="menu-item" on:click={launchLocalTerminal} disabled={!$currentBox.context}>
+                        <span class="menu-item-icon">&gt;_</span>Terminal
+                    </button>
+                </div>
 
                 {#if isIoskBox}
                     <div class="menu-separator"></div>
