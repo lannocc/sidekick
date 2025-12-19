@@ -1612,6 +1612,14 @@
         const newWidth = windowToBack.width * zoomFactor;
         const newHeight = windowToBack.height * zoomFactor;
 
+        // --- FIX ---
+        // The original config contains the dimensions from the front-layer window.
+        // We must update it with the newly calculated dimensions for the back-layer
+        // so that the optimistic render uses the correct size, preventing a size-jump.
+        config.width = newWidth;
+        config.height = newHeight;
+        // --- END FIX ---
+
         const newX = backWorldMidX - newWidth / 2;
         const newY = backWorldMidY - newHeight / 2;
 
@@ -1643,13 +1651,15 @@
         }
 
         // 4. *** REVISED ATOMIC UPDATE ***
-        // Remove the window from the front layer and add an optimistic representation
-        // to the back layer in the same tick. This is the key to preserving the component.
+        // To ensure the component instance is preserved across the front-to-back transition,
+        // we first add an optimistic representation of the window to the back layer.
+        // The `allRenderableWindows` derived store has logic to handle this temporary
+        // duplication (by hiding the back-layer version if the front-layer one exists).
+        // Then, we remove the front-layer window. Svelte processes this as a single logical
+        // update, sees the component key is still present (just in a different logical layer),
+        // and preserves the component instance, preventing a reset.
 
-        // First, remove from the front.
-        windows.removeWindow(windowToBack.id, { force: true });
-
-        // Then, add a temporary object to the back layer store. This object mimics
+        // Create the temporary object for the back layer store. This object mimics
         // the structure of a real backed window from the database.
         const optimisticBackedWindow = {
             id: `temp-${Date.now()}`, // Temporary ID, will be replaced by backend response
@@ -1662,7 +1672,14 @@
             scale: backedItem.scale,
             z_index: 1, // Placeholder
         };
+        
+        // Add to the back layer store FIRST.
         backedWindows.update(bws => [...bws, optimisticBackedWindow]);
+
+        // Now, remove the window from the front. Svelte will now see the same key
+        // move from the front list to the back list and will preserve the component.
+        windows.removeWindow(windowToBack.id, { force: true });
+
 
         // 5. Persist all changes to the backend asynchronously.
 
@@ -2291,3 +2308,4 @@
         <Dash />
     {/if}
 </div>
+
