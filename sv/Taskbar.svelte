@@ -480,7 +480,7 @@
             showQuickView = false;
         }
     }
-    
+
     function handleWindowClick() {
         // This handler is for clicks "outside" the menus.
         // It relies on the menu buttons and the menu containers themselves
@@ -630,7 +630,7 @@
         const command = user.paused ? `!resume ${user.name}` : `!pause ${user.name}`;
         sendCommand(connectionId, command);
     }
-    
+
     function inspectUser(user) {
         if (!connectionId) return;
         newIoskUserInspector({ connectionId, targetUser: user.name });
@@ -870,7 +870,7 @@
     }
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
     .menu-item-empty { padding: 10px 15px; color: #7f8c8d; font-style: italic; }
-    
+
     .quick-view-section-header, .connections-section-header {
         padding: 6px 12px;
         font-size: 0.8em;
@@ -888,11 +888,11 @@
     }
     .connections-frontend-item:hover { background-color: var(--taskbar-button-hover-bg); }
     .quick-view-process-item:last-of-type, .connections-process-item:last-of-type, .connections-frontend-item:last-of-type { border-bottom: none; }
-    
+
     .status-indicator { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
     .status-running { background-color: #2ecc71; }
     .status-paused { background-color: #f39c12; }
-    
+
     .process-info, .connection-info { flex-grow: 1; overflow: hidden; }
     .connection-info { cursor: pointer; }
     .process-info .name, .connection-info .name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -906,7 +906,7 @@
     }
     .quick-action-btn { color: #e74c3c; }
     .quick-action-btn:hover { background-color: rgba(231, 76, 60, 0.2); }
-    
+
     .process-actions, .connection-actions { display: flex; gap: 4px; }
     .process-actions button, .connection-actions button { color: var(--text-color-light); }
     .process-actions button:hover, .connection-actions button:hover { background-color: var(--taskbar-button-hover-bg); color: var(--text-color); }
@@ -1026,10 +1026,11 @@
                     {@const parentBox = i > 0 ? boxHierarchy[i-1] : null}
                     <div class="menu-item-row">
                         {#if i === 0}
-                            <button class="menu-item" 
+                            <button class="menu-item"
                                 style="padding-left: 15px;"
                                 class:bold={isCurrentBox}
                                 disabled={!isCurrentBox && $connectionStatus !== 'connected'}
+                                title={!isCurrentBox && $connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : ''}
                                 on:click={() => {
                                     if (isCurrentBox) {
                                         handleCurrentBoxClick();
@@ -1042,16 +1043,17 @@
                                 {box.name || 'SKYBOARD'}
                             </button>
                         {:else}
-                            <button type="button" class="menu-item-up" 
-                                on:click={() => { if ($connectionStatus === 'connected') { switchToBox(parentBox.id); showWindowsMenu = false; } }} 
+                            <button type="button" class="menu-item-up"
+                                on:click={() => { if ($connectionStatus === 'connected') { switchToBox(parentBox.id); showWindowsMenu = false; } }}
                                 disabled={$connectionStatus !== 'connected'}
-                                title="Return to {parentBox.name}">
+                                title={$connectionStatus === 'connected' ? `Return to ${parentBox.name}` : 'SKYBRIDGE REQUIRED'}>
                                 ⬑
                             </button>
                             <button type="button" class="menu-item"
                                 style="padding-left: {15 + (i - 1) * 15}px;"
                                 class:bold={isCurrentBox}
                                 disabled={!isCurrentBox && $connectionStatus !== 'connected'}
+                                title={!isCurrentBox && $connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : ''}
                                 on:click={() => {
                                     if (isCurrentBox) {
                                         handleCurrentBoxClick();
@@ -1067,7 +1069,7 @@
                     </div>
                 {:else}
                     <div class="menu-item-row">
-                        <button class="menu-item bold" style="padding-left: 15px;" disabled>
+                        <button class="menu-item bold" style="padding-left: 15px;" on:click={handleCurrentBoxClick}>
                             <img src="/skybox.png" alt="" class="menu-item-icon" />
                             SKYBOARD
                         </button>
@@ -1082,7 +1084,7 @@
                     {@const activeTab = getActiveTab(win)}
                     <div class="menu-item-row">
                         <button class="menu-item-close" on:click={() => windows.removeWindow(win.id)} title="Close window">✕</button>
-                        <button class="menu-item" 
+                        <button class="menu-item"
                             class:bold={win.id === activeWindowId}
                             on:click={() => { if ($dashActive) dashActive.set(false); windows.focusWindow(win.id); showWindowsMenu = false; }}>
                             {#if activeTab}<span class="menu-item-icon">{componentIconMap[activeTab.componentName] || componentIconMap.default}</span>{/if}
@@ -1158,7 +1160,7 @@
                             {#if consoleTitle}
                                 <div class="status" title={consoleTitle}>{consoleTitle}</div>
                             {/if}
-                        </div>
+                       </div>
                     </div>
                 {:else}
                     <div class="menu-item-empty">No active frontend connections.</div>
@@ -1229,18 +1231,18 @@
             on:click|stopPropagation={() => toggleMenu('quickview')}
             title="Box Menu"
         >&#9632;</button>
-        {#if showQuickView && $currentBox}
+        {#if showQuickView}
             <div class="quick-view-menu" style={menuBackgroundStyle} on:click|stopPropagation>
-                <div class="quick-view-section-header">{$currentBox.name}</div>
-                
+                <div class="quick-view-section-header">{$currentBox?.name || 'SKYBOARD'}</div>
+
                 <div style="position: relative;">
                     {#if $connectionStatus !== 'connected'}
                         <div class="skybridge-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 0; padding: 0; pointer-events: auto;">SKYBRIDGE REQUIRED</div>
                     {/if}
-                    <button class="menu-item" on:click={launchLocalFiles} disabled={!$currentBox.context}>
+                    <button class="menu-item" on:click={launchLocalFiles} disabled={!$currentBox?.context}>
                         <span class="menu-item-icon">📁</span>Files
                     </button>
-                    <button class="menu-item" on:click={launchLocalTerminal} disabled={!$currentBox.context}>
+                    <button class="menu-item" on:click={launchLocalTerminal} disabled={!$currentBox?.context}>
                         <span class="menu-item-icon">&gt;_</span>Terminal
                     </button>
                 </div>
@@ -1251,10 +1253,10 @@
                         <button class="menu-item" on:click={launchIoskConsole}>
                            <span class="menu-item-icon" style="font-weight: bold;">»_</span>Console
                         </button>
-                        <button class="menu-item" on:click={launchIoskFileExplorer}>
+                       <button class="menu-item" on:click={launchIoskFileExplorer}>
                             <img src="/iosk.png" alt="IOSK" class="menu-item-icon" />IOSK Files
                         </button>
-                        
+
                         {#if ioskConnectionState?.status === 'connected'}
                             <div class="quick-view-section-header" style="border-top: 1px solid var(--border-color); margin-top: 4px;">
                                 Live Users ({ioskConnectionState.roomParticipants.length})
@@ -1343,4 +1345,5 @@
             </div>
         {/if}
     </div>
-    </div>
+</div>
+
