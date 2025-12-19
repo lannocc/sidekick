@@ -6,7 +6,8 @@
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { sendMessage, askOutput, askError, askExit, connectionStatus, askStatsResponse } from '../bridge.js';
-    import { newLocalFileExplorer, windows } from '../windows.js';
+    import { windows } from '../windows.js';
+    import { newLocalFileExplorer } from '../apps.js';
     import { fileSelection } from '../iosk.js';
 
     export let id; // tab id

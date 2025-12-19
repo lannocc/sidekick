@@ -2,7 +2,7 @@
     import { onMount, onDestroy } from 'svelte';
 
     // Make `mirrored` a prop to receive saved state on re-creation.
-    export let mirrored = false;
+    export let mirrored = true;
 
     // Add a `getState` function so the window manager can save the component's state.
     export function getState() {
@@ -163,4 +163,3 @@
         <canvas bind:this={canvasEl} class="snapshot-canvas"></canvas>
     {/if}
 </div>
-

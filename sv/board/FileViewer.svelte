@@ -7,7 +7,8 @@
     import { get } from 'svelte/store';
     import { createFsAdapter } from '../fs_adapter.js';
     import { marked } from 'marked';
-    import { windows, activeConsoles } from '../windows.js';
+    import { windows } from '../windows.js';
+    import { activeConsoles } from '../apps.js';
     import { parseAnsi } from '../ansi.js';
     import hljs from 'highlight.js/lib/core';
     import javascript from 'highlight.js/lib/languages/javascript';
@@ -28,9 +29,8 @@
     export let id;
     export let groupId;
     export let connectionType;
-    export let consoleId = null;
+    export let connectionId = null;
     export let path;
-    export let consoleConnection = null;
     export let mode = 'rendered';
 
     let content_b64 = '';
@@ -53,30 +53,12 @@
     $: fileExtension = getFileExtension(path);
     $: isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(fileExtension);
     $: isMarkdown = ['md', 'markdown'].includes(fileExtension);
-    $: isSourceCode = ['py', 'html', 'js', 'css', 'svelte', 'c', 'cpp', 'sh', 'json', 'yml', 'xml', 'log'].includes(fileExtension);
+    $: isSourceCode = ['py', 'html', 'js', 'css', 'svelte', 'c', 'cpp', 'sh', 'json', 'yml', 'xml'].includes(fileExtension);
     $: isAnsiText = !isBinary && !isImage && !isMarkdown && !isSourceCode;
     $: canRender = (isImage && isBinary) || (isMarkdown && !isBinary) || (isSourceCode && !isBinary) || isAnsiText;
 
-    $: if (connectionType === 'iosk' && consoleConnection && $windows) {
-        const myConsoleTab = $windows.flatMap(w => w.tabs).find(t => t.id === consoleId);
-        if (!myConsoleTab || !myConsoleTab.isConsoleConnected) {
-            const key = `${consoleConnection.user}@${consoleConnection.url}`;
-            const compatibleConsole = $activeConsoles.get(key);
-            if (compatibleConsole) {
-                consoleId = compatibleConsole.id;
-                errorMessage = '';
-                initialRequest();
-            } else {
-                consoleId = null;
-                isLoading = false;
-                errorMessage = 'No active IOSK connection available.';
-                content_b64 = '';
-            }
-        }
-    }
-
     function requestFile(offset = 0, length = -1) {
-        if ((connectionType === 'iosk' && !consoleId)) {
+        if ((connectionType === 'iosk' && !connectionId)) {
             isLoading = false; return;
         }
         if (offset === 0) {
@@ -120,7 +102,7 @@
     }
 
     onMount(() => {
-        fsAdapter = createFsAdapter({ connectionType, consoleId, requesterId: id });
+        fsAdapter = createFsAdapter({ connectionType, connectionId, requesterId: id });
 
         fsAdapter.readResponse.subscribe(data => {
             if (data && data.path === path && data.requester_id === id) {
@@ -174,8 +156,13 @@
                 }
             }
         });
-
-        initialRequest();
+        
+        if (connectionType === 'iosk' && !connectionId) {
+            isLoading = false;
+            errorMessage = "Error: No IOSK connection specified.";
+        } else {
+            initialRequest();
+        }
     });
 
     onDestroy(() => {
@@ -188,13 +175,19 @@
     function isPrintable(byte) { return byte >= 32 && byte <= 126; }
 
     $: if (id !== undefined && groupId !== undefined) {
-        windows.updateTabProps(groupId, id, { canRender, mode, consoleId, path });
+        windows.updateTabProps(groupId, id, { canRender, mode, connectionId, path });
     }
 
     $: if (mode === 'rendered' && isSourceCode && content_text) {
         try {
-            const language = hljs.getLanguage(fileExtension) ? fileExtension : 'plaintext';
-            highlighted_html = hljs.highlight(content_text, { language, ignoreIllegals: true }).value;
+            // Only attempt to highlight if the language is explicitly registered.
+            if (hljs.getLanguage(fileExtension)) {
+                highlighted_html = hljs.highlight(content_text, { language: fileExtension, ignoreIllegals: true }).value;
+            } else {
+                // If language is not found, just render the text as-is, but escaped.
+                // This avoids the "Unknown language" warning from highlight.js.
+                highlighted_html = content_text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            }
         } catch(e) {
             console.error("Highlighting error:", e);
             highlighted_html = content_text.replace(/</g, "&lt;").replace(/>/g, "&gt;");

@@ -1,3 +1,5 @@
+// sv/desktop.js
+
 import { writable, get, derived } from 'svelte/store';
 import { boxes } from './bridge.js';
 
@@ -380,6 +382,9 @@ export const wasDraggingItems = writable(false);
 // This is used to immediately disable pointer events on other layers to prevent unintended hover/focus effects.
 export const desktopInteraction = writable(false);
 
+// *** NEW *** Store to track if a window drag/resize is in progress.
+export const windowInteraction = writable(false);
+
 // Store to track if a box is unfolded/expanded to manage global z-index contexts.
 export const activeBoxId = writable(null);
 
@@ -396,3 +401,132 @@ export const currentBox = derived(
 // New stores for Notification Center
 export const notificationHistory = writable([]);
 export const unreadNoticeCount = writable(0);
+
+/**
+ * Calculates the correct screen position for a context menu, ensuring it doesn't render off-screen.
+ * @param {MouseEvent} event The mouse event that triggered the menu.
+ * @param {object} [menuDimensions={width: 150, height: 200}] The estimated dimensions of the menu.
+ * @returns {{x: number, y: number}} The top-left coordinates for the menu.
+ */
+export function calculateContextMenuPosition(event, menuDimensions = { width: 150, height: 200 }) {
+    let x = event.clientX;
+    let y = event.clientY;
+
+    // Ensure we have window dimensions. This should be safe in a browser context.
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+
+    // Adjust if the menu would go off the right edge of the screen
+    if (x + menuDimensions.width > screenWidth) {
+        x = screenWidth - menuDimensions.width - 5; // subtract 5 for padding
+    }
+
+    // Adjust if the menu would go off the bottom edge of the screen
+    if (y + menuDimensions.height > screenHeight) {
+        y = screenHeight - menuDimensions.height - 5; // subtract 5 for padding
+    }
+
+    return { x, y };
+}
+
+/**
+ * Calculates coordinates for a menu that uses `position: fixed` but is a child of a
+ * transformed element (like a Window). This is necessary because `position: fixed`
+ * is relative to a transformed ancestor, not the viewport. This function computes
+ * the correct `top` and `left` values to make the menu appear at the desired
+ * viewport location (e.g., cursor position), while also ensuring it stays
+ * within the viewport boundaries.
+ * @param {MouseEvent} event The mouse event that triggered the menu.
+ * @param {object} [menuDimensions={width: 150, height: 200}] The estimated dimensions of the menu.
+ * @param {object} [options={}] Optional positioning preferences.
+ * @param {'left'|'right'} [options.preferredX='right'] Preferred horizontal opening direction.
+ * @param {'up'|'down'} [options.preferredY='down'] Preferred vertical opening direction.
+ * @returns {{x: number, y: number}} The top-left coordinates for the menu's style attribute.
+ */
+export function calculateWindowContextMenuPosition(
+    event,
+    menuDimensions = { width: 150, height: 200 },
+    options = {}
+) {
+    if (!event || !event.target) {
+        console.warn("calculateWindowContextMenuPosition called without a valid event. Returning {x: 0, y: 0}.");
+        return { x: 0, y: 0 };
+    }
+
+    const { preferredX = 'right', preferredY = 'down' } = options;
+    const windowWrapper = event.target.closest('.window-wrapper:not(.backed)');
+    const { zoom } = get(windowView);
+
+    // 1. Determine the target viewport coordinates for the menu's top-left corner.
+    let targetX, targetY;
+
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+
+    // The menu's rendered size in the viewport is affected by the window's zoom.
+    const scaledMenuWidth = menuDimensions.width * (zoom || 1);
+    const scaledMenuHeight = menuDimensions.height * (zoom || 1);
+
+    // Adjust X position based on preference, flipping if necessary
+    if (preferredX === 'left') {
+        targetX = event.clientX - scaledMenuWidth;
+        if (targetX < 0) { // Off-screen left, flip to right
+            targetX = event.clientX;
+        }
+    } else { // 'right' is default
+        targetX = event.clientX;
+        if (targetX + scaledMenuWidth > screenWidth) { // Off-screen right, flip to left
+            targetX = event.clientX - scaledMenuWidth;
+        }
+    }
+
+    // Adjust Y position based on preference, flipping if necessary
+    if (preferredY === 'up') {
+        targetY = event.clientY - scaledMenuHeight;
+        if (targetY < 0) { // Off-screen top, flip down
+            targetY = event.clientY;
+        }
+    } else { // 'down' is default
+        targetY = event.clientY;
+        if (targetY + scaledMenuHeight > screenHeight) { // Off-screen bottom, flip up
+            targetY = event.clientY - scaledMenuHeight;
+        }
+    }
+
+    // 2. Clamp to viewport edges as a final step.
+    const PADDING = 5;
+    if (targetX < PADDING) {
+        targetX = PADDING;
+    }
+    if (targetY < PADDING) {
+        targetY = PADDING;
+    }
+    if (targetX + scaledMenuWidth > screenWidth - PADDING) {
+        targetX = screenWidth - scaledMenuWidth - PADDING;
+    }
+    if (targetY + scaledMenuHeight > screenHeight - PADDING) {
+        targetY = screenHeight - scaledMenuHeight - PADDING;
+    }
+    // Re-ensure it's not off the left/top after a right/bottom adjustment
+    if (targetX < PADDING) {
+        targetX = PADDING;
+    }
+    if (targetY < PADDING) {
+        targetY = PADDING;
+    }
+
+
+    // 3. Convert these target viewport coordinates into coordinates relative to the transformed window.
+    if (windowWrapper && zoom !== 0) {
+        const rect = windowWrapper.getBoundingClientRect();
+        // The calculated x/y will be used as `left` and `top` style properties.
+        // These values are in the window's "untransformed" coordinate space.
+        // The browser will then apply the window's transform (including scale) to them.
+        const x = (targetX - rect.left) / zoom;
+        const y = (targetY - rect.top) / zoom;
+        return { x, y };
+    } else {
+        // Fallback if not in a transformed window, or if zoom is zero.
+        return { x: targetX, y: targetY };
+    }
+}

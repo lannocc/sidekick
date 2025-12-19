@@ -5,14 +5,51 @@
 <script>
     import { onMount, onDestroy, createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
-    import { newAskWindow, dragState, windows, generateBoardConfigFromWindow, newWebBrowser, newLocalFileExplorer, newLocalTerminal } from './windows.js';
-    import { updateBox, deleteBox, savePanelConfig, updateBoxTransform, setBoxCover, switchToBox, allBoxSettings, getBoxSpecificSettings } from './bridge.js';
-    import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId } from './desktop.js';
+    import { dragState, windows, generateBoardConfigFromWindow } from './windows.js';
+    import { 
+        newWebBrowser, 
+        showBoxesAndSelect,
+    } from './apps.js';
+    import { 
+        savePanelConfig, 
+        updateBoxTransform, 
+        setBoxCover, 
+        switchToBox, 
+        allBoxSettings, 
+        getBoxSpecificSettings, 
+        runningProcesses,
+        allIoskConfigs,
+        getIoskConfig,
+    } from './bridge.js';
+    import { activeIoskConnections, initiateConnection } from './iosk.js';
+    import { dashLayouts, desktopView, selectedItems, wasDraggingItems, TASKBAR_HEIGHT, desktopSettings, activeBoxId, calculateContextMenuPosition } from './desktop.js';
     import Panel from './Panel.svelte';
+    import BoxContextMenu from './BoxContextMenu.svelte';
 
     export let box;
 
     const dispatch = createEventDispatcher();
+
+    // --- Process Status ---
+    $: activeProcess = $runningProcesses.find(p => p.box_id === box.id && (p.status === 'running' || p.status === 'paused'));
+    $: processStatus = activeProcess?.status;
+    
+    // --- IOSK Connection Status ---
+    let connectionId = null;
+    let connectionState = null;
+    $: {
+        const config = $allIoskConfigs[box.id];
+        const process = $runningProcesses.find(p => p.box_id === box.id && p.status === 'running' && p.port);
+        if (box.type === 'iosk' && config && process) {
+            const username = config.default_username || 'root';
+            const url = `ws://localhost:${process.port}`;
+            connectionId = `${username}@${url}`;
+            connectionState = $activeIoskConnections.get(connectionId);
+        } else {
+            connectionId = null;
+            connectionState = null;
+        }
+    }
 
     // --- Position, Size, and Scale ---
     let x = box.x ?? 100 + (box.id % 5) * 200;
@@ -24,7 +61,6 @@
     $: if (box.y != null) y = box.y;
     $: if (box.scale != null) scale = box.scale;
     $: coverPanelLocation = box.cover_panel_location;
-    $: canSetCover = !coverPanelLocation;
     $: isSelected = $selectedItems.has(`box-${box.id}`);
 
     // --- Unfold State ---
@@ -32,8 +68,13 @@
     let hoveredPanelKey = null; // Key ('x_y') of the currently hovered panel
 
     // When unfolding, fetch specific settings if needed
-    $: if (isUnfolded && box.has_custom_settings && !$allBoxSettings[box.id]) {
-        getBoxSpecificSettings(box.id);
+    $: if (isUnfolded) {
+        if (box.has_custom_settings && !$allBoxSettings[box.id]) {
+            getBoxSpecificSettings(box.id);
+        }
+        if (box.type === 'iosk' && !$allIoskConfigs[box.id]) {
+            getIoskConfig(box.id);
+        }
     }
 
     $: if (isExpanded) {
@@ -275,10 +316,7 @@
     function handlePanelRightClick(event, loc_x, loc_y) {
         event.preventDefault();
         event.stopPropagation();
-
-        const { panX, panY, zoom } = get(desktopView);
-        const menuX = (event.clientX - panX) / zoom;
-        const menuY = (event.clientY - 40 - panY) / zoom; // -40 for taskbar height
+        window.dispatchEvent(new CustomEvent('close-all-context-menus'));
 
         const panelKey = `${loc_x}_${loc_y}`;
         const panelConfig = panels[panelKey];
@@ -286,20 +324,30 @@
         // If center panel is empty, show the main box context menu.
         if (loc_x === 0 && loc_y === 0 && !panelConfig) {
             closePanelContextMenu();
-            contextMenu = { visible: true, x: menuX, y: menuY };
+            // Estimate menu size: min-width: 150px, ~8 items
+            const position = calculateContextMenuPosition(event, { width: 150, height: 250 });
+            contextMenu = { visible: true, x: position.x, y: position.y };
             return;
         }
 
         // For any non-empty panel (including a non-empty center), show the panel context menu.
         if (panelConfig) {
             closeContextMenu();
-            panelContextMenu = { visible: true, x: menuX, y: menuY, location: { x: loc_x, y: loc_y } };
+            // Estimate panel menu size: min-width: 150px, 1 item
+            const position = calculateContextMenuPosition(event, { width: 150, height: 50 });
+            panelContextMenu = { visible: true, x: position.x, y: position.y, location: { x: loc_x, y: loc_y } };
         }
     }
     function closeContextMenu() {
+        contextMenu.visible = false;
     }
     function closePanelContextMenu() {
         panelContextMenu.visible = false;
+    }
+    
+    function closeAllLocalMenus() {
+        closeContextMenu();
+        closePanelContextMenu();
     }
 
     // Close menu or fold box on outside click or Esc key
@@ -335,9 +383,11 @@
         updateUnfoldDirection(); // Set initial direction
         window.addEventListener('click', handleWindowClick, true); // Use capture phase
         window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('close-all-context-menus', closeAllLocalMenus);
         return () => { // Svelte's onDestroy is implicitly called by this return
             window.removeEventListener('click', handleWindowClick, true);
             window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('close-all-context-menus', closeAllLocalMenus);
             if (clickTimeout) clearTimeout(clickTimeout);
             if (get(activeBoxId) === box.id) {
                 activeBoxId.set(null);
@@ -354,90 +404,6 @@
         }
     }
 
-    // --- Context Menu Actions ---
-    function renameBox() {
-        closeContextMenu();
-        const newName = prompt(`Rename box "${box.name}":`, box.name);
-        if (newName && newName.trim() !== '' && newName !== box.name) {
-            updateBox(box.id, newName);
-        }
-    }
-
-    function deleteBoxConfirm() {
-        closeContextMenu();
-        if (confirm(`Are you sure you want to delete the box "${box.name}"?`)) {
-            deleteBox(box.id);
-        }
-    }
-
-    function askBox() {
-        closeContextMenu();
-        if (box.type === 'local') {
-            newAskWindow([box.context]);
-            isUnfolded = false;
-        }
-    }
-
-    function openTerminal() {
-        closeContextMenu();
-        if (box.type === 'local' && box.context) {
-            newLocalTerminal({ title: `Terminal - ${box.name}`, initialPath: box.context });
-            isUnfolded = false;
-        }
-    }
-
-    function openFiles() {
-        closeContextMenu();
-        if (box.type === 'local' && box.context) {
-            newLocalFileExplorer({ title: `Files - ${box.name}`, initialPath: box.context });
-            isUnfolded = false;
-        }
-    }
-
-    function setCoverImage() {
-        closeContextMenu();
-        if (!canSetCover) {
-            alert("A cover image is already set.");
-            return;
-        }
-        const url = prompt("Enter URL for cover image:");
-        if (url) {
-            // Pick a preferred empty slot, e.g., 'top' at (0, -1)
-            const preferredSlot = availableSlots.find(s => s.x === 0 && s.y === -1) || availableSlots[0];
-            if (!preferredSlot) {
-                alert("Could not find an available panel slot.");
-                return;
-            }
-            const { x, y, parent } = preferredSlot;
-            const locationKey = `${x}_${y}`;
-            savePanelConfig(box.id, x, y, 'image', { url }, parent);
-            setBoxCover(box.id, locationKey);
-            isUnfolded = false;
-        }
-    }
-
-    function setCoverImageFromPicker() {
-        const { location, parent } = panelPickerProps; // location is {x, y}
-        showPanelPicker = false;
-        isUnfolded = false;
-
-        const url = prompt("Enter URL for cover image:");
-        if (url) {
-            const locationKey = `${location.x}_${location.y}`;
-            savePanelConfig(box.id, location.x, location.y, 'image', { url }, parent);
-            setBoxCover(box.id, locationKey);
-        }
-    }
-
-    function clearCoverImage() {
-        closeContextMenu();
-        if (coverPanelLocation) {
-            const [loc_x, loc_y] = coverPanelLocation.split('_').map(Number);
-            savePanelConfig(box.id, loc_x, loc_y, 'empty', null, null);
-            setBoxCover(box.id, null);
-        }
-    }
-
     function clearPanel() {
         const { location } = panelContextMenu; // location is {x, y}
         closePanelContextMenu();
@@ -448,6 +414,19 @@
             }
             savePanelConfig(box.id, location.x, location.y, 'empty', null, null);
             isUnfolded = false;
+        }
+    }
+ 
+    function setCoverImageFromPicker() {
+        const { location, parent } = panelPickerProps; // location is {x, y}
+        showPanelPicker = false;
+        isUnfolded = false;
+
+        const url = prompt("Enter URL for cover image:");
+        if (url) {
+            const locationKey = `${location.x}_${location.y}`;
+            savePanelConfig(box.id, location.x, location.y, 'image', { url }, parent);
+            setBoxCover(box.id, locationKey);
         }
     }
 
@@ -633,6 +612,16 @@
         transition-delay: 0s;
     }
 
+    .iosk-badge {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        width: 20px;
+        height: 20px;
+        z-index: 6;
+        pointer-events: none;
+    }
+
     .box-cloak {
         position: absolute;
         top: 0; left: 0; width: 100%; height: 100%;
@@ -690,6 +679,7 @@
         width: 100%;
         height: 100%;
         object-fit: cover;
+        pointer-events: none;
     }
 
     .panel {
@@ -849,6 +839,8 @@
         text-align: left;
         cursor: pointer;
         font-size: 14px;
+        display: flex;
+        align-items: center;
     }
     .context-menu button:hover {
         background-color: var(--taskbar-button-hover-bg);
@@ -858,9 +850,34 @@
         cursor: not-allowed;
         background-color: transparent;
     }
+    .menu-item-icon {
+        margin-right: 8px;
+        width: 16px;
+        height: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 16px;
+    }
+    img.menu-item-icon {
+        object-fit: contain;
+    }
     .menu-separator { height: 1px; background-color: var(--border-color); margin: 4px 0; }
     .context-menu .delete { color: #e74c3c; }
     .context-menu .delete:hover { background-color: #c0392b; color: white; }
+
+    .menu-subheader {
+        padding: 4px 12px;
+        font-size: 12px;
+        font-weight: bold;
+        color: var(--title-bar-text);
+        background-color: var(--title-bar-bg);
+        cursor: default;
+    }
+    .context-menu button.menu-item-indented {
+        padding-left: 24px;
+    }
 
     .panel-picker {
         position: fixed;
@@ -901,6 +918,63 @@
         color: #7f8c8d;
         font-style: italic;
     }
+
+    .process-status-badge {
+        position: absolute;
+        top: 2px;
+        right: 26px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        z-index: 6;
+        pointer-events: none;
+        border: 2px solid var(--window-bg, #333);
+        box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    }
+    .process-status-badge.running {
+        background-color: #2ecc71;
+    }
+    .process-status-badge.paused {
+        background-color: #f39c12;
+    }
+    .connection-status-badge {
+        position: absolute;
+        top: 2px;
+        right: 50px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        z-index: 6;
+        pointer-events: none;
+        border: 2px solid var(--window-bg, #333);
+        box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    }
+    .connection-status-badge.connected { background-color: #3498db; }
+    .connection-status-badge.connecting { background-color: #f1c40f; }
+    .connection-status-badge.disconnected { background-color: #95a5a6; }
+    .connection-status-badge.error { background-color: #e74c3c; }
+
+    .user-count-badge {
+        position: absolute;
+        top: 2px;
+        right: 74px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 8px;
+        z-index: 6;
+        pointer-events: none;
+        border: 2px solid var(--window-bg, #333);
+        box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        background-color: #8e44ad;
+        color: white;
+        font-size: 10px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+    }
 </style>
 
 <svelte:window bind:innerWidth bind:innerHeight />
@@ -922,6 +996,34 @@
     on:wheel={handleWheel}
     on:scale
 >
+    {#if box.type === 'iosk'}
+        {#if connectionState?.status === 'connected' && connectionState?.roomParticipants?.length > 0}
+            <div class="user-count-badge" title="{connectionState.roomParticipants.length} user(s) online">
+                {connectionState.roomParticipants.length}
+            </div>
+        {/if}
+        {#if connectionId}
+            <div 
+                class="connection-status-badge" 
+                class:connected={connectionState?.status === 'connected'} 
+                class:connecting={connectionState?.status === 'connecting'} 
+                class:disconnected={connectionState?.status === 'disconnected' || !connectionState} 
+                class:error={connectionState?.status === 'error'} 
+                title="Default user connection: {connectionState?.status ?? 'disconnected'}"
+            ></div>
+        {/if}
+        <img src="/iosk.png" alt="IOSK Box" class="iosk-badge" title="IOSK Box" />
+    {/if}
+
+    {#if processStatus}
+        <div
+            class="process-status-badge"
+            class:running={processStatus === 'running'}
+            class:paused={processStatus === 'paused'}
+            title="IOSK process is {processStatus}"
+        ></div>
+    {/if}
+
     <!-- Default Cloak (visible when folded) -->
     {#if !coverImageUrl}
     <div 
@@ -950,7 +1052,7 @@
 
     <!-- User-defined Cover Image (also visible when folded) -->
     {#if coverImageUrl}
-        <div class="box-cover" on:click={(e) => handlePanelClick(e, 0, 0)}>
+        <div class="box-cover" on:click={(e) => handlePanelClick(e, 0, 0)} on:contextmenu={(e) => handlePanelRightClick(e, 0, 0)}>
             <img src={coverImageUrl} alt="{box.name} cover" class="cover-image" />
         </div>
     {/if}
@@ -1050,23 +1152,14 @@
 </div>
 
 {#if contextMenu.visible}
-    <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
-        <button on:click={askBox} disabled={box.type !== 'local'}>Ask...</button>
-        <button on:click={openTerminal} disabled={box.type !== 'local'}>Terminal</button>
-        <button on:click={openFiles} disabled={box.type !== 'local'}>Files</button>
-        <div class="menu-separator"></div>
-        <button on:click={renameBox}>Rename...</button>
-        <div class="menu-separator"></div>
-        <button on:click={setCoverImage} disabled={!canSetCover}>Set Cover Image...</button>
-        <button on:click={clearCoverImage} disabled={!coverPanelLocation}>Clear Cover Image</button>
-        <div class="menu-separator"></div>
-        <button on:click={deleteBoxConfirm} class="delete">Delete</button>
+    <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation >
+        <BoxContextMenu {box} showDelete={true} on:close={closeContextMenu} />
     </div>
 {/if}
 
 {#if panelContextMenu.visible}
     <div class="context-menu" style="top: {panelContextMenu.y}px; left: {panelContextMenu.x}px;" on:click|stopPropagation>
-        <button on:click={clearPanel}>Clear</button>
+        <button on:click={clearPanel}><span class="menu-item-icon">🧹</span>Clear</button>
     </div>
 {/if}
 

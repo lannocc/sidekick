@@ -9,6 +9,9 @@ import platform
 import sys
 import tiktoken
 import sqlite3
+import subprocess
+import signal
+import socket
 from datetime import datetime
 from . import config
 from .util import get_directory_tree_as_text, get_directory_contents_as_text
@@ -91,6 +94,7 @@ TAILERS = {}   # path -> {'clients': set(), 'task': asyncio.Task}
 # --- SKYBRIDGE Globals ---
 DB_CONN = None
 CONNECTED_CLIENTS = set()
+RUNNING_PROCESSES = {} # pid -> { 'process': Process, 'monitor_task': Task, ... }
 # --------------------
 
 def get_resolved_settings_sync(box_id, cursor):
@@ -255,6 +259,118 @@ def init_db():
         );
     """)
 
+    # New tables for ProcBox
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS iosk (
+            box_id INTEGER PRIMARY KEY,
+            mount_point TEXT,
+            mount_point_mode TEXT NOT NULL DEFAULT 'managed',
+            daemon_mode INTEGER NOT NULL DEFAULT 1,
+            enable_stdin INTEGER NOT NULL DEFAULT 1,
+            port_mode TEXT NOT NULL DEFAULT 'managed',
+            port_number INTEGER,
+            default_username TEXT,
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
+        );
+    """)
+    cursor.execute("PRAGMA table_info(iosk)")
+    iosk_columns_info = {row['name']: dict(row) for row in cursor.fetchall()}
+    iosk_columns = list(iosk_columns_info.keys())
+    if 'mount_point_mode' not in iosk_columns:
+        log.info("Applying database migration: Adding 'mount_point_mode' to 'iosk' table.")
+        cursor.execute("ALTER TABLE iosk ADD COLUMN mount_point_mode TEXT;")
+        # Old entries with a path are 'custom'
+        cursor.execute("UPDATE iosk SET mount_point_mode = 'custom' WHERE mount_point IS NOT NULL AND mount_point != '';")
+        # Old entries without a path are 'none'
+        cursor.execute("UPDATE iosk SET mount_point_mode = 'none' WHERE mount_point IS NULL OR mount_point = '';")
+        DB_CONN.commit()
+
+    if 'port_mode' not in iosk_columns:
+        log.info("Applying database migration: Adding port/username columns to 'iosk' table.")
+        cursor.execute("ALTER TABLE iosk ADD COLUMN port_mode TEXT NOT NULL DEFAULT 'managed';")
+        cursor.execute("ALTER TABLE iosk ADD COLUMN port_number INTEGER;")
+        cursor.execute("ALTER TABLE iosk ADD COLUMN default_username TEXT;")
+        DB_CONN.commit()
+
+    # Refresh table info to check for the enable_stdin default value after other migrations
+    cursor.execute("PRAGMA table_info(iosk)")
+    iosk_columns_info = {row['name']: dict(row) for row in cursor.fetchall()}
+
+    # Migration to enable stdin by default
+    if 'enable_stdin' in iosk_columns_info and iosk_columns_info['enable_stdin']['dflt_value'] == '0':
+        log.info("Applying database migration: Setting 'iosk.enable_stdin' to default 1 and updating existing rows.")
+        try:
+            # The safest way to alter a column's default in SQLite is to rebuild the table.
+            # This is wrapped in a transaction to ensure atomicity.
+            cursor.execute("BEGIN TRANSACTION;")
+            
+            # 1. Rename the old table.
+            cursor.execute("ALTER TABLE iosk RENAME TO iosk_old;")
+
+            # 2. Create the new table with the corrected schema.
+            cursor.execute("""
+                CREATE TABLE iosk (
+                    box_id INTEGER PRIMARY KEY,
+                    mount_point TEXT,
+                    mount_point_mode TEXT NOT NULL DEFAULT 'managed',
+                    daemon_mode INTEGER NOT NULL DEFAULT 1,
+                    enable_stdin INTEGER NOT NULL DEFAULT 1,
+                    port_mode TEXT NOT NULL DEFAULT 'managed',
+                    port_number INTEGER,
+                    default_username TEXT,
+                    FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE CASCADE
+                );
+            """)
+
+            # 3. Copy data from the old table to the new.
+            cursor.execute("""
+                INSERT INTO iosk (box_id, mount_point, mount_point_mode, daemon_mode, enable_stdin, port_mode, port_number, default_username)
+                SELECT box_id, mount_point, mount_point_mode, daemon_mode, enable_stdin, port_mode, port_number, default_username
+                FROM iosk_old;
+            """)
+            
+            # 4. Drop the temporary old table.
+            cursor.execute("DROP TABLE iosk_old;")
+            
+            cursor.execute("COMMIT;")
+            log.info("Migration for 'iosk.enable_stdin' successful.")
+        except Exception as e:
+            cursor.execute("ROLLBACK;")
+            log.error(f"Migration for 'iosk.enable_stdin' failed: {e}. The database has been rolled back.", exc_info=True)
+        finally:
+            DB_CONN.commit()
+
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS process (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            box_id INTEGER,
+            pid INTEGER NOT NULL UNIQUE,
+            type TEXT NOT NULL DEFAULT 'iosk',
+            start_time TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('running', 'paused', 'stopped', 'error')),
+            stdout_log_path TEXT NOT NULL,
+            stderr_log_path TEXT NOT NULL,
+            stdin_pipe_path TEXT,
+            port INTEGER,
+            FOREIGN KEY(box_id) REFERENCES box(id) ON DELETE SET NULL
+        );
+    """)
+
+    # Simple migration for existing databases
+    cursor.execute("PRAGMA table_info(process)")
+    columns = [row['name'] for row in cursor.fetchall()]
+    if 'stdin_pipe_path' not in columns:
+        log.info("Applying database migration: Adding 'stdin_pipe_path' to 'process' table.")
+        cursor.execute("ALTER TABLE process ADD COLUMN stdin_pipe_path TEXT;")
+        DB_CONN.commit()
+
+    if 'port' not in columns:
+        log.info("Applying database migration: Adding 'port' to 'process' table.")
+        cursor.execute("ALTER TABLE process ADD COLUMN port INTEGER;")
+        DB_CONN.commit()
+
+
     # For new databases, create the default 'Main Desktop' box with id=0.
     # This is required for foreign key constraints and default settings.
     cursor.execute("INSERT OR IGNORE INTO box (id, name, type, context) VALUES (?, ?, ?, ?)",
@@ -267,7 +383,6 @@ def init_db():
 
     DB_CONN.commit()
     log.info("SKYBRIDGE database initialized.")
-
 
 
 async def broadcast_box_list():
@@ -402,7 +517,8 @@ async def handle_sk_ask(websocket, msg):
             else:
                 log.warning(f"File not found for 'ask', skipping: {abs_path}")
 
-        log.info(f"Executing ask command for {ask_id}: {cmd}")
+        log.info(f"Executing 'ask' for ask_id={ask_id}")
+        log.info(f"  > Full command: {cmd}")
 
         process = await asyncio.create_subprocess_exec(
             *cmd,
@@ -723,6 +839,338 @@ async def file_tailer_task(path):
         log.info(f"Stopping tailer for: {path}")
 
 
+# --- ProcBox Process Management ---
+
+def is_pid_running(pid: int) -> bool:
+    """Checks if a process with the given PID is currently running."""
+    if platform.system() == 'Windows':
+        try:
+            # The output of `tasklist` will contain the PID if it exists. /NH for no header.
+            result = subprocess.run(
+                ['tasklist', '/FI', f'PID eq {pid}', '/NH'],
+                check=True, capture_output=True, text=True, encoding='utf-8'
+            )
+            return str(pid) in result.stdout
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+    else:  # POSIX systems
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False  # PID does not exist
+        except PermissionError:
+            return True   # PID exists, but we can't signal it
+        else:
+            return True   # PID exists
+
+async def reattach_to_processes(procs):
+    """Re-attaches to previously running processes on startup."""
+    for proc_info in procs:
+        pid = proc_info['pid']
+        log.info(f"Re-attaching to process {pid}")
+        
+        entry = {
+            'process': None, # We don't have the process object
+            'monitor_task': None, # Cannot monitor without process object
+            'stdout_tailer': asyncio.create_task(process_log_tailer(pid, 'stdout', proc_info['stdout_log_path'])),
+            'stderr_tailer': asyncio.create_task(process_log_tailer(pid, 'stderr', proc_info['stderr_log_path'])),
+        }
+        
+        if proc_info.get('stdin_pipe_path'):
+            pipe_path = proc_info['stdin_pipe_path']
+            if os.path.exists(pipe_path):
+                try:
+                    if platform.system() != 'Windows':
+                        writer_fd = os.open(pipe_path, os.O_WRONLY | os.O_NONBLOCK)
+                        stdin_writer = os.fdopen(writer_fd, 'wb', buffering=0)
+                        entry['stdin_writer'] = stdin_writer
+                        log.info(f"Re-attached to stdin pipe for PID {pid} at {pipe_path}")
+                except Exception as e:
+                    log.error(f"Failed to re-attach to stdin pipe for PID {pid}: {e}", exc_info=True)
+        
+        RUNNING_PROCESSES[pid] = entry
+
+def check_stale_processes():
+    """
+    Checks for processes marked as running that no longer exist and updates their status.
+    Returns a list of active processes to be re-attached to.
+    """
+    if not DB_CONN:
+        log.error("Cannot check stale processes, DB not connected.")
+        return []
+    
+    log.info("Checking for stale running processes on startup...")
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT pid, stdout_log_path, stderr_log_path, stdin_pipe_path FROM process WHERE status IN ('running', 'paused')")
+    procs_to_check = cursor.fetchall()
+    
+    if not procs_to_check:
+        log.info("No processes were marked as running in the database. Check complete.")
+        return []
+
+    log.info(f"Found {len(procs_to_check)} processes marked as 'running' or 'paused'. Verifying each PID.")
+    stale_pids = []
+    active_procs = []
+    for row in procs_to_check:
+        pid = row['pid']
+        log.info(f"  - Verifying PID: {pid}...")
+        if not is_pid_running(pid):
+            log.warning(f"    -> Stale PID detected: {pid} is not running.")
+            stale_pids.append(pid)
+        else:
+            log.info(f"    -> PID {pid} is active.")
+            active_procs.append(dict(row))
+    
+    if stale_pids:
+        log.warning(f"Found {len(stale_pids)} stale processes: {stale_pids}. Marking as 'stopped' in the database.")
+        placeholders = ', '.join(['?'] * len(stale_pids))
+        cursor.execute(f"UPDATE process SET status = 'stopped' WHERE pid IN ({placeholders})", tuple(stale_pids))
+        DB_CONN.commit()
+        log.info(f"Updated status for {len(stale_pids)} stale processes.")
+    else:
+        log.info("All running processes verified to be active.")
+    
+    return active_procs
+
+async def periodic_process_check():
+    """Periodically check for running processes that have died."""
+    await asyncio.sleep(15) # Initial delay
+    while True:
+        try:
+            if DB_CONN:
+                cursor = DB_CONN.cursor()
+                cursor.execute("SELECT pid FROM process WHERE status IN ('running', 'paused')")
+                pids_to_check = [row['pid'] for row in cursor.fetchall()]
+                
+                stale_pids = []
+                for pid in pids_to_check:
+                    if not is_pid_running(pid):
+                        print_action("Process Died", f"PID {pid} is no longer running")
+                        stale_pids.append(pid)
+                
+                if stale_pids:
+                    log.warning(f"Periodic check: Found {len(stale_pids)} stale processes. Updating DB and notifying clients.")
+                    placeholders = ', '.join(['?'] * len(stale_pids))
+                    cursor.execute(f"UPDATE process SET status = 'stopped' WHERE pid IN ({placeholders})", tuple(stale_pids))
+                    DB_CONN.commit()
+                    
+                    # Clean up resources for stale processes
+                    for pid in stale_pids:
+                        proc_data = RUNNING_PROCESSES.pop(pid, None)
+                        if proc_data:
+                            log.info(f"Cleaning up resources for stale process {pid}.")
+                            if proc_data.get('stdout_tailer'): proc_data['stdout_tailer'].cancel()
+                            if proc_data.get('stderr_tailer'): proc_data['stderr_tailer'].cancel()
+                            if proc_data.get('stdin_writer'):
+                                try:
+                                    proc_data['stdin_writer'].close()
+                                except Exception as e:
+                                    log.warning(f"Error closing stdin_writer for stale pid {pid}: {e}")
+                    
+                    await broadcast_process_list()
+        except Exception as e:
+            log.error(f"Error during periodic process check: {e}", exc_info=True)
+        
+        await asyncio.sleep(30) # Check every 30 seconds
+
+async def broadcast_process_list():
+    """Fetches all managed processes and broadcasts them to clients."""
+    if not DB_CONN or not CONNECTED_CLIENTS:
+        return
+    
+    cursor = DB_CONN.cursor()
+    cursor.execute("""
+        SELECT p.*, b.name as box_name, i.enable_stdin, i.default_username
+        FROM process p 
+        LEFT JOIN box b ON p.box_id = b.id
+        LEFT JOIN iosk i ON p.box_id = i.box_id
+        ORDER BY p.start_time DESC
+    """)
+    processes = [dict(row) for row in cursor.fetchall()]
+    message = json.dumps({'type': 'running_processes_list', 'processes': processes})
+
+    log.info(f"Broadcasting process_list to {len(CONNECTED_CLIENTS)} clients.")
+    await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
+
+async def process_log_tailer(pid, stream, log_path):
+    """Tails a log file for a process and broadcasts its output."""
+    log.info(f"Starting log tailer for pid {pid} ({stream}) on {log_path}")
+    try:
+        await asyncio.sleep(0.1)
+        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+            f.seek(0, os.SEEK_END)
+            while True:
+                line = f.readline()
+                if line:
+                    if CONNECTED_CLIENTS:
+                        message = json.dumps({'type': 'process_output', 'pid': pid, 'stream': stream, 'data': line})
+                        await asyncio.gather(*[client.send(message) for client in CONNECTED_CLIENTS])
+                else:
+                    await asyncio.sleep(0.1)
+    except asyncio.CancelledError:
+        pass # Expected when process stops
+    except Exception as e:
+        log.error(f"Error in log tailer for pid {pid} ({stream}): {e}")
+    finally:
+        log.info(f"Stopping log tailer for pid {pid} ({stream}).")
+
+async def process_monitor(pid, process_obj):
+    """Waits for a process to exit and handles cleanup."""
+    await process_obj.wait()
+    log.info(f"Monitored process {pid} has terminated.")
+    
+    cursor = DB_CONN.cursor()
+    cursor.execute("UPDATE process SET status = 'stopped' WHERE pid = ?", (pid,))
+    DB_CONN.commit()
+    
+    proc_data = RUNNING_PROCESSES.pop(pid, None)
+    if proc_data:
+        log.info(f"Cleaning up resources for process {pid}.")
+        proc_data['stdout_tailer'].cancel()
+        proc_data['stderr_tailer'].cancel()
+        if proc_data.get('stdin_writer'): proc_data['stdin_writer'].close()
+        if process_obj.stdout: process_obj.stdout.close()
+        if process_obj.stderr: process_obj.stderr.close()
+    
+    await broadcast_process_list()
+
+def find_open_port():
+    """Finds a free port on the host."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('', 0)) # Bind to a free port provided by the OS
+        s.listen(1)
+        return s.getsockname()[1]
+
+async def handle_start_iosk(msg):
+    """Handles logic for launching and managing an iosk process."""
+    box_id = msg.get('box_id')
+    cursor = DB_CONN.cursor()
+    cursor.execute("SELECT context, name FROM box WHERE id = ?", (box_id,))
+    box_row = cursor.fetchone()
+    if not box_row: return
+
+    cursor.execute("SELECT mount_point, mount_point_mode, daemon_mode, enable_stdin, port_mode, port_number FROM iosk WHERE box_id = ?", (box_id,))
+    iosk_row = cursor.fetchone()
+    if not iosk_row: return
+    
+    cursor.execute("SELECT id FROM process WHERE box_id = ? AND status IN ('running', 'paused')", (box_id,))
+    if cursor.fetchone():
+        log.warning(f"Process for box {box_id} is already running.")
+        return
+
+    # Find iosk executable
+    sk_dir = os.path.dirname(sys.executable)
+    iosk_executable = os.path.join(sk_dir, 'iosk')
+    if platform.system() == 'Windows' and not os.path.exists(iosk_executable):
+        iosk_executable += '.exe'
+    if not os.path.exists(iosk_executable):
+        iosk_executable = 'iosk' # Fallback to PATH
+
+    # Prepare log files
+    log_dir = os.path.join(config.DIRS.user_data_dir, 'proc_logs')
+    os.makedirs(log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    stdout_log = os.path.join(log_dir, f"{box_id}_{timestamp}.stdout.log")
+    stderr_log = os.path.join(log_dir, f"{box_id}_{timestamp}.stderr.log")
+
+    # Resolve mount point based on mode
+    final_mount_point = None
+    mount_mode = iosk_row['mount_point_mode'] or 'managed' # Fallback for old DB entries
+    if mount_mode == 'managed':
+        final_mount_point = f"/mnt/{box_row['name']}"
+    elif mount_mode == 'custom' and iosk_row['mount_point']:
+        final_mount_point = iosk_row['mount_point']
+    
+    cmd = [iosk_executable, os.path.abspath(box_row['context'])]
+    if final_mount_point:
+        cmd.append(os.path.abspath(final_mount_point))
+    
+    # Port selection logic
+    port_to_use = None
+    port_mode = iosk_row['port_mode'] or 'managed'
+    
+    if port_mode == 'managed':
+        port_to_use = find_open_port()
+        log.info(f"Managed port selection for box {box_id}: found open port {port_to_use}")
+    elif port_mode == 'custom':
+        port_to_use = iosk_row['port_number']
+        log.info(f"Custom port selection for box {box_id}: using configured port {port_to_use}")
+    
+    if port_to_use is not None:
+        cmd.extend(['-p', str(port_to_use)])
+        
+    stdin_pipe_path = None
+    stdin_arg = None
+    stdin_writer_obj = None
+
+    if iosk_row['enable_stdin']:
+        if platform.system() != 'Windows':
+            pipe_dir = os.path.join(config.DIRS.user_data_dir, 'proc_pipes')
+            os.makedirs(pipe_dir, exist_ok=True)
+            stdin_pipe_path = os.path.join(pipe_dir, f"{timestamp}_{box_id}.stdin.pipe")
+            os.mkfifo(stdin_pipe_path)
+            # Open RDWR to prevent blocking until the other end is opened.
+            pipe_fd = os.open(stdin_pipe_path, os.O_RDWR)
+            stdin_arg = os.fdopen(pipe_fd, 'r')
+            writer_fd = os.dup(pipe_fd)
+            stdin_writer_obj = os.fdopen(writer_fd, 'wb', buffering=0)
+        else:
+            stdin_arg = asyncio.subprocess.PIPE
+
+    proc_args = {
+        'stdin': stdin_arg if iosk_row['enable_stdin'] else None,
+        'stdout': open(stdout_log, 'w', buffering=1),
+        'stderr': open(stderr_log, 'w', buffering=1),
+    }
+
+    if iosk_row['daemon_mode']:
+        if platform.system() == 'Windows':
+            proc_args['creationflags'] = subprocess.DETACHED_PROCESS
+        else:
+            proc_args['start_new_session'] = True
+
+    try:
+        log.info(f"Starting 'iosk' process for box_id={box_id}")
+        log.info(f"  > Full command: {cmd}")
+        process = await asyncio.create_subprocess_exec(*cmd, **proc_args)
+        pid = process.pid
+        print_action("Start IOSK", f"box={box_id}, pid={pid}, daemon={bool(iosk_row['daemon_mode'])}")
+
+        if iosk_row['enable_stdin'] and platform.system() != 'Windows':
+            # The child now has the read end, so we can close our copy in the parent.
+            stdin_arg.close()
+
+        start_time_iso = datetime.now().isoformat()
+        cursor.execute(
+            "INSERT INTO process (box_id, pid, type, start_time, status, stdout_log_path, stderr_log_path, stdin_pipe_path, port) VALUES (?, ?, 'iosk', ?, 'running', ?, ?, ?, ?)",
+            (box_id, pid, start_time_iso, stdout_log, stderr_log, stdin_pipe_path, port_to_use)
+        )
+        DB_CONN.commit()
+
+        RUNNING_PROCESSES[pid] = {
+            'process': process,
+            'monitor_task': asyncio.create_task(process_monitor(pid, process)),
+            'stdout_tailer': asyncio.create_task(process_log_tailer(pid, 'stdout', stdout_log)),
+            'stderr_tailer': asyncio.create_task(process_log_tailer(pid, 'stderr', stderr_log)),
+        }
+        
+        if iosk_row['enable_stdin']:
+            if platform.system() != 'Windows':
+                RUNNING_PROCESSES[pid]['stdin_writer'] = stdin_writer_obj
+            else:
+                RUNNING_PROCESSES[pid]['stdin_writer'] = process.stdin
+        
+        await broadcast_process_list()
+    except Exception as e:
+        log.error(f"Failed to start iosk for box {box_id}: {e}", exc_info=True)
+        # Update DB to error status
+        cursor.execute("UPDATE process SET status = 'error' WHERE box_id = ?", (box_id,))
+        DB_CONN.commit()
+        await broadcast_process_list()
+
+# --- End ProcBox ---
+
+
 async def websocket_handler(websocket):
     """Main handler for each WebSocket connection."""
     log.info(f"Client connected from {websocket.remote_address}")
@@ -1014,6 +1462,131 @@ async def websocket_handler(websocket):
                     windows = [dict(row) for row in cursor.fetchall()]
                     await websocket.send(json.dumps({'type': 'backed_window_list', 'windows': windows, 'box_id': box_id}))
 
+                # --- ProcBox Operations ---
+                elif msg_type == 'promote_to_iosk':
+                    box_id = msg.get('box_id')
+                    print_action("Promote to IOSK", f"box={box_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("UPDATE box SET type = 'iosk' WHERE id = ?", (box_id,))
+                    cursor.execute("INSERT INTO iosk (box_id, mount_point_mode) VALUES (?, 'managed') ON CONFLICT(box_id) DO NOTHING", (box_id,))
+                    DB_CONN.commit()
+                    await broadcast_box_list()
+
+                elif msg_type == 'get_iosk_config':
+                    box_id = msg.get('box_id')
+                    print_action("Get IOSK Cfg", f"box={box_id}")
+                    cursor = DB_CONN.cursor()
+                    cursor.execute("SELECT box_id, mount_point, mount_point_mode, daemon_mode, enable_stdin, port_mode, port_number, default_username FROM iosk WHERE box_id = ?", (box_id,))
+                    config_row = cursor.fetchone()
+                    config_data = dict(config_row) if config_row else None
+                    await websocket.send(json.dumps({'type': 'iosk_config_response', 'box_id': box_id, 'config': config_data}))
+
+                elif msg_type == 'update_iosk_config':
+                    box_id = msg.get('box_id')
+                    config = msg.get('config', {})
+                    print_action("Update IOSK Cfg", f"box={box_id}, keys={list(config.keys())}")
+                    cursor = DB_CONN.cursor()
+                    # Use a helper to build the SET part of the query safely
+                    allowed_keys = {
+                        'mount_point', 'mount_point_mode', 'daemon_mode', 'enable_stdin',
+                        'port_mode', 'port_number', 'default_username'
+                    }
+                    updates = {k: v for k, v in config.items() if k in allowed_keys}
+                    if updates:
+                        set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
+                        values = list(updates.values()) + [box_id]
+                        cursor.execute(f"UPDATE iosk SET {set_clause} WHERE box_id = ?", tuple(values))
+                        DB_CONN.commit()
+
+                elif msg_type == 'start_iosk':
+                    asyncio.create_task(handle_start_iosk(msg))
+
+                elif msg_type == 'stop_process':
+                    pid_to_stop = msg.get('pid')
+                    print_action("Stop Process", f"pid={pid_to_stop}, signal=SIGTERM")
+                    try:
+                        if platform.system() == 'Windows':
+                            subprocess.run(['taskkill', '/PID', str(pid_to_stop)], check=True, capture_output=True)
+                        else:
+                            cursor = DB_CONN.cursor()
+                            cursor.execute("SELECT status FROM process WHERE pid = ?", (pid_to_stop,))
+                            row = cursor.fetchone()
+                            if row and row['status'] == 'paused':
+                                log.info(f"Resuming paused process {pid_to_stop} before stopping.")
+                                os.kill(pid_to_stop, signal.SIGCONT)
+                            os.kill(pid_to_stop, signal.SIGTERM)
+                    except (ProcessLookupError, subprocess.CalledProcessError):
+                        log.warning(f"Process {pid_to_stop} not found, already stopped.")
+                        cursor = DB_CONN.cursor()
+                        cursor.execute("UPDATE process SET status = 'stopped' WHERE pid = ?", (pid_to_stop,))
+                        DB_CONN.commit()
+                        await broadcast_process_list()
+                    except Exception as e:
+                        log.error(f"Failed to send SIGTERM to process {pid_to_stop}: {e}")
+                
+                elif msg_type == 'kill_process':
+                    pid_to_kill = msg.get('pid')
+                    print_action("Kill Process", f"pid={pid_to_kill}, signal=SIGKILL")
+                    try:
+                        if platform.system() == 'Windows':
+                            subprocess.run(['taskkill', '/F', '/PID', str(pid_to_kill)], check=True, capture_output=True)
+                        else:
+                            cursor = DB_CONN.cursor()
+                            cursor.execute("SELECT status FROM process WHERE pid = ?", (pid_to_kill,))
+                            row = cursor.fetchone()
+                            if row and row['status'] == 'paused':
+                                log.info(f"Resuming paused process {pid_to_kill} before killing.")
+                                os.kill(pid_to_kill, signal.SIGCONT)
+                            os.kill(pid_to_kill, signal.SIGKILL)
+                    except (ProcessLookupError, subprocess.CalledProcessError):
+                        log.warning(f"Process {pid_to_kill} not found for kill, already stopped.")
+                        cursor = DB_CONN.cursor()
+                        cursor.execute("UPDATE process SET status = 'stopped' WHERE pid = ?", (pid_to_kill,))
+                        DB_CONN.commit()
+                        await broadcast_process_list()
+                    except Exception as e:
+                        log.error(f"Failed to send kill signal to process {pid_to_kill}: {e}")
+
+                elif msg_type in ('pause_process', 'resume_process'):
+                    if platform.system() == 'Windows':
+                        log.warning("Pause/Resume is not supported on this platform (e.g., Windows).")
+                        continue
+                    
+                    pid = msg.get('pid')
+                    sig = signal.SIGSTOP if msg_type == 'pause_process' else signal.SIGCONT
+                    new_status = 'paused' if msg_type == 'pause_process' else 'running'
+                    print_action(msg_type.replace('_', ' ').title(), f"pid={pid}")
+
+                    try:
+                        os.kill(pid, sig)
+                        cursor = DB_CONN.cursor()
+                        cursor.execute("UPDATE process SET status = ? WHERE pid = ?", (new_status, pid))
+                        DB_CONN.commit()
+                        await broadcast_process_list()
+                    except Exception as e:
+                        log.error(f"Failed to send signal to process {pid}: {e}")
+                
+                elif msg_type == 'list_running_processes':
+                    print_action("List Processes")
+                    await broadcast_process_list()
+                
+                elif msg_type == 'process_stdin':
+                    pid = msg.get('pid')
+                    data = msg.get('data')
+                    proc_data = RUNNING_PROCESSES.get(pid)
+                    if proc_data:
+                        writer = proc_data.get('stdin_writer')
+                        if writer:
+                            try:
+                                if isinstance(writer, asyncio.StreamWriter):
+                                    writer.write(data.encode('utf-8'))
+                                    await writer.drain()
+                                else: # POSIX file object
+                                    writer.write(data.encode('utf-8'))
+                            except (BrokenPipeError, ConnectionResetError):
+                                log.warning(f"stdin for process {pid} is closed.")
+                            except Exception as e:
+                                log.error(f"Error writing to stdin for process {pid}: {e}")
 
 
                 # --- SKYBRIDGE Box Operations ---
@@ -1204,16 +1777,39 @@ async def websocket_handler(websocket):
                     (pid, fd) = pty.fork()
 
                     if pid == 0:  # Child process
+                        new_env = os.environ.copy()
                         if path and os.path.isdir(path):
                             try:
                                 os.chdir(path)
                                 log.info(f"Child process for term_id {term_id} changed directory to: {path}")
+
+                                # --- VENV AUTO-ACTIVATION ---
+                                venv_dir_name = None
+                                if os.path.isdir('venv'):
+                                    venv_dir_name = 'venv'
+                                elif os.path.isdir('.venv'):
+                                    venv_dir_name = '.venv'
+                                
+                                if venv_dir_name:
+                                    venv_dir = os.path.abspath(venv_dir_name)
+                                    venv_bin = os.path.join(venv_dir, 'bin')
+                                    if os.path.isdir(venv_bin):
+                                        log.info(f"Activating virtual environment for term_id {term_id} at: {venv_dir}")
+                                        new_env['VIRTUAL_ENV'] = venv_dir
+                                        
+                                        path_var = new_env.get('PATH', '')
+                                        new_env['PATH'] = f'{venv_bin}:{path_var}'
+                                        
+                                        if 'PYTHONHOME' in new_env:
+                                            del new_env['PYTHONHOME']
+                                # --- END VENV AUTO-ACTIVATION ---
+
                             except Exception as e:
                                 log.error(f"Could not change directory to {path} for term_id {term_id}: {e}")
 
                         shell = os.environ.get('SHELL', 'sh')
                         log.info(f"Child process for term_id {term_id} launching shell: {shell}")
-                        os.execvpe(shell, [shell], os.environ)
+                        os.execvpe(shell, [shell], new_env)
                     else:  # Parent process
                         log.info(f"PTY forked for term_id {term_id} with child PID: {pid}")
                         fl = fcntl.fcntl(fd, fcntl.F_GETFL)
@@ -1292,8 +1888,11 @@ async def websocket_handler(websocket):
                     pass
 
 
-async def start_server():
+async def start_server(active_procs_to_reattach=None):
     """Starts the WebSocket server."""
+    if active_procs_to_reattach:
+        await reattach_to_processes(active_procs_to_reattach)
+    asyncio.create_task(periodic_process_check())
     async with serve(websocket_handler, HOST, PORT):
         await asyncio.Future()  # run forever
 
@@ -1302,8 +1901,9 @@ def main(args):
     """Entry point for `sk local` command."""
     print_startup_banner()
     init_db()  # Initialize the database on startup
+    active_procs = check_stale_processes() # Check for dead processes on startup
     try:
-        asyncio.run(start_server())
+        asyncio.run(start_server(active_procs))
     except KeyboardInterrupt:
         print_shutdown_message()
     except OSError as e:

@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import { 
-    fileSystemRequests, 
+    sendRequest, 
     fileSystemResponses, 
     fileSystemWatchEvents, 
     fileSystemTailEvents 
@@ -14,7 +14,7 @@ import {
     fsTailEvent
 } from './bridge.js';
 
-export function createFsAdapter({ connectionType, consoleId, requesterId }) {
+export function createFsAdapter({ connectionType, connectionId, requesterId }) {
     // Public stores for components to subscribe to
     const listResponse = writable(null);
     const readResponse = writable(null);
@@ -27,22 +27,31 @@ export function createFsAdapter({ connectionType, consoleId, requesterId }) {
     if (connectionType === 'iosk') {
         unsubscribers.push(fileSystemResponses.subscribe(msg => {
             if (msg && msg.requesterId === requesterId) {
-                if (msg.data.type === 'fs_list_response') {
-                    listResponse.set({ path: msg.data.path, entries: msg.data.listing, error: msg.data.error, requester_id: msg.data.requester_id });
-                } else if (msg.data.type === 'fs_read_response') {
-                    readResponse.set(msg.data); // Forward the whole data object
+                // The backend can respond with a specific fs_list_response or a generic
+                // exec_command_response that contains listing data. We need to handle both.
+                const responseData = msg.data;
+
+                if (responseData.type === 'fs_list_response') {
+                    listResponse.set({ path: responseData.path, entries: responseData.listing, error: responseData.error, requester_id: msg.requesterId });
+                } else if (responseData.type === 'exec_command_response' && responseData.listing !== undefined) {
+                    // Handle file listings wrapped in a generic command response
+                    listResponse.set({ path: responseData.path, entries: responseData.listing, error: responseData.error, requester_id: msg.requesterId });
+                } else if (responseData.type === 'fs_read_response') {
+                    // --- MODIFICATION START: Normalize the requester ID to match component expectations ---
+                    readResponse.set({ ...responseData, requester_id: msg.requesterId });
+                    // --- MODIFICATION END ---
                 }
             }
         }));
 
         unsubscribers.push(fileSystemWatchEvents.subscribe(event => {
-            if (event && event.consoleId === consoleId) {
+            if (event && event.connectionId === connectionId) {
                 watchEvent.set(event.data);
             }
         }));
 
         unsubscribers.push(fileSystemTailEvents.subscribe(event => {
-            if (event && event.consoleId === consoleId) {
+            if (event && event.connectionId === connectionId) {
                 tailEvent.set(event.data);
             }
         }));
@@ -101,8 +110,8 @@ export function createFsAdapter({ connectionType, consoleId, requesterId }) {
 
         requestPath: (path, recursive = false, honor_skignore = false) => {
             if (connectionType === 'iosk') {
-                const command = { type: 'fs_list', path, recursive, honor_skignore };
-                fileSystemRequests.set({ consoleId, requesterId, command, timestamp: Date.now() });
+                const command = { type: 'fs_list', path, recursive, honor_skignore, requesterId };
+                sendRequest(connectionId, command);
             } else {
                 sendMessage({ type: 'fs_list', path, recursive, requester_id: requesterId });
             }
@@ -110,8 +119,8 @@ export function createFsAdapter({ connectionType, consoleId, requesterId }) {
 
         readFile: (path, offset = 0, length = -1) => {
             if (connectionType === 'iosk') {
-                const command = { type: 'fs_read', path, offset, length };
-                fileSystemRequests.set({ consoleId, requesterId, command, timestamp: Date.now() });
+                const command = { type: 'fs_read', path, offset, length, requesterId };
+                sendRequest(connectionId, command);
             } else {
                 sendMessage({ type: 'fs_read', path, offset, length, requester_id: requesterId });
             }
@@ -119,29 +128,29 @@ export function createFsAdapter({ connectionType, consoleId, requesterId }) {
 
         watch: (path) => {
             if (connectionType === 'iosk') {
-                fileSystemRequests.set({ consoleId, command: { type: 'fs_watch_start', path }, timestamp: Date.now() });
+                sendRequest(connectionId, { type: 'fs_watch_start', path });
             } else {
                 sendMessage({ type: 'fs_watch_start', path });
             }
         },
         unwatch: (path) => {
-             if (connectionType === 'iosk') {
-                fileSystemRequests.set({ consoleId, command: { type: 'fs_watch_stop', path }, timestamp: Date.now() });
+            if (connectionType === 'iosk') {
+                sendRequest(connectionId, { type: 'fs_watch_stop', path });
             } else {
                 sendMessage({ type: 'fs_watch_stop', path });
             }
         },
 
         tail: (path) => {
-             if (connectionType === 'iosk') {
-                fileSystemRequests.set({ consoleId, command: { type: 'fs_tail_start', path }, timestamp: Date.now() });
+            if (connectionType === 'iosk') {
+                sendRequest(connectionId, { type: 'fs_tail_start', path });
             } else {
                 sendMessage({ type: 'fs_tail_start', path });
             }
         },
         untail: (path) => {
-             if (connectionType === 'iosk') {
-                fileSystemRequests.set({ consoleId, command: { type: 'fs_tail_stop', path }, timestamp: Date.now() });
+            if (connectionType === 'iosk') {
+                sendRequest(connectionId, { type: 'fs_tail_stop', path });
             } else {
                 sendMessage({ type: 'fs_tail_stop', path });
             }

@@ -4,11 +4,11 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { newLocalFileExplorer, newLocalFileViewer } from './windows.js';
-    import { desktopView, selectedItems, wasDraggingItems } from './desktop.js';
+    import { newLocalFileExplorer, newLocalFileViewer } from './apps.js';
+    import { desktopView, selectedItems, wasDraggingItems, calculateContextMenuPosition } from './desktop.js';
     import { desktopShortcuts, updateShortcutTransform } from './bridge.js';
     import { get } from 'svelte/store';
-    import { onDestroy, afterUpdate, createEventDispatcher } from 'svelte';
+    import { onMount, onDestroy, afterUpdate, createEventDispatcher } from 'svelte';
 
     export let id;
     export let name;
@@ -21,6 +21,11 @@
     const dispatch = createEventDispatcher();
     $: isSelected = $selectedItems.has(`shortcut-${id}`);
     let element;
+
+    let contextMenu = {
+        visible: false,
+        x: 0, y: 0,
+    };
 
     $: transform = `translate(${$desktopView.panX}px, ${$desktopView.panY}px) scale(${$desktopView.zoom}) translate(${x}px, ${y}px) scale(${scale || 1.0})`;
 
@@ -52,10 +57,32 @@
             return;
         }
         if (type === 'dir') {
-            newLocalFileExplorer({ initialPath: path, title: `Files - ${name}` });
+            newLocalFileExplorer({ initialPath: path, title: `Local Files - ${name}` });
         } else if (type === 'file') {
             newLocalFileViewer({ path, title: name });
         }
+    }
+
+    function handleRightClick(event) {
+        event.preventDefault();
+        event.stopPropagation(); // Prevent desktop context menu
+        window.dispatchEvent(new CustomEvent('close-all-context-menus'));
+        contextMenu = {
+            visible: true,
+            ...calculateContextMenuPosition(event, { width: 120, height: 50 }),
+        };
+        window.addEventListener('click', closeContextMenu, { once: true });
+    }
+
+    function closeContextMenu() {
+        if (contextMenu.visible) {
+            contextMenu.visible = false;
+        }
+    }
+
+    function removeShortcut() {
+        desktopShortcuts.remove(id);
+        closeContextMenu();
     }
 
     function handleWheel(event) {
@@ -67,6 +94,15 @@
             dispatch('scale', { id, newScale });
         }
     }
+
+    onMount(() => {
+        window.addEventListener('close-all-context-menus', closeContextMenu);
+    });
+
+    onDestroy(() => {
+        window.removeEventListener('click', closeContextMenu);
+        window.removeEventListener('close-all-context-menus', closeContextMenu);
+    });
 </script>
 
 <style>
@@ -110,6 +146,33 @@
         word-break: break-word;
         margin-top: 4px;
     }
+    .context-menu {
+        position: fixed;
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        z-index: 23000;
+        display: flex;
+        flex-direction: column;
+        padding: 4px 0;
+        min-width: 120px;
+    }
+
+    .context-menu button {
+        background: none;
+        border: none;
+        color: var(--taskbar-text);
+        padding: 8px 12px;
+        text-align: left;
+        cursor: pointer;
+        font-size: 14px;
+        width: 100%;
+    }
+
+    .context-menu button:hover {
+        background-color: var(--taskbar-button-hover-bg);
+    }
 </style>
 
 <div
@@ -120,9 +183,16 @@
     data-type="shortcut"
     style:transform={transform}
     on:click={handleClick}
+    on:contextmenu={handleRightClick}
     on:wheel={handleWheel}
     on:scale
 >
     <div class="icon">{type === 'dir' ? '🗂️' : '📄'}</div>
     <div class="name">{name}</div>
 </div>
+
+{#if contextMenu.visible}
+    <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
+        <button on:click={removeShortcut}>Remove Shortcut</button>
+    </div>
+{/if}

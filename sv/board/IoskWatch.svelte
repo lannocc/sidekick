@@ -1,15 +1,16 @@
-<!-- sv/IoskWatch.svelte -->
+<!-- sv/board/IoskWatch.svelte -->
 <script>
     import { onMount, onDestroy, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { fileSystemRequests, fileSystemResponses } from '../iosk.js';
-    import { windows, activeConsoles } from '../windows.js';
+    // Refactored to use the new central connection hub functions
+    import { sendRequest, fileSystemResponses } from '../iosk.js';
+    import { windows } from '../windows.js';
     import { parseAnsi } from '../ansi.js';
 
     export let id; // tab id
     export let groupId;
-    export let consoleId;
-    export let consoleConnection = null; // for dash restore
+    // The consoleId and consoleConnection props are replaced by a single connectionId.
+    export let connectionId;
 
     // Props for dash restore
     export let initialCommand = '';
@@ -22,7 +23,6 @@
     let interval = initialInterval;
     let watchState = initialState; // 'setup', 'watching', 'stopped'
     let output = '';
-    let statusMessage = '';
     
     let commandInputEl;
     let watchTimer = null;
@@ -30,31 +30,13 @@
 
     let unsubscribeResponses;
 
-    // --- Dash Restore Logic ---
-    $: if (consoleConnection && $windows) {
-        const myConsoleTab = $windows.flatMap(w => w.tabs).find(t => t.id === consoleId);
-        
-        if (!myConsoleTab || !myConsoleTab.isConsoleConnected) {
-            const key = `${consoleConnection.user}@${consoleConnection.url}`;
-            const compatibleConsole = $activeConsoles.get(key);
-
-            if (compatibleConsole) {
-                consoleId = compatibleConsole.id;
-                statusMessage = '';
-                if (watchState === 'watching') {
-                    startWatching();
-                }
-            } else {
-                consoleId = null;
-                statusMessage = 'Waiting for IOSK connection...';
-            }
-        }
-    }
+    // --- (REMOVED) Old dash restore logic ---
+    // The component now relies on being created with a valid connectionId.
 
     // --- Update window store for Dash saving ---
     $: if (id !== undefined && groupId !== undefined) {
         windows.updateTabProps(groupId, id, { 
-            consoleId,
+            connectionId, // Persist the connectionId
             initialCommand: command,
             initialPwd: pwd,
             initialInterval: interval,
@@ -84,7 +66,7 @@
         });
 
         // If restored from Dash and was watching, start immediately.
-        if (consoleId && watchState === 'watching') {
+        if (connectionId && watchState === 'watching') {
             startWatching();
         }
 
@@ -97,21 +79,20 @@
     });
 
     function sendWatchRequest() {
-        if (!consoleId) {
-            output = '[Error] No active console connection.';
+        if (!connectionId) {
+            output = '[Error] No active IOSK connection.';
             stopWatching();
             return;
         }
+        // Construct the request object to be sent to the server.
         const request = {
-            consoleId,
-            requesterId,
-            command: {
-                type: 'exec_command',
-                command_str: command,
-                pwd: pwd
-            }
+            type: 'exec_command',
+            command_str: command,
+            pwd: pwd,
+            requesterId: requesterId // Include requesterId for the server to echo back.
         };
-        fileSystemRequests.set({ ...request, timestamp: Date.now() });
+        // Use the new centralized sendRequest function.
+        sendRequest(connectionId, request);
     }
 
     function startWatching() {
@@ -182,7 +163,6 @@
         border: 1px solid var(--border-color);
         border-radius: 3px;
     }
-    .status-message { color: var(--ansi-yellow); font-style: italic; }
 </style>
 
 <div class="watch-container">
@@ -202,7 +182,7 @@
                 <input id="watch-interval-{id}" type="number" bind:value={interval} min="1">
             </div>
             <div class="buttons">
-                <button class="start-button" on:click={startWatching} disabled={!command.trim() || !consoleId}>Start Watching</button>
+                <button class="start-button" on:click={startWatching} disabled={!command.trim() || !connectionId}>Start Watching</button>
             </div>
         </div>
     {:else}
@@ -217,8 +197,5 @@
                 {/if}
             </div>
         </div>
-    {/if}
-    {#if statusMessage}
-        <div class="status-message">{statusMessage}</div>
     {/if}
 </div>

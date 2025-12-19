@@ -6,7 +6,7 @@
     import { createEventDispatcher, tick, onMount, onDestroy, getContext } from 'svelte';
     import { get } from 'svelte/store';
     import { windows, dragState, instanceRegistry, dragRequest, generateBoardConfigFromWindow } from './windows.js';
-    import { desktopSettings, windowSettings, windowView, desktopView, TASKBAR_HEIGHT, desktopInteraction, selectedItems } from './desktop.js';
+    import { desktopSettings, windowSettings, windowView, desktopView, TASKBAR_HEIGHT, desktopInteraction, selectedItems, windowInteraction } from './desktop.js';
     import { savePanelConfig, generateBgStyle, resolveAssetDataUrl } from './bridge.js';
     import IoskConsole from './board/IoskConsole.svelte';
     import FileViewer from './board/FileViewer.svelte';
@@ -251,7 +251,18 @@
     }
     function handleWindowClick(event) { if (showOptionsMenu && optionsButton && !optionsButton.contains(event.target) && !event.target.closest('.options-menu')) { showOptionsMenu = false; } }
     onMount(() => { window.addEventListener('click', handleWindowClick); });
-    onDestroy(() => { window.removeEventListener('click', handleWindowClick); if (focusFollowsMouseTimeout) clearTimeout(focusFollowsMouseTimeout); if (middleClickTimeout) clearTimeout(middleClickTimeout); window.removeEventListener('mousemove', handleContentPanMove); });
+
+    onDestroy(() => {
+        window.removeEventListener('click', handleWindowClick);
+        if (focusFollowsMouseTimeout) clearTimeout(focusFollowsMouseTimeout);
+        if (middleClickTimeout) clearTimeout(middleClickTimeout);
+        window.removeEventListener('mousemove', handleContentPanMove);
+        // Ensure state is reset on component destruction
+        if (isDragging || isResizing) {
+            windowInteraction.set(false);
+        }
+    });
+
     function handleConnect() { const instance = instanceRegistry.get(activeTabId); if (instance && typeof instance.connect === 'function') instance.connect(); showOptionsMenu = false; }
     function handleDisconnect() { const instance = instanceRegistry.get(activeTabId); if (instance && typeof instance.disconnect === 'function') instance.disconnect(); showOptionsMenu = false; }
     let isTabDragging = false, draggedTabInfo = null, dropIndicator = { visible: false, left: 0 }, tabDragHasMoved = false;
@@ -260,7 +271,9 @@
     function onTabMouseUp(e) { window.removeEventListener('mousemove', onTabMouseMove); document.body.style.cursor = 'auto'; if (isTabDragging) { if (draggedTabInfo.isDetaching) { windows.detachTabToNewWindow(draggedTabInfo.groupId, draggedTabInfo.tabId, e.clientX - 100, e.clientY - 15); } else if (tabDragHasMoved) { windows.reorderTab(draggedTabInfo.groupId, draggedTabInfo.tabId, draggedTabInfo.targetTabId); } } isTabDragging = false; draggedTabInfo = null; dropIndicator.visible = false; tabDragHasMoved = false; }
     async function restoreFocus() { if (activeTab.lastFocusedElement && document.body.contains(activeTab.lastFocusedElement)) { await tick(); activeTab.lastFocusedElement.focus({ preventScroll: true }); } }
     $: if (isActive && !isBacked) Promise.resolve().then(restoreFocus);
+
     function onDragStart(event, { focus = true } = {}) {
+        windowInteraction.set(true);
         isDragging = true;
         dragState.set({ draggingGroupId: id, dropTargetGroupId: null, dropTargetBoxPanel: null });
         const { panX, panY, zoom } = get(windowView);
@@ -317,11 +330,36 @@
         windows.updateWindowProps(id, { x: newX, y: newY });
     }
 
-    function onDragEnd() { isDragging = false; document.body.style.cursor = 'auto'; window.removeEventListener('mousemove', onDrag); const currentDragState = get(dragState); if (currentDragState) { if (currentDragState.dropTargetGroupId) { windows.groupWindows(currentDragState.draggingGroupId, currentDragState.dropTargetGroupId); } else if (currentDragState.dropTargetBoxPanel) { const { boxId, location } = currentDragState.dropTargetBoxPanel; const allWindows = get(windows); const sourceGroup = allWindows.find(g => g.id === currentDragState.draggingGroupId); if (sourceGroup) { const board_config = generateBoardConfigFromWindow(sourceGroup, allWindows); const board_type = sourceGroup.tabs.length > 1 ? 'tabs' : 'window'; savePanelConfig(boxId, location, board_type, board_config); windows.removeWindow(currentDragState.draggingGroupId); } } } dragState.set(null); restoreFocus(); }
+    function onDragEnd() {
+        windowInteraction.set(false);
+        isDragging = false;
+        document.body.style.cursor = 'auto';
+        window.removeEventListener('mousemove', onDrag);
+        const currentDragState = get(dragState);
+        if (currentDragState) {
+            if (currentDragState.dropTargetGroupId) {
+                windows.groupWindows(currentDragState.draggingGroupId, currentDragState.dropTargetGroupId);
+            } else if (currentDragState.dropTargetBoxPanel) {
+                const { boxId, location } = currentDragState.dropTargetBoxPanel;
+                const allWindows = get(windows);
+                const sourceGroup = allWindows.find(g => g.id === currentDragState.draggingGroupId);
+                if (sourceGroup) {
+                    const board_config = generateBoardConfigFromWindow(sourceGroup, allWindows);
+                    const board_type = sourceGroup.tabs.length > 1 ? 'tabs' : 'window';
+                    savePanelConfig(boxId, location, board_type, board_config);
+                    windows.removeWindow(currentDragState.draggingGroupId);
+                }
+            }
+        }
+        dragState.set(null);
+        restoreFocus();
+    }
+
     function onResizeStart(event, directionOverride = '', { focus = true } = {}) {
         if (maximized || isBacked) return;
         let direction = directionOverride || (event.target.classList.contains('resize-handle') ? 'se' : '');
         if (!direction) return;
+        windowInteraction.set(true);
         isResizing = true;
         resizeDirection = direction;
         initialResizeState = { x, y, width, height, mouseX: event.clientX, mouseY: event.clientY };
@@ -331,8 +369,15 @@
             windows.focusWindow(id);
         }
     }
+
     function onResize(event) { if (!isResizing) return; const { x: ix, y: iy, width: iw, height: ih, mouseX: startX, mouseY: startY } = initialResizeState; const { zoom } = get(windowView); const dx = (event.clientX - startX) / zoom; const dy = (event.clientY - startY) / zoom; const minWidth = 250, minHeight = 150; let newX = ix, newY = iy, newWidth = iw, newHeight = ih; if (resizeDirection.includes('e')) { newWidth = iw + dx; } else if (resizeDirection.includes('w')) { newWidth = iw - dx; newX = ix + dx; } if (resizeDirection.includes('s')) { newHeight = ih + dy; } else if (resizeDirection.includes('n')) { newHeight = ih - dy; newY = iy + dy; } if (newWidth < minWidth) { if (resizeDirection.includes('w')) { newX -= minWidth - newWidth; } newWidth = minWidth; } if (newHeight < minHeight) { if (resizeDirection.includes('n')) { newY -= minHeight - newHeight; } newHeight = minHeight; } windows.updateWindowProps(id, { x: newX, y: newY, width: newWidth, height: newHeight }); }
-    function onResizeEnd() { isResizing = false; window.removeEventListener('mousemove', onResize); restoreFocus(); }
+
+    function onResizeEnd() {
+        windowInteraction.set(false);
+        isResizing = false;
+        window.removeEventListener('mousemove', onResize);
+        restoreFocus();
+    }
 
     // --- MODIFICATION START: Updated Content Panning Logic ---
     function handleContentPanMove(event) {
@@ -444,13 +489,15 @@
         // For backed windows, all mouse down interactions are handled by Desktop.svelte
         if (isBacked) return;
 
-        // --- MODIFICATION START: Allow desktop pan fallback ---
+        // Let middle-clicks bubble up to become desktop pans.
         if (event.button === 1) { // Middle mouse button
             if (event.ctrlKey) { event.preventDefault(); event.stopPropagation(); dispatch('backrequest'); return; }
             // Let the event bubble up to Desktop.svelte to handle panning.
             return;
         }
-        // --- MODIFICATION END ---
+
+        // For all other clicks (left, right), stop them from reaching the desktop.
+        event.stopPropagation();
 
         // For other buttons on front windows...
         clearTimeout(focusFollowsMouseTimeout);
@@ -475,22 +522,24 @@
 
     function handleTitleBarMouseDown(event) {
         if (isBacked) return;
-        if (event.target.closest('button') || event.target.closest('.window-control') || event.target.closest('.tab')) {
-            if (!isActive) windows.focusWindow(id);
-            return;
-        }
-        // --- MODIFICATION START: Allow desktop pan fallback ---
-        if (event.button === 1) { // Middle mouse button
+
+        // Let middle-clicks bubble up to become desktop pans.
+        if (event.button === 1) {
             if (event.ctrlKey) {
                 event.preventDefault();
                 event.stopPropagation();
                 dispatch('backrequest');
-                return;
             }
-            // Let the event bubble up to Desktop.svelte to handle panning.
+            return; // Allow bubbling for plain middle-click
+        }
+
+        // For all other clicks (left, right), stop them from reaching the desktop.
+        event.stopPropagation();
+
+        if (event.target.closest('button') || event.target.closest('.window-control') || event.target.closest('.tab')) {
+            if (!isActive) windows.focusWindow(id);
             return;
         }
-        // --- MODIFICATION END ---
         if (maximized) {
             if (!isActive) windows.focusWindow(id);
             return;
@@ -508,6 +557,7 @@
             // This is a left-click on a non-maximized title bar.
             // We set up listeners to start the drag ONLY if the mouse moves.
             // This allows the browser's default dblclick event to fire.
+            windowInteraction.set(true); // Set the flag on mousedown
             windows.focusWindow(id); // Focus on mousedown regardless.
 
             const onMove = () => {
@@ -516,6 +566,7 @@
             };
             const onUp = () => {
                 window.removeEventListener('mousemove', onMove); // It was just a click, cleanup.
+                windowInteraction.set(false); // Reset if no drag occurred
             };
 
             window.addEventListener('mousemove', onMove, { once: true });
@@ -639,7 +690,10 @@
     .options-menu-button { background-color: #3498db; color: white; line-height: 0.8; }
     .middle-row { flex-grow: 1; display: flex; flex-direction: row; overflow: hidden; }
     .content-area-wrapper { flex-grow: 1; position: relative; overflow: hidden; }
-    .content-area-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: auto; padding: 5px; box-sizing: border-box; transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out; }
+    .content-area-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: auto; padding: 5px; box-sizing: border-box; transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
+        /* Re-enable user selection for window content, overriding the global `body` style */
+        user-select: auto;
+        -webkit-user-select: auto; }
     .side-frame, .bottom-frame { flex-shrink: 0; transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out, width 0.3s ease-in-out, height 0.3s ease-in-out; }
     .cloak { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 5; pointer-events: none; border-radius: 5px; transition: opacity 0.3s ease-in-out, background 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
     .resize-handle { position: absolute; z-index: 6; }
@@ -675,6 +729,7 @@
     data-type={isBacked ? 'backed_window' : 'window'}
     on:contextmenu|preventDefault|stopPropagation={isBacked ? (e) => dispatch('contextmenubacked', e) : null}
     on:wheel={handleWheel}
+    on:mousedown={e => { if (e.button !== 1) e.stopPropagation(); }}
 >
     <div
         class:window-frame={!isBacked}

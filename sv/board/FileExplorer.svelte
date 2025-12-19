@@ -6,7 +6,8 @@
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { createFsAdapter } from '../fs_adapter.js';
-    import { windows, activeConsoles, newFileViewer, newAskWindow } from '../windows.js';
+    import { windows } from '../windows.js';
+    import { newFileViewer, newAskWindow, activeConsoles } from '../apps.js';
     import { windowSettings, windowView, TASKBAR_HEIGHT } from '../desktop.js';
     import { connectionStatus, createBox } from '../bridge.js';
     import { fileSelection } from '../iosk.js';
@@ -16,18 +17,17 @@
     export let id;
     export let groupId;
     export let connectionType; // 'iosk' or 'skybridge'
-    export let consoleId = null; // Used only for 'iosk'
+    export let connectionId = null; // Used for 'iosk'
     export let initialPath = '.';
     export let pickerTargetId = null;
     export let componentName;
     export let x, y, width, height;
-    export let consoleConnection = null; // Passed during Dash restore
 
     // --- Recursive Rendering Props (for <svelte:self>) ---
     export let treeNode = null;
     export let treeLevel = 0;
     // Pass down reactive props needed by the recursive part
-    export { viewMode, colorMode, getTileColor, handleItemClick, expandedNodes, toggleNode, handleRightClick, handleDragStart };
+    export { getTileColor, handleItemClick, expandedNodes, toggleNode, handleRightClick, handleDragStart };
 
     let currentPath = (initialPath && initialPath !== '.') ? initialPath : '/';
     let items = [];
@@ -41,9 +41,9 @@
     let changeClearTimeout;
 
     // --- View State ---
-    let viewMode = 'list';
+    export let viewMode = 'list'; // MODIFICATION: Changed 'let' to 'export let'
     export let columnsEnabled = false;
-    let colorMode = 'type';
+    export let colorMode = 'type'; // MODIFICATION: Changed 'let' to 'export let'
     export let nestedView = false;
     let treeItems = [];
     let expandedNodes = new Set();
@@ -178,27 +178,25 @@
     }
 
     // --- State & Connection Management ---
+    // MODIFICATION: Update this reactive block to save all persistent state
     $: if (id !== undefined && groupId !== undefined) {
-        windows.updateTabProps(groupId, id, { currentPath, isSettingsModalOpen: showSettings });
-    }
+        windows.updateTabProps(groupId, id, {
+            // --- Persist dynamic state ---
+            // Save the *current* path as the *initial* path for the next instantiation.
+            initialPath: currentPath,
+            isSettingsModalOpen: showSettings,
+            // Save view-related state
+            viewMode,
+            colorMode,
+            nestedView,
+            columnsEnabled,
 
-    $: if (connectionType === 'iosk' && consoleConnection && $windows) {
-        const myConsoleTab = $windows.flatMap(g => g.tabs).find(t => t.id === consoleId);
-        if (!myConsoleTab || !myConsoleTab.isConsoleConnected) {
-            const key = `${consoleConnection.user}@${consoleConnection.url}`;
-            const compatibleConsole = $activeConsoles.get(key);
-            if (compatibleConsole) {
-                if (consoleId !== compatibleConsole.id) {
-                    windows.updateTabProps(groupId, id, { consoleId: compatibleConsole.id });
-                }
-            } else {
-                if (consoleId !== null) {
-                    windows.updateTabProps(groupId, id, { consoleId: null });
-                }
-                errorMessage = 'No active IOSK connection available.';
-                items = [];
-            }
-        }
+            // --- Persist "identity" props ---
+            // These are static but need to be saved for backing/restoring.
+            connectionType,
+            connectionId,
+            pickerTargetId
+        });
     }
 
     // --- View Logic ---
@@ -265,7 +263,7 @@
 
     function requestPath(path) {
         errorMessage = '';
-        if ((connectionType === 'iosk' && !consoleId)) return;
+        if ((connectionType === 'iosk' && !connectionId)) return;
         if (!supportsRecursive) {
             nestedView = false;
             columnsEnabled = false;
@@ -284,7 +282,7 @@
                 fileSelection.set({ targetId: pickerTargetId, path: filePath });
                 windows.removeWindow(groupId);
             } else {
-                newFileViewer({ connectionType, consoleId, path: filePath, groupId });
+                newFileViewer({ connectionType, connectionId, path: filePath, groupId });
             }
         } else if (item.type === 'dir') {
             const canNavigate = (item.name === '..' || !nestedView || columnsEnabled || (nestedView && viewMode === 'tiles'));
@@ -294,6 +292,11 @@
                 if (item.name === '..') {
                     if (currentPath === '/') return;
                     newPath = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
+                    // --- MODIFICATION START: Turn off nested view when going up ---
+                    if (nestedView) {
+                        nestedView = false;
+                    }
+                    // --- MODIFICATION END ---
                 } else {
                     newPath = item.path || (currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`);
                 }
@@ -317,7 +320,7 @@
     onMount(() => {
         if (treeNode) return; // Prevent execution in recursive children
 
-        fsAdapter = createFsAdapter({ connectionType, consoleId, requesterId: id });
+        fsAdapter = createFsAdapter({ connectionType, connectionId, requesterId: id });
         window.addEventListener('click', closeContextMenu);
 
         fsAdapter.listResponse.subscribe(response => {
@@ -326,7 +329,10 @@
             const { path, entries, error } = response;
             if (error) {
                 errorMessage = error;
-                items = [];
+                // --- MODIFICATION START: Always show ".." on error unless at root ---
+                items = (path && path !== '/') ? [{ name: '..', type: 'dir', size: -1, mtime: -1 }] : [];
+                treeItems = [];
+                // --- MODIFICATION END ---
                 previousItemsMap.clear();
             } else if (entries) {
                 let finalListing = [...entries];
@@ -391,7 +397,12 @@
                 }
             });
         } else { // iosk
-            if (consoleId) requestPath(currentPath);
+            if (connectionId) {
+                requestPath(currentPath);
+            } else {
+                errorMessage = "Error: No IOSK connection specified.";
+                items = [];
+            }
         }
     });
 
@@ -561,7 +572,7 @@
                         <div class="column-content">
                              {#if nestedView}
                                 {#each item.children as child (child.path)}
-                                    <svelte:self treeNode={child} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} {handleRightClick} {handleDragStart} {connectionType}/>
+                                    <svelte:self treeNode={child} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {connectionId} {handleRightClick} {handleDragStart} {connectionType}/>
                                 {/each}
                              {:else}
                                 {#if viewMode === 'list'}
@@ -596,7 +607,7 @@
                         </div>
                     {/if}
                     {#each treeItems as item (item.path)}
-                        <svelte:self treeNode={item} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} {handleRightClick} {handleDragStart} {connectionType}/>
+                        <svelte:self treeNode={item} treeLevel={0} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {connectionId} {handleRightClick} {handleDragStart} {connectionType}/>
                     {/each}
                 {:else}
                     {#each items as item (item.name)}
@@ -629,7 +640,7 @@
                                 <div class="nested-dir-content-grid">
                                     {#if item.children && item.children.length > 0}
                                         {#each item.children as child (child.path)}
-                                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} {handleRightClick} {handleDragStart} {connectionType}/>
+                                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {connectionId} {handleRightClick} {handleDragStart} {connectionType}/>
                                         {/each}
                                     {/if}
                                 </div>
@@ -685,7 +696,7 @@
             </div>
             {#if treeNode.children && treeNode.children.length > 0 && expandedNodes.has(treeNode.path)}
                 {#each treeNode.children as child}
-                    <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} {handleRightClick} {handleDragStart} {connectionType}/>
+                    <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {connectionId} {handleRightClick} {handleDragStart} {connectionType}/>
                 {/each}
             {/if}
         </div>
@@ -701,7 +712,7 @@
                 <div class="nested-dir-content-grid">
                     {#if treeNode.children && treeNode.children.length > 0}
                         {#each treeNode.children as child (child.path)}
-                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {consoleId} {handleRightClick} {handleDragStart} {connectionType}/>
+                            <svelte:self treeNode={child} treeLevel={treeLevel + 1} {viewMode} {colorMode} {getTileColor} {handleItemClick} {toggleNode} bind:expandedNodes {itemChangeStatus} {columnsEnabled} {nestedView} {connectionId} {handleRightClick} {handleDragStart} {connectionType}/>
                         {/each}
                     {/if}
                 </div>

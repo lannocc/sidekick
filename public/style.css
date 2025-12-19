@@ -11,8 +11,35 @@
     --border-color: #7f8c8d;
     --taskbar-bg: rgba(44, 62, 80, 0.9);
     --taskbar-text: #ecf0f1;
-    --taskbar-button-bg: #34495e;
+    /* Default button was invisible against window background. Changed to match title bar. */
+    --taskbar-button-bg: var(--title-bar-bg);
     --taskbar-button-hover-bg: #4a6a8a;
+
+    /* General-purpose UI variables for components */
+    --text-color: var(--title-bar-text);
+    --text-color-light: #bdc3c7;
+    --accent-color: #88C0D0;
+    --border-color-light: #95a5a6;
+
+    --button-bg: var(--title-bar-bg);
+    --button-hover-bg: var(--taskbar-button-hover-bg);
+    --button-border-color: var(--border-color);
+
+    --input-bg: var(--title-bar-bg);
+    --item-hover-bg: rgba(255, 255, 255, 0.07);
+    --item-selected-bg: var(--taskbar-button-hover-bg);
+
+    /* Variables for different button types/states (e.g., Stop/Start Process) */
+    --button-danger-text: #e74c3c;
+    --button-danger-hover-bg: #c0392b;
+    --button-danger-hover-text: #ffffff;
+    --button-success-text: #2ecc71;
+    --button-success-hover-bg: #27ae60;
+    --button-success-hover-text: #ffffff;
+    --button-warning-text: #f39c12;
+    --button-warning-hover-bg: #e67e22;
+    --button-warning-hover-text: #ffffff;
+
     --console-bg: #1e1e1e;
     --console-text: #d4d4d4;
     --console-prompt: #569cd6;
@@ -39,4 +66,3 @@ body {
     display: flex;
     flex-direction: column;
 }
-

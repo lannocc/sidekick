@@ -9,7 +9,13 @@
     import { windows } from './windows.js';
     import { dashActive, dashLayouts, dashCycleIndex, desktopSettings, activeBoxId, skyCloakEnabled, currentBoxId, currentBox } from './desktop.js';
     import { get } from 'svelte/store';
-    import { initializeLocalConnection, connectionStatus } from './bridge.js';
+    import { 
+        initializeLocalConnection, 
+        connectionStatus,
+        getIoskConfig,
+        getShortcuts,
+        boxes
+    } from './bridge.js';
 
     // --- NEW: Title update logic ---
     let title = 'SKYBOARD';
@@ -18,6 +24,33 @@
     } else {
         title = 'SKYBOARD';
     }
+
+    // --- MODIFICATION START: Fetch global data on connect ---
+    let initialDataFetched = false;
+
+    // Reset the flag on disconnection to ensure data is re-fetched on reconnect.
+    $: if ($connectionStatus !== 'connected') {
+        initialDataFetched = false;
+    }
+
+    $: if ($connectionStatus === 'connected' && !initialDataFetched && get(boxes).length > 0) {
+        // The `bridge` automatically fetches the box list and running processes on connect.
+        // This block fetches additional data needed for the UI once the box list is populated.
+        
+        // Fetch shortcuts for the root desktop.
+        getShortcuts(0); 
+
+        // Explicitly fetch all IOSK configs. This is required for Box components
+        // on the desktop to display correct badges and context menu options.
+        get(boxes).forEach(box => {
+            if (box.type === 'iosk') {
+                getIoskConfig(box.id);
+            }
+        });
+        
+        initialDataFetched = true;
+    }
+    // --- MODIFICATION END ---
 
     // --- NEW: Box switching effect logic ---
     let boxSwitchKey = 0;
@@ -84,6 +117,16 @@
             disableSkyCloak();
             return;
         }
+
+        // --- MODIFICATION START ---
+        // Handle plain Escape key press to close any open context menus.
+        // The event is handled by listeners in Desktop, Box, and Shortcut components.
+        if (e.key === 'Escape' && !e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey) {
+            window.dispatchEvent(new CustomEvent('close-all-context-menus'));
+            // We don't return or stop propagation here, as other components like Box
+            // might use subsequent Escape presses for other actions (e.g., folding).
+        }
+        // --- MODIFICATION END ---
 
         // Tab switching with Alt/Ctrl + Number
         const numericKey = parseInt(e.key, 10);
@@ -246,6 +289,20 @@
         animation: box-switch-flash 0.4s ease-in-out;
     }
 
+    /* Globally disable text selection to prevent it during drag operations */
+    :global(body) {
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+    /* Re-enable text selection for specific elements where it's expected */
+    :global(input),
+    :global(textarea),
+    :global(pre),
+    :global(code) {
+        user-select: text;
+        -webkit-user-select: text;
+    }
     /* --- GLOBAL SCROLLBAR STYLES --- */
     :global(*), :global(*::before), :global(*::after) {
         /* For Firefox */

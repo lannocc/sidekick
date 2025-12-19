@@ -3,16 +3,18 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { windows, newSettings, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
+    import { windows, dragRequest, componentMap, generateBoardConfigFromWindow, dragState, instanceRegistry } from './windows.js';
+    import { appList } from './apps.js';
     import Window from './Window.svelte';
-    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, skyCloakEnabled } from './desktop.js';
-    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox, resolveAssetDataUrl, generateBgStyle } from './bridge.js';
+    import { desktopSettings, dashActive, desktopView, windowView, TASKBAR_HEIGHT, selectedItems, wasDraggingItems, desktopInteraction, activeBoxId, currentBoxId, currentBox, skyCloakEnabled, calculateContextMenuPosition, windowInteraction } from './desktop.js';
+    import { boxes, desktopShortcuts, backedWindows, updateDesktopSettings, updateBoxTransform, updateShortcutTransform, updateBackedWindowTransform, createBackedWindow, createBox, resolveAssetDataUrl, generateBgStyle, deleteBox, deleteBackedWindow } from './bridge.js';
     import Box from './Box.svelte';
     import Dash from './Dash.svelte';
     import Shortcut from './Shortcut.svelte';
     import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { connectionStatus } from './bridge.js';
+    import BoxContextMenu from './BoxContextMenu.svelte';
     import { fade } from 'svelte/transition';
     import InstanceRegistrar from './InstanceRegistrar.svelte';
 
@@ -134,6 +136,16 @@
         sourceEvent: null,
     };
 
+    // --- MODIFICATION START ---
+    // --- Selection Context Menu State ---
+    let selectionContextMenu = {
+        visible: false,
+        x: 0,
+        y: 0,
+        count: 0,
+    };
+    // --- MODIFICATION END ---
+
     // --- Backed Window Context Menu State ---
     let backedWindowContextMenu = {
         visible: false,
@@ -142,12 +154,19 @@
         window: null,
     };
 
+    // --- MODIFICATION START ---
+    // Determine if the submenu should open to the left based on the main context menu's position.
+    $: openSubmenuLeft = contextMenu.visible && contextMenu.x > innerWidth / 2;
+    // Determine if the submenu should open upwards to avoid going off-screen.
+    $: openSubmenuUp = contextMenu.visible && (contextMenu.y + skyboardSubmenuHeight > innerHeight);
+    // --- MODIFICATION END ---
+
     function showBackedWindowContextMenu(event, backedWindow) {
+        window.dispatchEvent(new CustomEvent('close-all-context-menus'));
         closeContextMenu(); // Close the main desktop one if open
         backedWindowContextMenu = {
             visible: true,
-            x: event.clientX,
-            y: event.clientY,
+            ...calculateContextMenuPosition(event, { width: 120, height: 50 }),
             window: backedWindow,
         };
     }
@@ -155,6 +174,28 @@
     function closeBackedWindowContextMenu() {
         backedWindowContextMenu.visible = false;
     }
+
+    // --- MODIFICATION START ---
+    function showSelectionContextMenu(event) {
+        window.dispatchEvent(new CustomEvent('close-all-context-menus'));
+        const selectionSize = get(selectedItems).size;
+        selectionContextMenu = {
+            visible: true,
+            ...calculateContextMenuPosition(event, { width: 220, height: 50 }),
+            count: selectionSize,
+        };
+    }
+
+    function closeSelectionContextMenu() {
+        selectionContextMenu.visible = false;
+    }
+
+    function handleRemoveSelectedItems() {
+        handleDeleteSelectedItems();
+        closeSelectionContextMenu();
+    }
+    // --- MODIFICATION END ---
+
 
     function unbackAndRestoreWindow() {
         if (backedWindowContextMenu.window) {
@@ -191,10 +232,10 @@
         if (isPanning) return;
         if (get(dashActive)) return; // Don't show if dash is active
 
+        window.dispatchEvent(new CustomEvent('close-all-context-menus'));
         contextMenu = {
             visible: true,
-            x: event.clientX,
-            y: event.clientY,
+            ...calculateContextMenuPosition(event, { width: 120, height: 150 }),
             sourceEvent: event,
         };
     }
@@ -202,12 +243,36 @@
     function closeContextMenu() {
         contextMenu.visible = false;
         closeBackedWindowContextMenu();
+        closeSelectionContextMenu(); // Also close the selection menu
     }
 
-    function openSettingsMenu() {
+    // --- MODIFICATION START: SKYBOARD CONTEXT MENU ---
+    function launchApp(launcher, props = {}) {
+        const event = contextMenu.sourceEvent;
+        launcher({ ...props, sourceEvent: event });
         closeContextMenu();
-        newSettings({ sourceEvent: contextMenu.sourceEvent });
     }
+
+    const skyboardMenuItems = appList.map(app => ({
+        name: app.name,
+        icon: app.icon,
+        action: () => {
+            let props = {};
+            if (app.getProps) {
+                // Pass the currentBox store to getProps
+                props = app.getProps({ currentBox });
+            }
+            launchApp(app.launcher, props);
+        },
+        requiresConnection: app.requiresConnection,
+    })).sort((a, b) => a.name.localeCompare(b.name));
+
+    // Calculate submenu height for positioning to prevent it from going off-screen.
+    const SKYBOARD_ITEM_HEIGHT = 34; // Estimated height of one menu item (padding + line-height)
+    const SUBMENU_VERTICAL_PADDING = 8; // 4px top + 4px bottom padding of the submenu itself
+    const skyboardSubmenuHeight = skyboardMenuItems.length * SKYBOARD_ITEM_HEIGHT + SUBMENU_VERTICAL_PADDING;
+    // --- MODIFICATION END ---
+
 
     function handleNewBoxClick() {
         closeContextMenu();
@@ -870,8 +935,13 @@
         window.addEventListener('mouseup', onUp, { once: true });
     }
 
-    // --- MODIFICATION START: Updated Global Mouse Down Handler ---
     function handleGlobalMouseDown(event) {
+        // If a window interaction (drag/resize) has been initiated, do not
+        // process any desktop-level interactions for this event.
+        if (get(windowInteraction)) {
+            return;
+        }
+
         if (event.target.closest('.window-wrapper:not(.backed)')) {
             // A click landed on a front window. Window.svelte's handlers run first.
             // If it was a middle click that Window.svelte decided not to handle (e.g., no scrollable content),
@@ -911,7 +981,47 @@
             }
         }
     }
-    // --- MODIFICATION END ---
+
+    function handleDesktopContextMenu(event) {
+        if (isPanning) {
+            event.preventDefault();
+            return;
+        }
+
+        const targetItemEl = event.target.closest('.shortcut, .box, .window-wrapper.backed');
+
+        if (targetItemEl) {
+            const id = targetItemEl.dataset.id;
+            const type = targetItemEl.dataset.type;
+            const uniqueId = `${type}-${id}`;
+            const selected = get(selectedItems);
+
+            if (selected.has(uniqueId)) {
+                // Right-clicked an already selected item.
+                if (selected.size > 1) {
+                    // It's part of a multi-selection, so show the selection menu
+                    // and stop the event from reaching the item's own handler.
+                    event.preventDefault();
+                    event.stopPropagation();
+                    showSelectionContextMenu(event);
+                    return;
+                }
+                // Otherwise, it's a single selection. Do nothing and let the
+                // event propagate to the item's own context menu handler.
+            } else {
+                // Right-clicked an unselected item.
+                // The standard behavior is to clear the old selection and select this new item.
+                selectedItems.set(new Set([uniqueId]));
+                // Let the event propagate so the item's own context menu handler can fire.
+            }
+        } else if (event.target.classList.contains('desktop-background')) {
+            // Clicked on the desktop background. Show the main desktop context menu.
+            event.preventDefault();
+            handleRightClick(event);
+        }
+        // If the click was not on an item or the background (e.g., inside a window),
+        // do nothing and let the event continue.
+    }
 
     function startItemDrag(event, itemEl) {
         const id = itemEl.dataset.id;
@@ -1502,6 +1612,14 @@
         const newWidth = windowToBack.width * zoomFactor;
         const newHeight = windowToBack.height * zoomFactor;
 
+        // --- FIX ---
+        // The original config contains the dimensions from the front-layer window.
+        // We must update it with the newly calculated dimensions for the back-layer
+        // so that the optimistic render uses the correct size, preventing a size-jump.
+        config.width = newWidth;
+        config.height = newHeight;
+        // --- END FIX ---
+
         const newX = backWorldMidX - newWidth / 2;
         const newY = backWorldMidY - newHeight / 2;
 
@@ -1533,13 +1651,15 @@
         }
 
         // 4. *** REVISED ATOMIC UPDATE ***
-        // Remove the window from the front layer and add an optimistic representation
-        // to the back layer in the same tick. This is the key to preserving the component.
+        // To ensure the component instance is preserved across the front-to-back transition,
+        // we first add an optimistic representation of the window to the back layer.
+        // The `allRenderableWindows` derived store has logic to handle this temporary
+        // duplication (by hiding the back-layer version if the front-layer one exists).
+        // Then, we remove the front-layer window. Svelte processes this as a single logical
+        // update, sees the component key is still present (just in a different logical layer),
+        // and preserves the component instance, preventing a reset.
 
-        // First, remove from the front.
-        windows.removeWindow(windowToBack.id, { force: true });
-
-        // Then, add a temporary object to the back layer store. This object mimics
+        // Create the temporary object for the back layer store. This object mimics
         // the structure of a real backed window from the database.
         const optimisticBackedWindow = {
             id: `temp-${Date.now()}`, // Temporary ID, will be replaced by backend response
@@ -1552,7 +1672,14 @@
             scale: backedItem.scale,
             z_index: 1, // Placeholder
         };
+        
+        // Add to the back layer store FIRST.
         backedWindows.update(bws => [...bws, optimisticBackedWindow]);
+
+        // Now, remove the window from the front. Svelte will now see the same key
+        // move from the front list to the back list and will preserve the component.
+        windows.removeWindow(windowToBack.id, { force: true });
+
 
         // 5. Persist all changes to the backend asynchronously.
 
@@ -1579,16 +1706,44 @@
         });
     }
 
+    function handleDeleteSelectedItems() {
+        const selected = get(selectedItems);
+        if (selected.size === 0) return;
+
+        if (!confirm(`Are you sure you want to remove ${selected.size} item(s)?`)) {
+            return;
+        }
+
+        selected.forEach(uniqueId => {
+            const [type, idStr] = uniqueId.split('-');
+
+            if (type === 'shortcut') {
+                desktopShortcuts.remove(parseInt(idStr, 10));
+            } else if (type === 'box') {
+                deleteBox(parseInt(idStr, 10));
+            } else if (type === 'backed_window') {
+                // For backed windows, the ID can be a string (originalGroupId).
+                // We must find the item in our rendered list to get the real DB ID.
+                const item = allItems.find(i => `${i.type}-${i.id}` === uniqueId);
+                if (item && item.originalBackedId) {
+                     deleteBackedWindow(item.originalBackedId);
+                }
+            }
+        });
+
+        selectedItems.set(new Set());
+    }
+
     onMount(() => {
         // The WebSocket connection is now established in SideKick.svelte
         window.addEventListener('click', closeContextMenu);
-        window.addEventListener('click', closeBackedWindowContextMenu);
         window.addEventListener('keyup', handleKeyUpForScale);
+        window.addEventListener('close-all-context-menus', closeContextMenu);
     });
     onDestroy(() => {
         window.removeEventListener('click', closeContextMenu);
-        window.removeEventListener('click', closeBackedWindowContextMenu);
         window.removeEventListener('keyup', handleKeyUpForScale);
+        window.removeEventListener('close-all-context-menus', closeContextMenu);
         if (saveViewTimeout) clearTimeout(saveViewTimeout);
         if (controlsTimeout) clearTimeout(controlsTimeout);
         if (desktopMiddleClickTimeout) clearTimeout(desktopMiddleClickTimeout);
@@ -1667,6 +1822,36 @@
         margin: 4px 0;
     }
 
+    /* --- MODIFICATION START --- */
+    .embedded-menu {
+        margin: 2px 4px 2px;
+        border: 1px solid var(--border-color);
+        border-radius: 3px;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
+        background-color: var(--background-color);
+    }
+
+    .embedded-menu .embedded-menu-name {
+        color: var(--title-bar-bg);
+        font-weight: bold;
+        background-color: var(--title-bar-text);
+        border-bottom: 1px solid var(--border-color);
+        padding: 4px 10px;
+        font-size: 15px;
+        cursor: default;
+    }
+
+    .embedded-menu-content {
+        padding: 4px;
+    }
+
+    .embedded-menu-content :global(button) {
+        padding: 6px 8px;
+        font-size: 13px;
+        border-radius: 2px;
+    }
+    /* --- MODIFICATION END --- */
+
     .context-menu button {
         background: none;
         border: none;
@@ -1675,6 +1860,12 @@
         text-align: left;
         cursor: pointer;
         font-size: 14px;
+        /* MODIFICATION START */
+        display: flex;
+        align-items: center;
+        width: 100%;
+        box-sizing: border-box;
+        /* MODIFICATION END */
     }
 
     .context-menu button:not(:disabled):hover {
@@ -1869,6 +2060,72 @@
     .birdseye-viewport.front {
         border: 1px solid #3498db; /* Blue for front layer */
     }
+
+    /* MODIFICATION START: Sub-menu styles */
+    .context-menu-icon {
+        display: inline-block;
+        width: 20px;
+        text-align: center;
+        margin-right: 8px;
+        flex-shrink: 0;
+    }
+    .context-menu-item-container {
+        position: relative;
+    }
+    .context-menu-item-with-submenu {
+        justify-content: space-between;
+    }
+    .context-menu-item-with-submenu::after {
+        content: '▶';
+        font-size: 0.7em;
+        opacity: 0.7;
+        margin-left: auto;
+        padding-left: 10px;
+    }
+    .context-menu-item-with-submenu.open-left {
+        flex-direction: row-reverse;
+    }
+    .context-menu-item-with-submenu.open-left::after {
+        content: '◀';
+        margin-left: 0;
+        padding-left: 0;
+        padding-right: 10px;
+    }
+    .context-menu-item-with-submenu::after {
+        content: '▶';
+        font-size: 0.7em;
+        opacity: 0.7;
+        margin-left: auto;
+        padding-left: 10px;
+    }
+    .submenu {
+        display: none;
+        position: absolute;
+        left: 100%;
+        top: -5px; /* Aligns with parent item based on parent padding */
+        z-index: 1;
+
+        /* Re-apply context-menu styles for the sub-menu */
+        background-color: var(--window-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: 0px 10px rgba(0,0,0,0.2);
+        padding: 4px 0;
+        min-width: 180px;
+    }
+    .context-menu-item-container:hover > .submenu {
+        display: flex;
+        flex-direction: column;
+    }
+    .submenu.open-left {
+        left: auto;
+        right: 100%;
+    }
+    .submenu.open-up {
+        top: auto;
+        bottom: -5px; /* Aligns with bottom of parent */
+    }
+    /* MODIFICATION END */
 </style>
 
 <svelte:window
@@ -1877,6 +2134,9 @@
     on:keydown={e => {
         if (e.key === 'Control' && !e.repeat) ctrlPressed = true;
         if (e.key === 'Shift' && !e.repeat) shiftPressed = true;
+        if (e.key === 'Delete') {
+            handleDeleteSelectedItems();
+        }
     }}
     on:keyup={e => {
         if (e.key === 'Control') ctrlPressed = false;
@@ -1888,7 +2148,7 @@
     }}
 />
 
-<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu|preventDefault={handleRightClick} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop} style="overflow: hidden;">
+<div class="desktop" bind:this={desktopEl} bind:clientWidth={desktopWidth} bind:clientHeight={desktopHeight} class:dash-active={$dashActive} on:contextmenu|capture={handleDesktopContextMenu} on:mousedown={handleGlobalMouseDown} on:wheel={handleDesktopWheel} on:dragover|preventDefault on:drop={handleDrop} style="overflow: hidden;">
     <div class="desktop-background" style:background={backgroundStyle || ''} style:opacity={sceneOpacity}></div>
     <!-- BACK LAYER (for non-window items) -->
     <div class="desktop-content back-layer">
@@ -1996,10 +2256,36 @@
 
     {#if contextMenu.visible && !wasPanning}
         <div class="context-menu" style="top: {contextMenu.y}px; left: {contextMenu.x}px;" on:click|stopPropagation>
+            <div class="context-menu-item-container">
+                <button class="context-menu-item-with-submenu" class:open-left={openSubmenuLeft}>SKYBOARD Menu</button>
+                <div class="submenu" class:open-left={openSubmenuLeft} class:open-up={openSubmenuUp}>
+                    {#each skyboardMenuItems as item (item.name)}
+                        <button
+                            on:click={item.action}
+                            disabled={item.requiresConnection && $connectionStatus !== 'connected'}
+                            title={item.requiresConnection && $connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : item.name}
+                        >
+                            <span class="context-menu-icon">{item.icon}</span>
+                            <span>{item.name}</span>
+                        </button>
+                    {/each}
+                </div>
+            </div>
+            
             <button on:click={handleNewBoxClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Box</button>
             <button on:click={handleNewShortcutClick} disabled={$connectionStatus !== 'connected'} title={$connectionStatus !== 'connected' ? 'SKYBRIDGE REQUIRED' : null}>New Shortcut</button>
-            <div class="context-menu-separator"></div>
-            <button on:click={openSettingsMenu}>Settings...</button>
+
+            <!-- --- MODIFICATION START --- -->
+            {#if $currentBoxId !== 0 && $currentBox}
+                <div class="context-menu-separator"></div>
+                <div class="embedded-menu">
+                    <div class="embedded-menu-name">{$currentBox.name}</div>
+                    <div class="embedded-menu-content">
+                        <BoxContextMenu box={$currentBox} showDelete={false} showExit={true} on:close={closeContextMenu} />
+                    </div>
+                </div>
+            {/if}
+            <!-- --- MODIFICATION END --- -->
         </div>
     {/if}
 
@@ -2009,7 +2295,17 @@
         </div>
     {/if}
 
+    <!-- MODIFICATION START -->
+    {#if selectionContextMenu.visible}
+        <div class="context-menu" style="top: {selectionContextMenu.y}px; left: {selectionContextMenu.x}px;" on:click|stopPropagation>
+            <button on:click={handleRemoveSelectedItems}>Remove {selectionContextMenu.count} Selected Items</button>
+        </div>
+    {/if}
+    <!-- MODIFICATION END -->
+
+
     {#if $dashActive}
         <Dash />
     {/if}
 </div>
+

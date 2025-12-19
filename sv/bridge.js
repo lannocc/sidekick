@@ -27,6 +27,17 @@ export const askStatsResponse = writable(null);
 export const boxes = writable([]);
 export const backedWindows = writable([]);
 
+// --- New stores for inter-board communication ---
+export const requestedBoxId = writable(null);
+export const requestedPid = writable(null);
+
+// --- ProcBox Stores ---
+export const runningProcesses = writable([]);
+export const ioskConfigResponse = writable(null);
+export const allIoskConfigs = writable({});
+export const processOutput = writable(null);
+
+
 // --- Asset Resolution for local files ---
 const pendingRequests = new Map();
 const assetCache = new Map();
@@ -172,6 +183,13 @@ export function switchToBox(boxId) {
     sendMessage({ type: 'get_desktop_settings', box_id: boxId });
     sendMessage({ type: 'get_shortcut_list', box_id: boxId });
     sendMessage({ type: 'get_backed_window_list', box_id: boxId });
+
+    // Request IOSK config if we're switching to an IOSK box.
+    const allBoxes = get(boxes);
+    const targetBox = allBoxes.find(b => b.id === boxId);
+    if (targetBox && targetBox.type === 'iosk') {
+        getIoskConfig(boxId);
+    }
 }
 
 export function clearSettingsForBox(targetBoxId) {
@@ -212,6 +230,50 @@ export function updateBox(id, name) {
 export function deleteBox(id) {
     sendMessage({ type: 'delete_box', id });
 }
+
+// --- ProcBox Functions ---
+export function promoteToIosk(box_id) {
+    sendMessage({ type: 'promote_to_iosk', box_id });
+}
+
+export function getIoskConfig(box_id) {
+    sendMessage({ type: 'get_iosk_config', box_id });
+}
+
+export function updateIoskConfig(box_id, config) {
+    sendMessage({ type: 'update_iosk_config', box_id, config });
+}
+
+export function startIosk(box_id) {
+    sendMessage({ type: 'start_iosk', box_id });
+}
+
+export function stopProcess(pid) {
+    sendMessage({ type: 'stop_process', pid });
+}
+
+export function listRunningProcesses() {
+    sendMessage({ type: 'list_running_processes' });
+}
+
+export function pauseProcess(pid) {
+    sendMessage({ type: 'pause_process', pid });
+}
+
+export function resumeProcess(pid) {
+    sendMessage({ type: 'resume_process', pid });
+}
+
+export function killProcess(pid) {
+    sendMessage({ type: 'kill_process', pid });
+}
+
+export function sendProcessStdin(pid, data) {
+    sendMessage({ type: 'process_stdin', pid, data });
+}
+// --- End ProcBox Functions ---
+
+
 export function getBoxConfig(id) {
     sendMessage({ type: 'get_box_config', id });
 }
@@ -313,6 +375,7 @@ function attemptConnection() {
     socket.onopen = () => {
         connectionStatus.set('connected');
         sendMessage({ type: 'list_boxes' });
+        sendMessage({ type: 'list_running_processes' });
         switchToBox(0); // Load the main desktop content
         setupViewSettingsPersistence(); // Persist pan/zoom changes
         processQueue(); // Send any messages that were were queued
@@ -430,6 +493,21 @@ function attemptConnection() {
                         });
                     });
                     break;
+                // --- ProcBox Handlers ---
+                case 'running_processes_list':
+                    runningProcesses.set(msg.processes || []);
+                    break;
+                case 'iosk_config_response':
+                    ioskConfigResponse.set(msg);
+                    if (msg.config) {
+                        allIoskConfigs.update(configs => {
+                            return { ...configs, [msg.box_id]: msg.config };
+                        });
+                    }
+                    break;
+                case 'process_output':
+                    processOutput.set({ ...msg, timestamp: Date.now() });
+                    break;
                 default:
                     console.warn('Unknown message type from local backend:', msg.type);
             }
@@ -461,4 +539,3 @@ function attemptConnection() {
 export function initializeLocalConnection() {
     attemptConnection();
 }
-

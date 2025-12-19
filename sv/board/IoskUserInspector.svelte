@@ -3,19 +3,22 @@
   @%@~LICENSE~@%@
 -->
 <script>
-    import { onDestroy } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
     import { parseAnsi } from '../ansi.js'
-    import { contextUpdates } from '../iosk.js';
+    // --- MODIFICATION START: Import centralized connection functions ---
+    import { contextUpdates, sendCommand as sendIoskCommand, sendRequest as sendIoskRequest } from '../iosk.js';
+    // --- MODIFICATION END ---
     import { windows } from '../windows.js';
     import IoskUserInspector from './IoskUserInspector.svelte';
 
     // --- Component Props ---
     export let id; // The window tab ID for this component instance
     export let groupId; // The window group ID for this component instance
-    export let consoleId; // The console tab ID this inspector is linked to
     export let targetUser; // The user whose context is being inspected
-    export let consoleWs; // Reference to the console's WebSocket for unsubscribing
+    // --- MODIFICATION START: Replace consoleWs with connectionId ---
+    export let connectionId;
+    // --- MODIFICATION END ---
     export let isDetached = false; // Is this a popped-out view?
     export let detachedView = ''; // If so, which view to display?
     
@@ -57,6 +60,13 @@
         ]
     ];
 
+    onMount(() => {
+        // The main inspector window is responsible for subscribing to context updates.
+        // Detached (popped-out) views or inline views rely on the main window's subscription.
+        if (!isDetached && connectionId) {
+            sendIoskRequest(connectionId, { type: 'ui_context_subscribe', targetUser });
+        }
+    });
 
     // --- State for Token Telemetry ---
     let tokenTooltip = { visible: false, x: 0, y: 0 };
@@ -71,9 +81,9 @@
 
 
     const unsubscribeStore = contextUpdates.subscribe(update => {
-        // FIX: Reverted to the simpler, working logic from the .bak file.
-        // The new check for `consoleId` was preventing updates from being received.
-        if (update && update.targetUser === targetUser) {
+        // --- MODIFICATION START: Filter updates by connectionId ---
+        if (update && update.targetUser === targetUser && update.connectionId === connectionId) {
+        // --- MODIFICATION END ---
             // --- Sentinel: Store pre-update state for comparison ---
             const oldIsPaused = contextData?.isPaused;
             const oldHistoryLength = contextData?.aiContext?.sessionHistory?.length ?? 0;
@@ -166,14 +176,15 @@
         }
     }
 
+    // --- MODIFICATION START: Simplify onDestroy to use connectionId and central request function ---
     onDestroy(() => {
         unsubscribeStore();
         // Only the main inspector window sends the unsubscribe message when it closes.
-        // Detached windows are ephemeral views.
-        if (!isDetached && consoleWs && consoleWs.readyState === WebSocket.OPEN) {
-            consoleWs.send(JSON.stringify({ type: 'ui_context_unsubscribe', targetUser }));
+        if (!isDetached && connectionId) {
+            sendIoskRequest(connectionId, { type: 'ui_context_unsubscribe', targetUser });
         }
     });
+    // --- MODIFICATION END ---
 
     function popOutTab(viewName) {
         if (!contextData) return;
@@ -181,16 +192,17 @@
         const tabInfo = tabRows.flat().find(t => t.id === viewName);
         const titleName = tabInfo ? tabInfo.name : (viewName.charAt(0).toUpperCase() + viewName.slice(1));
         
+        // --- MODIFICATION START: Pass connectionId to new windows instead of consoleWs ---
         const newWindow = windows.addWindow(IoskUserInspector, {
             title: `${titleName} - ${targetUser}`,
-            consoleId: consoleId,
             targetUser: targetUser,
-            consoleWs: consoleWs,
+            connectionId: connectionId,
             isDetached: true,
             detachedView: viewName,
             width: 600,
             height: 500,
         });
+        // --- MODIFICATION END ---
         if (newWindow && newWindow.groupId) {
             detachedTabs[viewName] = { groupId: newWindow.groupId, tabId: newWindow.tabId };
             detachedTabs = detachedTabs;
@@ -239,12 +251,14 @@
         }
     }
 
+    // --- MODIFICATION START: Update togglePause to use central command function ---
     function togglePause() {
-        if (!contextData || !contextData.isBot || !consoleWs || consoleWs.readyState !== WebSocket.OPEN) return;
+        if (!contextData || !contextData.isBot || !connectionId) return;
         const command = contextData.isPaused ? `unpause ${targetUser}` : `pause ${targetUser}`;
         const commandToRun = `$ ${command}`;
-        consoleWs.send(JSON.stringify({ type: 'client_input', data: commandToRun + '\n' }));
+        sendIoskCommand(connectionId, commandToRun);
     }
+    // --- MODIFICATION END ---
 
     function formatBytes(bytes, decimals = 2) {
         if (bytes == null || bytes === 0) return '0 Bytes';
@@ -336,13 +350,14 @@
         return { type: 'unknown', content, strippedContent: content, prompt: null };
     }
     
-    // --- Universal function for sending commands from the inspector ---
+    // --- MODIFICATION START: Update universal command function to use central hub ---
     function sendInspectorCommand(command) {
-        if (!consoleWs || consoleWs.readyState !== WebSocket.OPEN) return;
+        if (!connectionId) return;
         const user = contextData ? contextData.user : targetUser;
-        // Use `su` to execute the command as the target user
-        consoleWs.send(JSON.stringify({ type: 'client_input', data: `$ su ${user} ${command}\n` }));
+        const fullCommand = `$ su ${user} ${command}`;
+        sendIoskCommand(connectionId, fullCommand);
     }
+    // --- MODIFICATION END ---
 
     // --- Functions for Memory Bank Management ---
     function clearSingleBank(bankName) {
@@ -923,7 +938,7 @@
                         on:click|stopPropagation={togglePause}
                         title={contextData.isPaused ? `Resume ${targetUser}` : `Pause ${targetUser}`}
                     >
-                        {contextData.isPaused ? '▶️' : '⏸️'}
+                        {contextData.isPaused ? '▶' : '⏸'}
                     </button>
                 </div>
             {/if}
@@ -972,7 +987,9 @@
                 </div>
             {:else}
                 <!-- Render content inline using a recursive call to self in detached mode -->
-                <svelte:self {contextData} isDetached={true} detachedView={activeTab} {consoleWs} />
+                <!-- --- MODIFICATION START: Pass connectionId to self --- -->
+                <svelte:self {contextData} isDetached={true} detachedView={activeTab} {connectionId} />
+                <!-- --- MODIFICATION END --- -->
             {/if}
         </div>
 
@@ -1211,3 +1228,4 @@
         </div>
     {/if}
 </div>
+

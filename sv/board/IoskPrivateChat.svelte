@@ -5,41 +5,38 @@
 <script>
     import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
     import { get } from 'svelte/store';
-    import { consoleCommands, privateMessages } from '../iosk.js';
-    import { windows, activeConsoles } from '../windows.js';
+    import { sendCommand, privateMessages } from '../iosk.js';
+    import { windows } from '../windows.js';
     import { parseAnsi, stripAnsi } from '../ansi.js';
 
     export let id;
     export let groupId;
-    export let consoleId;
-    export let consoleConnection = null; // Passed during Dash restore
+    export let connectionId;
     export let localUser;
     export let remoteUser;
+    export let initialMessage = null;
 
-    let messages = [];
+    let messages = initialMessage ? [initialMessage] : [];
     let inputMessage = '';
     let messageContainer;
     let inputEl;
     let shouldScroll = true;
+    let mountTimestamp;
 
     // Reactive function to get the display name (username part) from a full address
     const getDisplayName = (fullAddress) => (fullAddress || '').split('.')[0];
 
     // Update window store with props for Dash saving
     $: if (id !== undefined && groupId !== undefined) {
-        windows.updateTabProps(groupId, id, { consoleId, localUser, remoteUser, consoleConnection });
+        // --- MODIFICATION START ---
+        // Do not write `initialMessage` back to the store, as it's only for initialization
+        // and its presence as an object in this reactive statement causes an infinite update loop.
+        windows.updateTabProps(groupId, id, { connectionId, localUser, remoteUser });
+        // --- MODIFICATION END ---
     }
 
-    // Reactive logic to find console after a Dash restore
-    $: if (consoleConnection && $windows) {
-        const myConsoleTab = $windows.flatMap(w => w.tabs).find(t => t.id === consoleId);
-        
-        if (!myConsoleTab || !myConsoleTab.isConsoleConnected) {
-            const key = `${consoleConnection.user}@${consoleConnection.url}`;
-            const compatibleConsole = $activeConsoles.get(key);
-            consoleId = compatibleConsole ? compatibleConsole.id : null;
-        }
-    }
+    // Reactive logic to find console after a Dash restore is no longer needed
+    // with the persistent, centralized connection management system.
 
     async function focusInput() {
         await tick();
@@ -53,7 +50,13 @@
     }
 
     function handleMessage(message) {
-        if (!message) return;
+        if (!message || message.connectionId !== connectionId || message.timestamp < mountTimestamp) return;
+
+        // If a message with the same timestamp and sender is already displayed, skip.
+        // This primarily handles the initial message from the subscription firing on mount.
+        if (messages.some(m => m.timestamp === message.timestamp && m.from === message.from)) {
+            return;
+        }
 
         const isForThisWindow =
             (message.from === remoteUser && message.to === localUser) ||
@@ -77,6 +80,9 @@
 
     let unsubscribe;
     onMount(() => {
+        // Set the mount timestamp to the initial message's time, or now if none exists.
+        // This prevents messages before the initial one from being shown, but allows the initial one.
+        mountTimestamp = initialMessage ? initialMessage.timestamp : Date.now();
         unsubscribe = privateMessages.subscribe(handleMessage);
         focusInput();
     });
@@ -94,17 +100,22 @@
 
     function sendMessage() {
         const trimmedMessage = inputMessage.trim();
-        if (!trimmedMessage) return;
+        if (!trimmedMessage || !connectionId) return;
 
         const command = `@${remoteUser} ${trimmedMessage}`;
-        consoleCommands.set({ consoleId, command, timestamp: Date.now() });
+        sendCommand(connectionId, command);
 
-        privateMessages.set({
+        // Add a local echo of the sent message for immediate feedback.
+        // The server delivers the message to the recipient but does not echo it
+        // back to the sender, so we must display it ourselves.
+        messages = [...messages, {
             from: localUser,
             to: remoteUser,
             content: trimmedMessage,
-            timestamp: Date.now()
-        });
+            timestamp: Date.now(),
+            connectionId: connectionId
+        }];
+        shouldScroll = true;
 
         inputMessage = '';
     }
@@ -133,7 +144,8 @@
     </div>
     <div class="input-area" on:click={focusInput}>
         <form on:submit|preventDefault={sendMessage} style="width: 100%; display: flex;">
-            <input type="text" bind:this={inputEl} bind:value={inputMessage} placeholder="Type your message..." spellcheck="false" disabled={!consoleId} />
+            <input type="text" bind:this={inputEl} bind:value={inputMessage} placeholder="Type your message..." spellcheck="false" disabled={!connectionId} />
         </form>
     </div>
 </div>
+
